@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>3D Racer</title><link rel="stylesheet" href="../style.css">
+<style>
+body { padding: 0; overflow: hidden; }
+#wrap { position: fixed; inset: 0; }
+#hud { position: fixed; top: 15px; right: 20px; display: flex; gap: 10px; z-index: 5; }
+.box { background: rgba(15,23,42,.75); padding: 8px 16px; border-radius: 10px; backdrop-filter: blur(4px); }
+.box small { display: block; color: #a5b4fc; font-size: .7rem; letter-spacing: 1px; }
+.box b { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+#speed { position: fixed; bottom: 20px; right: 30px; z-index: 5; font-size: 3rem; font-weight: 900; text-shadow: 0 0 15px #000; }
+#speed small { font-size: 1rem; color: #a5b4fc; }
+#center { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 5; pointer-events: none; text-shadow: 0 4px 20px #000; }
+#big { font-size: 7rem; font-weight: 900; }
+#small { font-size: 1.5rem; }
+#drift { position: fixed; top: 22%; left: 0; right: 0; z-index: 5; pointer-events: none; font-size: 2.6rem; font-weight: 900; font-style: italic;
+  color: #fde047; text-shadow: 0 0 20px #f97316, 0 3px 0 #9a3412; transition: transform .1s; }
+#help { position: fixed; bottom: 15px; left: 0; right: 0; color: #e0e7ff; z-index: 5; text-shadow: 0 2px 6px #000; }
+.back { z-index: 6; background: rgba(15,23,42,.75); padding: 6px 12px; border-radius: 8px; }
+#err { display: none; position: fixed; inset: 0; z-index: 9; background: #0f172a; padding: 60px; }
+</style></head>
+<body>
+<a class="back" href="../index.html">← Back</a>
+<div id="wrap"></div>
+<div id="hud">
+  <div class="box"><small>LAP</small><b id="lap">1/3</b></div>
+  <div class="box"><small>TIME</small><b id="time">0.00</b></div>
+  <div class="box"><small>LAST LAP</small><b id="lastLap">-</b></div>
+  <div class="box"><small>BEST RACE</small><b id="best">-</b></div>
+  <div class="box"><small>DRIFT SCORE</small><b id="driftScore">0</b></div>
+</div>
+<div id="drift"></div>
+<div id="speed">0 <small>km/h</small></div>
+<div id="center"><div id="big"></div><div id="small"></div></div>
+<div id="help">↑/W gas · ↓/S brake · ←→/A D steer · <b>SPACE handbrake / drift</b> · C camera · R restart</div>
+<div id="err"><h2>Could not load 3D engine</h2><p>This game needs an internet connection to load Three.js.</p></div>
+<script>setTimeout(() => { if (!window.racerLoaded) document.getElementById("err").style.display = "block"; }, 6000);</script>
+<script type="module">
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+window.racerLoaded = true;
+
+// =====================================================
+//  SPEED: change this one number to make the car faster or slower.
+//  100 = normal, 50 = half speed, 150 = 1.5x speed
+const SPEED = 75;
+// =====================================================
+
+const $ = id => document.getElementById(id);
+const LAPS = 3, TRACK_W = 90, SAMPLES = 600;
+const SP = SPEED / 100; // internal multiplier
+
+// ---------- Renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+$("wrap").appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 500, 1600);
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 2, 4000);
+addEventListener("resize", () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+});
+
+scene.add(new THREE.HemisphereLight(0xdbeeff, 0x3a5f2a, 1.0));
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.5;
+Object.assign(sun.shadow.camera, { left: -350, right: 350, top: 350, bottom: -350, near: 10, far: 1500 });
+scene.add(sun, sun.target);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ color: 0x3d8b3d, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+// ---------- Track ----------
+const RAW = [
+  [150,480],[150,300],[180,170],[280,100],[420,110],[500,190],[520,290],
+  [600,330],[700,280],[740,170],[820,130],[860,220],[850,400],[790,500],
+  [650,530],[500,500],[380,520],[250,540]
+].map(([x, y]) => new THREE.Vector3((x - 500) * 1.6, 0, (y - 320) * 1.6));
+const curve = new THREE.CatmullRomCurve3(RAW, true, "centripetal");
+const pts = curve.getSpacedPoints(SAMPLES).slice(0, SAMPLES);
+const tangents = pts.map((p, i) => pts[(i + 1) % SAMPLES].clone().sub(pts[(i - 1 + SAMPLES) % SAMPLES]).normalize());
+const normals = tangents.map(t => new THREE.Vector3(-t.z, 0, t.x));
+
+// flat ribbon along the track; faces point UP, explicit up normals
+function ribbon(width, y, colorFn, order) {
+  const pos = [], col = [], nor = [], idx = [];
+  for (let i = 0; i <= SAMPLES; i++) {
+    const k = i % SAMPLES, p = pts[k], n = normals[k];
+    pos.push(p.x + n.x * width / 2, y, p.z + n.z * width / 2, p.x - n.x * width / 2, y, p.z - n.z * width / 2);
+    nor.push(0, 1, 0, 0, 1, 0);
+    const c = colorFn(i); col.push(...c, ...c);
+    if (i < SAMPLES) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -order, polygonOffsetUnits: -order * 4
+  }));
+  m.receiveShadow = true; m.renderOrder = order; scene.add(m); return m;
+}
+ribbon(TRACK_W + 18, 0.5, i => (i >> 2) % 2 ? [0.8, 0.08, 0.08] : [0.95, 0.95, 0.95], 1); // curbs
+ribbon(TRACK_W, 1.0, () => [0.22, 0.22, 0.24], 2);                                        // asphalt
+ribbon(2.5, 1.5, i => (i >> 2) % 2 ? [0.95, 0.95, 0.95] : [0.22, 0.22, 0.24], 3);         // center dashes
+
+// start/finish line: plane lying flat, local X = along track, local Z = across
+const startAngle = Math.atan2(tangents[0].z, tangents[0].x);
+const checker = document.createElement("canvas"); checker.width = 16; checker.height = 128;
+const cctx = checker.getContext("2d");
+for (let x = 0; x < 2; x++) for (let y = 0; y < 16; y++) { cctx.fillStyle = (x + y) % 2 ? "#000" : "#fff"; cctx.fillRect(x * 8, y * 8, 8, 8); }
+const checkTex = new THREE.CanvasTexture(checker); checkTex.magFilter = THREE.NearestFilter; checkTex.colorSpace = THREE.SRGBColorSpace;
+const lineGeo = new THREE.PlaneGeometry(14, TRACK_W); lineGeo.rotateX(-Math.PI / 2);
+const startLine = new THREE.Mesh(lineGeo, new THREE.MeshStandardMaterial({ map: checkTex, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -16 }));
+startLine.position.set(pts[0].x, 2, pts[0].z); startLine.rotation.y = -startAngle; startLine.receiveShadow = true; scene.add(startLine);
+
+// gantry
+const gantry = new THREE.Group();
+const gantryMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5 });
+for (const s of [1, -1]) {
+  const post = new THREE.Mesh(new THREE.BoxGeometry(4, 52, 4), gantryMat);
+  post.position.set(0, 26, s * (TRACK_W / 2 + 14)); post.castShadow = true; gantry.add(post);
+}
+const banner = new THREE.Mesh(new THREE.BoxGeometry(3, 12, TRACK_W + 32), new THREE.MeshStandardMaterial({ color: 0xe11d48, emissive: 0x440010 }));
+banner.position.y = 52; banner.castShadow = true; gantry.add(banner);
+gantry.position.set(pts[0].x, 0, pts[0].z); gantry.rotation.y = -startAngle; scene.add(gantry);
+
+function nearest(x, z, hint) {
+  let best = Infinity, bi = 0;
+  const range = hint == null ? SAMPLES / 2 : 60;
+  for (let o = -range; o <= range; o++) {
+    const i = ((hint ?? 0) + o + SAMPLES * 2) % SAMPLES;
+    const d = (pts[i].x - x) ** 2 + (pts[i].z - z) ** 2;
+    if (d < best) { best = d; bi = i; }
+  }
+  return { i: bi, d: Math.sqrt(best) };
+}
+
+// ---------- Scenery ----------
+const trunkGeo = new THREE.CylinderGeometry(2, 3, 14), trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4423 });
+const leafGeo = new THREE.ConeGeometry(12, 32, 8);
+const leafMats = [0x1f6f2f, 0x2e8b3e, 0x14532d].map(c => new THREE.MeshStandardMaterial({ color: c, flatShading: true }));
+for (let n = 0; n < 300; n++) {
+  const x = (Math.random() - .5) * 2200, z = (Math.random() - .5) * 1800;
+  if (nearest(x, z).d < TRACK_W / 2 + 45) continue;
+  const tree = new THREE.Group(), s = 0.7 + Math.random() * 0.8;
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat); trunk.position.y = 7;
+  const leaf = new THREE.Mesh(leafGeo, leafMats[n % 3]); leaf.position.y = 28;
+  trunk.castShadow = leaf.castShadow = true;
+  tree.add(trunk, leaf); tree.position.set(x, 0, z); tree.scale.setScalar(s); tree.rotation.y = Math.random() * 6; scene.add(tree);
+}
+const tireGeo = new THREE.TorusGeometry(4, 2, 8, 16), tireMat = new THREE.MeshStandardMaterial({ color: 0x151515 });
+for (let i = 12; i < SAMPLES; i += 25) for (const s of [1, -1]) {
+  const p = pts[i], n = normals[i];
+  for (let h = 0; h < 3; h++) {
+    const t = new THREE.Mesh(tireGeo, tireMat); t.rotation.x = Math.PI / 2;
+    t.position.set(p.x + n.x * (TRACK_W / 2 + 22) * s, 2 + h * 4, p.z + n.z * (TRACK_W / 2 + 22) * s);
+    t.castShadow = true; scene.add(t);
+  }
+}
+
+// ---------- Car ----------
+function makeCar(color) {
+  const car = new THREE.Group(), body = new THREE.Group(); car.add(body);
+  const paint = new THREE.MeshStandardMaterial({ color, metalness: 0.5, roughness: 0.35 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, metalness: 0.8, roughness: 0.15 });
+  const add = (parent, geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+  add(body, new THREE.BoxGeometry(34, 7, 16), paint, 0, 6, 0);
+  add(body, new THREE.BoxGeometry(14, 6, 13), glass, -2, 12, 0);
+  add(body, new THREE.BoxGeometry(4, 1.5, 18), paint, -17, 14, 0);
+  add(body, new THREE.BoxGeometry(2, 5, 2), dark, -16, 10.5, 5);
+  add(body, new THREE.BoxGeometry(2, 5, 2), dark, -16, 10.5, -5);
+  add(body, new THREE.BoxGeometry(35, 1.5, 3), new THREE.MeshStandardMaterial({ color: 0x111111 }), 0, 9.8, 0); // racing stripe
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffaa });
+  add(body, new THREE.BoxGeometry(1, 2, 4), headMat, 17, 7, 5);
+  add(body, new THREE.BoxGeometry(1, 2, 4), headMat, 17, 7, -5);
+  const brakeMat = new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0x000000 });
+  add(body, new THREE.BoxGeometry(1, 2, 4), brakeMat, -17, 7, 5);
+  add(body, new THREE.BoxGeometry(1, 2, 4), brakeMat, -17, 7, -5);
+  const wheelGeo = new THREE.CylinderGeometry(4, 4, 4, 16); wheelGeo.rotateX(Math.PI / 2);
+  const rimGeo = new THREE.CylinderGeometry(2, 2, 4.2, 8); rimGeo.rotateX(Math.PI / 2);
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.2 });
+  const wheels = [[11, 8.5], [11, -8.5], [-11, 8.5], [-11, -8.5]].map(([x, z]) => {
+    const pivot = new THREE.Group(); pivot.position.set(x, 4, z); car.add(pivot);       // steering pivot (Y)
+    const spin = new THREE.Group(); pivot.add(spin);                                     // rolling (Z)
+    add(spin, wheelGeo, dark, 0, 0, 0); add(spin, rimGeo, rimMat, 0, 0, 0);
+    return { pivot, spin };
+  });
+  car.userData = { body, wheels, brakeMat };
+  scene.add(car); return car;
+}
+const carMesh = makeCar(0xfacc15);
+
+// ---------- Skid marks (instanced ring buffer) ----------
+const MAX_SKIDS = 3000;
+const skidGeo = new THREE.PlaneGeometry(5, 3); skidGeo.rotateX(-Math.PI / 2);
+const skids = new THREE.InstancedMesh(skidGeo, new THREE.MeshBasicMaterial({
+  color: 0x111111, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -24
+}), MAX_SKIDS);
+skids.frustumCulled = false; skids.count = 0; scene.add(skids);
+let skidHead = 0; const dummy = new THREE.Object3D();
+function addSkid(x, z, angle) {
+  dummy.position.set(x, 2.2, z); dummy.rotation.set(0, -angle, 0); dummy.updateMatrix();
+  skids.setMatrixAt(skidHead, dummy.matrix);
+  skidHead = (skidHead + 1) % MAX_SKIDS; skids.count = Math.min(MAX_SKIDS, skids.count + 1);
+  skids.instanceMatrix.needsUpdate = true;
+}
+
+// ---------- Smoke ----------
+const smokeTexCanvas = document.createElement("canvas"); smokeTexCanvas.width = smokeTexCanvas.height = 64;
+const sctx = smokeTexCanvas.getContext("2d"), grad = sctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+grad.addColorStop(0, "rgba(255,255,255,1)"); grad.addColorStop(1, "rgba(255,255,255,0)");
+sctx.fillStyle = grad; sctx.fillRect(0, 0, 64, 64);
+const smokeTex = new THREE.CanvasTexture(smokeTexCanvas);
+const smoke = [];
+for (let n = 0; n < 120; n++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, color: 0xdddddd, transparent: true, opacity: 0, depthWrite: false }));
+  s.visible = false; scene.add(s); smoke.push({ s, life: 0, vx: 0, vz: 0 });
+}
+let smokeHead = 0;
+function puff(x, z, grass) {
+  const p = smoke[smokeHead]; smokeHead = (smokeHead + 1) % smoke.length;
+  p.life = 1; p.s.visible = true; p.s.position.set(x, 4, z);
+  p.s.material.color.setHex(grass ? 0x8b6b3d : 0xe5e5e5);
+  p.vx = (Math.random() - .5) * 20; p.vz = (Math.random() - .5) * 20;
+}
+
+// ---------- Input / state ----------
+const keys = {};
+let camMode = 0;
+addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
+  if (e.code === "KeyR") reset();
+  if (e.code === "KeyC") camMode = (camMode + 1) % 3;
+});
+addEventListener("keyup", e => keys[e.code] = false);
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+
+const CPS = [0, 150, 300, 450];
+let car, lap, nextCp, raceTime, lapStart, lastLap, state, countdown, trackIdx;
+let drift = { active: false, pts: 0, combo: 0, idle: 0, total: 0, flash: 0, flashText: "" };
+let best = +localStorage.racer3dBest || 0;
+
+function reset() {
+  const p = pts[3], dir = tangents[3];
+  car = { x: p.x, z: p.z, angle: Math.atan2(dir.z, dir.x), vx: 0, vz: 0, steer: 0, yawRate: 0 };
+  lap = 0; nextCp = 1; raceTime = 0; lapStart = 0; lastLap = null; trackIdx = 3;
+  drift = { active: false, pts: 0, idle: 0, total: 0, flash: 0, flashText: "" };
+  state = "countdown"; countdown = 3.99;
+  skids.count = 0; skidHead = 0;
+  camera.position.set(car.x - Math.cos(car.angle) * 90, 45, car.z - Math.sin(car.angle) * 90);
+}
+
+function update(dt) {
+  const up = !!(keys.ArrowUp || keys.KeyW), down = !!(keys.ArrowDown || keys.KeyS);
+  const left = !!(keys.ArrowLeft || keys.KeyA), right = !!(keys.ArrowRight || keys.KeyD);
+  const handbrake = !!keys.Space;
+
+  if (state === "countdown") { countdown -= dt; if (countdown <= 1) state = "race"; }
+  else if (state === "race") raceTime += dt;
+
+  const { i, d } = nearest(car.x, car.z, trackIdx);
+  trackIdx = i;
+  const offroad = d > TRACK_W / 2 + 8;
+  const canDrive = state === "race";
+
+  // --- drift physics: split velocity into forward / sideways ---
+  const fx = Math.cos(car.angle), fz = Math.sin(car.angle);
+  const rx = -fz, rz = fx;
+  let vf = car.vx * fx + car.vz * fz;    // forward speed
+  let vl = car.vx * rx + car.vz * rz;    // sideways (slide) speed
+
+  if (canDrive && up) vf += (offroad ? 140 : 280) * SP * dt;
+  if (canDrive && down) vf -= (vf > 0 ? 450 : 180) * SP * dt;
+  if (!up && !down) vf *= Math.pow(0.55, dt);
+  if (handbrake) vf *= Math.pow(0.45, dt);
+  if (offroad) vf *= Math.pow(0.25, dt);
+  const maxF = (offroad ? 120 : 380) * SP;
+  vf = Math.max(-110 * SP, Math.min(maxF, vf));
+
+  // sideways grip: high = sticks, low = slides
+  const sliding = Math.abs(vl) > 60;
+  let grip = handbrake ? 2.5 : sliding ? 6 : 14;
+  if (offroad) grip = 6;
+  vl *= Math.exp(-grip * dt);
+
+  // steering
+  const target = (left ? -1 : 0) + (right ? 1 : 0);
+  car.steer += (target - car.steer) * Math.min(1, dt * 10);
+  const speedFactor = Math.min(1, Math.abs(vf) / (100 * SP));
+  const turn = car.steer * (handbrake ? 2.9 : 2.3) * speedFactor * Math.sign(vf || 1);
+  car.yawRate += (turn - car.yawRate) * Math.min(1, dt * 8);
+  car.angle += car.yawRate * dt;
+
+  // rebuild world velocity (old velocity stays put while car rotates => slide)
+  car.vx = fx * vf + rx * vl;
+  car.vz = fz * vf + rz * vl;
+  car.x += car.vx * dt; car.z += car.vz * dt;
+  car.x = Math.max(-1100, Math.min(1100, car.x));
+  car.z = Math.max(-900, Math.min(900, car.z));
+
+  const speed = Math.hypot(car.vx, car.vz);
+  const slip = Math.abs(vl);
+
+  // --- skid marks & smoke ---
+  const rearX = car.x - fx * 11, rearZ = car.z - fz * 11;
+  if (slip > 30 && speed > 40) {
+    for (const s of [1, -1]) {
+      const wx = rearX + rx * 8.5 * s, wz = rearZ + rz * 8.5 * s;
+      if (!offroad) addSkid(wx, wz, car.angle);
+      if (Math.random() < 0.5) puff(wx, wz, offroad);
+    }
+  }
+  for (const p of smoke) {
+    if (p.life <= 0) continue;
+    p.life -= dt * 0.9;
+    p.s.position.x += p.vx * dt; p.s.position.z += p.vz * dt; p.s.position.y += 10 * dt;
+    const sc = 8 + (1 - p.life) * 30; p.s.scale.set(sc, sc, 1);
+    p.s.material.opacity = Math.max(0, p.life) * 0.45;
+    if (p.life <= 0) p.s.visible = false;
+  }
+
+  // --- drift scoring ---
+  if (canDrive && slip > 30 && speed > 90 && !offroad) {
+    drift.active = true; drift.idle = 0;
+    drift.pts += slip * speed * dt * 0.02;
+  } else if (drift.active) {
+    drift.idle += dt;
+    if (offroad) { drift.flashText = "Drift lost!"; drift.flash = 1.2; drift.active = false; drift.pts = 0; }
+    else if (drift.idle > 0.6) {
+      const p = drift.pts | 0;
+      if (p > 5) { drift.total += p; drift.flashText = `+${p} ${p > 400 ? "INSANE!" : p > 150 ? "GREAT DRIFT!" : "Nice!"}`; drift.flash = 1.5; }
+      drift.active = false; drift.pts = 0;
+    }
+  }
+
+  // --- checkpoints / laps ---
+  if (state === "race") {
+    const cp = CPS[nextCp];
+    const diff = Math.min(Math.abs(i - cp), SAMPLES - Math.abs(i - cp));
+    if (diff < 20 && !offroad) {
+      nextCp = (nextCp + 1) % CPS.length;
+      if (nextCp === 1) {
+        lap++; lastLap = raceTime - lapStart; lapStart = raceTime;
+        if (lap >= LAPS) {
+          state = "finished";
+          if (!best || raceTime < best) { best = raceTime; localStorage.racer3dBest = best; }
+        }
+      }
+    }
+  }
+  if (state === "finished") { car.vx *= Math.pow(0.3, dt); car.vz *= Math.pow(0.3, dt); }
+
+  // --- visuals ---
+  const { body, wheels, brakeMat } = carMesh.userData;
+  carMesh.position.set(car.x, offroad && speed > 30 ? Math.random() * 1.2 : 0, car.z);
+  carMesh.rotation.y = -car.angle;
+  body.rotation.x = THREE.MathUtils.clamp(-vl / 400 - car.yawRate * speed / 3000, -0.12, 0.12); // body roll
+  body.rotation.z = THREE.MathUtils.clamp((down ? 0.04 : 0) - (up ? 0.02 : 0), -0.1, 0.1);       // pitch
+  wheels.forEach((w, k) => {
+    w.spin.rotation.z -= vf * dt / 4;
+    if (k < 2) w.pivot.rotation.y = -car.steer * 0.45;
+  });
+  brakeMat.emissive.setHex(down || handbrake ? 0xff0000 : 0x000000);
+
+  const cfg = [[90, 40, 40], [45, 18, 80], [5, 280, 1]][camMode];
+  // camera follows velocity direction a bit, so you see the drift angle
+  const vAng = speed > 30 ? Math.atan2(car.vz, car.vx) : car.angle;
+  let diffA = vAng - car.angle; diffA = Math.atan2(Math.sin(diffA), Math.cos(diffA));
+  const camA = car.angle + diffA * 0.5;
+  const cdx = Math.cos(camA), cdz = Math.sin(camA);
+  const camTarget = new THREE.Vector3(car.x - cdx * cfg[0], cfg[1], car.z - cdz * cfg[0]);
+  camera.position.lerp(camTarget, Math.min(1, dt * (camMode === 2 ? 8 : 5)));
+  camera.lookAt(car.x + cdx * cfg[2], 8, car.z + cdz * cfg[2]);
+  camera.fov = 65 + speed / 380 * 15; camera.updateProjectionMatrix();
+  sun.position.set(car.x - 250, 500, car.z + 180); sun.target.position.set(car.x, 0, car.z);
+
+  // HUD
+  $("lap").textContent = `${Math.min(lap + 1, LAPS)}/${LAPS}`;
+  $("time").textContent = raceTime.toFixed(2);
+  $("lastLap").textContent = lastLap ? lastLap.toFixed(2) : "-";
+  $("best").textContent = best ? best.toFixed(2) : "-";
+  $("driftScore").textContent = drift.total;
+  $("speed").innerHTML = `${speed * 0.8 | 0} <small>km/h</small>`;
+  const de = $("drift");
+  if (drift.active && drift.pts > 5) { de.textContent = `DRIFT ${drift.pts | 0}`; de.style.transform = `scale(${1 + Math.min(drift.pts, 500) / 1000})`; de.style.opacity = 1; }
+  else if (drift.flash > 0) { drift.flash -= dt; de.textContent = drift.flashText; de.style.transform = "scale(1)"; de.style.opacity = Math.min(1, drift.flash); }
+  else de.style.opacity = 0;
+
+  if (state === "countdown") { $("big").textContent = Math.floor(countdown); $("small").textContent = "Get ready..."; }
+  else if (state === "race" && raceTime < 1) { $("big").textContent = "GO!"; $("small").textContent = ""; }
+  else if (state === "finished") { $("big").textContent = "🏁 FINISH"; $("small").innerHTML = `Time ${raceTime.toFixed(2)}s · Best ${best.toFixed(2)}s · Drift ${drift.total}<br>Press R to race again`; }
+  else if (state === "race" && offroad) { $("big").textContent = ""; $("small").textContent = "⚠️ Off track!"; }
+  else { $("big").textContent = ""; $("small").textContent = ""; }
+}
+
+let last = performance.now();
+function loop(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  update(dt); renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+reset(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

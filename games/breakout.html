@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Breakout</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<a class="back" href="../index.html">← Back</a>
+<h1>🧱 Breakout</h1>
+<canvas id="c" width="720" height="540"></canvas>
+<p class="info">Mouse or ← → to move · Space / Click to launch</p>
+<script>
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const W = c.width, H = c.height, ROWS = 6, COLS = 12, BW = 54, BH = 20, GAPB = 4, OFFX = (W - COLS*(BW+GAPB) + GAPB)/2;
+let paddle, ball, bricks, score, lives, level, state, particles = [], shake = 0, keys = {};
+let best = +localStorage.breakoutBest || 0;
+
+function newLevel() {
+  bricks = [];
+  for (let r = 0; r < ROWS; r++) for (let col = 0; col < COLS; col++)
+    bricks.push({ x: OFFX + col*(BW+GAPB), y: 70 + r*(BH+GAPB), hue: r * 45, hp: r < level - 1 ? 2 : 1 });
+  resetBall();
+}
+function resetBall() { ball = { x: paddle.x, y: H - 50, vx: 0, vy: 0, r: 8, stuck: true }; state = "ready"; }
+function reset() { paddle = { x: W/2, w: 110 }; score = 0; lives = 3; level = 1; newLevel(); }
+function launch() {
+  if (state === "over" || state === "win") { reset(); return; }
+  if (ball.stuck) { const sp = 6 + level * 0.5; ball.vx = (Math.random() - .5) * 4; ball.vy = -sp; ball.stuck = false; state = "play"; }
+}
+c.addEventListener("mousemove", e => { const r = c.getBoundingClientRect(); paddle.x = (e.clientX - r.left) * W / r.width; });
+c.addEventListener("click", launch);
+addEventListener("keydown", e => { keys[e.code] = true; if (e.code === "Space") { e.preventDefault(); launch(); } });
+addEventListener("keyup", e => keys[e.code] = false);
+
+function burst(x, y, hue, n = 14) {
+  for (let i = 0; i < n; i++) particles.push({ x, y, vx: (Math.random()-.5)*8, vy: (Math.random()-.5)*8, life: 1, hue });
+}
+function update() {
+  if (keys.ArrowLeft) paddle.x -= 9;
+  if (keys.ArrowRight) paddle.x += 9;
+  paddle.x = Math.max(paddle.w/2, Math.min(W - paddle.w/2, paddle.x));
+  if (ball.stuck) { ball.x = paddle.x; return; }
+  if (state !== "play") return;
+  // sub-steps to avoid tunneling
+  for (let s = 0; s < 4; s++) {
+    ball.x += ball.vx / 4; ball.y += ball.vy / 4;
+    if (ball.x < ball.r || ball.x > W - ball.r) { ball.vx *= -1; ball.x = Math.max(ball.r, Math.min(W - ball.r, ball.x)); }
+    if (ball.y < ball.r) { ball.vy = Math.abs(ball.vy); }
+    // paddle
+    const py = H - 30;
+    if (ball.vy > 0 && ball.y + ball.r > py && ball.y < py + 12 && Math.abs(ball.x - paddle.x) < paddle.w/2 + ball.r) {
+      const sp = Math.hypot(ball.vx, ball.vy), a = (ball.x - paddle.x) / (paddle.w/2) * 2;
+      ball.vx = Math.sin(a) * sp; ball.vy = -Math.cos(a) * sp;
+    }
+    // bricks
+    for (const b of bricks) {
+      if (b.hp <= 0) continue;
+      if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + BW && ball.y + ball.r > b.y && ball.y - ball.r < b.y + BH) {
+        const ox = Math.min(ball.x + ball.r - b.x, b.x + BW - ball.x + ball.r);
+        const oy = Math.min(ball.y + ball.r - b.y, b.y + BH - ball.y + ball.r);
+        if (ox < oy) ball.vx *= -1; else ball.vy *= -1;
+        b.hp--; shake = 5;
+        if (b.hp <= 0) { score += 10 * level; burst(b.x + BW/2, b.y + BH/2, b.hue); }
+        ball.vx *= 1.005; ball.vy *= 1.005;
+        break;
+      }
+    }
+  }
+  if (ball.y > H + 20) {
+    lives--; shake = 15;
+    if (lives <= 0) { state = "over"; if (score > best) { best = score; localStorage.breakoutBest = best; } }
+    else resetBall();
+  }
+  if (bricks.every(b => b.hp <= 0)) {
+    level++;
+    if (level > 5) { state = "win"; if (score > best) { best = score; localStorage.breakoutBest = best; } }
+    else newLevel();
+  }
+}
+function draw() {
+  ctx.save();
+  if (shake > 0) { ctx.translate((Math.random()-.5)*shake, (Math.random()-.5)*shake); shake *= 0.85; if (shake < .5) shake = 0; }
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0f0c29"); g.addColorStop(1, "#302b63");
+  ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+  // bricks
+  for (const b of bricks) {
+    if (b.hp <= 0) continue;
+    ctx.shadowColor = `hsl(${b.hue},90%,60%)`; ctx.shadowBlur = 12;
+    ctx.fillStyle = `hsl(${b.hue},85%,${b.hp > 1 ? 40 : 58}%)`;
+    ctx.beginPath(); ctx.roundRect(b.x, b.y, BW, BH, 5); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(b.x + 3, b.y + 3, BW - 6, 4);
+    if (b.hp > 1) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(b.x + 2, b.y + 2, BW - 4, BH - 4); }
+  }
+  // paddle
+  ctx.shadowColor = "#22d3ee"; ctx.shadowBlur = 20;
+  const pg = ctx.createLinearGradient(0, H - 30, 0, H - 18); pg.addColorStop(0, "#67e8f9"); pg.addColorStop(1, "#0891b2");
+  ctx.fillStyle = pg; ctx.beginPath(); ctx.roundRect(paddle.x - paddle.w/2, H - 30, paddle.w, 12, 6); ctx.fill();
+  // ball
+  ctx.shadowColor = "#fff"; ctx.shadowBlur = 20; ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+  // particles
+  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.025;
+    ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = `hsl(${p.hue},90%,60%)`; ctx.fillRect(p.x, p.y, 4, 4); });
+  ctx.globalAlpha = 1; particles = particles.filter(p => p.life > 0);
+  // HUD
+  ctx.fillStyle = "#fff"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "left";
+  ctx.fillText(`Score: ${score}`, 15, 30);
+  ctx.textAlign = "center"; ctx.fillText(`Level ${level > 5 ? 5 : level}`, W/2, 30);
+  ctx.textAlign = "right"; ctx.fillText("❤️".repeat(Math.max(0, lives)) + `  Best: ${best}`, W - 15, 30);
+  const msg = { ready: ["", "Click or press Space to launch"], over: ["Game Over", "Click to play again"], win: ["You Win! 🏆", "Click to play again"] }[state];
+  if (msg) {
+    ctx.textAlign = "center";
+    if (msg[0]) { ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#fff"; ctx.font = "bold 56px sans-serif"; ctx.fillText(msg[0], W/2, H/2); }
+    ctx.font = "20px sans-serif"; ctx.fillStyle = "#fff"; ctx.fillText(msg[1], W/2, msg[0] ? H/2 + 45 : H/2 + 80);
+  }
+  ctx.restore();
+}
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+reset(); loop();
+</script>
+</body>
+</html>
