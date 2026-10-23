@@ -81,7 +81,7 @@ const sfx = {
 
 // ---------- Levels (coords relative to floor center, y up = negative) ----------
 const LEVELS = [
-  { name: 'HOPPLA', what: 'Hocker', test: 'books', slots: [
+  { name: 'HOPPLA', what: 'Hocker', test: 'sit', slots: [
     { id: 'A', w: 16, h: 110, x: -60, y: -55, anchor: true },
     { id: 'B', w: 160, h: 16, x: 0, y: -118 },
     { id: 'C', w: 16, h: 110, x: 60, y: -55 },
@@ -182,9 +182,11 @@ function place(p, s, isAnchor) {
   const anchorPiece = slots.find(x => x.anchor).piece;
   let pos = slotWorld(s), ang = 0;
   if (!isAnchor && anchorPiece) {
-    const as = slots.find(x => x.anchor), ab = anchorPiece.body;
-    const off = rot({ x: s.x - as.x, y: s.y - as.y }, ab.angle);
-    pos = { x: ab.position.x + off.x, y: ab.position.y + off.y }; ang = ab.angle;
+    // line the part up with the part it plugs into (prefer the anchor), even if that one sags
+    const ns = joints.filter(j => j.a === s || j.b === s).map(j => j.a === s ? j.b : j.a).filter(n => n.piece);
+    const ref = ns.find(n => n.anchor) || ns[0] || slots.find(x => x.anchor), rb = ref.piece.body;
+    const off = rot({ x: s.x - ref.x, y: s.y - ref.y }, rb.angle);
+    pos = { x: rb.position.x + off.x, y: rb.position.y + off.y }; ang = rb.angle;
   }
   Body.setPosition(p.body, pos); Body.setAngle(p.body, ang);
   Body.setVelocity(p.body, { x: 0, y: 0 }); Body.setAngularVelocity(p.body, 0);
@@ -204,11 +206,12 @@ function place(p, s, isAnchor) {
 function localPt(slot, wx, wy) { return { x: wx - slot.x, y: wy - slot.y }; }
 function setJoint(j, kind, q) {
   j.cons.forEach(c => Composite.remove(world, c)); j.cons = [];
-  j.kind = kind; j.q = q;
+  j.kind = kind; j.q = q; j.age = 0;
   if (kind === 'dowel') {
-    j.cons = [Constraint.create({ bodyA: j.a.piece.body, bodyB: j.b.piece.body, pointA: localPt(j.a, j.x, j.y), pointB: localPt(j.b, j.x, j.y), stiffness: 0.008, length: 0, damping: 0.05 })];
+    // two soft pins: parts sag and wobble but don't swing around like a hinge
+    j.cons = [[-7, -7], [7, 7]].map(([dx, dy]) => Constraint.create({ bodyA: j.a.piece.body, bodyB: j.b.piece.body, pointA: localPt(j.a, j.x + dx, j.y + dy), pointB: localPt(j.b, j.x + dx, j.y + dy), stiffness: 0.03, length: 0, damping: 0.05 }));
   } else if (kind === 'screw') {
-    const st = 0.02 + 0.5 * q * q;
+    const st = 0.06 + 0.5 * q * q;
     j.cons = [[-7, -7], [7, 7]].map(([dx, dy]) => Constraint.create({ bodyA: j.a.piece.body, bodyB: j.b.piece.body, pointA: localPt(j.a, j.x + dx, j.y + dy), pointB: localPt(j.b, j.x + dx, j.y + dy), stiffness: st, length: 0, damping: 0.1 }));
   }
   Composite.add(world, j.cons);
@@ -228,17 +231,30 @@ function breakJoint(j) {
   splinter(w.x, w.y, wasScrew ? 26 : 10);
   if (wasScrew) { sfx.crack(); shake = 14; } else { sfx.boing(); shake = 5; }
   anger = 1;
-  if (state === 'build') {
-    addSat(wasScrew ? -8 : -3);
-    toast(wasScrew ? 'KRACK! Verbindung gerissen!' : 'Dübel rausgeflogen!');
-    say(rnd(CURSES)); if (Math.random() < 0.5) psay(rnd(PARTNER_BAD));
+  if (state !== 'build') return;
+  addSat(wasScrew ? -8 : -3);
+  say(rnd(CURSES)); if (Math.random() < 0.5) psay(rnd(PARTNER_BAD));
+  // the looser of the two parts falls off, so the broken joint can be rebuilt by re-inserting it
+  const live = s => joints.filter(k => (k.a === s || k.b === s) && (k.kind === 'dowel' || k.kind === 'screw')).length;
+  const loose = j.a.anchor ? j.b : j.b.anchor ? j.a : live(j.a) <= live(j.b) ? j.a : j.b;
+  const lost = [loose.id];
+  detach(loose);
+  // everything no longer connected to the anchor falls off too
+  const anchorSlot = slots.find(s => s.anchor), seen = new Set([anchorSlot]), queue = [anchorSlot];
+  while (queue.length) {
+    const s = queue.shift();
+    joints.forEach(k => {
+      if (k.kind !== 'dowel' && k.kind !== 'screw') return;
+      const o = k.a === s ? k.b : k.b === s ? k.a : null;
+      if (o && !seen.has(o)) { seen.add(o); queue.push(o); }
+    });
   }
-  // pieces with no remaining connections fall off
-  slots.forEach(s => {
-    if (!s.piece || s.anchor) return;
-    const alive = joints.some(k => (k.a === s || k.b === s) && (k.kind === 'dowel' || k.kind === 'screw'));
-    if (!alive && state === 'build') { s.piece.slot = null; s.piece = null; }
-  });
+  slots.forEach(s => { if (s.piece && !seen.has(s)) { lost.push(s.id); detach(s); } });
+  toast((wasScrew ? 'KRACK! ' : 'Dübel raus! ') + 'Teil ' + lost.join(', ') + ' neu einsetzen!');
+}
+function detach(s) {
+  joints.forEach(k => { if ((k.a === s || k.b === s) && k.kind !== 'none') setJoint(k, 'none', 0); });
+  s.piece.slot = null; s.piece = null;
 }
 function splinter(x, y, n) {
   for (let i = 0; i < n; i++) particles.push({ x, y, vx: (Math.random() - 0.5) * 12, vy: -Math.random() * 10 - 2, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.6, l: 6 + Math.random() * 10, life: 1.5 + Math.random() });
@@ -260,7 +276,9 @@ cv.addEventListener('pointerdown', e => {
   const hits = Query.point(pieces.map(p => p.body), mouse);
   if (hits.length) {
     const b = hits[hits.length - 1], p = pieces.find(p => p.body === b);
-    drag = { p, c: Constraint.create({ pointA: { ...mouse }, bodyB: b, pointB: Vector.sub(mouse, b.position), stiffness: 0.15, damping: 0.1, length: 0 }) };
+    // loose parts are held at their centre so they can be turned upright while carried
+    const grip = p.slot ? Vector.sub(mouse, b.position) : { x: 0, y: 0 };
+    drag = { p, c: Constraint.create({ pointA: { ...mouse }, bodyB: b, pointB: grip, stiffness: 0.15, damping: 0.1, length: 0 }) };
     Composite.add(world, drag.c);
     if (p.slot) { say(rnd(['Ups...', 'Nur kurz anheben...', 'Vorsichtig...'])); }
   }
@@ -272,30 +290,39 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape' && screw) screw = null;
 });
 
-function angDiff(a) { a = ((a % Math.PI) + Math.PI) % Math.PI; return Math.min(a, Math.PI - a); }
-function release() {
-  const p = drag.p; Composite.remove(world, drag.c); drag = null;
-  if (p.slot) return;
-  const anchor = slots.find(s => s.anchor).piece.body, as = slots.find(s => s.anchor);
-  let best = null, bd = 1e9;
+const SNAP = 60;
+function fitsSlot(p, s) { return s.w === p.w && s.h === p.h; }
+function hasNeighbour(s) { return joints.some(j => (j.a === s && j.b.piece) || (j.b === s && j.a.piece)); }
+// nearest free slot to a loose part; prefers a matching, reachable slot within snap range
+function snapTarget(p) {
+  const as = slots.find(s => s.anchor), anchor = as.piece.body;
+  let best = null, bd = 1e9, fit = null, fd = 1e9;
   slots.forEach(s => {
     if (s.piece) return;
     const off = rot({ x: s.x - as.x, y: s.y - as.y }, anchor.angle);
-    const gp = { x: anchor.position.x + off.x, y: anchor.position.y + off.y };
-    const d = Math.hypot(gp.x - p.body.position.x, gp.y - p.body.position.y);
+    const d = Math.hypot(anchor.position.x + off.x - p.body.position.x, anchor.position.y + off.y - p.body.position.y);
     if (d < bd) { bd = d; best = s; }
+    if (fitsSlot(p, s) && hasNeighbour(s) && d < fd) { fd = d; fit = s; }
   });
-  if (!best || bd > 45) return;
-  const fits = slots.filter(s => !s.piece && s.w === p.w && s.h === p.h);
-  const target = fits.includes(best) ? best : null;
-  if (!target) { toast('Falsches Teil! Das ist doch nicht ' + best.id + '!'); addSat(-3); sfx.bad(); say(rnd(CURSES)); return; }
-  if (angDiff(p.body.angle - anchor.angle) > 0.35) { toast('Andersrum drehen! (Teil gerade halten)', '#e67e22'); return; }
-  const hasNeighbour = joints.some(j => (j.a === target && j.b.piece) || (j.b === target && j.a.piece));
-  if (!hasNeighbour) { toast('Schritt ' + nextStepNo() + ' zuerst! (Anleitung...)', '#e67e22'); addSat(-2); return; }
-  place(p, target, false); sfx.snap();
-  toast('Gesteckt! Jetzt 🔩 anklicken zum Schrauben', '#27ae60');
+  if (fit && fd <= SNAP) return { slot: fit, ok: true };
+  if (best && bd <= SNAP) return { slot: best, ok: false };
+  return null;
 }
-function nextStepNo() { return slots.findIndex(s => !s.piece) + 1; }
+function release() {
+  const p = drag.p; Composite.remove(world, drag.c); drag = null;
+  if (p.slot) return;
+  const t = snapTarget(p);
+  if (!t) return;
+  if (!t.ok) {
+    if (!fitsSlot(p, t.slot)) { toast('Falsches Teil! Hier gehört Teil ' + t.slot.id + ' hin.'); addSat(-3); sfx.bad(); say(rnd(CURSES)); }
+    else { toast('Hängt noch in der Luft – erst Teil ' + nextSlot().id + '!', '#e67e22'); addSat(-2); }
+    return;
+  }
+  place(p, t.slot, false); sfx.snap();
+  toast('Gesteckt! Jetzt die roten 🔴 Dübel festschrauben', '#27ae60');
+}
+function nextSlot() { return slots.find(s => !s.piece && hasNeighbour(s)); }
+function nextStepNo() { return slots.filter(s => s.piece).length; }
 
 // ---------- Screw minigame ----------
 function startScrew(j) {
@@ -303,11 +330,12 @@ function startScrew(j) {
   sfx.click();
 }
 function screwHit() {
-  const a = Math.sin(screw.t * screw.speed) * 1.4;
+  if (!screw.j.a.piece || !screw.j.b.piece) { screw = null; return; }
+  const a =Math.sin(screw.t * screw.speed) * 1.4;
   const d = Math.abs(a - screw.zone), q = Math.max(0, 1 - d / 0.45);
   screw.hits.push(q); sfx.ratchet();
   if (q < 0.15) { toast('SCHIEF ANGESETZT!', '#c0392b'); sfx.bad(); say(rnd(CURSES)); anger = 1; const b = screw.j.b.piece.body; Body.applyForce(b, b.position, { x: (Math.random() - 0.5) * 0.04 * b.mass, y: -0.02 * b.mass }); }
-  screw.zone = (Math.random() - 0.5) * 1.6; screw.t = Math.random() * 6;
+  screw.zone = (Math.random() - 0.5) * 1.6;
   if (screw.hits.length >= 3) {
     const q = screw.hits.reduce((a, b) => a + b, 0) / 3, j = screw.j;
     screw = null;
@@ -338,14 +366,18 @@ function dropWeights() {
   } else {
     slots.filter(s => s.w > s.h).forEach(s => {
       const p = s.piece.body;
-      for (let k = 0; k < 3; k++) { const b = Bodies.rectangle(p.position.x - 40 + k * 40, p.position.y - 50 - k * 20, 30, 44, opt); b.kind = 'book'; b.col = rnd(['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#f39c12']); weights.push(b); }
+      // wide shelves have a divider in the middle, so books go left and right of it
+      const xs = s.w > 180 ? [-70, -35, 35, 70] : [-40, 0, 40];
+      xs.forEach((dx, k) => { const b = Bodies.rectangle(p.position.x + dx, p.position.y - 40 - k * 12, 30, 44, opt); b.kind = 'book'; b.col = rnd(['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#f39c12']); weights.push(b); });
     });
   }
   Composite.add(world, weights);
 }
 function endTest() {
   const broken = joints.filter(j => j.kind === 'broken').length;
-  const passed = broken <= 1;
+  const tilt = slots.find(s => s.anchor).piece.body.angle;
+  const toppled = Math.abs(Math.atan2(Math.sin(tilt), Math.cos(tilt))) > 0.6;
+  const passed = broken <= 1 && !toppled;
   const lvScore = passed ? Math.round(sat * 10 + Math.max(0, 150 - levelTime) * 5) : 0;
   if (passed) {
     totalScore += lvScore; sfx.win(); addSat(10);
@@ -354,7 +386,7 @@ function endTest() {
   } else {
     addSat(-25); sfx.bad();
     if (sat <= 0) return gameOver();
-    showOv(`<h2>💥 ZUSAMMENGEKRACHT!</h2><p>${broken} Verbindungen gerissen. Der ${lvl.what} ist jetzt Kaminholz.</p><p>Zufriedenheit: ${Math.round(sat)}%</p>`, 'Nochmal aufbauen 🔧', () => startLevel(lvIndex));
+    showOv(`<h2>💥 ZUSAMMENGEKRACHT!</h2><p>${toppled && broken <= 1 ? `Umgekippt! Der ${lvl.what} liegt jetzt flach.` : `${broken} Verbindungen gerissen. Der ${lvl.what} ist jetzt Kaminholz.`}</p><p>Tipp: Schrauben im grünen Bereich halten viel mehr aus.</p><p>Zufriedenheit: ${Math.round(sat)}%</p>`, 'Nochmal aufbauen 🔧', () => startLevel(lvIndex));
   }
   state = 'result';
 }
@@ -381,9 +413,17 @@ function loop(now) {
     if (state === 'build') {
       levelTime += dt; addSat(-dt / 5);
       if (sat <= 0) gameOver();
+      // carried loose parts turn themselves to match the furniture's orientation
+      if (drag && !drag.p.slot) {
+        const b = drag.p.body, ab = slots.find(s => s.anchor).piece.body;
+        let d = ab.angle - b.angle; d = Math.atan2(Math.sin(2 * d), Math.cos(2 * d)) / 2;
+        Body.setAngle(b, b.angle + d * 0.2); Body.setAngularVelocity(b, 0);
+      }
     }
     joints.forEach(j => {
-      if (j.kind === 'dowel' && j.cons.some(c => stretch(c) > 30)) breakJoint(j);
+      j.age += dt;
+      // fresh dowels get a moment to pull the parts together before they can pop out
+      if (j.kind === 'dowel' && j.age > 1 && j.cons.some(c => stretch(c) > 30)) breakJoint(j);
       else if (j.kind === 'screw' && j.cons.some(c => stretch(c) > 3.5 + 7 * j.q)) breakJoint(j);
     });
     if (state === 'test') {
@@ -422,8 +462,8 @@ function drawPart(p, alpha = 1) {
     }
     ctx.stroke();
   }
-  const letter = p.slot ? p.slot.id : slots.find(s => !s.piece && s.w === p.w && s.h === p.h)?.id;
-  if (letter && th >= 10) { ctx.fillStyle = '#5a3d1c'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; if (!horiz) ctx.rotate(-Math.PI / 2); ctx.fillText(letter, 0, 1); }
+  const letter = p.slot ? p.slot.id : slots.filter(s => !s.piece && fitsSlot(p, s)).map(s => s.id).join('/');
+  if (letter && th >= 10) { ctx.fillStyle = p.slot ? '#5a3d1c' : '#0058a3'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; if (!horiz) ctx.rotate(-Math.PI / 2); ctx.fillText(letter, 0, 1); }
   ctx.restore();
 }
 function drawPerson(x, y, col, face, mood, partner) {
@@ -470,12 +510,14 @@ function draw() {
   if (!lvl) { ctx.restore(); return; }
   // ghosts
   const as = slots.find(s => s.anchor), ab = as.piece.body;
-  const next = slots.find(s => !s.piece && joints.some(j => (j.a === s && j.b.piece) || (j.b === s && j.a.piece)));
+  const next = nextSlot();
+  const snap = drag && !drag.p.slot && state === 'build' ? snapTarget(drag.p) : null;
   if (state === 'build') slots.forEach(s => {
     if (s.piece) return;
     const off = rot({ x: s.x - as.x, y: s.y - as.y }, ab.angle);
     ctx.save(); ctx.translate(ab.position.x + off.x, ab.position.y + off.y); ctx.rotate(ab.angle);
     ctx.setLineDash([6, 5]); ctx.lineWidth = 2;
+    if (snap && snap.slot === s) { ctx.fillStyle = snap.ok ? 'rgba(46,204,113,.35)' : 'rgba(231,76,60,.3)'; ctx.fillRect(-s.w / 2, -s.h / 2, s.w, s.h); }
     ctx.strokeStyle = s === next ? 'rgba(0,88,163,' + (0.6 + Math.sin(performance.now() / 200) * 0.3) + ')' : 'rgba(0,88,163,.25)';
     ctx.strokeRect(-s.w / 2, -s.h / 2, s.w, s.h); ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(0,88,163,.5)'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(s.id, 0, 0);
@@ -534,10 +576,11 @@ function drawManual(next) {
   ctx.fillText(`${lvl.name} – ${lvl.what}   (${lvIndex + 1}/${LEVELS.length})`, 10, 20);
   ctx.font = '12px Arial';
   const unscrewed = joints.filter(j => j.kind !== 'screw').length;
-  ctx.fillText(state === 'test' ? 'Schritt ∞: 🧍❓💥' : next ? `Schritt ${nextStepNo()}: Teil ${next.id} ➜ 🔩×${joints.filter(j => j.a === next || j.b === next).length}` : unscrewed ? `Alle 🔴 festschrauben! (${unscrewed} übrig)` : '✔', 10, 38);
-  ctx.fillText('Ziehen = Teil bewegen · 🔴 klicken = Inbus · Leertaste im grünen Feld', 10, h - 8);
+  ctx.fillText(state === 'test' ? 'Schritt ∞: 🧍❓💥' : next ? `Schritt ${nextStepNo()}: Teil ${next.id} in den blinkenden Umriss ziehen` : unscrewed ? `Alle 🔴 festschrauben! (${unscrewed} übrig)` : '✔', 10, 38);
+  ctx.fillText(`Teile platziert: ${slots.filter(s => s.piece).length}/${slots.length} · verschraubt: ${joints.length - unscrewed}/${joints.length}`, 10, 54);
+  ctx.fillText('Ziehen = Teil bewegen · 🔴 klicken = Inbus · Klick/Leertaste im grünen Feld', 10, h - 8);
   // mini schematic
-  const sx = 290, sy = 80, k = 0.27;
+  const sx = 360, sy = 80, k = 0.27;
   slots.forEach(s => {
     ctx.fillStyle = s === next ? '#ff9f1a' : s.piece ? '#ccc' : '#fff';
     ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
@@ -564,9 +607,9 @@ function drawScrew() {
 
 showOv(`<h1>🛋️ Möbelbau aus der Hölle</h1>
 <p>Fünf Kartons. Eine kryptische Anleitung. Ein Inbusschlüssel. Und dein/e Partner/in schaut zu.</p>
-<p>🪵 <b>Ziehe</b> die Teile in die gestrichelten Umrisse – sie werden locker gedübelt und hängen durch.<br>
-🔴 <b>Klicke</b> die roten Punkte und drück im <b>grünen Bereich</b> (3×) – schief angesetzt = wackelige Schraube.<br>
-⚠️ Fertige Teile falsch anheben reißt alles auseinander!<br>
+<p>🪵 <b>Ziehe</b> die Teile in den <b>blinkenden Umriss</b> (Buchstabe auf dem Teil = Platz im Umriss). Grün = passt. Teile drehen sich beim Tragen von selbst gerade.<br>
+🔴 Gesteckte Teile hängen nur an <b>Dübeln</b>. <b>Klicke</b> die roten Punkte und drück im <b>grünen Bereich</b> (3×) – schief angesetzt = wackelige Schraube.<br>
+⚠️ Fertige Teile nicht rumzerren! Reißt eine Verbindung, fällt das Teil ab und muss neu rein.<br>
 💥 Am Ende kommt der <b>Belastungstest</b>. Hält dein Möbel?</p>
 <p>Wenn die Zufriedenheit auf 0 fällt, ist die Beziehung vorbei.</p>`, 'Karton aufreißen 📦', () => startLevel(0));
 requestAnimationFrame(loop);
