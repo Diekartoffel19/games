@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Brückenbauer — Monstertruck-Stresstest im Browser</title>
+<meta name="description" content="Baue mit Holz, Stahl und Seilen eine Brücke über die Schlucht. Dann rollt ein immer schwererer Truck drüber, und die Farben zeigen live, wo es knackt.">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#1b1420">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Brückenbauer — Monstertruck-Stresstest im Browser">
+<meta property="og:description" content="Baue eine Brücke, die einen 90-Tonnen-Monstertruck trägt. Grün, gelb, rot, knack!">
+<meta property="og:locale" content="de_DE">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "Brückenbauer — Monstertruck-Stresstest",
+  "description": "Baue mit Holzbalken, Stahlträgern und Seilen eine Brücke und teste sie mit immer schwereren Trucks.",
+  "inLanguage": "de",
+  "applicationCategory": "Game",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+}
+</script>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.lucius-website.xyz/script.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script defer src="https://umami.lucius-website.xyz/recorder.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+:root {
+  --ink: #1a1218;
+  --panel: rgba(26, 18, 24, 0.86);
+  --panel-edge: rgba(240, 214, 170, 0.16);
+  --paper: #f3e6cf;
+  --paper-dim: #b9a68b;
+  --amber: #f2a93b;
+  --amber-deep: #c9791a;
+  --ok: #3fbf6a;
+  --warn: #e8d23a;
+  --hot: #f08a2c;
+  --bad: #e23b2e;
+  --font: "Bahnschrift", "DIN Alternate", "Roboto Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); color: var(--paper); font-family: var(--font); }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+
+.panel { position: fixed; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+
+.back { position: fixed; top: 12px; left: 12px; z-index: 20; color: var(--paper); text-decoration: none; font-size: 0.95rem; font-weight: 600; background: var(--panel); border: 1px solid var(--panel-edge); padding: 8px 14px; border-radius: 20px; min-height: 40px; display: inline-flex; align-items: center; }
+.back:hover { background: rgba(60, 40, 34, 0.9); }
+
+#truckCard { top: 12px; left: 50%; transform: translateX(-50%); padding: 8px 18px 10px; text-align: center; min-width: 250px; }
+#truckName { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.01em; line-height: 1.2; }
+#truckName span { color: var(--amber); }
+#stages { display: flex; gap: 4px; justify-content: center; margin-top: 6px; }
+#stages i { width: 26px; height: 5px; border-radius: 3px; background: rgba(243, 230, 207, 0.18); }
+#stages i.done { background: var(--ok); }
+#stages i.now { background: var(--amber); }
+
+#budgetCard { top: 12px; right: 12px; padding: 8px 14px 10px; min-width: 190px; }
+#budgetText { display: flex; justify-content: space-between; gap: 12px; font-size: 0.95rem; color: var(--paper-dim); }
+#budgetText b { color: var(--paper); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+#budgetBar { height: 6px; border-radius: 3px; background: rgba(243, 230, 207, 0.15); margin-top: 6px; overflow: hidden; }
+#budgetFill { height: 100%; width: 0; background: var(--amber); transition: width .15s; }
+#budgetFill.over { background: var(--bad); }
+
+#gauge { top: 70px; left: 50%; transform: translateX(-50%); padding: 8px 16px 10px; width: min(360px, 90vw); display: none; }
+#gauge.on { display: block; }
+#gaugeRow { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--paper-dim); }
+#gaugeRow b { color: var(--paper); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+#gaugeTrack { position: relative; height: 10px; border-radius: 5px; margin-top: 6px; background: linear-gradient(90deg, var(--ok) 0%, var(--warn) 50%, var(--hot) 80%, var(--bad) 100%); }
+#gaugeMask { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 5px; background: rgba(26, 18, 24, 0.78); transform-origin: right; }
+#gaugeNote { margin-top: 6px; font-size: 0.82rem; color: var(--paper-dim); min-height: 1.1em; }
+
+#bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); display: flex; align-items: stretch; gap: 10px; background: linear-gradient(0deg, rgba(26, 18, 24, 0.94) 60%, rgba(26, 18, 24, 0)); z-index: 10; }
+#tools { display: flex; gap: 6px; flex: 1; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+#tools::-webkit-scrollbar { display: none; }
+.tool { flex: 0 0 auto; min-width: 104px; padding: 8px 12px 8px; text-align: left; font: inherit; color: var(--paper); background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px; cursor: pointer; touch-action: manipulation; }
+.tool:hover { border-color: rgba(242, 169, 59, 0.55); }
+.tool[aria-pressed="true"] { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); background: rgba(70, 44, 24, 0.9); }
+.tool .sw { display: block; height: 8px; border-radius: 2px; margin-bottom: 6px; }
+.tool .nm { display: block; font-weight: 700; font-size: 0.98rem; }
+.tool .pr { display: block; font-size: 0.8rem; color: var(--paper-dim); font-variant-numeric: tabular-nums; }
+.sw.road { background: repeating-linear-gradient(90deg, #4a3a30 0 10px, #2b211c 10px 12px); border-top: 2px solid #d8b27a; }
+.sw.wood { background: linear-gradient(#c99a5b, #a8783d); }
+.sw.steel { background: linear-gradient(#cfdbe6, #7f93a6); }
+.sw.rope { height: 4px; margin-top: 2px; margin-bottom: 8px; background: repeating-linear-gradient(90deg, #d9c59a 0 6px, #a58f63 6px 9px); }
+.sw.erase { background: repeating-linear-gradient(135deg, #7a2a24 0 6px, #3a1512 6px 12px); }
+.small { min-width: 0; padding: 8px 14px; display: flex; align-items: center; font-weight: 700; }
+#go { flex: 0 0 auto; padding: 0 22px; font: inherit; font-weight: 800; font-size: 1.1rem; color: #2a1606; background: linear-gradient(#ffc562, var(--amber-deep)); border: 0; border-radius: 10px; cursor: pointer; min-height: 52px; touch-action: manipulation; box-shadow: 0 3px 0 #7a4308; }
+#go:active { transform: translateY(2px); box-shadow: 0 1px 0 #7a4308; }
+#go.stop { color: var(--paper); background: linear-gradient(#6b3b33, #4a2420); box-shadow: 0 3px 0 #2a1210; }
+:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+#legend { right: 12px; top: 74px; padding: 8px 12px; font-size: 0.8rem; color: var(--paper-dim); width: 190px; }
+#legend .ramp { height: 6px; border-radius: 3px; margin: 5px 0 3px; background: linear-gradient(90deg, var(--ok), var(--warn) 50%, var(--hot) 80%, var(--bad)); }
+#legend .ends { display: flex; justify-content: space-between; }
+
+#hint { position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px; padding: 6px 14px; border-radius: 16px; background: var(--panel); border: 1px solid var(--panel-edge); font-size: 0.9rem; color: var(--paper-dim); pointer-events: none; transition: opacity .3s; text-align: center; max-width: 92vw; }
+
+#result { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(14, 8, 12, 0.55); z-index: 30; padding: 16px; }
+#result.on { display: flex; }
+#resultBox { background: #231a20; border: 1px solid var(--panel-edge); border-radius: 14px; padding: 24px 28px; max-width: 420px; width: 100%; text-align: left; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
+#resultBox h2 { margin: 0 0 8px; font-size: 1.8rem; line-height: 1.1; }
+#resultBox h2.win { color: var(--ok); }
+#resultBox h2.lose { color: var(--bad); }
+#resultBox p { margin: 0 0 18px; color: var(--paper-dim); line-height: 1.45; font-size: 1.02rem; }
+#resultBtns { display: flex; gap: 8px; flex-wrap: wrap; }
+#resultBtns button { font: inherit; font-weight: 700; padding: 11px 18px; border-radius: 9px; border: 1px solid var(--panel-edge); background: #3a2a30; color: var(--paper); cursor: pointer; min-height: 44px; }
+#resultBtns button.primary { background: linear-gradient(#ffc562, var(--amber-deep)); color: #2a1606; border: 0; }
+
+@media (max-width: 720px) {
+  #truckCard { top: 58px; min-width: 0; padding: 6px 14px 8px; }
+  #truckName { font-size: 1.05rem; }
+  #budgetCard { top: 12px; min-width: 150px; padding: 6px 10px 8px; }
+  #legend { display: none; }
+  #gauge { top: 118px; }
+  .tool { min-width: 88px; padding: 6px 9px; }
+  #go { padding: 0 14px; font-size: 1rem; }
+  #hint { bottom: 92px; font-size: 0.82rem; }
+}
+@media (prefers-reduced-motion: reduce) { #budgetFill { transition: none; } }
+</style>
+</head>
+<body>
+<canvas id="cv" aria-label="Bauplatz für die Brücke"></canvas>
+<a class="back" href="../index.html" title="Zurück zur Spielesammlung">‹ Arcade</a>
+
+<div id="truckCard" class="panel">
+  <div id="truckName"></div>
+  <div id="stages" aria-hidden="true"></div>
+</div>
+<div id="budgetCard" class="panel">
+  <div id="budgetText"><span>Budget</span><b id="budgetNum"></b></div>
+  <div id="budgetBar"><div id="budgetFill"></div></div>
+</div>
+<div id="legend" class="panel">
+  Belastung der Bauteile
+  <div class="ramp"></div>
+  <div class="ends"><span>locker</span><span>Limit</span><span>Bruch</span></div>
+</div>
+<div id="gauge" class="panel">
+  <div id="gaugeRow"><span>Höchste Belastung</span><b id="gaugePct">0 %</b></div>
+  <div id="gaugeTrack"><div id="gaugeMask"></div></div>
+  <div id="gaugeNote"></div>
+</div>
+<div id="hint"></div>
+
+<div id="bar">
+  <div id="tools" role="toolbar" aria-label="Baumaterial"></div>
+  <button id="go">Stresstest starten</button>
+</div>
+
+<div id="result" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+  <div id="resultBox">
+    <h2 id="resultTitle"></h2>
+    <p id="resultText"></p>
+    <div id="resultBtns"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- Konstanten ---------- */
+const G = 9.81;          // m/s²
+const SUBSTEPS = 10;     // XPBD-Substeps pro 1/60 s
+const DT = 1 / 60;
+const WALL_L = 6, WALL_R = 26, GROUND_Y = 0, WATER_Y = 12;
+
+// Einheiten: Meter, Tonnen, Kilonewton
+const MAT = {
+  road:  { name: 'Fahrbahn',    cost: 30, max: 4,  dens: 0.10,  k: 9000,  cap: 140, w: 0.30, road: true },
+  wood:  { name: 'Holzbalken',  cost: 18, max: 5,  dens: 0.05,  k: 9000,  cap: 170, w: 0.22 },
+  steel: { name: 'Stahlträger', cost: 55, max: 6,  dens: 0.14,  k: 40000, cap: 650, w: 0.20 },
+  rope:  { name: 'Seil',        cost: 10, max: 12, dens: 0.012, k: 6000,  cap: 320, w: 0.07, rope: true }
+};
+const TOOLS = ['road', 'wood', 'steel', 'rope', 'erase'];
+
+const TRUCKS = [
+  { name: 'Pickup',            t: 2,  kind: 'pickup', wb: 2.7, r: 0.42, col: '#c8472f', budget: 3000 },
+  { name: 'Lieferwagen',       t: 6,  kind: 'van',    wb: 3.4, r: 0.48, col: '#e9e1cf', budget: 3600 },
+  { name: 'Kipper',            t: 14, kind: 'dump',   wb: 4.2, r: 0.58, col: '#e0a21c', budget: 4600 },
+  { name: 'Tankwagen',         t: 26, kind: 'tank',   wb: 4.8, r: 0.62, col: '#9aa9b6', budget: 6000 },
+  { name: 'Sattelzug',         t: 40, kind: 'semi',   wb: 6.2, r: 0.62, col: '#2f6fa5', budget: 8000 },
+  { name: 'Monstertruck',      t: 60, kind: 'monster',wb: 3.8, r: 1.15, col: '#4aa84a', budget: 10000 },
+  { name: 'Titan-Monstertruck',t: 90, kind: 'monster',wb: 4.4, r: 1.35, col: '#8b3fb5', budget: 12000 }
+];
+function truckFor(level) {
+  if (level < TRUCKS.length) return TRUCKS[level];
+  const n = level - TRUCKS.length + 1;
+  return { ...TRUCKS[TRUCKS.length - 1], name: 'Titan Mk ' + (n + 1), t: 90 + 20 * n, budget: 12000 + 800 * n };
+}
+
+/* ---------- Zustand ---------- */
+let level = 0;
+let tool = 'wood';
+let build = [];          // {ax,ay,bx,by,type}
+let sim = null;          // läuft nur im Test
+let drag = null;         // {ax,ay,ex,ey}
+let hover = { x: 0, y: 0 };
+let result = null;
+let shake = 0;
+let particles = [];
+let clock = 0;
+let acc = 0;
+let lastTs = 0;
+let cleared = 0;
+try { cleared = (window.ArcadeCore && ArcadeCore.getScore('bridge')) || 0; } catch (e) {}
+if (cleared > 0) level = Math.min(cleared, 12);
+
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+const cam = { s: 20, ox: 0, oy: 0 };
+
+/* ---------- Geometrie ---------- */
+function isAnchor(x, y) {
+  const left = (x === WALL_L && y >= 0 && y <= 7) || (y === 0 && x >= 0 && x <= WALL_L) || (x === 3 && y >= -7 && y <= 0);
+  const mx = 32 - x;
+  const right = (mx === WALL_L && y >= 0 && y <= 7) || (y === 0 && mx >= 0 && mx <= WALL_L) || (mx === 3 && y >= -7 && y <= 0);
+  return left || right;
+}
+function inRock(x, y) { return y > 0.01 && (x < WALL_L - 0.01 || x > WALL_R + 0.01); }
+function ptOK(x, y) {
+  if (y > 9 || y < -9 || x < -2 || x > 34) return false;
+  if (isAnchor(x, y)) return true;
+  return !(y > 0 && (x <= WALL_L || x >= WALL_R));
+}
+function segInRock(ax, ay, bx, by) {
+  for (let i = 1; i < 12; i++) {
+    const t = i / 12;
+    if (inRock(ax + (bx - ax) * t, ay + (by - ay) * t)) return true;
+  }
+  return false;
+}
+function len(b) { return Math.hypot(b.bx - b.ax, b.by - b.ay); }
+function costOf(b) { return Math.round(len(b) * MAT[b.type].cost); }
+function spent() { return build.reduce((s, b) => s + costOf(b), 0); }
+function budget() { return truckFor(level).budget; }
+function fmtEur(n) { return n.toLocaleString('de-DE') + ' €'; }
+function distSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
+/* ---------- Farben ---------- */
+const STOPS = [[0, [63, 191, 106]], [0.5, [232, 210, 58]], [0.8, [240, 138, 44]], [1, [226, 59, 46]]];
+function stressRGB(r) {
+  r = Math.max(0, Math.min(1, r));
+  for (let i = 1; i < STOPS.length; i++) {
+    if (r <= STOPS[i][0]) {
+      const [r0, c0] = STOPS[i - 1], [r1, c1] = STOPS[i];
+      const t = (r - r0) / (r1 - r0);
+      return c0.map((v, k) => Math.round(v + (c1[k] - v) * t));
+    }
+  }
+  return STOPS[3][1];
+}
+const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+/* ---------- Sound ---------- */
+let ac = null, creakOsc = null, creakGain = null;
+function audio() {
+  if (ac) { if (ac.state === 'suspended') ac.resume(); return ac; }
+  const A = window.AudioContext || window.webkitAudioContext;
+  if (!A) return null;
+  ac = new A();
+  creakOsc = ac.createOscillator();
+  creakGain = ac.createGain();
+  creakOsc.type = 'sawtooth';
+  creakOsc.frequency.value = 90;
+  creakGain.gain.value = 0;
+  const lp = ac.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 420;
+  creakOsc.connect(lp); lp.connect(creakGain); creakGain.connect(ac.destination);
+  creakOsc.start();
+  return ac;
+}
+function muted() { try { return window.ArcadeCore && ArcadeCore.isMuted(); } catch (e) { return false; } }
+function creak(level01) {
+  if (!ac || !creakGain) return;
+  const g = muted() ? 0 : Math.max(0, (level01 - 0.65) / 0.35) * 0.07;
+  creakGain.gain.setTargetAtTime(g, ac.currentTime, 0.05);
+  creakOsc.frequency.setTargetAtTime(70 + level01 * 60 + Math.random() * 25, ac.currentTime, 0.04);
+}
+function crack(big = 1) {
+  if (muted() || !audio()) return;
+  const n = Math.floor(ac.sampleRate * 0.28);
+  const buf = ac.createBuffer(1, n, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+  const src = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+  src.buffer = buf; f.type = 'bandpass'; f.frequency.value = 900 + Math.random() * 700; f.Q.value = 0.8;
+  g.gain.value = 0.5 * big;
+  src.connect(f); f.connect(g); g.connect(ac.destination); src.start();
+}
+function tone(freq, dur, type = 'triangle', vol = 0.12, delay = 0) {
+  if (muted() || !audio()) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime + delay;
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(ac.destination); o.start(t0); o.stop(t0 + dur);
+}
+function place() { tone(220, 0.07, 'square', 0.05); }
+
+/* ---------- Simulation (XPBD) ---------- */
+function startTest() {
+  const nodes = [], map = new Map();
+  const get = (x, y) => {
+    const k = x + ',' + y;
+    if (!map.has(k)) { map.set(k, nodes.length); nodes.push({ x, y, px: x, py: y, vx: 0, vy: 0, m: 0, fixed: isAnchor(x, y) }); }
+    return map.get(k);
+  };
+  const beams = build.map(b => {
+    const a = get(b.ax, b.ay), c = get(b.bx, b.by), m = MAT[b.type], L = len(b);
+    nodes[a].m += m.dens * L / 2; nodes[c].m += m.dens * L / 2;
+    const capC = m.rope ? 0 : m.cap * Math.min(1, Math.pow(3 / L, 1.2));
+    return { a, b: c, type: b.type, m, rest: L, alpha: 1 / m.k, capT: m.cap, capC, f: 0, ratio: 0, dead: false, road: !!m.road };
+  });
+  nodes.forEach(n => { n.m = n.fixed ? 0 : Math.max(0.06, n.m + 0.03); n.w = n.fixed ? 0 : 1 / n.m; });
+  const tk = truckFor(level);
+  const speed = Math.max(3.4, 6 - tk.t * 0.035);
+  sim = {
+    nodes, beams, t: 0, state: 'run', endT: 0, maxRatio: 0, broken: 0, note: '',
+    truck: { ...tk, x: -tk.wb - 5, speed, fall: null, wheel: 0, ya: 0, yb: 0 }
+  };
+  result = null; drag = null;
+  audio();
+  $('go').textContent = 'Test abbrechen'; $('go').classList.add('stop');
+  $('gauge').classList.add('on');
+  $('legend').style.display = 'none';
+  setHint('');
+}
+function stopTest() {
+  sim = null;
+  creak(0);
+  $('go').textContent = 'Stresstest starten'; $('go').classList.remove('stop');
+  $('gauge').classList.remove('on');
+  $('legend').style.display = '';
+  setHint('Zieh von Punkt zu Punkt, um Balken zu bauen.');
+}
+
+function support(x) {
+  let best = null;
+  if (x <= WALL_L + 1e-4 || x >= WALL_R - 1e-4) best = { y: GROUND_Y, beam: null, t: 0 };
+  for (const b of sim.beams) {
+    if (b.dead || !b.road) continue;
+    const A = sim.nodes[b.a], B = sim.nodes[b.b];
+    if (Math.abs(B.x - A.x) < 0.2) continue;
+    const lo = Math.min(A.x, B.x), hi = Math.max(A.x, B.x);
+    if (x < lo - 1e-3 || x > hi + 1e-3) continue;
+    const t = (x - A.x) / (B.x - A.x), y = A.y + (B.y - A.y) * t;
+    if (!best || y < best.y - 1e-6) best = { y, beam: b, t };
+  }
+  return best;
+}
+
+function substep(h) {
+  const { nodes, beams, truck } = sim;
+  const h2 = h * h;
+  const ext = new Array(nodes.length).fill(0);
+
+  if (!truck.fall && sim.state === 'run') {
+    truck.x += truck.speed * h;
+    truck.wheel += truck.speed * h / truck.r;
+    const total = truck.t * G;
+    const axles = [{ x: truck.x, F: total * 0.55 }, { x: truck.x + truck.wb, F: total * 0.45 }];
+    const ys = [];
+    let lost = false;
+    axles.forEach((ax, i) => {
+      const s = support(ax.x);
+      if (!s) { lost = true; ys.push(null); return; }
+      ys.push(s.y);
+      if (s.beam) {
+        const bm = s.beam;
+        ext[bm.a] += ax.F * (1 - s.t);
+        ext[bm.b] += ax.F * s.t;
+      }
+    });
+    if (lost) {
+      const ya = ys[0] != null ? ys[0] : (ys[1] != null ? ys[1] : GROUND_Y);
+      truck.fall = { x: truck.x, y: ya - truck.r, vx: truck.speed, vy: 0, ang: Math.atan2((ys[1] ?? ya) - ya, truck.wb), w: 0.9 };
+      sim.endT = sim.t; sim.note = 'Der Truck stürzt in die Schlucht.';
+      crack(0.6);
+    } else { truck.ya = ys[0]; truck.yb = ys[1]; }
+  } else if (truck.fall) {
+    const f = truck.fall;
+    f.vy += G * h; f.x += f.vx * h; f.y += f.vy * h; f.ang += f.w * h;
+  }
+
+  // Vorhersage
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (n.fixed) continue;
+    n.px = n.x; n.py = n.y;
+    n.vy += G * h;
+    n.vx *= 1 - 1.6 * h; n.vy *= 1 - 1.6 * h;
+    n.x += n.vx * h;
+    n.y += n.vy * h + (ext[i] / n.m) * h2;
+  }
+  // Constraints, ein Durchgang pro Substep
+  for (const b of beams) {
+    if (b.dead) continue;
+    const A = nodes[b.a], B = nodes[b.b];
+    const dx = A.x - B.x, dy = A.y - B.y;
+    const l = Math.hypot(dx, dy) || 1e-9;
+    const C = l - b.rest;
+    if (b.m.rope && C < 0) continue;
+    const at = b.alpha / h2;
+    const wsum = A.w + B.w;
+    if (wsum === 0) continue;
+    const dl = -C / (wsum + at);
+    const nx = dx / l, ny = dy / l;
+    A.x += A.w * nx * dl; A.y += A.w * ny * dl;
+    B.x -= B.w * nx * dl; B.y -= B.w * ny * dl;
+    b.facc += -dl / h2; // +: Zug
+  }
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (n.fixed) continue;
+    n.vx = (n.x - n.px) / h; n.vy = (n.y - n.py) / h;
+    if (n.y > WATER_Y + 1.5) { n.y = WATER_Y + 1.5; n.vy = 0; n.vx *= 0.8; }
+  }
+}
+
+function stepFrame() {
+  const h = DT / SUBSTEPS;
+  for (const b of sim.beams) b.facc = 0;
+  for (let i = 0; i < SUBSTEPS; i++) substep(h);
+  sim.t += DT;
+
+  let maxR = 0;
+  for (const b of sim.beams) {
+    if (b.dead) continue;
+    const inst = b.facc / SUBSTEPS;
+    b.f = b.f * 0.65 + inst * 0.35;
+    const cap = b.f >= 0 ? b.capT : b.capC;
+    b.ratio = b.f === 0 ? 0 : (cap > 0 ? Math.abs(b.f) / cap : 0);
+    if (b.f < 0 && cap === 0) b.ratio = 0;
+    if (b.ratio > maxR) maxR = b.ratio;
+    if (b.ratio > 1) breakBeam(b);
+  }
+  sim.maxRatio = Math.max(0, maxR);
+
+  const tr = sim.truck;
+  if (sim.state === 'run') {
+    if (!tr.fall && tr.x > WALL_R + 1.5) { sim.state = 'win'; sim.endT = sim.t; }
+    else if (tr.fall && sim.t - sim.endT > 2.2) sim.state = 'lose';
+    else if (sim.broken > 0 && !tr.fall && sim.t - (sim.firstBreak || 0) > 6) sim.state = 'lose';
+    else if (sim.t > 45) sim.state = 'lose';
+  }
+  if (sim.state === 'win' && sim.t - sim.endT > 0.9) finish(true);
+  if (sim.state === 'lose') finish(false);
+}
+
+function breakBeam(b) {
+  b.dead = true;
+  sim.broken++;
+  if (!sim.firstBreak) sim.firstBreak = sim.t;
+  const A = sim.nodes[b.a], B = sim.nodes[b.b];
+  const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+  const mat = b.type;
+  const col = mat === 'steel' ? '#aab8c6' : mat === 'rope' ? '#d9c59a' : mat === 'road' ? '#5a463a' : '#c99a5b';
+  const count = mat === 'rope' ? 4 : 9;
+  for (let i = 0; i < count; i++) {
+    particles.push({ x: mx + (Math.random() - 0.5) * 0.6, y: my + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 7, vy: -Math.random() * 6, a: Math.random() * 6, va: (Math.random() - 0.5) * 14, l: 0.2 + Math.random() * 0.5, col, life: 1.6 });
+  }
+  shake = Math.min(1, shake + 0.7);
+  crack(mat === 'steel' ? 1.3 : 1);
+  sim.note = (b.f < 0 ? 'Ein ' + b.m.name + ' wurde zerdrückt.' : 'Ein ' + b.m.name + ' ist gerissen.');
+}
+
+function finish(win) {
+  if (result) return;
+  creak(0);
+  const tk = truckFor(level);
+  result = win ? 'win' : 'lose';
+  const box = $('resultBox');
+  $('resultTitle').className = win ? 'win' : 'lose';
+  const btns = $('resultBtns');
+  btns.innerHTML = '';
+  const add = (label, fn, primary) => {
+    const b = document.createElement('button');
+    b.textContent = label; if (primary) b.className = 'primary';
+    b.addEventListener('click', () => { $('result').classList.remove('on'); fn(); });
+    btns.appendChild(b); return b;
+  };
+  if (win) {
+    const left = budget() - spent();
+    const nextTk = truckFor(level + 1);
+    cleared = Math.max(cleared, level + 1);
+    try { ArcadeCore.saveScore('bridge', cleared); } catch (e) {}
+    try { if (window.umami) umami.track('bridge-win', { level: level + 1, truck: tk.name }); } catch (e) {}
+    tone(523, 0.18, 'triangle', 0.14); tone(659, 0.18, 'triangle', 0.14, 0.14); tone(784, 0.3, 'triangle', 0.14, 0.28);
+    $('resultTitle').textContent = 'Brücke hält!';
+    $('resultText').textContent = `Der ${tk.name} (${tk.t} t) ist drüber. ${sim.broken ? sim.broken + ' Bauteil(e) sind unterwegs gebrochen. ' : ''}${left >= 0 ? fmtEur(left) + ' Budget übrig.' : ''} Als Nächstes kommt der ${nextTk.name} mit ${nextTk.t} t.`;
+    add('Verstärken für ' + nextTk.name, () => { level++; stopTest(); refreshHud(); }, true);
+    add('Neu bauen', () => { level++; build = []; stopTest(); refreshHud(); });
+  } else {
+    try { if (window.umami) umami.track('bridge-lose', { level: level + 1, truck: tk.name }); } catch (e) {}
+    tone(160, 0.5, 'sawtooth', 0.12); tone(110, 0.6, 'sawtooth', 0.12, 0.2);
+    $('resultTitle').textContent = sim.truck.fall ? 'Truck abgestürzt' : 'Brücke eingestürzt';
+    $('resultText').textContent = (sim.note || 'Die Brücke hat nicht gehalten.') + ' Rot und Orange zeigen, wo die Last zu groß war. Nimm Stahl, bau höher oder verteile die Kräfte auf mehr Streben.';
+    add('Weiter bauen', () => { stopTest(); }, true);
+    add('Neu beginnen', () => { build = []; stopTest(); refreshHud(); });
+  }
+  $('result').classList.add('on');
+  box.querySelector('button').focus();
+}
+
+/* ---------- Eingabe ---------- */
+function toWorld(ev) {
+  const r = cv.getBoundingClientRect();
+  return { x: (ev.clientX - r.left - cam.ox) / cam.s, y: (ev.clientY - r.top - cam.oy) / cam.s };
+}
+function snapPt(w) { return { x: Math.round(w.x), y: Math.round(w.y) }; }
+function dragCheck(d) {
+  if (!d) return { ok: false };
+  const m = MAT[tool];
+  const L = Math.hypot(d.ex - d.ax, d.ey - d.ay);
+  if (L < 0.5) return { ok: false, msg: '' };
+  if (!ptOK(d.ex, d.ey)) return { ok: false, msg: 'Hier ist Fels oder Wasser.' };
+  if (L > m.max + 1e-6) return { ok: false, msg: `Zu lang, max. ${m.max} m` };
+  if (segInRock(d.ax, d.ay, d.ex, d.ey)) return { ok: false, msg: 'Balken kann nicht durch Fels.' };
+  if (build.some(b => (b.ax === d.ax && b.ay === d.ay && b.bx === d.ex && b.by === d.ey) || (b.bx === d.ax && b.by === d.ay && b.ax === d.ex && b.ay === d.ey))) return { ok: false, msg: 'Da liegt schon ein Balken.' };
+  const cost = Math.round(L * m.cost);
+  if (spent() + cost > budget()) return { ok: false, msg: `Zu teuer, es fehlen ${fmtEur(spent() + cost - budget())}` };
+  return { ok: true, L, cost, msg: `${L.toFixed(1)} m, ${fmtEur(cost)}` };
+}
+function eraseAt(w) {
+  let best = -1, bd = 0.7;
+  build.forEach((b, i) => { const d = distSeg(w.x, w.y, b.ax, b.ay, b.bx, b.by); if (d < bd) { bd = d; best = i; } });
+  if (best >= 0) { build.splice(best, 1); tone(150, 0.08, 'square', 0.06); refreshHud(); }
+}
+cv.addEventListener('pointerdown', ev => {
+  if (sim || result) return;
+  const w = toWorld(ev);
+  if (ev.button === 2 || tool === 'erase') { eraseAt(w); return; }
+  const p = snapPt(w);
+  if (!ptOK(p.x, p.y)) return;
+  cv.setPointerCapture(ev.pointerId);
+  drag = { ax: p.x, ay: p.y, ex: p.x, ey: p.y };
+});
+cv.addEventListener('pointermove', ev => {
+  const w = toWorld(ev); const p = snapPt(w);
+  hover = p;
+  if (drag) { drag.ex = p.x; drag.ey = p.y; }
+});
+function endDrag() {
+  if (!drag) return;
+  const c = dragCheck(drag);
+  if (c.ok) { build.push({ ax: drag.ax, ay: drag.ay, bx: drag.ex, by: drag.ey, type: tool }); place(); refreshHud(); }
+  drag = null;
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', () => { drag = null; });
+cv.addEventListener('contextmenu', ev => { ev.preventDefault(); if (!sim && !result) eraseAt(toWorld(ev)); });
+addEventListener('keydown', ev => {
+  if (result) return;
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') { if (!sim) { build.pop(); refreshHud(); } ev.preventDefault(); return; }
+  if (ev.key === 'Escape') { drag = null; return; }
+  if (ev.key === ' ' && ev.target === document.body) { ev.preventDefault(); $('go').click(); return; }
+  const n = parseInt(ev.key, 10);
+  if (n >= 1 && n <= 4) setTool(TOOLS[n - 1]);
+  if (ev.key.toLowerCase() === 'e') setTool('erase');
+});
+
+/* ---------- HUD ---------- */
+function setHint(t) { $('hint').textContent = t; $('hint').style.opacity = t ? 1 : 0; }
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.tool[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t ? 'true' : 'false'));
+}
+function buildTools() {
+  const box = $('tools');
+  TOOLS.forEach((t, i) => {
+    const b = document.createElement('button');
+    b.className = 'tool'; b.dataset.tool = t;
+    if (t === 'erase') b.innerHTML = '<span class="sw erase"></span><span class="nm">Abreißen</span><span class="pr">Geld zurück</span>';
+    else { const m = MAT[t]; b.innerHTML = `<span class="sw ${t}"></span><span class="nm">${m.name}</span><span class="pr">${m.cost} €/m, max. ${m.max} m</span>`; }
+    b.addEventListener('click', () => setTool(t));
+    box.appendChild(b);
+  });
+  const undo = document.createElement('button');
+  undo.className = 'tool small'; undo.textContent = 'Zurück'; undo.title = 'Letzten Balken entfernen (Strg+Z)';
+  undo.addEventListener('click', () => { if (!sim) { build.pop(); refreshHud(); } });
+  const clear = document.createElement('button');
+  clear.className = 'tool small'; clear.textContent = 'Alles weg';
+  clear.addEventListener('click', () => { if (!sim && build.length && confirm('Die ganze Brücke abreißen?')) { build = []; refreshHud(); } });
+  box.append(undo, clear);
+  setTool(tool);
+}
+function refreshHud() {
+  const tk = truckFor(level);
+  $('truckName').innerHTML = `Test: ${tk.name}, <span>${tk.t} t</span>`;
+  const st = $('stages'); st.innerHTML = '';
+  const n = Math.max(TRUCKS.length, level + 1);
+  for (let i = 0; i < n; i++) { const e = document.createElement('i'); e.className = i < cleared && i !== level ? 'done' : i === level ? 'now' : ''; st.appendChild(e); }
+  const sp = spent(), bd = budget();
+  $('budgetNum').textContent = fmtEur(Math.max(0, bd - sp));
+  const f = $('budgetFill'); f.style.width = Math.min(100, sp / bd * 100) + '%';
+  f.classList.toggle('over', sp > bd * 0.92);
+}
+$('go').addEventListener('click', () => {
+  if (result) return;
+  if (sim) { stopTest(); return; }
+  startTest();
+});
+addEventListener('arcade_mute_changed', () => creak(0));
+
+/* ---------- Rendering ---------- */
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  const top = W < 720 ? 100 : 64, bottom = $('bar').offsetHeight + 6;
+  const availH = Math.max(120, H - top - bottom);
+  cam.s = Math.min(W / 38, availH / 22);
+  cam.ox = (W - 38 * cam.s) / 2 + 3 * cam.s;
+  cam.oy = top + (availH - 22 * cam.s) / 2 + 8 * cam.s;
+}
+addEventListener('resize', resize);
+
+// Gesteins-Schichten und Mesas einmalig erzeugen
+function rng(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const R = rng(42);
+const strata = Array.from({ length: 46 }, (_, i) => ({ y: i * 0.3, h: 0.08 + R() * 0.3, a: 0.05 + R() * 0.18, dark: R() > 0.45 }));
+const mesas = (() => { const a = []; let x = -20; while (x < 60) { const w = 3 + R() * 8, h = 2 + R() * 4; a.push({ x, w, h, step: R() * 0.8 }); x += w * 0.7; } return a; })();
+const stars = Array.from({ length: 40 }, () => ({ x: R(), y: R() * 0.35, r: 0.5 + R() * 1.2 }));
+
+function sx(x) { return cam.ox + x * cam.s; }
+function sy(y) { return cam.oy + y * cam.s; }
+
+function drawBackdrop(t) {
+  const horizon = sy(-1.2);
+  let g = ctx.createLinearGradient(0, 0, 0, horizon + cam.s * 3);
+  g.addColorStop(0, '#171531'); g.addColorStop(0.45, '#5a2d52'); g.addColorStop(0.8, '#d4665a'); g.addColorStop(1, '#f3a65c');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,240,220,0.8)';
+  for (const s of stars) { ctx.globalAlpha = 0.5; ctx.fillRect(s.x * W, s.y * H, s.r, s.r); }
+  ctx.globalAlpha = 1;
+  // Sonne
+  const sunX = sx(17), sunY = sy(-3.2), sr = cam.s * 2.6;
+  g = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sr * 2.8);
+  g.addColorStop(0, 'rgba(255,214,140,0.9)'); g.addColorStop(0.25, 'rgba(255,176,98,0.45)'); g.addColorStop(1, 'rgba(255,140,80,0)');
+  ctx.fillStyle = g; ctx.fillRect(sunX - sr * 3, sunY - sr * 3, sr * 6, sr * 6);
+  ctx.fillStyle = '#ffe3a8'; ctx.beginPath(); ctx.arc(sunX, sunY, sr * 0.7, 0, 7); ctx.fill();
+  // ferne Mesas
+  ctx.fillStyle = '#6b3550';
+  for (const m of mesas) {
+    const x0 = sx(m.x * 0.8 + 3), w = m.w * cam.s * 0.8, h = m.h * cam.s * 0.5;
+    ctx.fillRect(x0, horizon - h, w, h + cam.s * 3);
+    ctx.fillRect(x0 - w * m.step * 0.3, horizon - h * 0.55, w * (1 + m.step * 0.6), h * 0.55 + cam.s * 3);
+  }
+  // Schluchthinterwand
+  g = ctx.createLinearGradient(0, sy(0), 0, sy(WATER_Y));
+  g.addColorStop(0, '#7a3d44'); g.addColorStop(0.55, '#41222f'); g.addColorStop(1, '#1d1220');
+  ctx.fillStyle = g; ctx.fillRect(sx(WALL_L), sy(0), (WALL_R - WALL_L) * cam.s, (WATER_Y) * cam.s);
+  // Wasser
+  g = ctx.createLinearGradient(0, sy(WATER_Y), 0, sy(WATER_Y + 5));
+  g.addColorStop(0, '#2c5a66'); g.addColorStop(1, '#0d1e28');
+  ctx.fillStyle = g; ctx.fillRect(sx(WALL_L), sy(WATER_Y), (WALL_R - WALL_L) * cam.s, H);
+  ctx.strokeStyle = 'rgba(255,214,160,0.28)'; ctx.lineWidth = 1.5;
+  for (let r = 0; r < 4; r++) {
+    ctx.beginPath();
+    for (let x = WALL_L; x <= WALL_R; x += 0.5) {
+      const yy = WATER_Y + 0.4 + r * 0.55 + Math.sin(x * 1.4 + t * 1.2 + r) * 0.06;
+      x === WALL_L ? ctx.moveTo(sx(x), sy(yy)) : ctx.lineTo(sx(x), sy(yy));
+    }
+    ctx.stroke();
+  }
+  // Nebel unten
+  g = ctx.createLinearGradient(0, sy(WATER_Y - 3), 0, sy(WATER_Y + 0.5));
+  g.addColorStop(0, 'rgba(210,120,100,0)'); g.addColorStop(1, 'rgba(210,120,100,0.28)');
+  ctx.fillStyle = g; ctx.fillRect(sx(WALL_L), sy(WATER_Y - 3), (WALL_R - WALL_L) * cam.s, cam.s * 3.5);
+}
+
+function drawRock(x0, x1) {
+  const top = sy(0), bot = H + 20;
+  const g = ctx.createLinearGradient(0, top, 0, sy(14));
+  g.addColorStop(0, '#b4693e'); g.addColorStop(0.35, '#7c3f2a'); g.addColorStop(1, '#2c1713');
+  ctx.fillStyle = g; ctx.fillRect(x0, top, x1 - x0, bot - top);
+  for (const s of strata) {
+    ctx.fillStyle = s.dark ? `rgba(30,12,10,${s.a})` : `rgba(255,190,130,${s.a * 0.7})`;
+    ctx.fillRect(x0, sy(0.35 + s.y), x1 - x0, s.h * cam.s);
+  }
+  // Fahrbahn auf der Klippe
+  ctx.fillStyle = '#2a2024'; ctx.fillRect(x0, sy(-0.02), x1 - x0, cam.s * 0.16);
+  ctx.fillStyle = '#e8c38a'; ctx.fillRect(x0, sy(-0.02), x1 - x0, 2);
+}
+function drawPylon(cx) {
+  const x0 = sx(cx - 0.55), w = cam.s * 1.1, y0 = sy(-7.5), h = cam.s * 7.5;
+  const g = ctx.createLinearGradient(x0, 0, x0 + w, 0);
+  g.addColorStop(0, '#8d4b32'); g.addColorStop(0.5, '#b86f46'); g.addColorStop(1, '#6a3524');
+  ctx.fillStyle = g; ctx.fillRect(x0, y0, w, h);
+  ctx.fillStyle = 'rgba(30,12,10,0.25)';
+  for (let i = 1; i < 8; i++) ctx.fillRect(x0, y0 + i * h / 8, w, 2);
+  ctx.fillStyle = '#d38b57'; ctx.fillRect(x0 - 3, y0 - 5, w + 6, 7);
+}
+
+function drawGrid() {
+  ctx.fillStyle = 'rgba(255,230,190,0.14)';
+  for (let x = -1; x <= 33; x++) for (let y = -8; y <= 9; y++) {
+    if (!ptOK(x, y) || isAnchor(x, y)) continue;
+    ctx.fillRect(sx(x) - 1, sy(y) - 1, 2, 2);
+  }
+  for (let x = 0; x <= 32; x++) for (let y = -7; y <= 7; y++) {
+    if (!isAnchor(x, y)) continue;
+    ctx.strokeStyle = 'rgba(242,169,59,0.8)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(sx(x), sy(y), cam.s * 0.14, 0, 7); ctx.stroke();
+  }
+}
+
+function beamPath(ax, ay, bx, by, rope, slackLen) {
+  ctx.beginPath(); ctx.moveTo(sx(ax), sy(ay));
+  if (rope && slackLen > 0) {
+    const mx = (ax + bx) / 2, my = (ay + by) / 2 + slackLen;
+    ctx.quadraticCurveTo(sx(mx), sy(my), sx(bx), sy(by));
+  } else ctx.lineTo(sx(bx), sy(by));
+}
+function drawBeam(ax, ay, bx, by, type, ratio, live, jitter) {
+  const m = MAT[type];
+  const wpx = Math.max(2, m.w * cam.s);
+  const rest = Math.hypot(bx - ax, by - ay);
+  const slackLen = 0; // wird unten für Seile gesetzt
+  ctx.lineCap = 'round';
+  if (jitter) { const j = (Math.random() - 0.5) * 0.05; ax += j; by += j; }
+  if (live) {
+    const c = stressRGB(ratio);
+    if (ratio > 0.55) {
+      ctx.strokeStyle = rgb(c, 0.22 + 0.4 * Math.min(1, (ratio - 0.55) / 0.45));
+      ctx.lineWidth = wpx + cam.s * (0.18 + 0.3 * ratio);
+      beamPath(ax, ay, bx, by, false, 0); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(20,10,10,0.75)'; ctx.lineWidth = wpx + 3; beamPath(ax, ay, bx, by, false, 0); ctx.stroke();
+    ctx.strokeStyle = rgb(c); ctx.lineWidth = wpx; beamPath(ax, ay, bx, by, false, 0); ctx.stroke();
+    if (type === 'steel') { ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = Math.max(1, wpx * 0.25); beamPath(ax, ay, bx, by, false, 0); ctx.stroke(); }
+    if (type === 'road') { ctx.strokeStyle = 'rgba(20,10,10,0.55)'; ctx.lineWidth = wpx * 0.35; beamPath(ax, ay, bx, by, false, 0); ctx.stroke(); }
+    return;
+  }
+  ctx.strokeStyle = 'rgba(20,10,10,0.7)'; ctx.lineWidth = wpx + 3; beamPath(ax, ay, bx, by, false, 0); ctx.stroke();
+  const col = type === 'wood' ? '#c99a5b' : type === 'steel' ? '#8fa3b6' : type === 'rope' ? '#d9c59a' : '#5a463a';
+  ctx.strokeStyle = col; ctx.lineWidth = wpx; beamPath(ax, ay, bx, by, false, 0); ctx.stroke();
+  if (type === 'steel') { ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = Math.max(1, wpx * 0.25); beamPath(ax, ay, bx, by, false, 0); ctx.stroke(); }
+  if (type === 'road') { ctx.strokeStyle = '#d8b27a'; ctx.lineWidth = Math.max(1, wpx * 0.22); ctx.save(); const nx = (by - ay) / rest, ny = -(bx - ax) / rest; ctx.translate(nx * wpx * 0.0, ny * 0); beamPath(ax, ay, bx, by, false, 0); ctx.stroke(); ctx.restore(); }
+  if (type === 'wood') { ctx.strokeStyle = 'rgba(80,45,20,0.45)'; ctx.lineWidth = 1; beamPath(ax, ay, bx, by, false, 0); ctx.stroke(); }
+}
+function drawRope(ax, ay, bx, by, ratio, live, slack) {
+  const wpx = Math.max(2, MAT.rope.w * cam.s);
+  ctx.lineCap = 'round';
+  if (live && ratio > 0.55) {
+    ctx.strokeStyle = rgb(stressRGB(ratio), 0.3 + 0.4 * ratio); ctx.lineWidth = wpx + cam.s * 0.25;
+    beamPath(ax, ay, bx, by, true, slack); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(20,10,10,0.7)'; ctx.lineWidth = wpx + 2; beamPath(ax, ay, bx, by, true, slack); ctx.stroke();
+  ctx.strokeStyle = live ? rgb(stressRGB(ratio)) : '#d9c59a'; ctx.lineWidth = wpx; beamPath(ax, ay, bx, by, true, slack); ctx.stroke();
+}
+function joint(x, y, fixed) {
+  ctx.fillStyle = fixed ? '#f2a93b' : '#2a2024';
+  ctx.beginPath(); ctx.arc(sx(x), sy(y), cam.s * (fixed ? 0.15 : 0.17), 0, 7); ctx.fill();
+  ctx.fillStyle = fixed ? '#fff0c8' : '#d8c6a8';
+  ctx.beginPath(); ctx.arc(sx(x), sy(y), cam.s * 0.07, 0, 7); ctx.fill();
+}
+
+function drawStructure() {
+  if (sim) {
+    const { nodes, beams } = sim;
+    const used = new Set();
+    // Seile zuerst (hinten), dann Balken
+    const order = [...beams].filter(b => !b.dead).sort((p, q) => (q.type === 'rope') - (p.type === 'rope') || (p.type === 'road') - (q.type === 'road'));
+    for (const b of order) {
+      const A = nodes[b.a], B = nodes[b.b];
+      used.add(b.a); used.add(b.b);
+      if (b.type === 'rope') {
+        const l = Math.hypot(B.x - A.x, B.y - A.y);
+        const slack = Math.min(1.2, Math.sqrt(Math.max(0, b.rest * b.rest - l * l)) * 0.5);
+        drawRope(A.x, A.y, B.x, B.y, b.ratio, true, slack);
+      } else drawBeam(A.x, A.y, B.x, B.y, b.type, b.ratio, true, b.ratio > 0.9);
+    }
+    used.forEach(i => { if (nodes[i].y < WATER_Y + 1.4) joint(nodes[i].x, nodes[i].y, nodes[i].fixed); });
+  } else {
+    const order = [...build].sort((p, q) => (q.type === 'rope') - (p.type === 'rope') || (p.type === 'road') - (q.type === 'road'));
+    for (const b of order) {
+      if (b.type === 'rope') drawRope(b.ax, b.ay, b.bx, b.by, 0, false, 0);
+      else drawBeam(b.ax, b.ay, b.bx, b.by, b.type, 0, false, false);
+    }
+    const seen = new Set();
+    for (const b of build) for (const [x, y] of [[b.ax, b.ay], [b.bx, b.by]]) { const k = x + ',' + y; if (!seen.has(k)) { seen.add(k); joint(x, y, isAnchor(x, y)); } }
+  }
+}
+
+function drawPreview() {
+  if (sim || result) return;
+  if (tool === 'erase') {
+    let best = null, bd = 0.7;
+    build.forEach(b => { const d = distSeg(hover.x, hover.y, b.ax, b.ay, b.bx, b.by); if (d < bd) { bd = d; best = b; } });
+    if (best) { ctx.strokeStyle = 'rgba(226,59,46,0.85)'; ctx.lineWidth = Math.max(3, MAT[best.type].w * cam.s + 5); ctx.lineCap = 'round'; beamPath(best.ax, best.ay, best.bx, best.by, false, 0); ctx.stroke(); }
+    return;
+  }
+  if (ptOK(hover.x, hover.y)) {
+    ctx.strokeStyle = 'rgba(255,240,210,0.7)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(sx(hover.x), sy(hover.y), cam.s * 0.24, 0, 7); ctx.stroke();
+  }
+  if (!drag) return;
+  const c = dragCheck(drag), m = MAT[tool];
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = c.ok ? 'rgba(255,240,210,0.7)' : 'rgba(226,59,46,0.8)';
+  ctx.setLineDash([cam.s * 0.3, cam.s * 0.25]);
+  ctx.lineWidth = Math.max(2, m.w * cam.s);
+  beamPath(drag.ax, drag.ay, drag.ex, drag.ey, false, 0); ctx.stroke();
+  ctx.setLineDash([]);
+  // max. Reichweite
+  ctx.strokeStyle = 'rgba(255,240,210,0.18)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(sx(drag.ax), sy(drag.ay), m.max * cam.s, 0, 7); ctx.stroke();
+  const label = c.msg;
+  if (label) {
+    ctx.font = `700 ${Math.max(12, cam.s * 0.5)}px ${getComputedStyle(document.body).fontFamily}`;
+    const tx = sx(drag.ex) + 14, ty = sy(drag.ey) - 14, tw = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(26,18,24,0.88)'; ctx.fillRect(tx - 6, ty - cam.s * 0.5, tw + 12, cam.s * 0.7);
+    ctx.fillStyle = c.ok ? '#f3e6cf' : '#ff9d8f'; ctx.fillText(label, tx, ty);
+  }
+}
+
+/* ---- Trucks ---- */
+function wheel(x, y, r, rot) {
+  ctx.fillStyle = '#16100f'; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+  ctx.fillStyle = '#6e6660'; ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#2a2220'; ctx.lineWidth = r * 0.14;
+  for (let i = 0; i < 5; i++) { const a = rot + i * 1.2566; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55); ctx.stroke(); }
+  if (r > 0.9) { ctx.strokeStyle = '#0b0807'; ctx.lineWidth = r * 0.12; for (let i = 0; i < 14; i++) { const a = rot + i * 0.4488; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r * 0.86, y + Math.sin(a) * r * 0.86); ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); ctx.stroke(); } }
+}
+function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+function drawTruckLocal(tk, rot) {
+  // lokale Einheiten = Meter, Hinterachse bei (0,0), Boden bei y=r
+  const r = tk.r, wb = tk.wb, c = tk.col;
+  const dark = 'rgba(0,0,0,0.28)';
+  const cab = (x, w, h, y0) => {
+    ctx.fillStyle = c; ctx.beginPath();
+    ctx.moveTo(x, y0); ctx.lineTo(x + w * 0.62, y0); ctx.lineTo(x + w, y0 + h * 0.42); ctx.lineTo(x + w, y0 + h); ctx.lineTo(x, y0 + h); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#bfe1ee'; ctx.beginPath();
+    ctx.moveTo(x + w * 0.42, y0 + h * 0.1); ctx.lineTo(x + w * 0.6, y0 + h * 0.1); ctx.lineTo(x + w * 0.92, y0 + h * 0.42); ctx.lineTo(x + w * 0.42, y0 + h * 0.42); ctx.closePath(); ctx.fill();
+    rect(x + w - 0.12, y0 + h * 0.6, 0.12, h * 0.16, '#ffeaa0');
+  };
+  const chassisY = -r * 0.2;
+  switch (tk.kind) {
+    case 'pickup': {
+      rect(-0.9, chassisY - 0.35, wb + 1.9, 0.5, '#2a2224');
+      rect(-0.9, chassisY - 0.85, 1.9, 0.5, c); rect(-0.9, chassisY - 0.85, 1.9, 0.08, dark);
+      cab(wb - 1.1, 2.0, 0.95, chassisY - 1.35 + 0.3 - 0.0);
+      break; }
+    case 'van': {
+      rect(-1, chassisY - 0.3, wb + 1.9, 0.45, '#2a2224');
+      rect(-1, chassisY - 1.75, wb - 0.1, 1.45, c);
+      rect(-1, chassisY - 1.75, wb - 0.1, 0.1, dark);
+      cab(wb - 1.2, 2.3, 1.3, chassisY - 1.6);
+      break; }
+    case 'dump': {
+      rect(-1, chassisY - 0.3, wb + 2.1, 0.5, '#2a2224');
+      ctx.fillStyle = '#7d6a55'; ctx.beginPath(); ctx.moveTo(-1.2, chassisY - 1.9); ctx.lineTo(wb - 1.4, chassisY - 1.9); ctx.lineTo(wb - 1.7, chassisY - 0.3); ctx.lineTo(-1, chassisY - 0.3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#5a4a3a'; ctx.fillRect(-1.2, chassisY - 1.9, wb - 0.2, 0.18);
+      cab(wb - 1.4, 2.4, 1.4, chassisY - 1.7);
+      break; }
+    case 'tank': {
+      rect(-1.2, chassisY - 0.3, wb + 2.4, 0.5, '#2a2224');
+      ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(wb * 0.5 - 0.5, chassisY - 1.3, wb * 0.5 + 0.9, 1.05, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.ellipse(wb * 0.5 - 0.5, chassisY - 1.6, wb * 0.45 + 0.8, 0.28, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#d63a2a'; ctx.fillRect(wb * 0.5 - 1.1, chassisY - 1.5, 1.2, 0.4);
+      cab(wb - 0.6, 2.2, 1.5, chassisY - 1.8);
+      break; }
+    case 'semi': {
+      rect(-5.6, chassisY - 0.3, wb + 7.6, 0.5, '#2a2224');
+      rect(-5.6, chassisY - 3.1, 6.7 + 0.2, 2.8, '#d9d2c0');
+      rect(-5.6, chassisY - 3.1, 6.9, 0.14, dark);
+      ctx.fillStyle = c; ctx.fillRect(-5.6, chassisY - 1.4, 6.9, 0.35);
+      cab(wb - 0.9, 2.4, 2.0, chassisY - 2.3);
+      break; }
+    case 'monster': {
+      const top = -r * 0.95;
+      rect(-0.8, top - 0.25, wb + 1.8, 0.35, '#1d1618');
+      ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(-1.1, top - 0.1); ctx.lineTo(-1.1, top - 1.1); ctx.lineTo(1.0, top - 1.1); ctx.lineTo(1.0, top - 0.1); ctx.closePath(); ctx.fill();
+      cab(wb - 1.8, 2.8, 1.35, top - 1.35);
+      ctx.fillStyle = '#ffcf3a'; ctx.beginPath(); ctx.moveTo(-0.7, top - 0.3); ctx.lineTo(1.5, top - 0.5); ctx.lineTo(wb + 0.6, top - 0.3); ctx.lineTo(1.5, top - 0.2); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 0.1;
+      [0, wb].forEach(ax => { ctx.beginPath(); ctx.moveTo(ax, top - 0.15); ctx.lineTo(ax, 0); ctx.stroke(); });
+      break; }
+  }
+  wheel(0, 0, r, rot); wheel(wb, 0, r, rot);
+  if (tk.kind === 'semi') { wheel(-1.4, 0, r, rot); wheel(-2.7, 0, r, rot); wheel(-4.5, 0, r, rot); wheel(-5.8 + 0.4, 0, r, rot); }
+  if (tk.kind === 'dump' || tk.kind === 'tank') wheel(-1.3, 0, r, rot);
+}
+function drawTruck() {
+  if (!sim) return;
+  const tk = sim.truck;
+  ctx.save();
+  if (tk.fall) {
+    ctx.translate(sx(tk.fall.x), sy(tk.fall.y));
+    ctx.rotate(tk.fall.ang);
+  } else {
+    const ya = tk.ya - tk.r, yb = tk.yb - tk.r;
+    ctx.translate(sx(tk.x), sy(ya));
+    ctx.rotate(Math.atan2(yb - ya, tk.wb));
+  }
+  ctx.scale(cam.s, cam.s);
+  drawTruckLocal(tk, tk.wheel);
+  ctx.restore();
+}
+
+function drawParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt; if (p.life <= 0 || p.y > WATER_Y + 1) { particles.splice(i, 1); continue; }
+    p.vy += G * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt;
+    ctx.strokeStyle = p.col; ctx.globalAlpha = Math.min(1, p.life);
+    ctx.lineWidth = Math.max(2, cam.s * 0.1);
+    ctx.beginPath(); ctx.moveTo(sx(p.x), sy(p.y)); ctx.lineTo(sx(p.x + Math.cos(p.a) * p.l), sy(p.y + Math.sin(p.a) * p.l)); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function updateGauge() {
+  if (!sim) return;
+  const r = Math.min(1, sim.maxRatio);
+  $('gaugePct').textContent = Math.round(sim.maxRatio * 100) + ' %';
+  $('gaugeMask').style.transform = `scaleX(${1 - r})`;
+  $('gaugeNote').textContent = sim.state === 'run' && sim.truck.x < WALL_L - 2 ? 'Der Truck rollt an …' : sim.broken ? `${sim.broken} Bauteil(e) gebrochen` : r > 0.85 ? 'Es knarzt gefährlich.' : '';
+}
+
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0); lastTs = ts;
+  clock += dt;
+  if (sim && !result) {
+    acc += dt;
+    let guard = 0;
+    while (acc >= DT && guard++ < 4 && sim && !result) { stepFrame(); acc -= DT; }
+    if (sim) creak(sim.maxRatio);
+    updateGauge();
+  }
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.save();
+  if (shake > 0.01) { ctx.translate((Math.random() - 0.5) * shake * 10, (Math.random() - 0.5) * shake * 10); shake *= 0.9; }
+  drawBackdrop(clock);
+  drawRock(-4000, sx(WALL_L));
+  drawRock(sx(WALL_R), 4000 + W);
+  // Kantenlicht
+  ctx.fillStyle = 'rgba(255,200,140,0.35)';
+  ctx.fillRect(sx(WALL_L) - 2, sy(0), 2, cam.s * 12); ctx.fillRect(sx(WALL_R), sy(0), 2, cam.s * 12);
+  drawPylon(3); drawPylon(29);
+  if (!sim) drawGrid();
+  drawStructure();
+  drawTruck();
+  drawParticles(dt);
+  drawPreview();
+  ctx.restore();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Start ---------- */
+buildTools();
+resize();
+refreshHud();
+setHint('Zieh von Punkt zu Punkt, um Balken zu bauen. Rechtsklick reißt ab.');
+setTimeout(() => { if (!sim && build.length) $('hint').style.opacity = 0; }, 9000);
+cv.addEventListener('pointerdown', () => { if (build.length) $('hint').style.opacity = 0; }, { once: true });
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
