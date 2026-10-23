@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Sky Tower 3D — Der ultimative Turmbau & Stack Simulator</title>
+<meta name="description" content="Baue den höchsten Wolkenkratzer: Platziere gleitende 3D-Steine im perfekten Moment per Klick oder Leertaste, meistere Kanten-Schnitte, baue Mega-Combos und erreiche das Weltall!">
+<meta name="keywords" content="turmbau spiel, stack 3d, tower builder browser, timing game, stack blocks online, browsergames kostenlos">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#1e1b4b">
+<link rel="canonical" href="https://rwpxe.com/games/skytower.html">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Sky Tower 3D — Turmbau & Stack Simulator">
+<meta property="og:description" content="Klicke oder drücke die Leertaste im perfekten Moment! Baue deinen Turm bis in den Weltraum.">
+<meta property="og:locale" content="de_DE">
+
+<!-- Pflicht-Tracking-Skripte für alle HTML-Seiten -->
+<script defer src="https://umami.lucius-website.xyz/script.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script defer src="https://umami.lucius-website.xyz/recorder.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+
+<link rel="stylesheet" href="../style.css">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #0d1117; color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  #canvas-container {
+    position: fixed; inset: 0; width: 100vw; height: 100vh;
+    display: block; z-index: 1;
+  }
+  #canvas-container canvas {
+    display: block; width: 100%; height: 100%; outline: none;
+  }
+
+  /* Schwebender Zurück-Button */
+  .back-btn {
+    position: fixed; top: 16px; left: 16px; z-index: 50;
+    color: #e0e7ff; text-decoration: none; font-weight: 700;
+    background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(99, 102, 241, 0.5);
+    padding: 8px 16px; border-radius: 999px; backdrop-filter: blur(10px);
+    transition: all 0.2s; font-size: 0.9rem;
+  }
+  .back-btn:hover { background: #4338ca; color: #fff; transform: translateY(-2px); }
+
+  /* Audio- & Theme-Controls oben rechts */
+  .top-actions {
+    position: fixed; top: 16px; right: 16px; z-index: 50;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .action-btn {
+    background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #f1f5f9; padding: 8px 14px; border-radius: 999px; backdrop-filter: blur(10px);
+    cursor: pointer; font-size: 0.85rem; font-weight: 700; transition: all 0.2s;
+  }
+  .action-btn:hover { background: rgba(30, 41, 59, 0.9); transform: scale(1.05); }
+
+  /* HUD */
+  #hud {
+    position: fixed; top: 68px; left: 0; right: 0; z-index: 20;
+    display: flex; flex-direction: column; align-items: center; pointer-events: none;
+  }
+  .floor-counter {
+    font-size: clamp(3rem, 9vw, 5.5rem);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -2px;
+    background: linear-gradient(180deg, #ffffff, #cbd5e1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 4px 16px rgba(0,0,0,0.45));
+    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .floor-counter.bump { transform: scale(1.22); }
+
+  .sub-hud {
+    display: flex; gap: 12px; margin-top: 6px; align-items: center;
+  }
+  .hud-pill {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 999px; padding: 4px 14px;
+    font-size: 0.85rem; font-weight: 800;
+    color: #94a3b8; backdrop-filter: blur(8px);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hud-pill b { color: #facc15; }
+
+  /* Combo / Perfect Popup */
+  #combo-popup {
+    position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%) scale(0.6);
+    z-index: 30; pointer-events: none; text-align: center;
+    opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  #combo-popup.show {
+    opacity: 1; transform: translate(-50%, -50%) scale(1.15);
+  }
+  .combo-title {
+    font-size: clamp(2rem, 6vw, 3.2rem);
+    font-weight: 950;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px rgba(250, 204, 21, 0.8), 0 4px 12px rgba(0,0,0,0.6);
+  }
+  .combo-sub {
+    font-size: clamp(0.9rem, 2.5vw, 1.2rem);
+    font-weight: 800; color: #fff;
+    letter-spacing: 1px; text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+  }
+
+  /* Bottom Controls Hint */
+  #bottom-hint {
+    position: fixed; bottom: 24px; left: 0; right: 0; z-index: 20;
+    text-align: center; pointer-events: none;
+    color: rgba(255, 255, 255, 0.7); font-size: 0.95rem; font-weight: 600;
+    animation: pulseHint 2.4s infinite ease-in-out;
+  }
+  .key-badge {
+    background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.4);
+    padding: 3px 8px; border-radius: 6px; font-weight: 800; color: #fff;
+  }
+  @keyframes pulseHint {
+    0%, 100% { opacity: 0.55; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-3px); }
+  }
+
+  /* Mobile Fullscreen Tap Trigger */
+  #tap-zone {
+    position: fixed; inset: 0; z-index: 10; cursor: pointer;
+  }
+
+  /* Overlay Modal (Game Over / Start) */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px);
+    display: none; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal-card {
+    background: linear-gradient(165deg, #1e1b4b, #0f172a);
+    border: 2px solid #6366f1; border-radius: 28px;
+    max-width: 480px; width: 100%; padding: clamp(24px, 5vw, 36px);
+    text-align: center; box-shadow: 0 25px 60px rgba(0,0,0,0.7);
+    animation: modalIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.9) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .modal-card h1 {
+    margin: 0 0 6px; font-size: clamp(2rem, 5vw, 2.6rem); font-weight: 950;
+    background: linear-gradient(135deg, #facc15, #f59e0b, #ec4899);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .modal-card p.subtitle {
+    color: #94a3b8; font-size: 0.95rem; margin: 0 0 20px;
+  }
+  .stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin: 20px 0; text-align: left;
+  }
+  .stat-box {
+    background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px; padding: 12px 14px;
+  }
+  .stat-label { font-size: 0.75rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 1.5rem; font-weight: 900; color: #f8fafc; margin-top: 2px; }
+  .stat-value.gold { color: #facc15; }
+
+  .comparison-banner {
+    background: rgba(99, 102, 241, 0.15); border: 1.5px dashed #818cf8;
+    border-radius: 16px; padding: 12px 16px; margin: 16px 0 24px;
+    font-size: 0.95rem; font-weight: 700; color: #e0e7ff;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+
+  .primary-btn {
+    width: 100%; background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: #fff; border: none; padding: 16px 24px; border-radius: 16px;
+    font-size: 1.15rem; font-weight: 900; cursor: pointer;
+    box-shadow: 0 10px 25px rgba(99, 102, 241, 0.45);
+    transition: all 0.2s;
+  }
+  .primary-btn:hover {
+    transform: translateY(-2px); box-shadow: 0 14px 30px rgba(99, 102, 241, 0.6);
+  }
+  .primary-btn:active { transform: translateY(1px); }
+
+  .secondary-btn {
+    margin-top: 10px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #cbd5e1; padding: 10px 18px; border-radius: 12px;
+    font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
+  }
+  .secondary-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+
+  /* Mode Chips */
+  .mode-selector {
+    display: flex; gap: 8px; justify-content: center; margin: 16px 0;
+  }
+  .mode-chip {
+    background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #cbd5e1; padding: 6px 14px; border-radius: 999px; font-size: 0.82rem; font-weight: 700;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .mode-chip.active {
+    background: #6366f1; border-color: #818cf8; color: #fff; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  }
+
+  /* Real-time Altitude indicator */
+  #altitude-tag {
+    position: fixed; left: 20px; bottom: 24px; z-index: 20;
+    background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px; padding: 8px 14px; font-size: 0.82rem; font-weight: 800;
+    backdrop-filter: blur(8px); color: #94a3b8; pointer-events: none;
+  }
+  #altitude-tag span { color: #38bdf8; }
+
+  /* New Highscore Pulse */
+  .new-record-pill {
+    display: inline-block; background: #f59e0b; color: #000;
+    font-size: 0.72rem; font-weight: 900; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 999px; margin-left: 6px;
+    animation: bounceRec 0.8s infinite alternate;
+  }
+  @keyframes bounceRec {
+    from { transform: scale(0.95); }
+    to { transform: scale(1.1); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Einheitlicher Zurück-Button -->
+<a href="../index.html" class="back back-btn">← Arcade</a>
+
+<!-- Top Actions (Audio, Farbschema) -->
+<div class="top-actions">
+  <button class="action-btn" id="themeBtn" title="Farbschema wechseln">🎨 Schema</button>
+  <button class="action-btn" id="soundBtn" title="Sound umschalten">🔊 Sound: An</button>
+</div>
+
+<!-- 3D WebGL Canvas Container -->
+<div id="canvas-container"></div>
+
+<!-- Touch/Click Event Receiver -->
+<div id="tap-zone"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="floor-counter" id="floorDisplay">0</div>
+  <div class="sub-hud">
+    <div class="hud-pill">🏆 Rekord: <b id="bestDisplay">0</b></div>
+    <div class="hud-pill" id="comboPill" style="display:none;">⚡ Combo: <b id="comboDisplay">x0</b></div>
+    <div class="hud-pill">📐 Präzision: <b id="precDisplay">100%</b></div>
+  </div>
+</div>
+
+<!-- Combo Flash Popup -->
+<div id="combo-popup">
+  <div class="combo-title" id="comboTitle">PERFECT!</div>
+  <div class="combo-sub" id="comboSub">+1 Combo Streak</div>
+</div>
+
+<!-- Real-time Altitude -->
+<div id="altitude-tag">
+  Höhe: <span id="altMeter">0 m</span> • <span id="altZone">Erdgeschoss</span>
+</div>
+
+<!-- Bottom Control Hint -->
+<div id="bottom-hint">
+  <span class="key-badge">LEERTASTE</span> oder <span class="key-badge">KLICK</span> zum Platzieren
+</div>
+
+<!-- Game Over Modal -->
+<div class="modal-overlay" id="gameOverModal">
+  <div class="modal-card">
+    <h1 id="modalTitle">TURM ABGESTÜRZT!</h1>
+    <p class="subtitle" id="modalSub">Dein Bauwerk ragt gigantisch in den Himmel.</p>
+
+    <div class="comparison-banner" id="comparisonBanner">
+      🏢 <span>Höher als der Schiefe Turm von Pisa!</span>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Stockwerke</div>
+        <div class="stat-value" id="statFloors">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Gesamthöhe</div>
+        <div class="stat-value gold" id="statHeight">0 m</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Perfekte Treffer</div>
+        <div class="stat-value" id="statPerfects">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Beste Combo</div>
+        <div class="stat-value" id="statMaxCombo">0x</div>
+      </div>
+    </div>
+
+    <div class="mode-selector">
+      <button class="mode-chip active" data-mode="classic">Klassik</button>
+      <button class="mode-chip" data-mode="zen">Zen (Sanft)</button>
+      <button class="mode-chip" data-mode="turbo">Hardcore Turbo</button>
+    </div>
+
+    <button class="primary-btn" id="restartBtn">Nochmal spielen (Space)</button>
+    <button class="secondary-btn" id="shareBtn">📸 Turm-Kamera drehen</button>
+  </div>
+</div>
+
+<script>
+/**
+ * Sky Tower 3D: Stack Master
+ * True 3D Isometric Physics Slicer & Ascent Engine
+ */
+
+// --- Spiel-Konfiguration ---
+const CONFIG = {
+  BLOCK_HEIGHT: 0.65,
+  INITIAL_WIDTH: 3.2,
+  INITIAL_DEPTH: 3.2,
+  BOUNDS: 4.8,          // Bewegungsamplitude
+  PERFECT_LIMIT: 0.18,  // Toleranz für "PERFECT!" Treffer
+  COMBO_RESTORE_REQ: 5, // Ab 5x Perfect wächst der Stein leicht nach
+  BASE_SPEED: 0.046
+};
+
+// --- Farbthemen ---
+const THEMES = [
+  { name: 'Prisma Regenbogen', step: 6.5, sat: 80, lit: 58 },
+  { name: 'Cyberpunk Neon', step: 14, sat: 95, lit: 60, custom: ['#06b6d4', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', '#3b82f6'] },
+  { name: 'Pastell Traum', step: 8, sat: 70, lit: 72 },
+  { name: 'Obsidian Gold', step: 10, sat: 90, lit: 50, custom: ['#facc15', '#e2e8f0', '#fb923c', '#ca8a04', '#38bdf8', '#f43f5e'] }
+];
+let currentThemeIndex = 0;
+
+// --- Höhendefinitionen & Meilensteine ---
+const MILESTONES = [
+  { floors: 0, height: 0, name: "Erdgeschoss", landmark: "Fundament gelegt" },
+  { floors: 5, height: 16, name: "Wohnhaus", landmark: "Einfamilienhaus (16 m)" },
+  { floors: 10, height: 32, name: "Altstadt-Dächer", landmark: "Pariser Stadthaus (32 m)" },
+  { floors: 18, height: 56, name: "Glockenturm", landmark: "Schiefer Turm von Pisa (56 m)" },
+  { floors: 30, height: 96, name: "Uhrturm-Höhe", landmark: "Big Ben in London (96 m)" },
+  { floors: 48, height: 157, name: "Kathedrale", landmark: "Kölner Dom (157 m)" },
+  { floors: 70, height: 230, name: "Wolkenkratzer", landmark: "Fernsehturm Berlin (368 m)" },
+  { floors: 95, height: 310, name: "Himmelsspitze", landmark: "Eiffelturm in Paris (330 m)" },
+  { floors: 120, height: 381, name: "Stratos-Turm", landmark: "Empire State Building (381 m)" },
+  { floors: 160, height: 508, name: "Megastruktur", landmark: "Taipei 101 (508 m)" },
+  { floors: 220, height: 828, name: "Gipfel der Erde", landmark: "Burj Khalifa Dubai (828 m)" },
+  { floors: 300, height: 1200, name: "Orbit-Aufzug", landmark: "Kármán-Linie / Weltraum-Grenze!" }
+];
+
+// --- Web Audio Synthesizer ---
+class SoundEngine {
+  constructor() {
+    this.pentatonic = [
+      261.63, 293.66, 329.63, 392.00, 440.00, // C4, D4, E4, G4, A4
+      523.25, 587.33, 659.25, 783.99, 880.00, // C5, D5, E5, G5, A5
+      1046.50, 1174.66, 1318.51, 1567.98       // C6...
+    ];
+  }
+
+  isMuted() {
+    return window.ArcadeCore ? ArcadeCore.isMuted() : false;
+  }
+
+  getContext() {
+    return window.ArcadeCore ? ArcadeCore.getAudioContext() : null;
+  }
+
+  // Sanfter Plop/Marimba beim normalen Platzieren
+  playPlace(pitchMod = 1) {
+    if (this.isMuted()) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220 * pitchMod, now);
+      osc.frequency.exponentialRampToValueAtTime(110 * pitchMod, now + 0.12);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.14);
+    } catch(e) {}
+  }
+
+  // Aufsteigende Tonleiter bei PERFECT!
+  playPerfect(combo = 1) {
+    if (this.isMuted()) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const noteIndex = Math.min(combo - 1, this.pentatonic.length - 1);
+      const freq = this.pentatonic[noteIndex];
+
+      // Oszillator 1 (reine Glocke)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(freq, now);
+
+      gain1.gain.setValueAtTime(0.35, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.45);
+
+      // Oszillator 2 (Oberton mit Glitzer)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(freq * 2, now);
+      gain2.gain.setValueAtTime(0.12, now);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now);
+      osc2.stop(now + 0.3);
+    } catch(e) {}
+  }
+
+  // Sound beim Abbrechen des Überhangs
+  playSlice() {
+    if (this.isMuted()) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(60, now + 0.15);
+      gain.gain.setValueAtTime(0.16, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } catch(e) {}
+  }
+
+  // Bonus: Stein wächst wieder
+  playRestore() {
+    if (this.isMuted()) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      [440, 554, 659, 880].forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now + i * 0.06);
+        gain.gain.setValueAtTime(0.2, now + i * 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + (i + 1) * 0.18);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.06);
+        osc.stop(now + (i + 1) * 0.18);
+      });
+    } catch(e) {}
+  }
+
+  // Game Over Fanfare
+  playGameOver() {
+    if (this.isMuted()) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      [220, 207, 196, 174].forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(f, now + i * 0.14);
+        gain.gain.setValueAtTime(0.18, now + i * 0.14);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + (i + 1) * 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.14);
+        osc.stop(now + (i + 1) * 0.2);
+      });
+    } catch(e) {}
+  }
+}
+
+const sounds = new SoundEngine();
+
+// --- 3D Scene & Game Engine ---
+class SkyTowerEngine {
+  constructor() {
+    this.container = document.getElementById('canvas-container');
+    this.mode = 'classic'; // classic, zen, turbo
+    
+    // Spielstatus
+    this.floors = 0;
+    this.combo = 0;
+    this.maxCombo = 0;
+    this.perfectCount = 0;
+    this.totalPlacements = 0;
+    this.bestScore = 0;
+    this.state = 'IDLE'; // IDLE, PLAYING, GAMEOVER
+    
+    // Bewegungsdaten
+    this.activeBlock = null;
+    this.lastBlock = null;
+    this.blockWidth = CONFIG.INITIAL_WIDTH;
+    this.blockDepth = CONFIG.INITIAL_DEPTH;
+    this.currentAxis = 'x'; // 'x' oder 'z'
+    this.movePos = 0;
+    this.moveDir = 1;
+    this.moveSpeed = CONFIG.BASE_SPEED;
+
+    // Listen für animierte Objekte
+    this.placedBlocks = [];
+    this.fallingPieces = [];
+    this.particles = [];
+    this.clouds = [];
+    this.stars = null;
+
+    // Kamera-Ziele
+    this.camTargetY = 0;
+    this.camCurrentY = 0;
+    this.camOrbit = 0;
+    this.camOrbitRadius = 9;
+
+    this.initThree();
+    this.initStarsAndClouds();
+    this.loadHighscore();
+    this.setupEvents();
+    this.resetGame();
+    this.animate();
+  }
+
+  loadHighscore() {
+    if (window.ArcadeCore) {
+      const s = ArcadeCore.getScore('skytower');
+      if (s) this.bestScore = parseInt(s, 10) || 0;
+    }
+    document.getElementById('bestDisplay').textContent = this.bestScore;
+  }
+
+  saveHighscore() {
+    if (this.floors > this.bestScore) {
+      this.bestScore = this.floors;
+      if (window.ArcadeCore) {
+        ArcadeCore.saveScore('skytower', this.bestScore);
+      }
+      document.getElementById('bestDisplay').textContent = this.bestScore;
+      return true;
+    }
+    return false;
+  }
+
+  initThree() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    // Szene
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x181a29);
+    this.scene.fog = new THREE.FogExp2(0x181a29, 0.038);
+
+    // Orthografische Isometrische Kamera
+    const aspect = w / h;
+    const d = 4.5;
+    this.camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, -50, 100);
+    this.camera.position.set(6, 6, 6);
+    this.camera.lookAt(0, 0, 0);
+
+    // Renderer
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setSize(w, h);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.container.appendChild(this.renderer.domElement);
+
+    // Beleuchtung
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+    this.scene.add(this.ambientLight);
+
+    this.dirLight = new THREE.DirectionalLight(0xfffaed, 0.9);
+    this.dirLight.position.set(6, 15, 8);
+    this.dirLight.castShadow = true;
+    this.dirLight.shadow.mapSize.width = 1024;
+    this.dirLight.shadow.mapSize.height = 1024;
+    this.dirLight.shadow.camera.near = 0.5;
+    this.dirLight.shadow.camera.far = 40;
+    const sCam = 6;
+    this.dirLight.shadow.camera.left = -sCam;
+    this.dirLight.shadow.camera.right = sCam;
+    this.dirLight.shadow.camera.top = sCam;
+    this.dirLight.shadow.camera.bottom = -sCam;
+    this.scene.add(this.dirLight);
+
+    // Sanftes Gegenlicht
+    const rimLight = new THREE.DirectionalLight(0x818cf8, 0.35);
+    rimLight.position.set(-8, 5, -8);
+    this.scene.add(rimLight);
+  }
+
+  initStarsAndClouds() {
+    // Sternenfeld für höhere Etagen
+    const starCount = 350;
+    const starGeo = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount * 3; i += 3) {
+      starPositions[i] = (Math.random() - 0.5) * 80;
+      starPositions[i + 1] = Math.random() * 150 + 20; // ab Höhe 20
+      starPositions[i + 2] = (Math.random() - 0.5) * 80;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.18,
+      transparent: true,
+      opacity: 0.8
+    });
+    this.stars = new THREE.Points(starGeo, starMat);
+    this.scene.add(this.stars);
+
+    // 3D-Wolkenfetzen
+    for (let i = 0; i < 12; i++) {
+      const cloud = this.createCloudMesh();
+      cloud.position.set(
+        (Math.random() - 0.5) * 25,
+        10 + Math.random() * 25,
+        (Math.random() - 0.5) * 25
+      );
+      cloud.userData = {
+        speed: 0.005 + Math.random() * 0.008,
+        radius: 12 + Math.random() * 8,
+        angle: Math.random() * Math.PI * 2
+      };
+      this.scene.add(cloud);
+      this.clouds.push(cloud);
+    }
+  }
+
+  createCloudMesh() {
+    const group = new THREE.Group();
+    const cloudMat = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.4
+    });
+    const puffs = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < puffs; i++) {
+      const geo = new THREE.DodecahedronGeometry(0.8 + Math.random() * 0.5, 1);
+      const puff = new THREE.Mesh(geo, cloudMat);
+      puff.position.set(
+        (i - puffs / 2) * 0.8,
+        (Math.random() - 0.5) * 0.3,
+        (Math.random() - 0.5) * 0.5
+      );
+      group.add(puff);
+    }
+    return group;
+  }
+
+  // Berechnet Blockfarbe nach aktueller Höhe & Farbschema
+  getBlockColor(index) {
+    const t = THEMES[currentThemeIndex];
+    if (t.custom) {
+      return new THREE.Color(t.custom[index % t.custom.length]);
+    }
+    const hue = (index * t.step) % 360;
+    return new THREE.Color(`hsl(${hue}, ${t.sat}%, ${t.lit}%)`);
+  }
+
+  // Aktualisiert die Himmelsfarbe dynamisch je nach Turmhöhe
+  updateAtmosphere() {
+    let topColor, fogExp;
+    const h = this.floors;
+
+    if (h < 15) {
+      // Dämmerung / Warme Stadt
+      topColor = new THREE.Color().lerpColors(new THREE.Color(0x181a29), new THREE.Color(0x2d1f3d), h / 15);
+      fogExp = 0.038;
+    } else if (h < 35) {
+      // Golden Hour / Wolkenmeer
+      topColor = new THREE.Color().lerpColors(new THREE.Color(0x2d1f3d), new THREE.Color(0x1e3a8a), (h - 15) / 20);
+      fogExp = 0.032;
+    } else if (h < 65) {
+      // Stratosphäre / Polarlichter
+      topColor = new THREE.Color().lerpColors(new THREE.Color(0x1e3a8a), new THREE.Color(0x0f172a), (h - 35) / 30);
+      fogExp = 0.025;
+    } else {
+      // Tiefer Weltraum
+      topColor = new THREE.Color(0x05070f);
+      fogExp = 0.018;
+    }
+
+    this.scene.background.lerp(topColor, 0.05);
+    this.scene.fog.color.lerp(topColor, 0.05);
+    this.scene.fog.density = fogExp;
+  }
+
+  resetGame() {
+    // Vorherige Blöcke entfernen
+    this.placedBlocks.forEach(b => this.scene.remove(b.mesh));
+    this.fallingPieces.forEach(p => this.scene.remove(p.mesh));
+    this.particles.forEach(pt => this.scene.remove(pt.mesh));
+    this.placedBlocks = [];
+    this.fallingPieces = [];
+    this.particles = [];
+
+    this.floors = 0;
+    this.combo = 0;
+    this.maxCombo = 0;
+    this.perfectCount = 0;
+    this.totalPlacements = 0;
+    this.blockWidth = CONFIG.INITIAL_WIDTH;
+    this.blockDepth = CONFIG.INITIAL_DEPTH;
+    this.currentAxis = 'x';
+    this.movePos = -CONFIG.BOUNDS;
+    this.moveDir = 1;
+    this.state = 'PLAYING';
+
+    if (this.mode === 'turbo') {
+      this.moveSpeed = CONFIG.BASE_SPEED * 1.55;
+    } else if (this.mode === 'zen') {
+      this.moveSpeed = CONFIG.BASE_SPEED * 0.85;
+    } else {
+      this.moveSpeed = CONFIG.BASE_SPEED;
+    }
+
+    // Basis-Fundament platzieren
+    const baseGeo = new THREE.BoxGeometry(this.blockWidth, CONFIG.BLOCK_HEIGHT * 2, this.blockDepth);
+    const baseMat = new THREE.MeshLambertMaterial({ color: this.getBlockColor(0) });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.set(0, CONFIG.BLOCK_HEIGHT, 0);
+    baseMesh.receiveShadow = true;
+    baseMesh.castShadow = true;
+    this.scene.add(baseMesh);
+
+    this.placedBlocks.push({
+      mesh: baseMesh,
+      x: 0,
+      y: CONFIG.BLOCK_HEIGHT,
+      z: 0,
+      w: this.blockWidth,
+      d: this.blockDepth
+    });
+    this.lastBlock = this.placedBlocks[0];
+
+    // Nächsten aktiven Block erzeugen
+    this.spawnNextBlock();
+
+    // Kamera zurücksetzen
+    this.camTargetY = 0;
+    this.camCurrentY = 0;
+    this.camera.position.set(6, 6, 6);
+    this.camera.lookAt(0, 0, 0);
+
+    // UI aktualisieren
+    this.updateHUD();
+    document.getElementById('gameOverModal').style.display = 'none';
+    document.getElementById('bottom-hint').style.display = 'block';
+  }
+
+  spawnNextBlock() {
+    this.floors++;
+    this.currentAxis = (this.floors % 2 === 1) ? 'x' : 'z';
+
+    const y = this.floors * CONFIG.BLOCK_HEIGHT + CONFIG.BLOCK_HEIGHT;
+    this.movePos = (Math.random() > 0.5 ? 1 : -1) * CONFIG.BOUNDS;
+    this.moveDir = this.movePos > 0 ? -1 : 1;
+
+    const geo = new THREE.BoxGeometry(this.blockWidth, CONFIG.BLOCK_HEIGHT, this.blockDepth);
+    const mat = new THREE.MeshLambertMaterial({ color: this.getBlockColor(this.floors) });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    if (this.currentAxis === 'x') {
+      mesh.position.set(this.movePos, y, this.lastBlock.z);
+    } else {
+      mesh.position.set(this.lastBlock.x, y, this.movePos);
+    }
+
+    this.scene.add(mesh);
+    this.activeBlock = {
+      mesh,
+      w: this.blockWidth,
+      d: this.blockDepth,
+      y,
+      axis: this.currentAxis
+    };
+
+    // Kamera Zielhöhe anpassen
+    this.camTargetY = this.floors * CONFIG.BLOCK_HEIGHT;
+
+    // Geschwindigkeitsanstieg
+    if (this.mode !== 'zen') {
+      const speedIncr = this.mode === 'turbo' ? 0.0016 : 0.0011;
+      this.moveSpeed = Math.min(this.moveSpeed + speedIncr, 0.125);
+    }
+  }
+
+  // Stein platzieren / Slicen
+  placeBlock() {
+    if (this.state !== 'PLAYING' || !this.activeBlock) return;
+
+    this.totalPlacements++;
+    const cur = this.activeBlock;
+    const prev = this.lastBlock;
+    let diff = 0;
+    let isPerfect = false;
+
+    if (cur.axis === 'x') {
+      diff = cur.mesh.position.x - prev.x;
+      const tol = (this.mode === 'zen') ? CONFIG.PERFECT_LIMIT * 1.8 : CONFIG.PERFECT_LIMIT;
+
+      if (Math.abs(diff) <= tol) {
+        // --- PERFECT TREFFER ---
+        isPerfect = true;
+        diff = 0;
+        cur.mesh.position.x = prev.x;
+      }
+
+      const overhang = Math.abs(diff);
+      const newWidth = cur.w - overhang;
+
+      if (newWidth <= 0) {
+        // Komplett verfehlt -> Spiel vorbei!
+        this.activeBlockMissed();
+        return;
+      }
+
+      if (!isPerfect) {
+        // --- SCHNITT DURCHFÜHREN ---
+        const keptX = prev.x + diff / 2;
+        cur.mesh.position.x = keptX;
+        cur.w = newWidth;
+        this.blockWidth = newWidth;
+
+        // Neues Geometrie-Mesh für erhaltenen Block
+        cur.mesh.geometry.dispose();
+        cur.mesh.geometry = new THREE.BoxGeometry(newWidth, CONFIG.BLOCK_HEIGHT, cur.d);
+
+        // Abfallendes Stück erzeugen
+        const sliceX = (diff > 0)
+          ? prev.x + (prev.w / 2) + (overhang / 2)
+          : prev.x - (prev.w / 2) - (overhang / 2);
+
+        this.spawnFallingPiece(sliceX, cur.y, prev.z, overhang, CONFIG.BLOCK_HEIGHT, cur.d, cur.mesh.material.color);
+        sounds.playSlice();
+        this.combo = 0;
+      } else {
+        // PERFECT!
+        this.handlePerfectPlacement(cur);
+      }
+
+      cur.x = cur.mesh.position.x;
+      cur.z = prev.z;
+
+    } else {
+      // --- Z-ACHSE ---
+      diff = cur.mesh.position.z - prev.z;
+      const tol = (this.mode === 'zen') ? CONFIG.PERFECT_LIMIT * 1.8 : CONFIG.PERFECT_LIMIT;
+
+      if (Math.abs(diff) <= tol) {
+        isPerfect = true;
+        diff = 0;
+        cur.mesh.position.z = prev.z;
+      }
+
+      const overhang = Math.abs(diff);
+      const newDepth = cur.d - overhang;
+
+      if (newDepth <= 0) {
+        this.activeBlockMissed();
+        return;
+      }
+
+      if (!isPerfect) {
+        const keptZ = prev.z + diff / 2;
+        cur.mesh.position.z = keptZ;
+        cur.d = newDepth;
+        this.blockDepth = newDepth;
+
+        cur.mesh.geometry.dispose();
+        cur.mesh.geometry = new THREE.BoxGeometry(cur.w, CONFIG.BLOCK_HEIGHT, newDepth);
+
+        const sliceZ = (diff > 0)
+          ? prev.z + (prev.d / 2) + (overhang / 2)
+          : prev.z - (prev.d / 2) - (overhang / 2);
+
+        this.spawnFallingPiece(prev.x, cur.y, sliceZ, cur.w, CONFIG.BLOCK_HEIGHT, overhang, cur.mesh.material.color);
+        sounds.playSlice();
+        this.combo = 0;
+      } else {
+        this.handlePerfectPlacement(cur);
+      }
+
+      cur.x = prev.x;
+      cur.z = cur.mesh.position.z;
+    }
+
+    if (!isPerfect) {
+      sounds.playPlace(1 + (this.floors % 12) * 0.05);
+    }
+
+    // Zur Liste der festen Blöcke hinzufügen
+    this.placedBlocks.push({
+      mesh: cur.mesh,
+      x: cur.x,
+      y: cur.y,
+      z: cur.z,
+      w: cur.w,
+      d: cur.d
+    });
+    this.lastBlock = this.placedBlocks[this.placedBlocks.length - 1];
+
+    this.updateHUD();
+    this.updateAtmosphere();
+    this.spawnNextBlock();
+  }
+
+  // Behandlung bei Perfect-Treffer
+  handlePerfectPlacement(block) {
+    this.combo++;
+    this.perfectCount++;
+    if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+
+    sounds.playPerfect(this.combo);
+    this.showComboFlash(this.combo);
+    this.spawnSparkles(block.x, block.y + CONFIG.BLOCK_HEIGHT / 2, block.z, block.w, block.d);
+
+    // Belohnung: Stein wächst wieder an nach Streak
+    if (this.combo % CONFIG.COMBO_RESTORE_REQ === 0) {
+      const growth = 0.35;
+      this.blockWidth = Math.min(this.blockWidth + growth, CONFIG.INITIAL_WIDTH);
+      this.blockDepth = Math.min(this.blockDepth + growth, CONFIG.INITIAL_DEPTH);
+      block.w = this.blockWidth;
+      block.d = this.blockDepth;
+      block.mesh.geometry.dispose();
+      block.mesh.geometry = new THREE.BoxGeometry(this.blockWidth, CONFIG.BLOCK_HEIGHT, this.blockDepth);
+      sounds.playRestore();
+      this.showToast("STEIN GEWACHSEN! 🌟");
+    }
+  }
+
+  // Physikalisches Abfallstück
+  spawnFallingPiece(x, y, z, w, h, d, color) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mat = new THREE.MeshLambertMaterial({ color });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    this.scene.add(mesh);
+
+    this.fallingPieces.push({
+      mesh,
+      vy: 0.02,
+      gravity: 0.015,
+      rotX: (Math.random() - 0.5) * 0.1,
+      rotZ: (Math.random() - 0.5) * 0.1,
+      life: 180
+    });
+  }
+
+  // Funkelnde Glitzer-Partikel bei PERFECT
+  spawnSparkles(x, y, z, w, d) {
+    const pCount = 18;
+    const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    for (let i = 0; i < pCount; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(
+        x + (Math.random() - 0.5) * w,
+        y,
+        z + (Math.random() - 0.5) * d
+      );
+      this.scene.add(mesh);
+      this.particles.push({
+        mesh,
+        vx: (Math.random() - 0.5) * 0.08,
+        vy: 0.05 + Math.random() * 0.08,
+        vz: (Math.random() - 0.5) * 0.08,
+        life: 45
+      });
+    }
+  }
+
+  // Stein hat komplett daneben getroffen
+  activeBlockMissed() {
+    this.state = 'GAMEOVER';
+    sounds.playGameOver();
+
+    // Den gesamten Block als fallendes Stück abstürzen lassen
+    const cur = this.activeBlock;
+    this.spawnFallingPiece(
+      cur.mesh.position.x,
+      cur.mesh.position.y,
+      cur.mesh.position.z,
+      cur.w,
+      CONFIG.BLOCK_HEIGHT,
+      cur.d,
+      cur.mesh.material.color
+    );
+    this.scene.remove(cur.mesh);
+    this.activeBlock = null;
+
+    // Turm-Etage war die letzte platzierte
+    this.floors = Math.max(0, this.floors - 1);
+    this.updateHUD();
+
+    // Rekord prüfen
+    const isNew = this.saveHighscore();
+
+    // Nach kurzer Fallzeit Game-Over-Menü öffnen & Kamera-Orbit aktivieren
+    setTimeout(() => {
+      this.showGameOverModal(isNew);
+    }, 700);
+  }
+
+  // HUD-Werte aktualisieren
+  updateHUD() {
+    const fDisp = document.getElementById('floorDisplay');
+    fDisp.textContent = this.floors;
+    fDisp.classList.remove('bump');
+    void fDisp.offsetWidth;
+    fDisp.classList.add('bump');
+
+    const totalHeightMeters = Math.round(this.floors * 3.2);
+    document.getElementById('altMeter').textContent = `${totalHeightMeters} m`;
+
+    // Höhenzone ermitteln
+    let currentZone = "Erdgeschoss";
+    for (let i = MILESTONES.length - 1; i >= 0; i--) {
+      if (this.floors >= MILESTONES[i].floors) {
+        currentZone = MILESTONES[i].name;
+        break;
+      }
+    }
+    document.getElementById('altZone').textContent = currentZone;
+
+    // Combo Pill
+    const cPill = document.getElementById('comboPill');
+    if (this.combo > 1) {
+      cPill.style.display = 'flex';
+      document.getElementById('comboDisplay').textContent = `x${this.combo}`;
+    } else {
+      cPill.style.display = 'none';
+    }
+
+    // Präzision
+    if (this.totalPlacements > 0) {
+      const prec = Math.round((this.perfectCount / this.totalPlacements) * 100);
+      document.getElementById('precDisplay').textContent = `${prec}%`;
+    }
+  }
+
+  showComboFlash(combo) {
+    const pop = document.getElementById('combo-popup');
+    const title = document.getElementById('comboTitle');
+    const sub = document.getElementById('comboSub');
+
+    title.textContent = combo >= 5 ? `SUPER PERFECT! x${combo}` : `PERFECT! x${combo}`;
+    title.style.color = combo >= 5 ? '#f43f5e' : '#facc15';
+    sub.textContent = combo >= 5 ? '🌟 STEIN WÄCHST WIEDER AN!' : `+${combo * 10} Präzisions-Punkte`;
+
+    pop.classList.add('show');
+    clearTimeout(this.popTimeout);
+    this.popTimeout = setTimeout(() => {
+      pop.classList.remove('show');
+    }, 650);
+  }
+
+  showToast(text) {
+    const pop = document.getElementById('combo-popup');
+    document.getElementById('comboTitle').textContent = text;
+    document.getElementById('comboTitle').style.color = '#38bdf8';
+    document.getElementById('comboSub').textContent = '';
+    pop.classList.add('show');
+    setTimeout(() => pop.classList.remove('show'), 900);
+  }
+
+  showGameOverModal(isNewRecord) {
+    document.getElementById('bottom-hint').style.display = 'none';
+    const modal = document.getElementById('gameOverModal');
+    modal.style.display = 'flex';
+
+    const heightM = Math.round(this.floors * 3.2);
+
+    document.getElementById('statFloors').textContent = this.floors;
+    document.getElementById('statHeight').textContent = `${heightM} m`;
+    document.getElementById('statPerfects').textContent = this.perfectCount;
+    document.getElementById('statMaxCombo').textContent = `${this.maxCombo}x`;
+
+    const title = document.getElementById('modalTitle');
+    if (isNewRecord) {
+      title.innerHTML = `NEUER REKORD! <span class="new-record-pill">BEST</span>`;
+    } else {
+      title.textContent = "TURM VOLLENDET!";
+    }
+
+    // Passenden Meilenstein suchen
+    let matchedMilestone = MILESTONES[0];
+    for (let i = MILESTONES.length - 1; i >= 0; i--) {
+      if (this.floors >= MILESTONES[i].floors) {
+        matchedMilestone = MILESTONES[i];
+        break;
+      }
+    }
+    document.getElementById('comparisonBanner').innerHTML = `🏢 <span>Höher als: <b>${matchedMilestone.landmark}</b></span>`;
+  }
+
+  setupEvents() {
+    // Klick / Tap Listener
+    const triggerAction = (e) => {
+      if (e) {
+        // Ignoriere Buttons
+        if (e.target.closest('button') || e.target.closest('a') || e.target.closest('.modal-card')) {
+          return;
+        }
+      }
+      if (this.state === 'PLAYING') {
+        this.placeBlock();
+      }
+    };
+
+    window.addEventListener('pointerdown', triggerAction);
+
+    // Tastatur-Steuerung (Leertaste / Enter)
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'Enter') {
+        e.preventDefault();
+        if (this.state === 'PLAYING') {
+          this.placeBlock();
+        } else if (this.state === 'GAMEOVER') {
+          this.resetGame();
+        }
+      } else if (e.code === 'KeyR') {
+        this.resetGame();
+      } else if (e.code === 'KeyM') {
+        toggleMuteButton();
+      }
+    });
+
+    // Modal Buttons
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      this.resetGame();
+    });
+
+    document.getElementById('shareBtn').addEventListener('click', () => {
+      // Schließt das Modal temporär zur Turm-Besichtigung
+      document.getElementById('gameOverModal').style.display = 'none';
+      this.showToast("Kamera kreist um deinen Turm! Klicke zum Neustarten.");
+      window.addEventListener('pointerdown', () => {
+        document.getElementById('gameOverModal').style.display = 'flex';
+      }, { once: true });
+    });
+
+    // Theme Switcher Button
+    document.getElementById('themeBtn').addEventListener('click', () => {
+      currentThemeIndex = (currentThemeIndex + 1) % THEMES.length;
+      document.getElementById('themeBtn').textContent = `🎨 ${THEMES[currentThemeIndex].name.split(' ')[0]}`;
+      // Aktive Blöcke Farben aktualisieren
+      this.placedBlocks.forEach((b, idx) => {
+        b.mesh.material.color = this.getBlockColor(idx);
+      });
+      if (this.activeBlock) {
+        this.activeBlock.mesh.material.color = this.getBlockColor(this.floors);
+      }
+      sounds.playPlace(1.3);
+    });
+
+    // Sound Switcher Button
+    const soundBtn = document.getElementById('soundBtn');
+    function updateSoundUi() {
+      const muted = window.ArcadeCore ? ArcadeCore.isMuted() : false;
+      soundBtn.textContent = muted ? '🔇 Sound: Aus' : '🔊 Sound: An';
+      soundBtn.style.borderColor = muted ? '#ef4444' : 'rgba(255,255,255,0.2)';
+    }
+    function toggleMuteButton() {
+      if (window.ArcadeCore) {
+        ArcadeCore.toggleMute();
+        updateSoundUi();
+      }
+    }
+    soundBtn.addEventListener('click', toggleMuteButton);
+    updateSoundUi();
+
+    // Modus-Wahl (Klassik, Zen, Turbo)
+    const modeChips = document.querySelectorAll('.mode-chip');
+    modeChips.forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        modeChips.forEach(c => c.classList.remove('active'));
+        e.target.classList.add('active');
+        this.mode = e.target.dataset.mode;
+        sounds.playPlace(1.2);
+      });
+    });
+
+    // Fenstergröße anpassen
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const aspect = w / h;
+      const d = 4.5;
+      this.camera.left = -d * aspect;
+      this.camera.right = d * aspect;
+      this.camera.top = d;
+      this.camera.bottom = -d;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(w, h);
+    });
+  }
+
+  animate() {
+    requestAnimationFrame(() => this.animate());
+
+    // 1. Aktiven gleitenden Block bewegen
+    if (this.state === 'PLAYING' && this.activeBlock) {
+      this.movePos += this.moveDir * this.moveSpeed;
+      if (Math.abs(this.movePos) >= CONFIG.BOUNDS) {
+        this.moveDir *= -1;
+      }
+      if (this.activeBlock.axis === 'x') {
+        this.activeBlock.mesh.position.x = this.movePos;
+      } else {
+        this.activeBlock.mesh.position.z = this.movePos;
+      }
+    }
+
+    // 2. Abfallende Trümmer-Physik
+    for (let i = this.fallingPieces.length - 1; i >= 0; i--) {
+      const p = this.fallingPieces[i];
+      p.mesh.position.y -= p.vy;
+      p.vy += p.gravity;
+      p.mesh.rotation.x += p.rotX;
+      p.mesh.rotation.z += p.rotZ;
+      p.life--;
+      if (p.life <= 0 || p.mesh.position.y < -15) {
+        this.scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        p.mesh.material.dispose();
+        this.fallingPieces.splice(i, 1);
+      }
+    }
+
+    // 3. Glitzer-Partikel
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const pt = this.particles[i];
+      pt.mesh.position.x += pt.vx;
+      pt.mesh.position.y += pt.vy;
+      pt.mesh.position.z += pt.vz;
+      pt.vy -= 0.002;
+      pt.mesh.scale.multiplyScalar(0.95);
+      pt.life--;
+      if (pt.life <= 0) {
+        this.scene.remove(pt.mesh);
+        pt.mesh.geometry.dispose();
+        this.particles.splice(i, 1);
+      }
+    }
+
+    // 4. Wolken langsam kreisen lassen
+    this.clouds.forEach(c => {
+      c.userData.angle += c.userData.speed * 0.05;
+      c.position.x = Math.cos(c.userData.angle) * c.userData.radius;
+      c.position.z = Math.sin(c.userData.angle) * c.userData.radius;
+    });
+
+    // 5. Kamera-Tracking (Sanftes Lerpen)
+    if (this.state === 'PLAYING') {
+      this.camCurrentY += (this.camTargetY - this.camCurrentY) * 0.08;
+      this.camera.position.set(6, 6 + this.camCurrentY, 6);
+      this.camera.lookAt(0, this.camCurrentY, 0);
+
+      // Licht folgt dem Turm nach oben
+      this.dirLight.position.set(6, 15 + this.camCurrentY, 8);
+      this.dirLight.target.position.set(0, this.camCurrentY, 0);
+      this.dirLight.target.updateMatrixWorld();
+    } else if (this.state === 'GAMEOVER') {
+      // Majestätischer 360-Grad Kamera-Orbit um den gesamten Turm
+      this.camOrbit += 0.006;
+      const midTowerY = (this.floors * CONFIG.BLOCK_HEIGHT) / 2;
+      const zoomFactor = Math.max(1, (this.floors * CONFIG.BLOCK_HEIGHT) / 8);
+
+      const rad = 7.5 * zoomFactor;
+      this.camera.position.x = Math.cos(this.camOrbit) * rad;
+      this.camera.position.z = Math.sin(this.camOrbit) * rad;
+      this.camera.position.y = midTowerY + 4 * zoomFactor;
+      this.camera.lookAt(0, midTowerY, 0);
+
+      // Kamera-Frustum weiten für Turm-Pracht
+      const aspect = window.innerWidth / window.innerHeight;
+      const d = 4.5 * Math.min(zoomFactor, 2.5);
+      this.camera.left = -d * aspect;
+      this.camera.right = d * aspect;
+      this.camera.top = d;
+      this.camera.bottom = -d;
+      this.camera.updateProjectionMatrix();
+    }
+
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+
+// Engine starten sobald DOM bereit ist
+window.addEventListener('DOMContentLoaded', () => {
+  if (typeof THREE === 'undefined') {
+    document.getElementById('canvas-container').innerHTML = `
+      <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;background:#0d1117;z-index:99;">
+        <h2 style="color:#f43f5e;font-size:1.8rem;margin:0 0 10px;">⚠️ 3D-Engine wird geladen...</h2>
+        <p style="color:#94a3b8;max-width:440px;line-height:1.5;margin:0 0 16px;">Das Spiel lädt Three.js für 3D-Rendering. Falls die Seite offline genutzt wird oder keine Internetverbindung besteht, bitte die Seite aktualisieren.</p>
+        <button onclick="location.reload()" style="background:#6366f1;color:#fff;border:none;padding:12px 24px;border-radius:12px;font-weight:800;font-size:1rem;cursor:pointer;">Neu laden</button>
+      </div>`;
+    return;
+  }
+  new SkyTowerEngine();
+});
+</script>
+</body>
+</html>
