@@ -250,7 +250,8 @@ const ArcadeCore = (() => {
     'elpatron': 'elpatron_networth',
     'gettingoverit': 'gettingoverit_best',
     'securityguard': 'securityguard_score',
-    'skytower': 'skytower_best'
+    'skytower': 'skytower_best',
+    'duckskate': 'duckskate-best'
   };
 
   function getScore(gameKey) {
