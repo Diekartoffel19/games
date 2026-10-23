@@ -1,6 +1,6 @@
-# 🕹️ Retro Arcade — 31 Browser Games
+# 🕹️ Retro Arcade — 34 Browser Games
 
-Eine lokale Sammlung von **31 eigenständigen HTML5/JS-Spielen** ohne Build-Step oder externe Server-Abhängigkeiten.
+Eine lokale Sammlung von **34 eigenständigen HTML5/JS-Spielen** ohne Build-Step oder externe Server-Abhängigkeiten.
 
-- **[`index.html`](index.html)**: Startseite / Arcade-Hub mit allen 31 Spielen
+- **[`index.html`](index.html)**: Startseite / Arcade-Hub mit allen 34 Spielen
 - **[`style.css`](style.css)**: Globales Stylesheet für Hub, Navigation (`.back`) und Touch-Controls

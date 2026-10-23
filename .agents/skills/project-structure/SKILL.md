@@ -50,6 +50,9 @@ c:\Users\luciu\Documents\dev\games\
 │       └── unique-game-design/
 │           └── SKILL.md       # Design-Unikat-Leitfaden (Anti-Copy-Paste-Regeln)
 ├── games/                     # Alle eigenständigen Browser-Spiele
+│   ├── stadiumrush.html       # Stadium Rush (Trackmania-artiges 3D-Zeitfahren: 5 Blockstrecken A01–E05, Booster, Schanzen, Drift, Checkpoint-Respawn mit Schwung, PB-/Autor-Ghost, Medaillen per Autor-Bot & Web Audio Motor)
+│   ├── physiklabor.html       # Physik-Labor (Physik-Sandkasten mit eigener 2D-Starrkörper-Engine: Kreise & Polygone, Pendel, Ketten, Stangen/Seile/Federn/Gelenke/Motoren, Freihand-Formen, Wasser mit Auftrieb, 6 Materialien, Bombe, Rückgängig/Speichern, 12 Aufbauten & Web Audio)
+│   ├── driftisles.html        # Drift Isles: Endlose Minecraft-artige Voxel-Survival-Welt (Chunk-Streaming, Biome, Höhlen/Lava, Mobs, Crafting, Minimap, Sky-Isles-Modus)
 │   ├── duckskate.html         # Duck Ice Skating (Enten-Eiskunstlauf auf dem Teich: Stride-Speed, Spins & Posen, grantiger Gans-Richter Gerald mit Wertungskarten, Gans-Jagd-Easter-Egg & Spieluhr-Walzer)
 │   ├── haircut.html           # Bad Haircut Barber (Wackelkopf-Friseur: 6 Kunden mit eigenen Wackel-Profilen, Clipper-Schnitt bis zur Guide-Linie, Zeitbonus & eskalierende Reaktionen)
 │   ├── toast.html             # Toast in the Toaster: Crazy Physics Trickshot (Slingshot-Katapult, 2D Rigid-Body Physik, 6 Szenarien, Ventilatoren, Flipper, Slow-Mo Swish Cam & Web Audio Synthesizer)
@@ -81,7 +84,7 @@ c:\Users\luciu\Documents\dev\games\
 │   ├── 2048.html              # 2048 (Zahlenkacheln verschmelzen)
 │   ├── breakout.html          # Breakout (Neon-Bricks zerschlagen)
 │   ├── memory.html            # Memory Match (Kartenpaare aufdecken)
-│   ├── casino.html            # Grand Casino Royale (3-in-1: Einarmiger Bandit mit Hebel & Jackpot, Blackjack & Kessel-Roulette mit geteiltem Bankroll)
+│   ├── casino.html            # Grand Casino Royale (4-in-1: Einarmiger Bandit mit Hebel & Jackpot, Plinko-Pyramide mit bis zu 1.000x Rand-Multiplikator, Blackjack & Kessel-Roulette mit geteiltem Bankroll)
 │   ├── marble.html            # 3D Marble Blast (Three.js Murmelbahn)
 │   └── maze.html              # Seed Maze (Prozedurales Labyrinth)
 ├── index.html                 # Startseite / Arcade-Hub mit allen Spielkarten
@@ -118,6 +121,7 @@ Jedes Spiel in `games/` ist als **eigenständige HTML-Datei** realisiert (Single
 * **Mobile & Touch:** Alle Spiele unterstützen Touchevents und Touch-Controls (`touch-action: manipulation`).
 
 ### Vorhandene Spiele:
+1. **`stadiumrush.html`**: Stadium Rush: Trackmania-inspiriertes Zeitfahren im Stadion (Three.js). 5 Strecken aus 32-m-Blöcken (Geraden, Kurven, Rampen, Lücken), gelbe/rote Turbo-Pads, Brems-Drift, Checkpoints mit Split-Zeiten (blau/rot vs. PB), Respawn am letzten CP mit Schwung, PB-Ghost & Autor-Ghost, Bronze/Silber/Gold/Autor-Medaillen (Autorzeit fährt ein Bot beim Laden), 3 Kameras & synthetisierter Motor-Sound. Eigener Skill: `.agents/skills/stadiumrush/SKILL.md`.
 1. **`duckskate.html`**: Duck Ice Skating: 90-Sekunden-Kür einer Ente mit Bommelmütze auf einem zugefrorenen Teich in der Winterdämmerung. Mit ↑ halten Schwung holen, mit Space springen, in der Luft drehen (Tuck/Spread-Wing-Posen), sauber vorwärts oder rückwärts landen. Bewertet von Gerald, einer grantigen Kanadagans mit Grummel-Meter, Wertungskarten, Wiederholungs-Abzügen und Combo-Multiplikator; Hockey-Stop-Schneeduschen aufs Richterpult lösen eine Gans-Jagd übers Eis aus. Kufenspuren, Eisrisse, Entenküken-Fans und Spieluhr-Walzer via Web Audio. Eigener Skill: `.agents/skills/duckskate/SKILL.md`.
 1. **`dropper.html`**: Cursed Dropper 3D (Falsche Physik & Uncanny Abyss): 3D-Dropper im Minecraft-Dropper-Stil mit 7 surrealen Schächten (Backrooms, Windows BSOD Fehlercode, pulsierender Fleischtunnel mit starrenden Riesenaugen, umgekehrte Schwerkraft/nach oben fallen, Mikrowellen-Fiebertraum um 03:33, rutschige Honig-Matrix mit Eis-Trägheit, optische Hypnose-Spiralen), Vertigo Dolly-Zoom bei High-Speed, 1st & 3rd-Person Ragdoll-Sicht, Flatter-Notbremse, Sturzflug-Boost, lustig-fiesen Todesnachrichten und nativem Web Audio Synthesizer (Wind, Herzschlag-Drohne, Knochenknacken & Wasser-Splash).
 2. **`schedule1.html`**: Schedule I (Hyland Point Empire): Open-World Karte, Skateboard, Grow-Zelte, Packaging Station, Custom Strain Mixing mit Mutationen, Handy-SMS & Counter-Offers, Dealer Benji/Molly/Brad, Immobilien & Geldwäsche.
@@ -143,7 +147,7 @@ Jedes Spiel in `games/` ist als **eigenständige HTML-Datei** realisiert (Single
 9. **`2048.html`**: Schiebepuzzle mit Zahlenwerten und flüssigen Kachel-Animationen.
 10. **`breakout.html`**: Brick-Breaker mit Ballphysik, Paddle-Steuerung und bunten Neonblöcken.
 11. **`memory.html`**: Gedächtnistraining mit umdrehbaren Kartenpaaren.
-12. **`casino.html`**: Grand Casino Royale: Umfassendes 3-in-1 Casino-Erlebnis mit Einarmigem Bandit (Slots mit Zughebel, 3x3 Walzen, 5 Gewinnlinien, Wilds & progressivem Mega-Jackpot), Kessel-Roulette (europäisches Rad, Setzfeld, Dutzende, Kolonnen, Kugelphysik & Historie), klassischem 6-Deck Blackjack (Austeilen, Hit, Stand, Verdoppeln, Kartenschuh-Zähler & Basisstrategie-Berater) sowie zentralem High-Roller-Guthaben, VIP-Geldautomat und Web Audio Soundeffekten.
+12. **`casino.html`**: Grand Casino Royale: Umfassendes 4-in-1 Casino-Erlebnis mit Einarmigem Bandit (Slots mit Zughebel, 3x3 Walzen, 5 Gewinnlinien, Wilds & progressivem Mega-Jackpot), Plinko-Pyramide (Galton-Zufallsphysik, 8–16 Reihen, 3 Risiko-Stufen mit Rand-Multiplikatoren bis zu 1.000x, Multi- & Auto-Drop), Kessel-Roulette (europäisches Rad, Setzfeld, Dutzende, Kolonnen, Kugelphysik & Historie), klassischem 6-Deck Blackjack (Austeilen, Hit, Stand, Verdoppeln, Kartenschuh-Zähler & Basisstrategie-Berater) sowie zentralem High-Roller-Guthaben, VIP-Geldautomat und Web Audio Soundeffekten.
 13. **`marble.html`**: 3D Physikspiel basierend auf Three.js mit Murmel, Rampen und Juwelen.
 14. **`maze.html`**: Prozedurales Labyrinth, reproduzierbar über Seed-Eingaben generiert.
 
