@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backpack Gladiator</title>
+<style>
+  :root {
+    --bg: #17141f; --panel: #231f31; --panel2: #2d2840; --line: #3d3657;
+    --text: #ece8f5; --dim: #9b93b3; --gold: #f5c542; --red: #e5534b;
+    --green: #5ec26a; --blue: #5aa9e6; --purple: #a56be0; --accent: #ff9f43;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif; user-select: none;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between;
+    padding: 12px 20px; background: var(--panel); border-bottom: 2px solid var(--line);
+  }
+  header h1 { margin: 0; font-size: 20px; color: var(--accent); }
+  .stats { display: flex; gap: 18px; font-weight: 600; }
+  #app {
+    display: flex; flex-wrap: wrap; gap: 20px; padding: 20px; justify-content: center; align-items: flex-start;
+  }
+  .panel { background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 16px; }
+  .panel h2 { margin: 0 0 12px; font-size: 15px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+  #grid { display: grid; grid-template-columns: repeat(4, 84px); gap: 6px; }
+  .cell {
+    width: 84px; height: 84px; background: var(--panel2); border: 2px solid var(--line); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 38px; position: relative;
+    cursor: pointer; overflow: hidden;
+  }
+  .cell.empty { border-style: dashed; }
+  .cell.sel { border-color: var(--gold); box-shadow: 0 0 12px var(--gold); }
+  .cell.adj { border-color: var(--blue); background: #2b3350; }
+  .cell.targetable:hover { border-color: var(--green); }
+  .cell .cd {
+    position: absolute; left: 0; bottom: 0; width: 100%; height: 0%;
+    background: rgba(255, 255, 255, 0.18); pointer-events: none;
+  }
+  .cell .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .cell .flash.on { animation: flash .25s; }
+  @keyframes flash { from { opacity: .6; } to { opacity: 0; } }
+  .cell .tag {
+    position: absolute; top: 2px; right: 4px; font-size: 11px; color: var(--gold); font-weight: 700;
+  }
+  #detail { margin-top: 12px; min-height: 96px; width: 366px; font-size: 14px; line-height: 1.5; }
+  #detail b { color: var(--accent); }
+  #detail .dim { color: var(--dim); }
+  button {
+    background: var(--accent); color: #1a1208; border: 0; border-radius: 8px; padding: 9px 16px;
+    font-weight: 700; font-size: 14px; cursor: pointer; font-family: inherit;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.sec { background: var(--panel2); color: var(--text); border: 2px solid var(--line); }
+  button.red { background: var(--red); color: #fff; }
+  button.big { font-size: 18px; padding: 14px 26px; }
+  button:disabled { opacity: .4; cursor: default; }
+  #side { width: 460px; max-width: 100%; }
+  #shop { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 14px; }
+  .card {
+    background: var(--panel2); border: 2px solid var(--line); border-radius: 8px; padding: 8px 2px;
+    text-align: center; cursor: pointer; font-size: 30px;
+  }
+  .card small { display: block; font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .card .price { font-size: 13px; color: var(--gold); font-weight: 700; margin-top: 4px; }
+  .card.sel { border-color: var(--gold); box-shadow: 0 0 12px var(--gold); }
+  .card.poor { opacity: .45; }
+  .card.sold { visibility: hidden; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  #msg { height: 20px; margin-top: 10px; color: var(--gold); font-size: 14px; }
+  .side-box { margin-bottom: 14px; position: relative; }
+  .side-box .name { font-weight: 700; margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .bar { height: 22px; background: #120f19; border-radius: 6px; overflow: hidden; position: relative; border: 1px solid var(--line); }
+  .bar > div { height: 100%; transition: width .08s; }
+  .bar .hp { background: var(--green); }
+  .bar .hp.foe { background: var(--red); }
+  .bar span { position: absolute; inset: 0; text-align: center; font-size: 13px; line-height: 22px; font-weight: 700; text-shadow: 0 0 3px #000; }
+  .status { height: 22px; font-size: 14px; margin-top: 3px; color: var(--dim); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .chip {
+    width: 44px; height: 44px; background: var(--panel2); border: 2px solid var(--line); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 22px; position: relative; overflow: hidden;
+  }
+  .chip .cd { position: absolute; left: 0; bottom: 0; width: 100%; height: 0; background: rgba(255,255,255,.18); }
+  .float {
+    position: absolute; right: 20px; top: 0; font-weight: 800; font-size: 20px; pointer-events: none;
+    animation: rise .9s forwards; text-shadow: 0 0 4px #000;
+  }
+  @keyframes rise { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-34px); opacity: 0; } }
+  .result { text-align: center; padding: 14px 0; }
+  .result h3 { font-size: 26px; margin: 0 0 8px; }
+  @media (max-width: 560px) {
+    #grid { grid-template-columns: repeat(4, 70px); }
+    .cell { width: 70px; height: 70px; font-size: 32px; }
+    #detail { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎒 Backpack Gladiator</h1>
+  <div class="stats">
+    <span id="sRound"></span><span id="sGold"></span><span id="sLives"></span><span id="sBest"></span>
+  </div>
+</header>
+<div id="app">
+  <div class="panel">
+    <h2>Rucksack 4×4</h2>
+    <div id="grid"></div>
+    <div id="detail"></div>
+  </div>
+  <div class="panel" id="side"></div>
+</div>
+
+<script>
+'use strict';
+
+const GRID_W = 4, GRID_N = 16, MAX_ROUND = 10, TICKS_PER_SEC = 10;
+
+// type: weapon | shield | heal | poison | passive. cd in ticks (10 ticks = 1s).
+// aura(e): wirkt auf aktive Nachbar-Items (e = effektive Werte des Nachbarn).
+const ITEMS = {
+  dolch:     { name: 'Dolch', icon: '🗡️', cost: 3, type: 'weapon', cd: 10, dmg: 4, tags: ['blade'],
+               desc: 'Schneller Angriff.' },
+  schwert:   { name: 'Schwert', icon: '⚔️', cost: 5, type: 'weapon', cd: 20, dmg: 10, tags: ['blade'],
+               desc: 'Solider Schaden.' },
+  axt:       { name: 'Axt', icon: '🪓', cost: 7, type: 'weapon', cd: 30, dmg: 20, tags: [],
+               desc: 'Langsam, aber hart.' },
+  schild:    { name: 'Schild', icon: '🛡️', cost: 4, type: 'shield', cd: 20, block: 6, tags: [],
+               desc: 'Gibt Block. Block verfällt 1/s.' },
+  trank:     { name: 'Heiltrank', icon: '🧪', cost: 4, type: 'heal', cd: 25, heal: 8, tags: [],
+               desc: 'Heilt dich.' },
+  pilz:      { name: 'Giftpilz', icon: '🍄', cost: 4, type: 'poison', cd: 15, poison: 3, tags: [],
+               desc: 'Vergiftet den Gegner. Gift ignoriert Block, 1 Schaden pro Stapel/s, Stapel -1/s.' },
+  giftstein: { name: 'Giftstein', icon: '🪨', cost: 5, type: 'passive', tags: [],
+               desc: 'Nachbar-Waffen: +2 Gift pro Treffer. Nachbar-Giftitems: +2 Gift.',
+               aura: e => { if (e.type === 'weapon') e.hitPoison += 2; else if (e.type === 'poison') e.poison += 2; } },
+  wetzstein: { name: 'Wetzstein', icon: '🔪', cost: 4, type: 'passive', tags: [],
+               desc: 'Nachbar-Klingen (Dolch, Schwert): +3 Schaden.',
+               aura: e => { if (e.tags.includes('blade')) e.dmg += 3; } },
+  kraut:     { name: 'Heilkraut', icon: '🌿', cost: 4, type: 'passive', tags: [],
+               desc: 'Nachbar-Heilitems: +5 Heilung.',
+               aura: e => { if (e.type === 'heal') e.heal += 5; } },
+  ring:      { name: 'Eisenring', icon: '💍', cost: 4, type: 'passive', tags: [],
+               desc: 'Nachbar-Schilde: +5 Block.',
+               aura: e => { if (e.type === 'shield') e.block += 5; } },
+  uhrwerk:   { name: 'Uhrwerk', icon: '⚙️', cost: 6, type: 'passive', tags: [],
+               desc: 'Nachbar-Items laden 25% schneller.',
+               aura: e => { if (e.type !== 'passive') e.cdMul *= 0.75; } },
+  kelch:     { name: 'Blutkelch', icon: '🏆', cost: 5, type: 'passive', tags: [],
+               desc: 'Nachbar-Waffen heilen dich um 2 pro Treffer.',
+               aura: e => { if (e.type === 'weapon') e.hitHeal += 2; } },
+  beutel:    { name: 'Münzbeutel', icon: '💰', cost: 5, type: 'passive', tags: [],
+               desc: '+3 Gold nach jedem gewonnenen Kampf.' },
+};
+const ITEM_IDS = Object.keys(ITEMS);
+
+const $ = id => document.getElementById(id);
+const G = {};
+let timer = null;
+
+function newRun() {
+  G.round = 1; G.gold = 10; G.lives = 3;
+  G.grid = Array(GRID_N).fill(null);
+  G.grid[5] = 'dolch';
+  G.sel = null; G.fight = null; G.over = null;
+  G.best = G.best || loadBest();
+  rollShop();
+  render();
+}
+
+function loadBest() { try { return +localStorage.getItem('bgBest') || 0; } catch (e) { return 0; } }
+function saveBest(v) { try { localStorage.setItem('bgBest', v); } catch (e) {} }
+
+function rollShop() {
+  G.shop = Array.from({ length: 5 }, () => ITEM_IDS[Math.floor(Math.random() * ITEM_IDS.length)]);
+}
+
+function neighbors(i) {
+  const x = i % GRID_W, y = Math.floor(i / GRID_W), r = [];
+  if (x > 0) r.push(i - 1);
+  if (x < GRID_W - 1) r.push(i + 1);
+  if (y > 0) r.push(i - GRID_W);
+  if (y < GRID_W - 1) r.push(i + GRID_W);
+  return r;
+}
+
+// Effektive Werte eines Items anhand seiner Nachbarn.
+function effItem(id, neighborIds) {
+  const d = ITEMS[id];
+  const e = {
+    id, name: d.name, icon: d.icon, type: d.type, tags: d.tags,
+    cd: d.cd || 0, dmg: d.dmg || 0, block: d.block || 0, heal: d.heal || 0, poison: d.poison || 0,
+    hitPoison: 0, hitHeal: 0, cdMul: 1,
+  };
+  for (const n of neighborIds) if (ITEMS[n].aura) ITEMS[n].aura(e);
+  if (e.cd) e.cd = Math.max(4, Math.round(e.cd * e.cdMul));
+  return e;
+}
+function effAt(grid, i) {
+  return effItem(grid[i], neighbors(i).map(n => grid[n]).filter(Boolean));
+}
+
+function describe(e) {
+  const s = e.cd ? (e.cd / TICKS_PER_SEC).toFixed(1) + 's' : '';
+  const a = [];
+  if (e.type === 'weapon') {
+    a.push(`<b>${e.dmg}</b> Schaden alle ${s}`);
+    if (e.hitPoison) a.push(`+${e.hitPoison} Gift pro Treffer`);
+    if (e.hitHeal) a.push(`+${e.hitHeal} Heilung pro Treffer`);
+  } else if (e.type === 'shield') a.push(`<b>${e.block}</b> Block alle ${s}`);
+  else if (e.type === 'heal') a.push(`<b>${e.heal}</b> Heilung alle ${s}`);
+  else if (e.type === 'poison') a.push(`<b>${e.poison}</b> Gift alle ${s}`);
+  return a.join('<br>');
+}
+
+// ---------- Rendering (Planungsphase) ----------
+
+function toast(t) { $('msg') && ($('msg').textContent = t); }
+
+function render() {
+  $('sRound').textContent = `Runde ${G.round}/${MAX_ROUND}`;
+  $('sGold').textContent = `💰 ${G.gold}`;
+  $('sLives').textContent = '❤️'.repeat(G.lives) || '💀';
+  $('sBest').textContent = `Best: Runde ${G.best}`;
+  renderGrid();
+  if (G.fight) renderBattle();
+  else renderShop();
+  showDetail(null);
+}
+
+function renderGrid() {
+  const g = $('grid');
+  g.innerHTML = '';
+  for (let i = 0; i < GRID_N; i++) {
+    const c = document.createElement('div');
+    const id = G.grid[i];
+    c.className = 'cell' + (id ? '' : ' empty') + (!G.fight ? ' targetable' : '');
+    c.dataset.i = i;
+    if (id) c.innerHTML = `${ITEMS[id].icon}<div class="cd"></div><div class="flash"></div>`;
+    if (G.sel && G.sel.src === 'grid' && G.sel.i === i) c.classList.add('sel');
+    c.onclick = () => clickCell(i);
+    c.onmouseenter = () => hoverCell(i);
+    c.onmouseleave = () => { clearAdj(); showDetail(null); };
+    g.appendChild(c);
+  }
+}
+
+function clearAdj() { document.querySelectorAll('.cell.adj').forEach(c => c.classList.remove('adj')); }
+
+function hoverCell(i) {
+  clearAdj();
+  neighbors(i).forEach(n => $('grid').children[n].classList.add('adj'));
+  if (G.grid[i]) showDetail({ id: G.grid[i], idx: i });
+  else showDetail(null);
+}
+
+function showDetail(what) {
+  let target = what;
+  if (!target && G.sel && !G.fight) {
+    target = G.sel.src === 'shop' ? { id: G.shop[G.sel.i], shop: true } : { id: G.grid[G.sel.i], idx: G.sel.i };
+  }
+  const el = $('detail');
+  if (!target) {
+    el.innerHTML = `<span class="dim">Item im Shop wählen, dann auf ein freies Feld klicken. Items berühren sich nur über Kanten (oben/unten/links/rechts). Mit der Maus über ein Feld fahren zeigt Nachbarn.</span>`;
+    return;
+  }
+  const d = ITEMS[target.id];
+  const e = target.idx != null ? effAt(G.grid, target.idx) : effItem(target.id, []);
+  let html = `<b>${d.icon} ${d.name}</b><br>`;
+  if (d.type !== 'passive') html += describe(e) + '<br>';
+  html += `<span class="dim">${d.desc}</span>`;
+  if (target.idx != null && !G.fight && G.sel && G.sel.src === 'grid' && G.sel.i === target.idx) {
+    html += `<div style="margin-top:8px"><button class="red" id="sellBtn">Verkaufen (+${Math.floor(d.cost / 2)}💰)</button></div>`;
+  }
+  el.innerHTML = html;
+  const sb = $('sellBtn');
+  if (sb) sb.onclick = sellSelected;
+}
+
+function renderShop() {
+  const s = $('side');
+  s.innerHTML = `
+    <h2>Shop</h2>
+    <div id="shop"></div>
+    <div class="row">
+      <button class="sec" id="reroll">Neu würfeln (1💰)</button>
+      <button class="big" id="fightBtn">⚔️ Kampf starten</button>
+    </div>
+    <div id="msg"></div>`;
+  const shop = $('shop');
+  G.shop.forEach((id, i) => {
+    const c = document.createElement('div');
+    if (!id) { c.className = 'card sold'; c.innerHTML = '&nbsp;'; shop.appendChild(c); return; }
+    const d = ITEMS[id];
+    c.className = 'card' + (G.gold < d.cost ? ' poor' : '') + (G.sel && G.sel.src === 'shop' && G.sel.i === i ? ' sel' : '');
+    c.innerHTML = `${d.icon}<small>${d.name}</small><div class="price">${d.cost}💰</div>`;
+    c.onclick = () => clickShop(i);
+    c.onmouseenter = () => showDetail({ id, shop: true });
+    c.onmouseleave = () => showDetail(null);
+    shop.appendChild(c);
+  });
+  $('reroll').onclick = () => {
+    if (G.gold < 1) return toast('Zu wenig Gold.');
+    G.gold--; rollShop(); G.sel = null; render();
+  };
+  $('fightBtn').onclick = startFight;
+}
+
+function clickShop(i) {
+  const id = G.shop[i];
+  if (!id) return;
+  if (G.gold < ITEMS[id].cost) { toast('Zu wenig Gold.'); return; }
+  G.sel = G.sel && G.sel.src === 'shop' && G.sel.i === i ? null : { src: 'shop', i };
+  render();
+  if (G.sel) toast('Jetzt freies Feld im Rucksack wählen.');
+}
+
+function clickCell(i) {
+  if (G.fight) return;
+  const sel = G.sel;
+  if (!sel) {
+    if (G.grid[i]) { G.sel = { src: 'grid', i }; render(); }
+    return;
+  }
+  if (sel.src === 'shop') {
+    if (G.grid[i]) { toast('Feld belegt. Verkaufe oder verschiebe das Item zuerst.'); return; }
+    const id = G.shop[sel.i];
+    G.gold -= ITEMS[id].cost;
+    G.grid[i] = id; G.shop[sel.i] = null; G.sel = null;
+    render();
+  } else {
+    if (sel.i === i) { G.sel = null; render(); return; }
+    const t = G.grid[i];
+    G.grid[i] = G.grid[sel.i]; G.grid[sel.i] = t;
+    G.sel = null; render();
+  }
+}
+
+function sellSelected() {
+  if (!G.sel || G.sel.src !== 'grid') return;
+  const id = G.grid[G.sel.i];
+  G.gold += Math.floor(ITEMS[id].cost / 2);
+  G.grid[G.sel.i] = null; G.sel = null;
+  render();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && G.sel) { G.sel = null; render(); }
+});
+
+// ---------- Gegner ----------
+
+const ENEMY_NAMES = ['Ratte', 'Goblin', 'Wolf', 'Skelett', 'Ork-Wächter', 'Arena-Bestie', 'Troll', 'Dunkelritter', 'Giftmagier', 'Champion'];
+const ENEMY_ICONS = ['🐀', '👺', '🐺', '💀', '👹', '🦂', '🧌', '🥷', '🧙', '👑'];
+
+function makeEnemy(r) {
+  const boss = r % 5 === 0;
+  const items = [{ type: 'weapon', icon: '🗡️', name: 'Waffe', cd: Math.max(10, 18 - Math.floor(r / 2)), dmg: Math.round((3 + r * 1.4) * (boss ? 1.3 : 1)) }];
+  if (r >= 3) items.push({ type: 'shield', icon: '🛡️', name: 'Panzer', cd: 30, block: 3 + r });
+  if (r >= 4) items.push({ type: 'poison', icon: '🍄', name: 'Gift', cd: 25, poison: 1 + Math.floor(r / 3) });
+  if (r >= 7) items.push({ type: 'heal', icon: '🧪', name: 'Trank', cd: 40, heal: 6 + r });
+  if (boss) items.push({ type: 'weapon', icon: '🔨', name: 'Hammer', cd: 35, dmg: 10 + r * 2 });
+  return {
+    name: (boss ? 'BOSS ' : '') + ENEMY_NAMES[r - 1],
+    icon: ENEMY_ICONS[r - 1],
+    maxHp: Math.round((30 + r * 8 + r * r * 2) * (boss ? 1.4 : 1)),
+    items,
+  };
+}
+
+// ---------- Kampf ----------
+
+function startFight() {
+  const idx = G.grid.map((id, i) => id ? i : -1).filter(i => i >= 0);
+  const active = idx.filter(i => ['weapon', 'poison'].includes(ITEMS[G.grid[i]].type));
+  if (!active.length) { toast('Du brauchst mindestens eine Waffe oder ein Giftitem.'); return; }
+  const en = makeEnemy(G.round);
+  const pItems = idx.map(i => ({ ...effAt(G.grid, i), cell: i, t: 0 }))
+    .filter(it => it.type !== 'passive');
+  G.sel = null;
+  G.fight = {
+    tick: 0, speed: 1, done: null,
+    p: { name: 'Du', icon: '🧔', maxHp: 60, hp: 60, block: 0, poison: 0, items: pItems },
+    e: { name: en.name, icon: en.icon, maxHp: en.maxHp, hp: en.maxHp, block: 0, poison: 0, items: en.items.map(it => ({ ...it, t: 0 })) },
+  };
+  render();
+  runTimer();
+}
+
+function runTimer() {
+  clearInterval(timer);
+  const f = G.fight;
+  if (!f || f.done) return;
+  timer = setInterval(stepFight, 100 / f.speed);
+}
+
+function hurt(side, other, amt, pierce, key) {
+  let dealt = amt;
+  if (!pierce && side.block > 0) {
+    const ab = Math.min(side.block, amt);
+    side.block -= ab; dealt -= ab;
+  }
+  side.hp -= dealt;
+  if (amt > 0) floatNum(key, dealt > 0 ? '-' + dealt : '🛡', dealt > 0 ? '#ff6b6b' : '#8ec5ff');
+  return dealt;
+}
+
+function fire(f, key, side, other, otherKey, it) {
+  if (it.type === 'weapon') {
+    hurt(other, side, it.dmg, false, otherKey);
+    if (it.hitPoison) other.poison += it.hitPoison;
+    if (it.hitHeal) heal(side, it.hitHeal, key);
+  } else if (it.type === 'shield') {
+    side.block += it.block;
+  } else if (it.type === 'heal') {
+    heal(side, it.heal, key);
+  } else if (it.type === 'poison') {
+    other.poison += it.poison;
+  }
+  if (it.cell != null) {
+    const fl = $('grid').children[it.cell].querySelector('.flash');
+    if (fl) { fl.classList.remove('on'); void fl.offsetWidth; fl.classList.add('on'); }
+  }
+}
+
+function heal(side, amt, key) {
+  const h = Math.min(amt, side.maxHp - side.hp);
+  side.hp += h;
+  if (h > 0) floatNum(key, '+' + h, '#7dff8a');
+}
+
+function stepFight() {
+  const f = G.fight;
+  if (!f || f.done) return;
+  f.tick++;
+  const sides = [['p', f.p, f.e, 'e'], ['e', f.e, f.p, 'p']];
+  for (const [k, s, o, ok] of sides) {
+    for (const it of s.items) {
+      it.t++;
+      if (it.t >= it.cd) { it.t = 0; fire(f, k, s, o, ok, it); }
+    }
+  }
+  if (f.tick % TICKS_PER_SEC === 0) {
+    for (const [k, s] of [['p', f.p], ['e', f.e]]) {
+      if (s.poison > 0) { hurt(s, null, s.poison, true, k); s.poison--; }
+      if (s.block > 0) s.block--;
+      if (f.tick > 400) hurt(s, null, Math.ceil((f.tick - 400) / 50), true, k); // Sudden Death
+    }
+  }
+  updateBattle();
+  if (f.e.hp <= 0 || f.p.hp <= 0) endFight(f.e.hp <= 0);
+}
+
+function endFight(won) {
+  const f = G.fight;
+  f.done = won ? 'win' : 'lose';
+  clearInterval(timer);
+  let gain = 0;
+  if (won) {
+    gain = 7 + 3 * G.grid.filter(id => id === 'beutel').length;
+    if (G.round > G.best) { G.best = G.round; saveBest(G.best); }
+  } else {
+    G.lives--;
+  }
+  f.gain = gain;
+  renderBattle();
+}
+
+function floatNum(key, text, color) {
+  const box = document.querySelector(`.side-box[data-k="${key}"]`);
+  if (!box) return;
+  const s = document.createElement('div');
+  s.className = 'float'; s.textContent = text; s.style.color = color;
+  s.style.right = (10 + Math.random() * 70) + 'px';
+  box.appendChild(s);
+  setTimeout(() => s.remove(), 900);
+}
+
+function sideBox(k, s) {
+  return `<div class="side-box" data-k="${k}">
+    <div class="name"><span>${s.icon} ${s.name}</span><span id="${k}Stat"></span></div>
+    <div class="bar"><div class="hp ${k === 'e' ? 'foe' : ''}" id="${k}Hp"></div><span id="${k}HpT"></span></div>
+    <div class="status" id="${k}Status"></div>
+    ${k === 'e' ? '<div class="chips">' + s.items.map((it, i) =>
+      `<div class="chip" title="${it.name}" data-ei="${i}">${it.icon}<div class="cd"></div></div>`).join('') + '</div>' : ''}
+  </div>`;
+}
+
+function renderBattle() {
+  const f = G.fight, s = $('side');
+  let res = '';
+  if (f.done) {
+    const last = G.round >= MAX_ROUND;
+    if (f.done === 'win') {
+      res = last
+        ? `<div class="result"><h3>🏆 Arena-Champion!</h3><p>Du hast alle ${MAX_ROUND} Runden überlebt.</p><button class="big" id="againBtn">Neuer Run</button></div>`
+        : `<div class="result"><h3>Sieg! +${f.gain}💰</h3><button class="big" id="nextBtn">Nächste Runde</button></div>`;
+    } else if (G.lives <= 0) {
+      res = `<div class="result"><h3>💀 Game Over</h3><p>Du bist in Runde ${G.round} gefallen.</p><button class="big" id="againBtn">Neuer Run</button></div>`;
+    } else {
+      res = `<div class="result"><h3>Niederlage</h3><p>Noch ${G.lives} Leben. Baue um und versuche es erneut.</p><button class="big" id="nextBtn">Zurück zum Shop</button></div>`;
+    }
+  }
+  s.innerHTML = `
+    <h2>Kampf – Runde ${G.round}</h2>
+    ${sideBox('e', f.e)}
+    ${sideBox('p', f.p)}
+    ${f.done ? res : `<div class="row">
+      <span class="dim" style="color:var(--dim)">Tempo:</span>
+      ${[1, 2, 4].map(v => `<button class="sec spd" data-v="${v}">${v}×</button>`).join('')}
+    </div>`}`;
+  document.querySelectorAll('.spd').forEach(b => {
+    b.onclick = () => { f.speed = +b.dataset.v; runTimer(); };
+  });
+  const nb = $('nextBtn');
+  if (nb) nb.onclick = nextRound;
+  const ab = $('againBtn');
+  if (ab) ab.onclick = newRun;
+  updateBattle();
+  $('sLives').textContent = '❤️'.repeat(Math.max(G.lives, 0)) || '💀';
+  $('sBest').textContent = `Best: Runde ${G.best}`;
+}
+
+function updateBattle() {
+  const f = G.fight;
+  for (const k of ['p', 'e']) {
+    const s = f[k];
+    const hp = Math.max(0, s.hp);
+    $(k + 'Hp').style.width = (100 * hp / s.maxHp) + '%';
+    $(k + 'HpT').textContent = `${hp} / ${s.maxHp}`;
+    $(k + 'Status').textContent = [s.block > 0 ? `🛡️ ${s.block}` : '', s.poison > 0 ? `☠️ ${s.poison}` : ''].filter(Boolean).join('   ');
+  }
+  for (const it of f.p.items) {
+    const bar = $('grid').children[it.cell].querySelector('.cd');
+    if (bar) bar.style.height = (100 * it.t / it.cd) + '%';
+  }
+  document.querySelectorAll('.chip').forEach(c => {
+    const it = f.e.items[+c.dataset.ei];
+    c.querySelector('.cd').style.height = (100 * it.t / it.cd) + '%';
+  });
+}
+
+function nextRound() {
+  const won = G.fight.done === 'win';
+  if (won) {
+    G.gold += G.fight.gain;
+    G.round++;
+    rollShop();
+  }
+  G.fight = null;
+  render();
+}
+
+newRun();
+</script>
+</body>
+</html>
