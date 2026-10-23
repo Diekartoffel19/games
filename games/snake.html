@@ -1,103 +1,523 @@
 <!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>Snake</title><link rel="stylesheet" href="../style.css">
+<html lang="de">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Snake Deluxe — Das legendäre Schlangenspiel kostenlos online</title>
+<meta name="description" content="Klassisches Retro-Snake mit Goldenen Äpfeln, Chilis, Modi-Wahl (Klassisch vs Wrap-Around) und Hindernissen kostenlos im Browser zocken!">
+<meta name="keywords" content="snake retro spielen, schlangenspiel online, snake game kostenlos">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Snake Deluxe — Das legendäre Schlangenspiel kostenlos online">
+<meta property="og:description" content="Klassisches Retro-Snake mit Goldenen Äpfeln, Chilis, Modi-Wahl (Klassisch vs Wrap-Around) und Hindernissen kostenlos im Browser zocken!">
+<meta property="og:locale" content="de_DE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Snake Deluxe — Das legendäre Schlangenspiel kostenlos online">
+<meta name="twitter:description" content="Klassisches Retro-Snake mit Goldenen Äpfeln, Chilis, Modi-Wahl (Klassisch vs Wrap-Around) und Hindernissen kostenlos im Browser zocken!">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "Snake Deluxe — Das legendäre Schlangenspiel kostenlos online",
+  "description": "Klassisches Retro-Snake mit Goldenen Äpfeln, Chilis, Modi-Wahl (Klassisch vs Wrap-Around) und Hindernissen kostenlos im Browser zocken!",
+  "inLanguage": "de",
+  "applicationCategory": "Game",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  }
+}
+</script><link rel="stylesheet" href="../style.css">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
 <script defer src="https://umami.lucius-website.xyz/script.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
-<script defer src="https://umami.lucius-website.xyz/recorder.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script></head>
+<script defer src="https://umami.lucius-website.xyz/recorder.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+  body { touch-action: manipulation; }
+  #c { touch-action: none; max-height: 58vh; width: auto; max-width: 100%; aspect-ratio: 1/1; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+  .mode-selectors { display: flex; justify-content: center; gap: 8px; margin: 8px auto; flex-wrap: wrap; }
+  .mode-btn { background: #1e1b4b; border: 1px solid #4338ca; color: #a5b4fc; padding: 6px 12px; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .mode-btn.active { background: #4f46e5; color: #fff; border-color: #818cf8; }
+  .special-legend { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 0.8rem; color: #94a3b8; }
+</style>
+</head>
 <body>
-<a class="back" href="../index.html">← Back</a>
-<h1>🐍 Snake</h1>
-<p class="info">Score: <b id="score">0</b> · Best: <b id="best">0</b></p>
+<a class="back" href="../index.html">← Arcade</a>
+<h1>🐍 Snake Deluxe</h1>
+<div class="mode-selectors">
+  <button class="mode-btn active" id="btnModeClassic" onclick="setWallMode('classic')">🧱 Wände: Tödlich</button>
+  <button class="mode-btn" id="btnModeWrap" onclick="setWallMode('wrap')">🌀 Wrap-Around</button>
+  <button class="mode-btn" id="btnObstacles" onclick="toggleObstacles()">🪨 Hindernisse: Aus</button>
+</div>
+<p class="info">Punkte: <b id="score">0</b> · Rekord: <b id="best">0</b></p>
 <canvas id="c" width="560" height="560"></canvas>
-<p class="info">Arrows / WASD to move · Space to start/pause</p>
+<div class="special-legend">
+  <span>🍎 Normal (+1)</span>
+  <span>🌟 Goldener Apfel (+50, zeitlich begrenzt)</span>
+  <span>🌶️ Chili (2x Punkte & Speed)</span>
+</div>
+<div class="touch-controls">
+  <button class="touch-btn" onclick="steer(-1,0)" aria-label="Links">◀</button>
+  <button class="touch-btn" onclick="steer(0,-1)" aria-label="Oben">▲</button>
+  <button class="touch-btn" onclick="steer(0,1)" aria-label="Unten">▼</button>
+  <button class="touch-btn" onclick="steer(1,0)" aria-label="Rechts">▶</button>
+</div>
+<p class="info">Pfeiltasten / WASD / Wischen zum Steuern · Leertaste / Tippen für Start & Pause</p>
+
 <script>
 const c = document.getElementById("c"), ctx = c.getContext("2d");
 const N = 20, S = c.width / N;
-let snake, dir, nextDir, food, score, state, acc, speed, particles = [];
+
+let snake = [], dir = {x:1, y:0}, dirQueue = [], food = null, specialFood = null;
+let obstacles = [];
+let score = 0, state = "ready", acc = 0, speed = 0.12, particles = [];
+let wallMode = 'classic'; // 'classic' or 'wrap'
+let useObstacles = false;
+let chiliTimer = 0; // double points and flames
+let tongueCycle = 0;
 let best = +localStorage.snakeBest || 0;
 document.getElementById("best").textContent = best;
 
+function playSnd(type) {
+  if (!window.ArcadeCore) return;
+  if (type === 'eat') ArcadeCore.sounds.pop(1.2);
+  else if (type === 'gold') ArcadeCore.sounds.coin();
+  else if (type === 'chili') ArcadeCore.sounds.powerup();
+  else if (type === 'die') ArcadeCore.sounds.gameOver();
+}
+
+function setWallMode(mode) {
+  wallMode = mode;
+  document.getElementById("btnModeClassic").classList.toggle("active", mode === 'classic');
+  document.getElementById("btnModeWrap").classList.toggle("active", mode === 'wrap');
+  reset();
+}
+
+function toggleObstacles() {
+  useObstacles = !useObstacles;
+  const btn = document.getElementById("btnObstacles");
+  btn.textContent = useObstacles ? "🪨 Hindernisse: An" : "🪨 Hindernisse: Aus";
+  btn.classList.toggle("active", useObstacles);
+  reset();
+}
+
 function reset() {
-  snake = [{x:10,y:10},{x:9,y:10},{x:8,y:10}];
-  dir = nextDir = {x:1,y:0}; score = 0; speed = 0.12; acc = 0; state = "ready";
-  placeFood(); document.getElementById("score").textContent = 0;
+  snake = [{x:10, y:10}, {x:9, y:10}, {x:8, y:10}];
+  dir = {x:1, y:0};
+  dirQueue = [];
+  particles = [];
+  score = 0;
+  speed = 0.12;
+  acc = 0;
+  chiliTimer = 0;
+  specialFood = null;
+  state = "ready";
+
+  // Generate obstacles if enabled
+  obstacles = [];
+  if (useObstacles) {
+    const count = 10;
+    for (let i = 0; i < count; i++) {
+      let ox, oy;
+      do {
+        ox = Math.floor(Math.random() * N);
+        oy = Math.floor(Math.random() * N);
+      } while (Math.abs(ox - 10) < 4 && Math.abs(oy - 10) < 4);
+      obstacles.push({ x: ox, y: oy });
+    }
+  }
+
+  placeFood();
+  document.getElementById("score").textContent = 0;
 }
+
+function isOccupied(x, y) {
+  if (snake.some(s => s.x === x && s.y === y)) return true;
+  if (obstacles.some(o => o.x === x && o.y === y)) return true;
+  if (food && food.x === x && food.y === y) return true;
+  if (specialFood && specialFood.x === x && specialFood.y === y) return true;
+  return false;
+}
+
 function placeFood() {
-  do food = { x: Math.random()*N|0, y: Math.random()*N|0 };
-  while (snake.some(s => s.x === food.x && s.y === food.y));
+  if (snake.length >= N * N - obstacles.length) {
+    state = "over";
+    return;
+  }
+  let fx, fy;
+  do {
+    fx = Math.floor(Math.random() * N);
+    fy = Math.floor(Math.random() * N);
+  } while (isOccupied(fx, fy));
+  food = { x: fx, y: fy };
+
+  // 25% chance to spawn or refresh special fruit
+  if (!specialFood && Math.random() < 0.3) {
+    const isGold = Math.random() < 0.6;
+    let sx, sy;
+    do {
+      sx = Math.floor(Math.random() * N);
+      sy = Math.floor(Math.random() * N);
+    } while (isOccupied(sx, sy));
+
+    specialFood = {
+      x: sx,
+      y: sy,
+      type: isGold ? 'gold' : 'chili',
+      timer: 450, // 7.5 seconds
+      maxTimer: 450
+    };
+  }
 }
-const DIRS = { ArrowUp:[0,-1], KeyW:[0,-1], ArrowDown:[0,1], KeyS:[0,1], ArrowLeft:[-1,0], KeyA:[-1,0], ArrowRight:[1,0], KeyD:[1,0] };
+
+function steer(x, y) {
+  const ref = dirQueue.length ? dirQueue[dirQueue.length - 1] : dir;
+  if ((x !== -ref.x || y !== -ref.y) && (x !== ref.x || y !== ref.y) && dirQueue.length < 2) {
+    dirQueue.push({x, y});
+  }
+  if (state === "ready") state = "play";
+  else if (state === "over") reset();
+}
+
+const DIRS = {
+  ArrowUp:[0,-1], KeyW:[0,-1],
+  ArrowDown:[0,1], KeyS:[0,1],
+  ArrowLeft:[-1,0], KeyA:[-1,0],
+  ArrowRight:[1,0], KeyD:[1,0]
+};
+
 addEventListener("keydown", e => {
   if (DIRS[e.code]) {
     e.preventDefault();
     const [x, y] = DIRS[e.code];
-    if (x !== -dir.x || y !== -dir.y) nextDir = {x, y};
-    if (state === "ready") state = "play";
+    steer(x, y);
   }
-  if (e.code === "Space") {
+  if (e.code === "Space" && !e.repeat) {
     e.preventDefault();
-    if (state === "over") reset(); else state = state === "play" ? "pause" : "play";
+    if (state === "over") reset();
+    else state = state === "play" ? "pause" : "play";
   }
 });
-function step() {
-  dir = nextDir;
-  const h = { x: (snake[0].x + dir.x + N) % N, y: (snake[0].y + dir.y + N) % N };
-  if (snake.some(s => s.x === h.x && s.y === h.y)) {
-    state = "over";
-    if (score > best) { best = score; localStorage.snakeBest = best; document.getElementById("best").textContent = best; }
+
+let sx = null, sy = null;
+c.addEventListener("pointerdown", e => { sx = e.clientX; sy = e.clientY; });
+c.addEventListener("pointerup", e => {
+  if (sx === null || sy === null) return;
+  const dx = e.clientX - sx, dy = e.clientY - sy;
+  sx = sy = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) {
+    if (state === "over") reset();
+    else state = state === "play" ? "pause" : "play";
     return;
   }
+  Math.abs(dx) > Math.abs(dy) ? steer(Math.sign(dx), 0) : steer(0, Math.sign(dy));
+});
+
+function step() {
+  if (dirQueue.length) dir = dirQueue.shift();
+
+  let nx = snake[0].x + dir.x;
+  let ny = snake[0].y + dir.y;
+
+  // Wall collision in classic mode
+  if (wallMode === 'classic') {
+    if (nx < 0 || nx >= N || ny < 0 || ny >= N) {
+      die();
+      return;
+    }
+  } else {
+    nx = (nx + N) % N;
+    ny = (ny + N) % N;
+  }
+
+  const h = { x: nx, y: ny };
+
+  // Obstacle collision
+  if (obstacles.some(o => o.x === h.x && o.y === h.y)) {
+    die();
+    return;
+  }
+
+  // Eating checks
+  const eatingNormal = food && h.x === food.x && h.y === food.y;
+  const eatingSpecial = specialFood && h.x === specialFood.x && h.y === specialFood.y;
+
+  // Body collision
+  const body = (eatingNormal || eatingSpecial) ? snake : snake.slice(0, -1);
+  if (body.some(s => s.x === h.x && s.y === h.y)) {
+    die();
+    return;
+  }
+
   snake.unshift(h);
-  if (h.x === food.x && h.y === food.y) {
-    score++; document.getElementById("score").textContent = score;
-    for (let i = 0; i < 16; i++) particles.push({ x:(food.x+.5)*S, y:(food.y+.5)*S, vx:(Math.random()-.5)*6, vy:(Math.random()-.5)*6, life:1 });
-    speed = Math.max(0.05, speed - 0.003); placeFood();
-  } else snake.pop();
+
+  if (eatingNormal) {
+    const pts = chiliTimer > 0 ? 2 : 1;
+    score += pts;
+    document.getElementById("score").textContent = score;
+    playSnd('eat');
+    for (let i = 0; i < 14; i++) {
+      particles.push({
+        x: (food.x + 0.5) * S,
+        y: (food.y + 0.5) * S,
+        vx: (Math.random() - 0.5) * 6,
+        vy: (Math.random() - 0.5) * 6,
+        life: 1,
+        color: "#ff3b3b"
+      });
+    }
+    speed = Math.max(0.05, speed - 0.002);
+    placeFood();
+  } else if (eatingSpecial) {
+    if (specialFood.type === 'gold') {
+      const pts = chiliTimer > 0 ? 100 : 50;
+      score += pts;
+      playSnd('gold');
+      for (let i = 0; i < 24; i++) {
+        particles.push({
+          x: (specialFood.x + 0.5) * S,
+          y: (specialFood.y + 0.5) * S,
+          vx: (Math.random() - 0.5) * 8,
+          vy: (Math.random() - 0.5) * 8,
+          life: 1.2,
+          color: "#fbbf24"
+        });
+      }
+    } else {
+      // Chili: trigger rush
+      chiliTimer = 360; // 6 seconds
+      playSnd('chili');
+      for (let i = 0; i < 20; i++) {
+        particles.push({
+          x: (specialFood.x + 0.5) * S,
+          y: (specialFood.y + 0.5) * S,
+          vx: (Math.random() - 0.5) * 7,
+          vy: (Math.random() - 0.5) * 7,
+          life: 1,
+          color: "#ea580c"
+        });
+      }
+    }
+    document.getElementById("score").textContent = score;
+    specialFood = null;
+  } else {
+    snake.pop();
+  }
 }
+
+function die() {
+  state = "over";
+  playSnd('die');
+  if (score > best) {
+    best = score;
+    localStorage.snakeBest = best;
+    document.getElementById("best").textContent = best;
+    if (window.ArcadeCore) ArcadeCore.saveScore('snake', best);
+  }
+}
+
 function draw(t) {
-  // checker background
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    ctx.fillStyle = (x + y) % 2 ? "#1a2e1a" : "#1f361f"; ctx.fillRect(x*S, y*S, S, S);
+  // Checkerboard background
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      ctx.fillStyle = (x + y) % 2 ? "#142814" : "#1a341a";
+      ctx.fillRect(x * S, y * S, S, S);
+    }
   }
-  // food (pulsing apple)
-  const p = 1 + Math.sin(t / 150) * 0.08;
-  ctx.save(); ctx.translate((food.x+.5)*S, (food.y+.5)*S); ctx.scale(p, p);
-  ctx.shadowColor = "#ff4d4d"; ctx.shadowBlur = 20;
-  ctx.fillStyle = "#ff3b3b"; ctx.beginPath(); ctx.arc(0, 2, S*0.38, 0, 7); ctx.fill();
-  ctx.shadowBlur = 0; ctx.fillStyle = "#4caf50"; ctx.beginPath(); ctx.ellipse(4, -S*0.35, 6, 3, -0.5, 0, 7); ctx.fill();
-  ctx.restore();
-  // snake
+
+  // Classic border warning outline
+  if (wallMode === 'classic') {
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.4)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+  }
+
+  // Obstacles
+  obstacles.forEach(o => {
+    ctx.fillStyle = "#64748b";
+    ctx.shadowColor = "#334155";
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.roundRect(o.x * S + 2, o.y * S + 2, S - 4, S - 4, 6);
+    ctx.fill();
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillRect(o.x * S + 6, o.y * S + 6, S - 12, S - 12);
+  });
+  ctx.shadowBlur = 0;
+
+  // Normal Apple
+  if (food) {
+    const p = 1 + Math.sin(t / 150) * 0.08;
+    ctx.save();
+    ctx.translate((food.x + 0.5) * S, (food.y + 0.5) * S);
+    ctx.scale(p, p);
+    ctx.shadowColor = "#ff4d4d";
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = "#ff3b3b";
+    ctx.beginPath();
+    ctx.arc(0, 2, S * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#4caf50";
+    ctx.beginPath();
+    ctx.ellipse(4, -S * 0.35, 6, 3, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Special Food (Golden Apple / Chili)
+  if (specialFood) {
+    ctx.save();
+    const sx = (specialFood.x + 0.5) * S, sy = (specialFood.y + 0.5) * S;
+    ctx.translate(sx, sy);
+    const pulse = 1 + Math.sin(t / 100) * 0.12;
+    ctx.scale(pulse, pulse);
+
+    if (specialFood.type === 'gold') {
+      ctx.shadowColor = "#facc15";
+      ctx.shadowBlur = 22;
+      ctx.fillStyle = "#f59e0b";
+      ctx.beginPath();
+      ctx.arc(0, 1, S * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fef08a";
+      ctx.beginPath();
+      ctx.arc(-3, -3, S * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+      // Countdown ring
+      const pct = specialFood.timer / specialFood.maxTimer;
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 1, S * 0.48, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+      ctx.stroke();
+    } else {
+      // Chili
+      ctx.shadowColor = "#ea580c";
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = "#dc2626";
+      ctx.beginPath();
+      ctx.ellipse(0, 2, S * 0.22, S * 0.4, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(-2, -S * 0.4, 5, 6);
+      // Countdown ring
+      const pct = specialFood.timer / specialFood.maxTimer;
+      ctx.strokeStyle = "#f97316";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 1, S * 0.48, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Snake Body
   snake.forEach((s, i) => {
-    const k = 1 - i / snake.length * 0.5;
-    ctx.fillStyle = `hsl(${130 - i * 2}, 70%, ${55 * k}%)`;
-    ctx.beginPath(); ctx.roundRect(s.x*S+2, s.y*S+2, S-4, S-4, 8); ctx.fill();
+    const k = 1 - (i / snake.length) * 0.4;
+    const isChili = chiliTimer > 0;
+    ctx.fillStyle = isChili
+      ? `hsl(${25 + (i * 4) % 30}, 95%, ${50 * k}%)`
+      : `hsl(${135 - i * 2}, 75%, ${50 * k}%)`;
+
+    ctx.beginPath();
+    ctx.roundRect(s.x * S + 2, s.y * S + 2, S - 4, S - 4, 8);
+    ctx.fill();
   });
-  // eyes
-  const h = snake[0], cx = (h.x+.5)*S, cy = (h.y+.5)*S;
-  [[-1],[1]].forEach(([side]) => {
-    const ex = cx + dir.x*5 + dir.y*side*7, ey = cy + dir.y*5 - dir.x*side*7;
-    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex, ey, 5, 0, 7); ctx.fill();
-    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(ex + dir.x*2, ey + dir.y*2, 2.5, 0, 7); ctx.fill();
+
+  // Snake Head with Eyes and Flicking Forked Tongue
+  if (snake.length > 0) {
+    const h = snake[0], cx = (h.x + 0.5) * S, cy = (h.y + 0.5) * S;
+
+    // Eyes
+    [[-1], [1]].forEach(([side]) => {
+      const ex = cx + dir.x * 5 + dir.y * side * 7;
+      const ey = cy + dir.y * 5 - dir.x * side * 7;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(ex, ey, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.arc(ex + dir.x * 2, ey + dir.y * 2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Flicking Forked Tongue
+    tongueCycle += 0.15;
+    if (Math.sin(tongueCycle) > 0.4) {
+      const tx = cx + dir.x * (S * 0.55);
+      const ty = cy + dir.y * (S * 0.55);
+      const tipX = tx + dir.x * 8;
+      const tipY = ty + dir.y * 8;
+
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(tipX, tipY);
+      // Fork
+      ctx.lineTo(tipX + dir.x * 4 + dir.y * 4, tipY + dir.y * 4 - dir.x * 4);
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX + dir.x * 4 - dir.y * 4, tipY + dir.y * 4 + dir.x * 4);
+      ctx.stroke();
+    }
+  }
+
+  // Particles
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.03;
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.color || "#fff";
+    ctx.fillRect(p.x, p.y, 4, 4);
   });
-  // particles
-  particles.forEach(q => { q.x += q.vx; q.y += q.vy; q.life -= 0.03;
-    ctx.globalAlpha = Math.max(0, q.life); ctx.fillStyle = "#ffd54f"; ctx.fillRect(q.x, q.y, 4, 4); });
-  ctx.globalAlpha = 1; particles = particles.filter(q => q.life > 0);
-  // overlay
-  const msg = { ready: ["Snake", "Press an arrow key to start"], pause: ["Paused", "Space to resume"], over: ["Game Over", `Score ${score} · Space to retry`] }[state];
-  if (msg) {
-    ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(0, 0, c.width, c.height);
-    ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-    ctx.font = "bold 50px sans-serif"; ctx.fillText(msg[0], c.width/2, c.height/2);
-    ctx.font = "20px sans-serif"; ctx.fillText(msg[1], c.width/2, c.height/2 + 40);
+  ctx.globalAlpha = 1;
+  particles = particles.filter(p => p.life > 0);
+
+  // Overlays
+  if (state === "ready" || state === "pause" || state === "over") {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 40px sans-serif";
+    ctx.textAlign = "center";
+
+    const title = state === "ready" ? "SNAKE" : state === "pause" ? "PAUSE" : "GAME OVER";
+    const sub = state === "ready" ? "Tippen oder Pfeiltaste zum Starten" : state === "pause" ? "Leertaste zum Fortsetzen" : `Rekord: ${best} · Tippen für Neustart`;
+
+    ctx.fillText(title, c.width / 2, c.height / 2 - 20);
+    ctx.font = "18px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText(sub, c.width / 2, c.height / 2 + 25);
   }
 }
-let last;
-function loop(t) {
-  const dt = (t - (last ?? t)) / 1000; last = t;
-  if (state === "play") { acc += dt; while (acc > speed && state === "play") { acc -= speed; step(); } }
-  draw(t); requestAnimationFrame(loop);
+
+let lastTime = 0;
+function loop(time) {
+  const dt = (time - lastTime) / 1000;
+  lastTime = time;
+
+  if (state === "play") {
+    acc += dt;
+    if (specialFood) {
+      specialFood.timer--;
+      if (specialFood.timer <= 0) specialFood = null;
+    }
+    if (chiliTimer > 0) chiliTimer--;
+
+    const currentSpeed = chiliTimer > 0 ? speed * 0.65 : speed;
+    while (acc >= currentSpeed) {
+      acc -= currentSpeed;
+      step();
+    }
+  }
+
+  draw(time);
+  requestAnimationFrame(loop);
 }
-reset(); requestAnimationFrame(loop);
+
+reset();
+requestAnimationFrame(t => { lastTime = t; loop(t); });
 </script>
 </body>
 </html>
