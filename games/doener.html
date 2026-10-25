@@ -1,0 +1,1947 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Döner Tycoon: Der Gerät — Kebab Shop Simulator</title>
+<meta name="description" content="Der Gerät wird nie müde! Schneide knuspriges Dönerfleisch, belege Fladenbrote mit Salat und Soßen, bediene hungrige Kunden und werde Döner-König!">
+<meta name="theme-color" content="#090a0f">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<link rel="stylesheet" href="../style.css">
+
+<!-- Pflicht-Tracking-Skripte für alle HTML-Seiten -->
+<script defer src="https://umami.lucius-website.xyz/script.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script defer src="https://umami.lucius-website.xyz/recorder.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+
+<!-- Zentraler Arcade-Core Audio & Storage Synthesizer -->
+<script src="../src/arcade-core.js"></script>
+
+<style>
+  :root {
+    --bg-dark: #090a0f;
+    --panel-bg: rgba(17, 19, 23, 0.95);
+    --gold: #f59e0b;
+    --red: #ef4444;
+    --green: #10b981;
+    --accent: #f97316;
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-dark);
+    color: #f4f4f5;
+    font-family: var(--font-sans);
+  }
+
+  #game-container {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 40%, #171b24 0%, #090a0f 85%);
+  }
+
+  canvas {
+    display: block;
+    touch-action: none;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.75);
+  }
+
+  /* Standardisierter Top-Right Arcade Return Link */
+  a.back {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    left: auto;
+    z-index: 100;
+    color: #f4f4f5;
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    padding: 8px 16px;
+    border-radius: 9999px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+    touch-action: manipulation;
+  }
+
+  a.back:hover, a.back:active {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.5);
+    color: #fbbf24;
+    transform: translateY(-1px);
+  }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back" style="position:fixed;top:12px;right:12px;left:auto;z-index:100;backdrop-filter:blur(12px);">‹ Arcade</a>
+
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // --- AUDIO SYNTHESIZER INTEGRATION ---
+  const Audio = {
+    pop(pitch = 1) {
+      try {
+        if (window.ArcadeCore?.sounds?.pop) {
+          window.ArcadeCore.sounds.pop(pitch);
+        } else if (window.ArcadeCore?.playTone) {
+          window.ArcadeCore.playTone(320 * pitch, 0.06, 'triangle', 0.15);
+        }
+      } catch (e) {}
+    },
+    hit() {
+      try {
+        if (window.ArcadeCore?.sounds?.hit) {
+          window.ArcadeCore.sounds.hit();
+        } else if (window.ArcadeCore?.playTone) {
+          window.ArcadeCore.playTone(110, 0.1, 'sawtooth', 0.2);
+        }
+      } catch (e) {}
+    },
+    coin() {
+      try {
+        if (window.ArcadeCore?.sounds?.coin) {
+          window.ArcadeCore.sounds.coin();
+        } else if (window.ArcadeCore?.playTone) {
+          window.ArcadeCore.playTone(988, 0.08, 'sine', 0.15);
+        }
+      } catch (e) {}
+    },
+    powerup() {
+      try {
+        if (window.ArcadeCore?.sounds?.powerup) {
+          window.ArcadeCore.sounds.powerup();
+        } else if (window.ArcadeCore?.playTone) {
+          window.ArcadeCore.playTone(523, 0.15, 'triangle', 0.2);
+        }
+      } catch (e) {}
+    },
+    explosion() {
+      try {
+        if (window.ArcadeCore?.sounds?.explosion) {
+          window.ArcadeCore.sounds.explosion();
+        } else if (window.ArcadeCore?.playTone) {
+          window.ArcadeCore.playTone(70, 0.25, 'sawtooth', 0.3);
+        }
+      } catch (e) {}
+    },
+    gameOver() {
+      try {
+        if (window.ArcadeCore?.sounds?.gameOver) {
+          window.ArcadeCore.sounds.gameOver();
+        } else if (window.ArcadeCore?.playTone) {
+          window.ArcadeCore.playTone(160, 0.3, 'sawtooth', 0.2);
+        }
+      } catch (e) {}
+    },
+    slice() {
+      try {
+        if (window.ArcadeCore?.sounds?.hit) {
+          window.ArcadeCore.sounds.hit();
+        } else if (window.ArcadeCore?.playTone) {
+          window.ArcadeCore.playTone(280 + Math.random() * 80, 0.05, 'sawtooth', 0.12);
+        } else {
+          this.pop(1.4);
+        }
+      } catch (e) {}
+    }
+  };
+
+  // --- PERSISTENCE ---
+  const Storage = {
+    getHighscore() {
+      const a = Number(localStorage.getItem('doener_highscore')) || 0;
+      let b = 0;
+      try {
+        if (window.ArcadeCore?.getScore) {
+          b = Number(window.ArcadeCore.getScore('doener')) || 0;
+        }
+      } catch (e) {}
+      return Math.max(a, b);
+    },
+    saveHighscore(score) {
+      const prev = this.getHighscore();
+      if (score > prev || localStorage.getItem('doener_highscore') === null) {
+        localStorage.setItem('doener_highscore', score);
+        try {
+          if (window.ArcadeCore?.saveScore) {
+            window.ArcadeCore.saveScore('doener', score);
+          }
+        } catch (e) {}
+        return score > prev;
+      }
+      return false;
+    }
+  };
+
+  // --- CONSTANTS & DATA ---
+  const V_WIDTH = 1280;
+  const V_HEIGHT = 720;
+  const SHIFT_DURATION = 150; // 2:30 minutes per shift
+
+  const INGREDIENTS = {
+    salat:     { id: 'salat',     name: 'Salat',       key: '1', emoji: '🥬', color: '#22c55e', type: 'topping' },
+    tomate:    { id: 'tomate',    name: 'Tomaten',     key: '2', emoji: '🍅', color: '#ef4444', type: 'topping' },
+    zwiebel:   { id: 'zwiebel',   name: 'Zwiebeln',    key: '3', emoji: '🧅', color: '#f3f4f6', type: 'topping' },
+    rotkohl:   { id: 'rotkohl',   name: 'Rotkohl',     key: '4', emoji: '🟣', color: '#a855f7', type: 'topping' },
+    feta:      { id: 'feta',      name: 'Schafskäse',  key: '5', emoji: '🧀', color: '#fef08a', type: 'topping' },
+    kraeuter:  { id: 'kraeuter',  name: 'Kräutersoße', key: 'Q', emoji: '🌿', color: '#86efac', type: 'sauce' },
+    knoblauch: { id: 'knoblauch', name: 'Knoblauch',   key: 'W', emoji: '🧄', color: '#f1f5f9', type: 'sauce' },
+    scharf:    { id: 'scharf',    name: 'Scharf (Chili)', key: 'E', emoji: '🌶️', color: '#dc2626', type: 'sauce' }
+  };
+
+  const BASES = {
+    doener: { id: 'doener', name: 'Döner', emoji: '🥙', price: 7.50 },
+    dueruem: { id: 'dueruem', name: 'Dürüm', emoji: '🌯', price: 8.50 },
+    box: { id: 'box', name: 'Dönerbox', emoji: '🥡', price: 6.50 }
+  };
+
+  const CUSTOMER_NAMES = [
+    'Murat', 'Sophie', 'Klaus', 'Mustafa', 'Lena', 'Onkel Ali',
+    'Jan', 'Frau Becker', 'Tayfun', 'Emir', 'Lisa', 'Mehmet', 'Torsten'
+  ];
+
+  const CUSTOMER_SKINS = ['#f8d5b8', '#e8b896', '#cf9972', '#b37651', '#fce3d3'];
+  const CUSTOMER_HAIR = ['#1e1b18', '#3b2f2f', '#78350f', '#d97706', '#9ca3af', '#1e293b'];
+
+  // --- VIEWPORT & COORDINATE MAPPING ---
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const Viewport = {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+    dpr: 1,
+
+    resize() {
+      this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const winW = window.innerWidth;
+      const winH = window.innerHeight;
+
+      canvas.width = Math.round(winW * this.dpr);
+      canvas.height = Math.round(winH * this.dpr);
+
+      canvas.style.width = winW + 'px';
+      canvas.style.height = winH + 'px';
+
+      this.scale = Math.min(canvas.width / V_WIDTH, canvas.height / V_HEIGHT);
+      this.offsetX = (canvas.width - V_WIDTH * this.scale) / 2;
+      this.offsetY = (canvas.height - V_HEIGHT * this.scale) / 2;
+    },
+
+    screenToGame(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const physX = (clientX - rect.left) * (canvas.width / rect.width);
+      const physY = (clientY - rect.top) * (canvas.height / rect.height);
+      return {
+        x: (physX - this.offsetX) / this.scale,
+        y: (physY - this.offsetY) / this.scale
+      };
+    }
+  };
+
+  window.addEventListener('resize', () => Viewport.resize());
+  Viewport.resize();
+
+  // Prevent scrolling and gestures on mobile touch
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); }, { passive: false });
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); }, { passive: false });
+
+  // --- PARTICLE & POPUP SYSTEM ---
+  class ParticleSystem {
+    constructor() {
+      this.popups = [];
+      this.particles = [];
+      this.meatFlakes = [];
+    }
+
+    addPopup(x, y, text, color = '#f59e0b', size = 24) {
+      this.popups.push({ x, y, text, color, size, life: 1.0, maxLife: 1.0, vy: -50 });
+    }
+
+    addBurst(x, y, count = 12, color = '#fbbf24', speedMul = 1) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = (50 + Math.random() * 120) * speedMul;
+        this.particles.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 20,
+          color,
+          radius: 2 + Math.random() * 3,
+          life: 0.6 + Math.random() * 0.4,
+          maxLife: 1.0,
+          gravity: 200
+        });
+      }
+    }
+
+    addSmoke(x, y, count = 5) {
+      for (let i = 0; i < count; i++) {
+        this.particles.push({
+          x: x + (Math.random() - 0.5) * 30,
+          y: y + (Math.random() - 0.5) * 20,
+          vx: (Math.random() - 0.5) * 40,
+          vy: -60 - Math.random() * 80,
+          color: Math.random() > 0.4 ? 'rgba(70, 70, 70, 0.7)' : 'rgba(30, 30, 30, 0.8)',
+          radius: 8 + Math.random() * 14,
+          life: 0.8 + Math.random() * 0.5,
+          maxLife: 1.3,
+          gravity: -30
+        });
+      }
+    }
+
+    addFire(x, y, count = 8) {
+      for (let i = 0; i < count; i++) {
+        this.particles.push({
+          x: x + (Math.random() - 0.5) * 40,
+          y: y + (Math.random() - 0.5) * 40,
+          vx: (Math.random() - 0.5) * 50,
+          vy: -80 - Math.random() * 90,
+          color: ['#ff4400', '#ff8800', '#ffcc00'][Math.floor(Math.random() * 3)],
+          radius: 6 + Math.random() * 8,
+          life: 0.4 + Math.random() * 0.3,
+          maxLife: 0.7,
+          gravity: -40
+        });
+      }
+    }
+
+    addMeatSlice(x, y, targetX, targetY) {
+      this.meatFlakes.push({
+        x, y,
+        vx: 30 + Math.random() * 60,
+        vy: -30 - Math.random() * 50,
+        targetX, targetY,
+        angle: Math.random() * Math.PI,
+        va: (Math.random() - 0.5) * 10,
+        life: 0,
+        totalTime: 0.45
+      });
+    }
+
+    update(dt) {
+      for (let i = this.popups.length - 1; i >= 0; i--) {
+        const p = this.popups[i];
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) this.popups.splice(i, 1);
+      }
+
+      for (let i = this.particles.length - 1; i >= 0; i--) {
+        const pt = this.particles[i];
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.vy += pt.gravity * dt;
+        pt.life -= dt;
+        if (pt.life <= 0) this.particles.splice(i, 1);
+      }
+
+      for (let i = this.meatFlakes.length - 1; i >= 0; i--) {
+        const mf = this.meatFlakes[i];
+        mf.life += dt;
+        const progress = Math.min(1, mf.life / mf.totalTime);
+        mf.x = mf.x + (mf.targetX - mf.x) * 0.18;
+        mf.y = mf.y + (mf.targetY - mf.y) * 0.22;
+        mf.angle += mf.va * dt;
+        if (progress >= 1) {
+          this.meatFlakes.splice(i, 1);
+        }
+      }
+    }
+
+    draw(ctx) {
+      ctx.save();
+
+      // Particles
+      for (const pt of this.particles) {
+        const alpha = Math.max(0, pt.life / pt.maxLife);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Meat flakes in flight
+      for (const mf of this.meatFlakes) {
+        ctx.globalAlpha = 0.95;
+        ctx.save();
+        ctx.translate(mf.x, mf.y);
+        ctx.rotate(mf.angle);
+        ctx.fillStyle = '#92400e';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 14, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#b45309';
+        ctx.fillRect(-8, -2, 16, 2);
+        ctx.restore();
+      }
+
+      // Floating text popups
+      for (const p of this.popups) {
+        const alpha = Math.max(0, p.life / p.maxLife);
+        ctx.globalAlpha = alpha;
+        ctx.font = `900 ${p.size}px ${getComputedStyle(document.body).fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.lineWidth = 4;
+        ctx.strokeText(p.text, p.x, p.y);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, p.x, p.y);
+      }
+
+      ctx.restore();
+    }
+  }
+
+  // --- GAME STATE & SIMULATION ---
+  const Game = {
+    state: 'TITLE', // 'TITLE', 'PLAYING', 'GAMEOVER'
+    shiftTimeRemaining: SHIFT_DURATION,
+    cash: 0,
+    tipsTotal: 0,
+    combo: 0,
+    maxCombo: 0,
+    strikes: 0,
+    maxStrikes: 3,
+    customersServed: 0,
+    perfectOrders: 0,
+    highScore: 0,
+    isNewRecord: false,
+
+    // Spit & Grill
+    spit: {
+      x: 175,
+      y: 130,
+      width: 140,
+      height: 300,
+      rotation: 0,
+      rotSpeed: 1.4,
+      heatLevel: 2, // 0 = Aus, 1 = Leicht, 2 = Optimal, 3 = Turbo
+      temp: 95, // Celsius (sweet spot: 60 - 135)
+      burntTimer: 0,
+      sliceCooldown: 0,
+      knifeY: 0,
+      knifeActive: false
+    },
+
+    // Meat Pan (Warming Basin)
+    meatPan: {
+      x: 80,
+      y: 470,
+      width: 190,
+      height: 90,
+      count: 3,
+      maxCount: 15
+    },
+
+    // Workbench / Active Assembly
+    workbench: {
+      base: 'doener',
+      meatCount: 0,
+      ingredients: new Set()
+    },
+
+    // Customers Queue
+    customers: [],
+    customerSpawnTimer: 1.0,
+
+    // UI Interactive Rectangles
+    interactiveZones: [],
+    particles: new ParticleSystem(),
+
+    init() {
+      this.highScore = Storage.getHighscore();
+      this.bindInputs();
+    },
+
+    startShift() {
+      this.state = 'PLAYING';
+      this.shiftTimeRemaining = SHIFT_DURATION;
+      this.cash = 0;
+      this.tipsTotal = 0;
+      this.combo = 0;
+      this.maxCombo = 0;
+      this.strikes = 0;
+      this.customersServed = 0;
+      this.perfectOrders = 0;
+      this.isNewRecord = false;
+      this.highScore = Storage.getHighscore();
+
+      this.spit.heatLevel = 2;
+      this.spit.temp = 95;
+      this.spit.burntTimer = 0;
+      this.meatPan.count = 4;
+
+      this.clearWorkbench();
+      this.customers = [];
+      this.spawnCustomer();
+      this.customerSpawnTimer = 4.0;
+
+      Audio.powerup();
+      this.particles.addPopup(V_WIDTH / 2, V_HEIGHT / 2 - 40, 'SCHICHT GESTARTET! 🥙', '#f59e0b', 34);
+    },
+
+    clearWorkbench() {
+      this.workbench.meatCount = 0;
+      this.workbench.ingredients.clear();
+      Audio.pop(0.85);
+    },
+
+    endShift(reason = 'Schicht beendet!') {
+      this.state = 'GAMEOVER';
+      this.gameOverReason = reason;
+
+      const totalEarned = Math.round(this.cash * 100) / 100;
+      this.isNewRecord = Storage.saveHighscore(totalEarned);
+      this.highScore = Storage.getHighscore();
+
+      if (this.strikes >= this.maxStrikes) {
+        Audio.gameOver();
+      } else {
+        Audio.powerup();
+      }
+    },
+
+    spawnCustomer() {
+      if (this.customers.length >= 3) return;
+
+      const baseKeys = Object.keys(BASES);
+      const chosenBase = baseKeys[Math.floor(Math.random() * baseKeys.length)];
+
+      // Random required toppings
+      const allToppings = ['salat', 'tomate', 'zwiebel', 'rotkohl', 'feta'];
+      const allSauces = ['kraeuter', 'knoblauch', 'scharf'];
+
+      // Pick 2-4 veggies
+      const shuffledVeggies = [...allToppings].sort(() => Math.random() - 0.5);
+      const toppingCount = 2 + Math.floor(Math.random() * 3);
+      const reqToppings = shuffledVeggies.slice(0, toppingCount);
+
+      // Pick 1-2 sauces
+      const shuffledSauces = [...allSauces].sort(() => Math.random() - 0.5);
+      const sauceCount = 1 + (Math.random() > 0.4 ? 1 : 0);
+      const reqSauces = shuffledSauces.slice(0, sauceCount);
+
+      // Almost all want meat, 12% veggie
+      const wantsMeat = Math.random() > 0.12 ? 1 : 0;
+
+      const name = CUSTOMER_NAMES[Math.floor(Math.random() * CUSTOMER_NAMES.length)];
+      const skin = CUSTOMER_SKINS[Math.floor(Math.random() * CUSTOMER_SKINS.length)];
+      const hair = CUSTOMER_HAIR[Math.floor(Math.random() * CUSTOMER_HAIR.length)];
+      const hatType = Math.floor(Math.random() * 4); // 0 none, 1 beanie, 2 cap, 3 glasses
+
+      // Build German customer speech line
+      let speech = `${BASES[chosenBase].name} bitte!`;
+      if (reqSauces.includes('scharf') && reqToppings.includes('zwiebel')) {
+        speech = 'Mit allem und scharf, Chef!';
+      } else if (!reqToppings.includes('zwiebel')) {
+        speech = 'Bitte ohne Zwiebeln!';
+      } else if (reqSauces.length === 1 && reqSauces[0] === 'knoblauch') {
+        speech = 'Nur Knoblauchsauce!';
+      } else if (chosenBase === 'dueruem') {
+        speech = 'Einen Dürüm, schön saftig!';
+      } else if (wantsMeat === 0) {
+        speech = 'Vegetarisch mit extra Schafskäse!';
+      }
+
+      this.customers.push({
+        id: Math.random().toString(36).substr(2, 9),
+        name,
+        skin,
+        hair,
+        hatType,
+        speech,
+        base: chosenBase,
+        wantsMeat,
+        meatCount: wantsMeat ? 1 : 0,
+        ingredients: new Set([...reqToppings, ...reqSauces]),
+        patienceMax: 26,
+        patience: 26,
+        bounceY: 0
+      });
+    },
+
+    sliceMeat() {
+      if (this.spit.burntTimer > 0) {
+        this.particles.addPopup(this.spit.x + this.spit.width / 2, this.spit.y + 120, 'VERBRANNT! 🔥', '#ef4444', 22);
+        Audio.hit();
+        return;
+      }
+
+      if (this.spit.sliceCooldown > 0) return;
+      this.spit.sliceCooldown = 0.12;
+
+      // Check temperature
+      if (this.spit.temp < 60) {
+        this.particles.addPopup(this.spit.x + this.spit.width / 2, this.spit.y + 120, 'NOCH ROH! ❄️', '#38bdf8', 22);
+        Audio.hit();
+        return;
+      }
+
+      if (this.meatPan.count >= this.meatPan.maxCount) {
+        this.particles.addPopup(this.meatPan.x + this.meatPan.width / 2, this.meatPan.y - 15, 'PFANNE VOLL! 🥩', '#f59e0b', 20);
+        Audio.hit();
+        return;
+      }
+
+      // Slicing successful!
+      Audio.slice();
+      this.spit.knifeActive = true;
+      this.spit.knifeY = this.spit.y + Math.random() * (this.spit.height - 40);
+
+      // Spawn falling slice
+      this.particles.addMeatSlice(
+        this.spit.x + this.spit.width - 20,
+        this.spit.knifeY,
+        this.meatPan.x + 30 + Math.random() * (this.meatPan.width - 60),
+        this.meatPan.y + 35 + Math.random() * 25
+      );
+
+      this.meatPan.count++;
+      this.particles.addBurst(this.spit.x + this.spit.width - 20, this.spit.knifeY, 4, '#b45309', 0.5);
+    },
+
+    toggleHeat() {
+      this.spit.heatLevel = (this.spit.heatLevel + 1) % 4;
+      Audio.pop(1.1);
+      const names = ['AUS', 'LEICHT (1)', 'OPTIMAL (2)', 'TURBO (3)'];
+      const colors = ['#9ca3af', '#38bdf8', '#22c55e', '#ef4444'];
+      this.particles.addPopup(
+        this.spit.x + this.spit.width / 2,
+        this.spit.y + this.spit.height + 65,
+        `GRILL: ${names[this.spit.heatLevel]}`,
+        colors[this.spit.heatLevel],
+        20
+      );
+    },
+
+    setHeat(lvl) {
+      this.spit.heatLevel = Math.max(0, Math.min(3, lvl));
+      Audio.pop(1.1);
+    },
+
+    addMeatToWorkbench() {
+      if (this.meatPan.count <= 0) {
+        this.particles.addPopup(this.meatPan.x + this.meatPan.width / 2, this.meatPan.y - 15, 'KEIN FLEISCH! 🔪', '#ef4444', 20);
+        Audio.hit();
+        return;
+      }
+      if (this.workbench.meatCount >= 3) {
+        this.particles.addPopup(580, 290, 'GENUG FLEISCH! 🥩', '#f59e0b', 20);
+        Audio.hit();
+        return;
+      }
+
+      this.meatPan.count--;
+      this.workbench.meatCount++;
+      Audio.pop(1.3);
+      this.particles.addBurst(580, 310, 6, '#b45309');
+    },
+
+    toggleIngredient(id) {
+      if (!INGREDIENTS[id]) return;
+      if (this.workbench.ingredients.has(id)) {
+        this.workbench.ingredients.delete(id);
+        Audio.pop(0.9);
+      } else {
+        this.workbench.ingredients.add(id);
+        Audio.pop(1.2);
+        this.particles.addBurst(580, 310, 5, INGREDIENTS[id].color);
+      }
+    },
+
+    setBase(baseId) {
+      if (!BASES[baseId]) return;
+      this.workbench.base = baseId;
+      Audio.pop(1.1);
+      this.particles.addPopup(580, 240, BASES[baseId].name, '#fbbf24', 22);
+    },
+
+    serveOrder() {
+      if (this.customers.length === 0) return;
+
+      const customer = this.customers[0];
+      const baseMatch = (this.workbench.base === customer.base);
+
+      // Compare meat
+      const customerWantsMeat = customer.wantsMeat > 0;
+      const workbenchHasMeat = this.workbench.meatCount > 0;
+      const meatMatch = (customerWantsMeat === workbenchHasMeat);
+
+      // Compare toppings and sauces
+      let matchedCount = 0;
+      let wrongCount = 0;
+
+      // Items customer wanted
+      for (const item of customer.ingredients) {
+        if (this.workbench.ingredients.has(item)) {
+          matchedCount++;
+        }
+      }
+
+      // Items customer did NOT want but we added
+      for (const item of this.workbench.ingredients) {
+        if (!customer.ingredients.has(item)) {
+          wrongCount++;
+        }
+      }
+
+      const totalReq = customer.ingredients.size + (customerWantsMeat ? 1 : 0) + 1; // +meat +base
+      let totalPoints = (baseMatch ? 1 : 0) + (meatMatch ? 1 : 0) + matchedCount - (wrongCount * 0.8);
+      const matchRatio = Math.max(0, totalPoints / totalReq);
+
+      if (matchRatio >= 0.85 && baseMatch && meatMatch) {
+        // PERFECT ORDER!
+        this.combo++;
+        if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+        this.perfectOrders++;
+        this.customersServed++;
+
+        const basePrice = BASES[customer.base].price;
+        const tip = (1.50 + (customer.patience / customer.patienceMax) * 2.50) * (1 + (this.combo - 1) * 0.25);
+        const orderTotal = Math.round((basePrice + tip) * 100) / 100;
+
+        this.cash += orderTotal;
+        this.tipsTotal += tip;
+
+        Audio.coin();
+        if (this.combo >= 3) Audio.powerup();
+
+        this.particles.addPopup(960, 220, `+€${orderTotal.toFixed(2)} PERFEKT! 🌟`, '#10b981', 28);
+        if (this.combo >= 2) {
+          this.particles.addPopup(960, 260, `COMBO x${this.combo}! 🔥`, '#f59e0b', 24);
+        }
+        this.particles.addBurst(960, 200, 20, '#10b981');
+
+        this.customers.shift();
+        this.clearWorkbench();
+      } else if (matchRatio >= 0.5 && baseMatch) {
+        // ACCEPTABLE ORDER
+        this.customersServed++;
+        const basePrice = BASES[customer.base].price * 0.85;
+        const tip = 0.50;
+        const orderTotal = Math.round((basePrice + tip) * 100) / 100;
+
+        this.cash += orderTotal;
+        this.tipsTotal += tip;
+
+        Audio.coin();
+        this.particles.addPopup(960, 220, `+€${orderTotal.toFixed(2)} Geht klar! 👍`, '#eab308', 24);
+        this.particles.addBurst(960, 200, 10, '#eab308');
+
+        this.customers.shift();
+        this.clearWorkbench();
+      } else {
+        // REJECTED ORDER!
+        Audio.hit();
+        this.strikes++;
+        this.combo = 0;
+
+        this.particles.addPopup(960, 220, 'FALSCHE BESTELLUNG! 😠', '#ef4444', 26);
+        this.particles.addBurst(960, 200, 15, '#ef4444');
+
+        if (this.strikes >= this.maxStrikes) {
+          this.endShift('3 Kunden verärgert! Feierabend!');
+          return;
+        }
+
+        this.customers.shift();
+        this.clearWorkbench();
+      }
+    },
+
+    customerTimeout(index) {
+      if (!this.customers[index]) return;
+      Audio.hit();
+      Audio.explosion();
+
+      this.strikes++;
+      this.combo = 0;
+
+      const c = this.customers[index];
+      this.particles.addPopup(960, 220, `${c.name} ist weg! 😤`, '#ef4444', 24);
+      this.particles.addBurst(960, 200, 15, '#ef4444');
+
+      this.customers.splice(index, 1);
+
+      if (this.strikes >= this.maxStrikes) {
+        this.endShift('3 Kunden weggelaufen!');
+      }
+    },
+
+    update(dt) {
+      this.particles.update(dt);
+
+      if (this.state !== 'PLAYING') return;
+
+      // Shift timer
+      this.shiftTimeRemaining -= dt;
+      if (this.shiftTimeRemaining <= 0) {
+        this.shiftTimeRemaining = 0;
+        this.endShift('Schichtzeit abgelaufen! Feierabend!');
+        return;
+      }
+
+      // Spit rotation
+      this.spit.rotation += this.spit.rotSpeed * dt;
+
+      // Spit temperature differential equation
+      // Targets: 0 = 24C, 1 = 80C, 2 = 120C, 3 = 225C
+      const targetTemps = [24, 80, 120, 225];
+      const target = targetTemps[this.spit.heatLevel];
+      const heatRate = this.spit.heatLevel > 0 ? 0.35 : 0.15;
+      this.spit.temp += (target - this.spit.temp) * (heatRate * dt);
+
+      // Spit burn check
+      if (this.spit.temp > 185) {
+        if (this.spit.burntTimer <= 0) {
+          // Spit catches fire!
+          Audio.explosion();
+          this.particles.addPopup(this.spit.x + this.spit.width / 2, this.spit.y + 100, 'SPIESS BRENNT! 🔥', '#ff0000', 30);
+          this.particles.addFire(this.spit.x + this.spit.width / 2, this.spit.y + this.spit.height / 2, 30);
+          this.meatPan.count = Math.max(0, this.meatPan.count - 3);
+          this.spit.burntTimer = 4.0;
+        }
+      }
+
+      if (this.spit.burntTimer > 0) {
+        this.spit.burntTimer -= dt;
+        this.particles.addSmoke(this.spit.x + this.spit.width / 2, this.spit.y + 60, 2);
+        if (this.spit.burntTimer <= 0) {
+          this.spit.temp = 110;
+        }
+      }
+
+      // Cooldowns
+      if (this.spit.sliceCooldown > 0) {
+        this.spit.sliceCooldown -= dt;
+        if (this.spit.sliceCooldown <= 0) {
+          this.spit.knifeActive = false;
+        }
+      }
+
+      // Smoke or steam on normal heating
+      if (this.spit.temp > 140 && Math.random() < 0.25) {
+        this.particles.addSmoke(this.spit.x + this.spit.width / 2, this.spit.y + 40, 1);
+      }
+
+      // Customer queue timers
+      for (let i = this.customers.length - 1; i >= 0; i--) {
+        const c = this.customers[i];
+        if (i === 0) {
+          // Front customer loses patience
+          c.patience -= dt;
+          if (c.patience <= 0) {
+            this.customerTimeout(i);
+          }
+        }
+      }
+
+      // Customer spawning
+      if (this.customers.length < 3) {
+        this.customerSpawnTimer -= dt;
+        if (this.customerSpawnTimer <= 0) {
+          this.spawnCustomer();
+          this.customerSpawnTimer = 5.0 + Math.random() * 4.0;
+        }
+      }
+    },
+
+    bindInputs() {
+      // Keyboard hotkeys
+      window.addEventListener('keydown', e => {
+        if (e.repeat) return;
+
+        if (this.state === 'TITLE') {
+          if (e.code === 'Space' || e.code === 'Enter') {
+            this.startShift();
+            e.preventDefault();
+          }
+          return;
+        }
+
+        if (this.state === 'GAMEOVER') {
+          if (e.code === 'Space' || e.code === 'Enter') {
+            this.startShift();
+            e.preventDefault();
+          }
+          return;
+        }
+
+        // Gameplay keys
+        if (e.code === 'Space') {
+          this.sliceMeat();
+          e.preventDefault();
+        } else if (e.code === 'KeyH') {
+          this.toggleHeat();
+        } else if (e.code === 'Enter') {
+          this.serveOrder();
+          e.preventDefault();
+        } else if (e.code === 'Backspace' || e.code === 'Delete') {
+          this.clearWorkbench();
+          e.preventDefault();
+        } else if (e.code === 'Digit1') {
+          this.toggleIngredient('salat');
+        } else if (e.code === 'Digit2') {
+          this.toggleIngredient('tomate');
+        } else if (e.code === 'Digit3') {
+          this.toggleIngredient('zwiebel');
+        } else if (e.code === 'Digit4') {
+          this.toggleIngredient('rotkohl');
+        } else if (e.code === 'Digit5') {
+          this.toggleIngredient('feta');
+        } else if (e.code === 'KeyQ') {
+          this.toggleIngredient('kraeuter');
+        } else if (e.code === 'KeyW') {
+          this.toggleIngredient('knoblauch');
+        } else if (e.code === 'KeyE') {
+          this.toggleIngredient('scharf');
+        } else if (e.code === 'KeyM') {
+          this.addMeatToWorkbench();
+        }
+      });
+
+      // Pointer / Mouse / Touch interaction
+      let isPointerDown = false;
+      let lastPointerY = 0;
+
+      canvas.addEventListener('pointerdown', e => {
+        isPointerDown = true;
+        const p = Viewport.screenToGame(e.clientX, e.clientY);
+        lastPointerY = p.y;
+        this.handleClick(p.x, p.y);
+      });
+
+      canvas.addEventListener('pointermove', e => {
+        if (!isPointerDown) return;
+        const p = Viewport.screenToGame(e.clientX, e.clientY);
+        if (this.state === 'PLAYING') {
+          // Check if dragging across spit area to slice
+          if (p.x >= this.spit.x - 20 && p.x <= this.spit.x + this.spit.width + 40 &&
+              p.y >= this.spit.y && p.y <= this.spit.y + this.spit.height) {
+            if (Math.abs(p.y - lastPointerY) > 20) {
+              this.sliceMeat();
+              lastPointerY = p.y;
+            }
+          }
+        }
+      });
+
+      const onPointerUp = () => { isPointerDown = false; };
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
+    },
+
+    handleClick(gx, gy) {
+      if (this.state === 'TITLE') {
+        // Start button zone: center screen
+        if (gx >= 440 && gx <= 840 && gy >= 580 && gy <= 680) {
+          this.startShift();
+        }
+        return;
+      }
+
+      if (this.state === 'GAMEOVER') {
+        // Replay button zone: center screen
+        if (gx >= 440 && gx <= 840 && gy >= 500 && gy <= 600) {
+          this.startShift();
+        }
+        return;
+      }
+
+      // Check click against registered interactive zones
+      for (const z of this.interactiveZones) {
+        if (gx >= z.x && gx <= z.x + z.w && gy >= z.y && gy <= z.y + z.h) {
+          z.action();
+          return;
+        }
+      }
+    },
+
+    // --- DRAWING ROUTINES ---
+    draw() {
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Apply transform & letterbox
+      ctx.setTransform(Viewport.scale, 0, 0, Viewport.scale, Viewport.offsetX, Viewport.offsetY);
+
+      if (this.state === 'TITLE') {
+        this.drawTitleScreen();
+      } else if (this.state === 'PLAYING') {
+        this.drawGameScreen();
+      } else if (this.state === 'GAMEOVER') {
+        this.drawGameOverScreen();
+      }
+
+      this.particles.draw(ctx);
+      ctx.restore();
+    },
+
+    drawTitleScreen() {
+      // Dark kebab shop atmospheric background
+      ctx.fillStyle = '#0f1218';
+      ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+      // Neon shop sign
+      ctx.save();
+      ctx.shadowColor = '#f59e0b';
+      ctx.shadowBlur = 25;
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '900 64px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🥙 DÖNER TYCOON 🥙', V_WIDTH / 2, 130);
+      ctx.restore();
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '700 24px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Der Gerät schläft nie — Das ultimative Kebab-Imperium!', V_WIDTH / 2, 175);
+
+      // Rotating sample spit in background
+      this.drawSpitGraphic(V_WIDTH / 2 - 60, 205, 120, 220, this.spit.rotation, 100);
+
+      // Instructions card
+      ctx.fillStyle = 'rgba(23, 27, 36, 0.9)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 2;
+      this.roundRect(ctx, 300, 440, 680, 130, 16, true, true);
+
+      ctx.fillStyle = '#f4f4f5';
+      ctx.font = '600 16px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('🔥 1. Reguliere die Spieß-Hitze & schneide knuspriges Fleisch in die Pfanne.', 330, 475);
+      ctx.fillText('🥙 2. Belege Fladenbrot, Dürüm oder Box nach Kundenwunsch (Zutaten & Soßen).', 330, 505);
+      ctx.fillText('⚡ 3. Serviere schnell für fette Trinkgelder, Combo-Multiplikatoren & Rekorde!', 330, 535);
+
+      // Start button
+      ctx.save();
+      ctx.shadowColor = '#f59e0b';
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = 'linear-gradient(180deg, #f59e0b, #d97706)';
+      this.roundRect(ctx, 440, 590, 400, 75, 18, true, false);
+      ctx.restore();
+
+      ctx.fillStyle = '#111827';
+      ctx.font = '900 26px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('SCHICHT STARTEN! 🚀', V_WIDTH / 2, 637);
+
+      // Highscore
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '600 18px system-ui, sans-serif';
+      ctx.fillText(`🏆 Bester Tagesumsatz: €${this.highScore.toFixed(2)}`, V_WIDTH / 2, 695);
+    },
+
+    drawGameScreen() {
+      this.interactiveZones = [];
+
+      // Dark kitchen tiles background
+      ctx.fillStyle = '#0a0d14';
+      ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+      // Top HUD bar
+      this.drawTopHUD();
+
+      // Zone 1: Left - The Spit Station (Der Gerät)
+      this.drawSpitStation();
+
+      // Zone 2: Center - The Assembly Workstation
+      this.drawAssemblyStation();
+
+      // Zone 3: Right - Customer Counter & Queue
+      this.drawCustomerCounter();
+    },
+
+    drawTopHUD() {
+      ctx.fillStyle = 'rgba(17, 24, 39, 0.95)';
+      ctx.fillRect(0, 0, V_WIDTH, 70);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 70);
+      ctx.lineTo(V_WIDTH, 70);
+      ctx.stroke();
+
+      // Shift Timer
+      const mins = Math.floor(this.shiftTimeRemaining / 60);
+      const secs = Math.floor(this.shiftTimeRemaining % 60).toString().padStart(2, '0');
+      ctx.fillStyle = this.shiftTimeRemaining < 30 ? '#ef4444' : '#f4f4f5';
+      ctx.font = '900 26px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`⏱️ ${mins}:${secs}`, 30, 45);
+
+      // Revenue / Cash
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '900 28px system-ui, sans-serif';
+      ctx.fillText(`💰 €${this.cash.toFixed(2)}`, 200, 45);
+
+      // Tips
+      ctx.fillStyle = '#10b981';
+      ctx.font = '700 18px system-ui, sans-serif';
+      ctx.fillText(`(Trinkgeld: €${this.tipsTotal.toFixed(2)})`, 365, 45);
+
+      // Combo Flame
+      if (this.combo > 1) {
+        ctx.fillStyle = '#f97316';
+        ctx.font = '900 24px system-ui, sans-serif';
+        ctx.fillText(`🔥 COMBO x${this.combo}`, 580, 45);
+      }
+
+      // Strikes / Patience lost
+      ctx.textAlign = 'right';
+      let strikeIcons = '';
+      for (let i = 0; i < this.maxStrikes; i++) {
+        strikeIcons += (i < this.strikes ? '❌ ' : '❤️ ');
+      }
+      ctx.font = '700 22px system-ui, sans-serif';
+      ctx.fillText(`Laune: ${strikeIcons}`, 1080, 45);
+    },
+
+    drawSpitStation() {
+      const sx = 30;
+      const sy = 85;
+      const sw = 330;
+      const sh = 615;
+
+      // Stainless steel panel backdrop
+      ctx.fillStyle = '#151921';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.lineWidth = 2;
+      this.roundRect(ctx, sx, sy, sw, sh, 14, true, true);
+
+      // Title
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('DER GERÄT (FLEISCHSPIESS)', sx + sw / 2, sy + 30);
+
+      // Electric heating elements behind spit
+      this.drawBurnerCoils(sx + 30, sy + 50, 40, 280, this.spit.heatLevel, this.spit.temp);
+
+      // The Rotating Meat Spit
+      this.drawSpitGraphic(this.spit.x, this.spit.y, this.spit.width, this.spit.height, this.spit.rotation, this.spit.temp);
+
+      // Spit interactive slice target
+      this.interactiveZones.push({
+        x: this.spit.x - 20,
+        y: this.spit.y,
+        w: this.spit.width + 40,
+        h: this.spit.height,
+        action: () => this.sliceMeat()
+      });
+
+      // Animated Knife if slicing
+      if (this.spit.knifeActive) {
+        ctx.save();
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(this.spit.x + this.spit.width - 25, this.spit.knifeY, 70, 8);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(this.spit.x + this.spit.width + 45, this.spit.knifeY - 2, 25, 12);
+        ctx.restore();
+      }
+
+      // Temperature Gauge Bar
+      this.drawTempGauge(sx + sw - 45, sy + 50, 20, 280, this.spit.temp);
+
+      // Heat Control Buttons
+      this.drawHeatControls(sx + 20, sy + 345, sw - 40);
+
+      // Warming Meat Pan (Basin)
+      this.drawMeatPan(this.meatPan.x, this.meatPan.y, this.meatPan.width, this.meatPan.height);
+      this.interactiveZones.push({
+        x: this.meatPan.x,
+        y: this.meatPan.y,
+        w: this.meatPan.width,
+        h: this.meatPan.height,
+        action: () => this.addMeatToWorkbench()
+      });
+
+      // Big Slice Action Button (Mobile / Accessibility)
+      const sliceBtnY = sy + sh - 60;
+      ctx.fillStyle = 'linear-gradient(180deg, #d97706, #b45309)';
+      this.roundRect(ctx, sx + 20, sliceBtnY, sw - 40, 48, 10, true, false);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🔪 FLEISCH SCHNEIDEN (Space)', sx + sw / 2, sliceBtnY + 31);
+
+      this.interactiveZones.push({
+        x: sx + 20,
+        y: sliceBtnY,
+        w: sw - 40,
+        h: 48,
+        action: () => this.sliceMeat()
+      });
+    },
+
+    drawBurnerCoils(x, y, w, h, level, temp) {
+      ctx.save();
+      ctx.fillStyle = '#1c1917';
+      ctx.fillRect(x, y, w, h);
+
+      // Red / orange glow based on temperature
+      const glowAlpha = Math.min(1, Math.max(0, (temp - 40) / 140));
+      ctx.fillStyle = `rgba(239, 68, 68, ${0.15 + glowAlpha * 0.75})`;
+      for (let i = 0; i < 7; i++) {
+        const cy = y + 20 + i * 38;
+        ctx.fillRect(x + 5, cy, w - 10, 14);
+      }
+      ctx.restore();
+    },
+
+    drawSpitGraphic(x, y, w, h, rot, temp) {
+      ctx.save();
+
+      // Top and bottom skewer steel rod
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(x + w / 2 - 6, y - 25, 12, h + 50);
+
+      // Spit Body Shape (Tapered top-to-bottom cone)
+      ctx.beginPath();
+      ctx.moveTo(x + 15, y);
+      ctx.lineTo(x + w - 15, y);
+      ctx.lineTo(x + w - 35, y + h);
+      ctx.lineTo(x + 35, y + h);
+      ctx.closePath();
+      ctx.clip();
+
+      // Base meat gradient
+      let meatColor1 = '#78350f';
+      let meatColor2 = '#451a03';
+      if (temp < 60) {
+        // Raw pink-reddish
+        meatColor1 = '#be123c';
+        meatColor2 = '#881337';
+      } else if (temp > 160) {
+        // Charred dark
+        meatColor1 = '#1c1917';
+        meatColor2 = '#292524';
+      }
+
+      const grad = ctx.createLinearGradient(x, y, x + w, y);
+      grad.addColorStop(0, meatColor2);
+      grad.addColorStop(0.5, meatColor1);
+      grad.addColorStop(1, '#292524');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y, w, h);
+
+      // Procedural meat layers & rotating stripes
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.lineWidth = 3;
+      const stripeCount = 14;
+      for (let i = 0; i < stripeCount; i++) {
+        const sy = y + (i * (h / stripeCount));
+        ctx.beginPath();
+        ctx.moveTo(x, sy);
+        ctx.lineTo(x + w, sy);
+        ctx.stroke();
+
+        // Glistening roasted flecks
+        const offset = Math.sin(rot + i) * 20;
+        ctx.fillStyle = temp >= 60 && temp <= 140 ? '#f59e0b' : 'rgba(255,255,255,0.15)';
+        ctx.fillRect(x + w / 2 + offset, sy + 6, 8, 4);
+      }
+
+      ctx.restore();
+    },
+
+    drawTempGauge(x, y, w, h, temp) {
+      ctx.save();
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 2;
+      this.roundRect(ctx, x, y, w, h, 6, true, true);
+
+      // Fill height
+      const ratio = Math.min(1, Math.max(0, temp / 200));
+      const fillH = ratio * (h - 4);
+
+      let fillColor = '#38bdf8'; // Cold
+      if (temp >= 60 && temp <= 135) fillColor = '#22c55e'; // Perfect
+      else if (temp > 135 && temp <= 175) fillColor = '#f59e0b'; // Hot
+      else if (temp > 175) fillColor = '#ef4444'; // Burnt
+
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(x + 2, y + h - 2 - fillH, w - 4, fillH);
+
+      // Markers
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${Math.round(temp)}°`, x + w / 2, y + h + 18);
+      ctx.restore();
+    },
+
+    drawHeatControls(x, y, w) {
+      const btnW = (w - 18) / 4;
+      const levels = [
+        { label: 'AUS', val: 0, color: '#64748b' },
+        { label: 'LOW', val: 1, color: '#38bdf8' },
+        { label: 'MED', val: 2, color: '#22c55e' },
+        { label: 'MAX', val: 3, color: '#ef4444' }
+      ];
+
+      for (let i = 0; i < 4; i++) {
+        const bx = x + i * (btnW + 6);
+        const active = (this.spit.heatLevel === levels[i].val);
+
+        ctx.fillStyle = active ? levels[i].color : 'rgba(30, 41, 59, 0.8)';
+        ctx.strokeStyle = active ? '#ffffff' : 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = active ? 2 : 1;
+        this.roundRect(ctx, bx, y, btnW, 36, 6, true, true);
+
+        ctx.fillStyle = active ? '#0f172a' : '#cbd5e1';
+        ctx.font = '800 13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(levels[i].label, bx + btnW / 2, y + 23);
+
+        this.interactiveZones.push({
+          x: bx,
+          y,
+          w: btnW,
+          h: 36,
+          action: () => this.setHeat(levels[i].val)
+        });
+      }
+    },
+
+    drawMeatPan(x, y, w, h) {
+      ctx.save();
+      // Stainless steel warming pan
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      this.roundRect(ctx, x, y, w, h, 10, true, true);
+
+      // Pan label
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '800 13px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`PFANNE: ${this.meatPan.count}x FLEISCH 🥩`, x + w / 2, y + 22);
+
+      // Sliced meat pile rendering
+      for (let i = 0; i < Math.min(this.meatPan.count, 10); i++) {
+        const mx = x + 25 + (i % 5) * 28;
+        const my = y + 42 + Math.floor(i / 5) * 18;
+        ctx.fillStyle = '#92400e';
+        ctx.beginPath();
+        ctx.ellipse(mx, my, 12, 5, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#b45309';
+        ctx.fillRect(mx - 6, my - 2, 12, 2);
+      }
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '600 11px system-ui, sans-serif';
+      ctx.fillText('(Klick zum Belegen)', x + w / 2, y + h - 8);
+      ctx.restore();
+    },
+
+    drawAssemblyStation() {
+      const ax = 380;
+      const ay = 85;
+      const aw = 480;
+      const ah = 615;
+
+      // Wooden cutting board worktable
+      ctx.fillStyle = '#181b22';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.lineWidth = 2;
+      this.roundRect(ctx, ax, ay, aw, ah, 14, true, true);
+
+      // Section Title
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('ZUBEREITUNGSTISCH', ax + aw / 2, ay + 30);
+
+      // Base Selector Tabs ([Döner] [Dürüm] [Box])
+      this.drawBaseSelector(ax + 20, ay + 45, aw - 40);
+
+      // Center Sandwich Preparation Display
+      this.drawActiveSandwich(ax + aw / 2, ay + 200);
+
+      // Ingredient Trays (Veggies & Sauces)
+      this.drawIngredientBins(ax + 20, ay + 310, aw - 40);
+
+      // Bottom Action Buttons ([Neu anfangen / Müll] [SERVIEREN!])
+      this.drawAssemblyActions(ax + 20, ay + ah - 65, aw - 40);
+    },
+
+    drawBaseSelector(x, y, w) {
+      const btnW = (w - 16) / 3;
+      const bases = Object.values(BASES);
+
+      for (let i = 0; i < 3; i++) {
+        const b = bases[i];
+        const bx = x + i * (btnW + 8);
+        const active = (this.workbench.base === b.id);
+
+        ctx.fillStyle = active ? '#f59e0b' : 'rgba(30, 41, 59, 0.7)';
+        ctx.strokeStyle = active ? '#ffffff' : 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = active ? 2 : 1;
+        this.roundRect(ctx, bx, y, btnW, 40, 8, true, true);
+
+        ctx.fillStyle = active ? '#0f172a' : '#f1f5f9';
+        ctx.font = '800 14px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${b.emoji} ${b.name}`, bx + btnW / 2, y + 25);
+
+        this.interactiveZones.push({
+          x: bx,
+          y,
+          w: btnW,
+          h: 40,
+          action: () => this.setBase(b.id)
+        });
+      }
+    },
+
+    drawActiveSandwich(cx, cy) {
+      ctx.save();
+
+      // Plate / Board circle
+      ctx.fillStyle = '#222834';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 75, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Render Base graphic
+      if (this.workbench.base === 'doener') {
+        // Pita pocket
+        ctx.fillStyle = '#d97706';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + 10, 60, 40, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fef3c7';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - 2, 50, 28, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (this.workbench.base === 'dueruem') {
+        // Wrap roll
+        ctx.fillStyle = '#fed7aa';
+        this.roundRect(ctx, cx - 55, cy - 20, 110, 42, 16, true, false);
+        ctx.fillStyle = '#94a3b8';
+        this.roundRect(ctx, cx + 15, cy - 20, 40, 42, 6, true, false); // Foil
+      } else {
+        // Box
+        ctx.fillStyle = '#ef4444';
+        this.roundRect(ctx, cx - 40, cy - 35, 80, 70, 8, true, false);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 12px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('BOX', cx, cy + 5);
+      }
+
+      // Meat layers inside sandwich
+      if (this.workbench.meatCount > 0) {
+        ctx.fillStyle = '#92400e';
+        for (let i = 0; i < this.workbench.meatCount * 4; i++) {
+          const ox = (Math.sin(i * 1.5) * 30);
+          const oy = (Math.cos(i * 2.1) * 12);
+          ctx.beginPath();
+          ctx.ellipse(cx + ox, cy + oy, 11, 4, i * 0.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Veggies & Toppings
+      if (this.workbench.ingredients.has('salat')) {
+        ctx.fillStyle = '#22c55e';
+        for (let i = 0; i < 6; i++) {
+          ctx.fillRect(cx - 35 + i * 12, cy - 10 + (i % 2) * 5, 10, 6);
+        }
+      }
+      if (this.workbench.ingredients.has('tomate')) {
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(cx - 18, cy + 2, 8, 0, Math.PI * 2);
+        ctx.arc(cx + 18, cy - 2, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (this.workbench.ingredients.has('zwiebel')) {
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx - 8, cy - 8, 12, 0, Math.PI);
+        ctx.stroke();
+      }
+      if (this.workbench.ingredients.has('rotkohl')) {
+        ctx.fillStyle = '#a855f7';
+        for (let i = 0; i < 5; i++) {
+          ctx.fillRect(cx - 25 + i * 11, cy + 8, 9, 3);
+        }
+      }
+      if (this.workbench.ingredients.has('feta')) {
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(cx - 15, cy - 14, 6, 6);
+        ctx.fillRect(cx + 12, cy + 4, 6, 6);
+        ctx.fillRect(cx, cy + 12, 6, 6);
+      }
+
+      // Sauce swirls
+      if (this.workbench.ingredients.has('kraeuter')) {
+        ctx.strokeStyle = '#86efac';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx - 30, cy - 6);
+        ctx.bezierCurveTo(cx - 10, cy - 20, cx + 10, cy + 10, cx + 30, cy - 4);
+        ctx.stroke();
+      }
+      if (this.workbench.ingredients.has('knoblauch')) {
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx - 25, cy + 4);
+        ctx.bezierCurveTo(cx - 5, cy + 16, cx + 15, cy - 12, cx + 25, cy + 8);
+        ctx.stroke();
+      }
+      if (this.workbench.ingredients.has('scharf')) {
+        ctx.strokeStyle = '#dc2626';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx - 28, cy);
+        ctx.lineTo(cx + 28, cy);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    },
+
+    drawIngredientBins(x, y, w) {
+      const items = Object.values(INGREDIENTS);
+      const cols = 4;
+      const rows = 2;
+      const btnW = (w - (cols - 1) * 8) / cols;
+      const btnH = 80;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const bx = x + col * (btnW + 8);
+        const by = y + row * (btnH + 10);
+        const isAdded = this.workbench.ingredients.has(item.id);
+
+        ctx.fillStyle = isAdded ? 'rgba(34, 197, 94, 0.25)' : 'rgba(27, 33, 44, 0.85)';
+        ctx.strokeStyle = isAdded ? '#22c55e' : 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = isAdded ? 2 : 1;
+        this.roundRect(ctx, bx, by, btnW, btnH, 10, true, true);
+
+        // Emoji & Hotkey badge
+        ctx.fillStyle = '#f4f4f5';
+        ctx.font = '24px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(item.emoji, bx + btnW / 2, by + 34);
+
+        ctx.font = '800 12px system-ui, sans-serif';
+        ctx.fillStyle = isAdded ? '#86efac' : '#cbd5e1';
+        ctx.fillText(item.name, bx + btnW / 2, by + 54);
+
+        // Hotkey tag in corner
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        this.roundRect(ctx, bx + btnW - 20, by + 4, 16, 16, 4, true, false);
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = '800 10px system-ui, sans-serif';
+        ctx.fillText(item.key, bx + btnW - 12, by + 16);
+
+        this.interactiveZones.push({
+          x: bx,
+          y: by,
+          w: btnW,
+          h: btnH,
+          action: () => this.toggleIngredient(item.id)
+        });
+      }
+    },
+
+    drawAssemblyActions(x, y, w) {
+      // Trash / Clear Button (25% width)
+      const trashW = 100;
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+      ctx.lineWidth = 1;
+      this.roundRect(ctx, x, y, trashW, 48, 8, true, true);
+      ctx.fillStyle = '#f87171';
+      ctx.font = '800 13px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🗑️ LEEREN', x + trashW / 2, y + 29);
+
+      this.interactiveZones.push({
+        x,
+        y,
+        w: trashW,
+        h: 48,
+        action: () => this.clearWorkbench()
+      });
+
+      // Big SERVE button (remaining width)
+      const serveX = x + trashW + 12;
+      const serveW = w - trashW - 12;
+
+      ctx.save();
+      ctx.shadowColor = '#10b981';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = 'linear-gradient(180deg, #10b981, #059669)';
+      this.roundRect(ctx, serveX, y, serveW, 48, 8, true, false);
+      ctx.restore();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🔔 SERVIEREN! 🥙 (Enter)', serveX + serveW / 2, y + 31);
+
+      this.interactiveZones.push({
+        x: serveX,
+        y,
+        w: serveW,
+        h: 48,
+        action: () => this.serveOrder()
+      });
+    },
+
+    drawCustomerCounter() {
+      const cx = 880;
+      const cy = 85;
+      const cw = 370;
+      const ch = 615;
+
+      // Dark counter backdrop
+      ctx.fillStyle = '#141720';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.lineWidth = 2;
+      this.roundRect(ctx, cx, cy, cw, ch, 14, true, true);
+
+      // Section Title
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('THEKE & KUNDEN', cx + cw / 2, cy + 30);
+
+      if (this.customers.length === 0) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '600 16px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Nächster Kunde kommt gleich...', cx + cw / 2, cy + 220);
+        return;
+      }
+
+      // Front active customer card
+      const front = this.customers[0];
+      this.drawActiveCustomerCard(cx + 15, cy + 45, cw - 30, front);
+
+      // Queue of upcoming customers behind
+      ctx.fillStyle = '#64748b';
+      ctx.font = '700 13px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`WARTESCHLANGE (${this.customers.length - 1} wartend):`, cx + 20, cy + 450);
+
+      for (let i = 1; i < this.customers.length; i++) {
+        const c = this.customers[i];
+        const qy = cy + 465 + (i - 1) * 65;
+        this.drawQueuedCustomer(cx + 15, qy, cw - 30, c);
+      }
+    },
+
+    drawActiveCustomerCard(x, y, w, c) {
+      // Background card
+      ctx.fillStyle = 'rgba(26, 31, 42, 0.9)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 1;
+      this.roundRect(ctx, x, y, w, 385, 12, true, true);
+
+      // Customer avatar
+      this.drawCustomerAvatar(x + 55, y + 65, c);
+
+      // Name & German Greeting
+      ctx.fillStyle = '#f4f4f5';
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(c.name, x + 115, y + 48);
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.fillText(`"${c.speech}"`, x + 115, y + 70);
+
+      // Patience Bar with dynamic emoji
+      const pRatio = Math.max(0, c.patience / c.patienceMax);
+      let pColor = '#10b981';
+      let pEmoji = '😊';
+      if (pRatio < 0.25) {
+        pColor = '#ef4444';
+        pEmoji = '🤬';
+      } else if (pRatio < 0.55) {
+        pColor = '#f59e0b';
+        pEmoji = '😐';
+      }
+
+      ctx.fillStyle = '#334155';
+      this.roundRect(ctx, x + 20, y + 115, w - 40, 16, 6, true, false);
+      ctx.fillStyle = pColor;
+      this.roundRect(ctx, x + 20, y + 115, (w - 40) * pRatio, 16, 6, true, false);
+
+      ctx.fillStyle = '#f4f4f5';
+      ctx.font = '700 13px system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${pEmoji} Geduld: ${Math.ceil(c.patience)}s`, x + w - 20, y + 108);
+
+      // Required items checklist
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '700 13px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('BESTELLTE ZUTATEN:', x + 20, y + 155);
+
+      let itemY = y + 180;
+
+      // Base item check
+      const baseDone = (this.workbench.base === c.base);
+      this.drawCheckRow(x + 20, itemY, `${BASES[c.base].emoji} Basis: ${BASES[c.base].name}`, baseDone);
+      itemY += 28;
+
+      // Meat item check
+      const meatDone = (c.wantsMeat > 0 ? this.workbench.meatCount > 0 : this.workbench.meatCount === 0);
+      const meatLabel = c.wantsMeat > 0 ? '🥩 Fleisch (aus Pfanne)' : '🥗 Vegetarisch (Kein Fleisch)';
+      this.drawCheckRow(x + 20, itemY, meatLabel, meatDone);
+      itemY += 28;
+
+      // Veggies & Sauces
+      for (const ingId of c.ingredients) {
+        const item = INGREDIENTS[ingId];
+        const done = this.workbench.ingredients.has(ingId);
+        this.drawCheckRow(x + 20, itemY, `${item.emoji} ${item.name}`, done);
+        itemY += 26;
+      }
+    },
+
+    drawCheckRow(x, y, label, isDone) {
+      ctx.fillStyle = isDone ? '#22c55e' : '#64748b';
+      ctx.font = '800 14px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(isDone ? '✔' : '○', x, y);
+
+      ctx.fillStyle = isDone ? '#f4f4f5' : '#94a3b8';
+      ctx.font = isDone ? '700 13px system-ui, sans-serif' : '500 13px system-ui, sans-serif';
+      ctx.fillText(label, x + 22, y);
+    },
+
+    drawCustomerAvatar(x, y, c) {
+      ctx.save();
+      // Head
+      ctx.fillStyle = c.skin;
+      ctx.beginPath();
+      ctx.arc(x, y, 28, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hair
+      ctx.fillStyle = c.hair;
+      ctx.beginPath();
+      ctx.arc(x, y - 8, 28, Math.PI, Math.PI * 2);
+      ctx.fill();
+
+      // Hat / Accessories
+      if (c.hatType === 1) {
+        // Beanie
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(x, y - 14, 26, Math.PI, Math.PI * 2);
+        ctx.fill();
+      } else if (c.hatType === 2) {
+        // Cap
+        ctx.fillStyle = '#3b82f6';
+        ctx.fillRect(x - 24, y - 26, 48, 12);
+        ctx.fillRect(x - 8, y - 16, 40, 6);
+      }
+
+      // Eyes
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(x - 9, y + 2, 3, 0, Math.PI * 2);
+      ctx.arc(x + 9, y + 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Glasses
+      if (c.hatType === 3) {
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 16, y - 4, 13, 11);
+        ctx.strokeRect(x + 3, y - 4, 13, 11);
+      }
+
+      // Mouth
+      ctx.strokeStyle = '#b91c1c';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y + 14, 8, 0, Math.PI);
+      ctx.stroke();
+
+      ctx.restore();
+    },
+
+    drawQueuedCustomer(x, y, w, c) {
+      ctx.fillStyle = 'rgba(26, 31, 42, 0.6)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.lineWidth = 1;
+      this.roundRect(ctx, x, y, w, 55, 8, true, true);
+
+      // Mini avatar
+      this.drawCustomerAvatar(x + 30, y + 28, c);
+
+      ctx.fillStyle = '#f4f4f5';
+      ctx.font = '800 13px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${c.name} (${BASES[c.base].name})`, x + 65, y + 24);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 12px system-ui, sans-serif';
+      ctx.fillText(`"${c.speech}"`, x + 65, y + 42);
+    },
+
+    drawGameOverScreen() {
+      // Dark overlay
+      ctx.fillStyle = 'rgba(9, 10, 15, 0.92)';
+      ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+      const boxW = 560;
+      const boxH = 490;
+      const bx = (V_WIDTH - boxW) / 2;
+      const by = (V_HEIGHT - boxH) / 2;
+
+      ctx.save();
+      ctx.shadowColor = '#000000';
+      ctx.shadowBlur = 30;
+      ctx.fillStyle = '#171b24';
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.4)';
+      ctx.lineWidth = 2;
+      this.roundRect(ctx, bx, by, boxW, boxH, 18, true, true);
+      ctx.restore();
+
+      // Heading
+      ctx.fillStyle = this.strikes >= this.maxStrikes ? '#ef4444' : '#f59e0b';
+      ctx.font = '900 36px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.gameOverReason || 'Schicht beendet!', V_WIDTH / 2, by + 55);
+
+      if (this.isNewRecord) {
+        ctx.fillStyle = '#10b981';
+        ctx.font = '900 20px system-ui, sans-serif';
+        ctx.fillText('🎉 NEUER TAGESREKORD! 🎉', V_WIDTH / 2, by + 90);
+      }
+
+      // Stats Grid
+      const statX = bx + 60;
+      let statY = by + 140;
+
+      this.drawStatRow(statX, statY, 'Gesamtumsatz:', `€${this.cash.toFixed(2)}`, '#fbbf24');
+      statY += 38;
+      this.drawStatRow(statX, statY, 'Davon Trinkgeld:', `€${this.tipsTotal.toFixed(2)}`, '#10b981');
+      statY += 38;
+      this.drawStatRow(statX, statY, 'Bediente Kunden:', `${this.customersServed}`, '#f4f4f5');
+      statY += 38;
+      this.drawStatRow(statX, statY, 'Perfekte Bestellungen:', `${this.perfectOrders}`, '#38bdf8');
+      statY += 38;
+      this.drawStatRow(statX, statY, 'Höchste Combo:', `x${this.maxCombo}`, '#f97316');
+      statY += 38;
+      this.drawStatRow(statX, statY, 'Bester Rekord:', `€${this.highScore.toFixed(2)}`, '#a855f7');
+
+      // Replay Button
+      const rBtnY = by + boxH - 85;
+      ctx.save();
+      ctx.shadowColor = '#f59e0b';
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = 'linear-gradient(180deg, #f59e0b, #d97706)';
+      this.roundRect(ctx, V_WIDTH / 2 - 180, rBtnY, 360, 56, 14, true, false);
+      ctx.restore();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '900 20px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('NÄCHSTE SCHICHT! 🥙 (Enter)', V_WIDTH / 2, rBtnY + 35);
+    },
+
+    drawStatRow(x, y, label, val, color) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '600 16px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, x, y);
+
+      ctx.fillStyle = color;
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(val, x + 440, y);
+    },
+
+    roundRect(ctx, x, y, w, h, r, fill, stroke) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+  };
+
+  // --- MAIN ENGINE LOOP ---
+  let lastTime = performance.now();
+
+  function loop(currentTime) {
+    let dt = (currentTime - lastTime) / 1000;
+    lastTime = currentTime;
+
+    // Cap delta time on background tabs
+    if (dt > 0.1) dt = 0.1;
+
+    Game.update(dt);
+    Game.draw();
+
+    requestAnimationFrame(loop);
+  }
+
+  // Boot the game
+  Game.init();
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>

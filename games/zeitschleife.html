@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Zeitschleife — Arbeite mit dir selbst</title>
+<meta name="description" content="Jede Schleife wiederholt sich: Dein früheres Ich läuft als Geist mit und hält Schalter gedrückt. Öffne die Türen, indem du dir selbst hilfst.">
+<meta name="theme-color" content="#0f1a24">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#0f1a24; color:#dff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas { position:fixed; inset:0; width:100%; height:100%; touch-action:none; }
+#hud { position:fixed; top:8px; left:125px; right:14px; display:flex; justify-content:space-between; align-items:center; font-weight:900; font-size:clamp(14px,4vw,20px); text-shadow:0 2px 0 #0007; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#dff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(21,40,58,.85); border:1px solid rgba(79,195,247,.35); padding:6px 14px; border-radius:20px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); display:inline-flex; align-items:center; gap:4px; min-height:36px; transition:background .15s, transform .15s; touch-action:manipulation; }
+.back:hover, .back:active { background:rgba(79,195,247,.3); transform:translateY(-1px); color:#fff; }
+#bar { position:fixed; left:0; right:0; bottom:12px; display:flex; justify-content:center; gap:8px; }
+#bar button { margin:0; padding:10px 16px; font-size:16px; border-radius:10px; }
+#msg { position:fixed; left:0; right:0; bottom:66px; text-align:center; font-weight:800; font-size:clamp(14px,4vw,20px); color:#ffd77a; pointer-events:none; padding:0 14px; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000b; z-index:5; }
+.overlay.hide { display:none; }
+.card { background:#15283a; border:2px solid #4fc3f7; border-radius:16px; padding:20px 26px; max-width:450px; text-align:center; box-shadow:0 8px 0 #0006; }
+.card h1 { margin:0 0 6px; font-size:30px; }
+.card p { margin:8px 0; line-height:1.4; }
+button { font:inherit; font-weight:800; font-size:20px; color:#012; background:linear-gradient(#7fdcff,#2c9ad6); border:0; border-radius:12px; padding:12px 28px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #17648f; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #17648f; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<canvas id="c"></canvas>
+<div id="hud"><div id="info"></div><div id="best">Rekord: 0</div></div>
+<div id="msg"></div>
+<div id="bar"><button id="wait">⏸ Warten</button><button id="endloop">⏭ Schleife beenden</button><button id="rst">⟲ Neu</button></div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>⏳ Zeitschleife</h1>
+  <p>Du hast pro Schleife nur <b>wenige Züge</b>. Danach springt alles zurück zum Start, aber dein früheres Ich läuft als <b style="color:#8fdcff">Geist</b> genau denselben Weg nochmal.</p>
+  <p>Druckplatten <b>öffnen</b> die Tür gleicher Farbe, solange jemand draufsteht. Lass einen Geist die Platte halten und lauf selbst zum <b style="color:#7f7">Ausgang</b>. Manche Türen brauchen mehrere Geister.</p>
+  <p><b>Zug:</b> WASD / Pfeile / Wischen<br><b>Warten:</b> Leertaste / Tippen · <b>E</b> Schleife beenden · <b>R</b> Neu</p>
+  <button id="go">Start</button>
+</div></div>
+<script>
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+let W, H, dpr;
+function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+addEventListener("resize", resize); resize();
+function snd(n, ...a) { try { const s = ArcadeCore.sounds; if (s[n]) s[n](...a); } catch (e) {} }
+let best = Number(ArcadeCore.getScore("zeitschleife")) || 0;
+$("best").textContent = "Rekord: " + best;
+
+// a-d = Platten (klein), A-D = zugehörige Tür; S = Start, E = Ausgang
+const LEVELS = [
+  { L: 20, loops: 3, hint: "Lass einen Geist die Platte halten.", map: [
+    "###########",
+    "#S..#.....#",
+    "#...#.....#",
+    "#.a.A....E#",
+    "#...#.....#",
+    "#...#.....#",
+    "###########" ] },
+  { L: 24, loops: 4, hint: "Zwei Türen = zwei Geister.", map: [
+    "###############",
+    "#S..#.....#...#",
+    "#...#.....#...#",
+    "#.a.A..b..B..E#",
+    "#...#.....#...#",
+    "#...#.....#...#",
+    "###############" ] },
+  { L: 24, loops: 4, hint: "Eine Tür, zwei Platten. Beide müssen gedrückt sein.", map: [
+    "#############",
+    "#S...#......#",
+    "#.a..#......#",
+    "#....A.....E#",
+    "#.a..#......#",
+    "#....#......#",
+    "#############" ] },
+  { L: 30, loops: 5, hint: "Jetzt wird's eng: drei Helfer nötig.", map: [
+    "#################",
+    "#S...#.....#....#",
+    "#.a..#.....#....#",
+    "#....A..b..B...E#",
+    "#.a..#.....#....#",
+    "#....#.....#....#",
+    "#################" ] },
+  { L: 24, loops: 3, hint: "Halte unten die Platte, damit oben der Durchgang frei wird.", map: [
+    "#############",
+    "#S...#.....E#",
+    "#....A......#",
+    "###.#########",
+    "#...#.......#",
+    "#..a........#",
+    "#############" ] },
+  { L: 26, loops: 4, hint: "Platte B liegt hinter Tür A. Ein Geist muss vortasten.", map: [
+    "###############",
+    "#S..#....#....#",
+    "#...A..b.B...E#",
+    "#.a.#....#....#",
+    "###############" ] },
+  { L: 32, loops: 5, hint: "Drei Farben, drei Türen in Reihe. Jeder Schritt zählt.", map: [
+    "###################",
+    "#S..#....#....#...#",
+    "#...A..b.B..c.C..E#",
+    "#.a.#....#....#...#",
+    "###################" ] },
+  { L: 32, loops: 5, hint: "Jede Tür verlangt zwei Geister gleichzeitig.", map: [
+    "#################",
+    "#S.a.#.....#....#",
+    "#....A..b..B...E#",
+    "#.a..#.....#....#",
+    "#....#..b..#....#",
+    "#################" ] },
+  { L: 28, loops: 4, hint: "Eine Platte oben, eine unten. Geduld beim Timing!", map: [
+    "#############",
+    "#S..#..b....#",
+    "#...A...#####",
+    "#...#.......#",
+    "#.a.#.B....E#",
+    "#############" ] },
+  { L: 36, loops: 5, hint: "Vier Tore öffnen sich nacheinander wie Dominosteine.", map: [
+    "#####################",
+    "#S..#....#....#....E#",
+    "#.a.A..b.B..c.C..d.D#",
+    "#...#....#....#.....#",
+    "#####################" ] },
+  { L: 32, loops: 4, hint: "Zwei Seitenflügel: Links öffnet die Schleuse, rechts die Kammer.", map: [
+    "#################",
+    "#...............#",
+    "#.a.###.#.S.#.#.#",
+    "#...#...#...#.#.#",
+    "##A######.B##.#.#",
+    "#.............b.#",
+    "#.......E.......#",
+    "#################" ] },
+  { L: 28, loops: 4, hint: "Eine Tür öffnet sich nur, wenn zwei Schalter im Vorraum besetzt sind.", map: [
+    "###############",
+    "#S...#...#....#",
+    "#.a..A.b.B...E#",
+    "#....#...#....#",
+    "#.a..#...#....#",
+    "###############" ] },
+  { L: 32, loops: 5, hint: "Platte C öffnet Tür C zur mittleren Platte B.", map: [
+    "#################",
+    "#S..#.....#.....#",
+    "#...A..b..B....E#",
+    "#.a.#.....#.....#",
+    "#####..c..#######",
+    "#......C........#",
+    "#################" ] },
+  { L: 34, loops: 4, hint: "Ein langer Schleichweg: Halte die Platte bis zur letzten Sekunde.", map: [
+    "#################",
+    "#S..............#",
+    "#.#############.#",
+    "#.a.#.....#...#.#",
+    "#...A..b..B.E.#.#",
+    "#################" ] },
+  { L: 34, loops: 5, hint: "Drei Zonen müssen gleichzeitig gesichert sein.", map: [
+    "###################",
+    "#S...#.....#.....E#",
+    "#.a..A..b..B..c..C#",
+    "#....#.....#.....#",
+    "#.a..#.....#.....#",
+    "###################" ] },
+  { L: 38, loops: 6, hint: "Das ultimative Finale: 4 Tore, perfekte Koordination nötig!", map: [
+    "#####################",
+    "#S..#....#....#....E#",
+    "#.a.A..b.B..c.C..d.D#",
+    "#.a.#....#....#.....#",
+    "#####################" ] }
+];
+const DOORCOL = { a: "#ffb347", b: "#c58bff", c: "#4ef08a", d: "#ff5470" };
+let lvl = 0, cfg, grid, rows, cols, start, exit, plates, doors, loop, t, pos, ghosts, path, won, state = "menu", T, ox, oy, msgT = 0, over = false;
+
+function load() {
+  cfg = LEVELS[lvl]; grid = cfg.map; rows = grid.length; cols = grid[0].length;
+  plates = []; doors = [];
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const c = grid[y][x];
+    if (c === "S") start = { x, y }; else if (c === "E") exit = { x, y };
+    else if (c >= "a" && c <= "d") plates.push({ x, y, k: c });
+    else if (c >= "A" && c <= "D") doors.push({ x, y, k: c.toLowerCase() });
+  }
+  ghosts = []; loop = 1; newLoop(); won = false; over = false;
+  T = Math.floor(Math.min((W - 20) / cols, (H - 150) / rows)); ox = Math.floor((W - T * cols) / 2); oy = Math.floor((H - T * rows) / 2 - 10);
+  say("Ebene " + (lvl + 1) + ": " + cfg.hint);
+}
+function newLoop() { t = 0; pos = { x: start.x, y: start.y }; path = [{ x: pos.x, y: pos.y }]; info(); }
+function info() { $("info").textContent = `Ebene ${lvl + 1} · Schleife ${loop}/${cfg.loops} · Zug ${t}/${cfg.L}`; }
+function say(s) { $("msg").textContent = s; msgT = 4; }
+function ghostAt(g, tt) { return g[Math.min(tt, g.length - 1)]; }
+function occupied(tt) {
+  const o = [pos && tt === t ? pos : (path[tt] || path[path.length - 1])];
+  for (const g of ghosts) o.push(ghostAt(g, tt));
+  return o;
+}
+function doorOpen(k, tt) {
+  const occ = occupied(tt);
+  return plates.filter(p => p.k === k).every(p => occ.some(o => o.x === p.x && o.y === p.y));
+}
+function blocked(x, y, tt) {
+  const c = grid[y][x];
+  if (c === "#") return true;
+  if (c >= "A" && c <= "D") return !doorOpen(c.toLowerCase(), tt);
+  return false;
+}
+function act(dx, dy) {
+  if (state !== "play" || won) return;
+  if ((dx || dy) && !blocked(pos.x + dx, pos.y + dy, t)) { pos = { x: pos.x + dx, y: pos.y + dy }; snd("playTone", 300 + t * 8, 0.05, "triangle", 0.07); }
+  else if (dx || dy) { snd("playTone", 110, 0.05, "square", 0.05); }
+  t++; path.push({ x: pos.x, y: pos.y });
+  if (pos.x === exit.x && pos.y === exit.y) return win();
+  if (t >= cfg.L) return endLoop();
+  info();
+}
+function endLoop() {
+  if (loop >= cfg.loops) { say("Keine Schleifen mehr. Neustart der Ebene."); snd("gameOver"); setTimeout(() => load(), 900); return; }
+  ghosts.push(path.slice()); loop++; newLoop(); say("Neue Schleife: dein früheres Ich läuft mit.");
+}
+function win() {
+  won = true; snd("coin");
+  const done = lvl + 1;
+  if (done > best) { best = done; try { ArcadeCore.saveScore("zeitschleife", best); } catch (e) {} $("best").textContent = "Rekord: " + best; }
+  if (lvl + 1 >= LEVELS.length) { say("🎉 Alle Ebenen geschafft! Die Zeit ist besiegt."); setTimeout(() => { lvl = 0; load(); }, 3500); }
+  else { say("Ausgang erreicht!"); setTimeout(() => { lvl++; load(); }, 1100); }
+}
+$("wait").onclick = () => act(0, 0);
+$("endloop").onclick = () => { if (state === "play" && !won && t > 0) endLoop(); };
+$("rst").onclick = () => { if (state === "play" && !won) load(); };
+addEventListener("keydown", e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const m = { ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0], ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1], " ": [0, 0] }[k];
+  if (m) { e.preventDefault(); act(m[0], m[1]); }
+  else if (k === "e") $("endloop").onclick(); else if (k === "r") $("rst").onclick();
+});
+let sx, sy;
+cv.addEventListener("pointerdown", e => { sx = e.clientX; sy = e.clientY; });
+cv.addEventListener("pointerup", e => {
+  if (sx === undefined) return;
+  const dx = e.clientX - sx, dy = e.clientY - sy; sx = undefined;
+  if (Math.hypot(dx, dy) < 24) return act(0, 0);
+  if (Math.abs(dx) > Math.abs(dy)) act(Math.sign(dx), 0); else act(0, Math.sign(dy));
+});
+
+function draw(time) {
+  ctx.fillStyle = "#0f1a24"; ctx.fillRect(0, 0, W, H);
+  if (state === "menu" || !grid) return;
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const c = grid[y][x], px = ox + x * T, py = oy + y * T;
+    if (c === "#") { ctx.fillStyle = "#223a52"; ctx.fillRect(px, py, T, T); ctx.fillStyle = "#2c4a66"; ctx.fillRect(px + 2, py + 2, T - 4, 5); continue; }
+    ctx.fillStyle = (x + y) % 2 ? "#162738" : "#1a2d41"; ctx.fillRect(px, py, T, T);
+  }
+  const occ = [pos, ...ghosts.map(g => ghostAt(g, t))];
+  for (const p of plates) {
+    const on = occ.some(o => o.x === p.x && o.y === p.y), col = DOORCOL[p.k];
+    ctx.fillStyle = col; ctx.globalAlpha = on ? 1 : 0.45; ctx.beginPath(); ctx.arc(ox + (p.x + .5) * T, oy + (p.y + .5) * T, T * (on ? 0.32 : 0.38), 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+  }
+  for (const d of doors) {
+    const open = doorOpen(d.k, t), px = ox + d.x * T, py = oy + d.y * T;
+    ctx.fillStyle = DOORCOL[d.k];
+    if (open) { ctx.globalAlpha = 0.35; ctx.fillRect(px + T * .1, py, T * .2, T); ctx.fillRect(px + T * .7, py, T * .2, T); ctx.globalAlpha = 1; }
+    else { ctx.fillRect(px + T * .1, py, T * .8, T); ctx.fillStyle = "#0006"; for (let i = 1; i < 4; i++) ctx.fillRect(px + T * .1, py + T * i / 4 - 2, T * .8, 3); }
+  }
+  ctx.fillStyle = "#6f6"; ctx.globalAlpha = 0.6 + 0.3 * Math.sin(time / 250);
+  ctx.fillRect(ox + exit.x * T + T * .15, oy + exit.y * T + T * .15, T * .7, T * .7); ctx.globalAlpha = 1;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = Math.floor(T * 0.75) + "px serif";
+  for (const g of ghosts) { const p = ghostAt(g, t); ctx.globalAlpha = 0.6; ctx.fillText("👻", ox + (p.x + .5) * T, oy + (p.y + .5) * T); }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ox + (pos.x + .5) * T, oy + (pos.y + .5) * T, T * 0.3, 0, 7); ctx.fill();
+  ctx.fillStyle = "#12161f"; ctx.fillRect(ox + (pos.x + .5) * T - T * .13, oy + (pos.y + .5) * T - T * .08, T * .08, T * .12); ctx.fillRect(ox + (pos.x + .5) * T + T * .05, oy + (pos.y + .5) * T - T * .08, T * .08, T * .12);
+  const bw = T * cols, by = oy + T * rows + 10;
+  ctx.fillStyle = "#223a52"; ctx.fillRect(ox, by, bw, 8); ctx.fillStyle = t > cfg.L - 4 ? "#ff6b6b" : "#4fc3f7"; ctx.fillRect(ox, by, bw * t / cfg.L, 8);
+}
+function frame(time) {
+  if (msgT > 0 && (msgT -= 0.016) <= 0) $("msg").textContent = "";
+  draw(time); requestAnimationFrame(frame);
+}
+function startGame() { lvl = 0; state = "play"; load(); $("menu").classList.add("hide"); }
+$("go").onclick = startGame;
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,2542 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Crypt Survivor: Rogue Dawn — Bullet Heaven Roguelite</title>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.lucius-website.xyz/script.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script defer src="https://umami.lucius-website.xyz/recorder.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+  :root {
+    --bg-base: #0a0812;
+    --panel-bg: #141122;
+    --panel-border: #2c2547;
+    --accent: #8b5cf6;
+    --accent-hover: #a78bfa;
+    --gold: #fbbf24;
+    --text: #f3f4f6;
+    --text-dim: #9ca3af;
+    --red: #ef4444;
+    --green: #10b981;
+    --blue: #38bdf8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  body {
+    background: var(--bg-base);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    touch-action: none;
+    width: 100vw;
+    height: 100vh;
+  }
+  #gameCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #0d0b18;
+  }
+  .back-btn {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 50;
+    color: #e5e7eb;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    background: rgba(20, 17, 34, 0.85);
+    border: 1px solid var(--panel-border);
+    backdrop-filter: blur(8px);
+    padding: 6px 14px;
+    border-radius: 999px;
+    transition: all 0.2s;
+  }
+  .back-btn:hover {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  /* In-game HUD */
+  #hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 10px 16px;
+    z-index: 20;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .hud-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .hud-stat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    background: rgba(14, 11, 26, 0.82);
+    border: 1px solid var(--panel-border);
+    padding: 5px 12px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  }
+  .gold-val { color: var(--gold); }
+  .timer-val { color: #fff; font-family: ui-monospace, monospace; font-size: 18px; letter-spacing: 1px; }
+  .kills-val { color: #f87171; }
+  .hud-bars {
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .bar-container {
+    width: 100%;
+    height: 12px;
+    background: rgba(20, 17, 34, 0.9);
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.12);
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+  }
+  .bar-fill {
+    height: 100%;
+    width: 100%;
+    transition: width 0.15s ease-out;
+  }
+  .hp-fill { background: linear-gradient(90deg, #dc2626, #ef4444); }
+  .xp-fill { background: linear-gradient(90deg, #3b82f6, #06b6d4, #10b981); }
+  .bar-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #fff;
+    text-shadow: 0 1px 2px #000;
+  }
+  .inventory-bar {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .inv-slot {
+    width: 32px;
+    height: 32px;
+    background: rgba(14, 11, 26, 0.85);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    position: relative;
+  }
+  .inv-slot .lvl {
+    position: absolute;
+    bottom: 1px;
+    right: 2px;
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--gold);
+    text-shadow: 0 1px 2px #000;
+  }
+
+  /* Overlays & Modals */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 3, 10, 0.88);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    padding: 16px;
+  }
+  .modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .modal-card {
+    background: var(--panel-bg);
+    border: 2px solid var(--panel-border);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 580px;
+    padding: 24px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 40px rgba(139, 92, 246, 0.15);
+    color: var(--text);
+    text-align: center;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .modal-subtitle {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+
+  /* Card Choices for Level Up */
+  .card-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .upgrade-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #1c1830;
+    border: 2px solid #372e5a;
+    border-radius: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .upgrade-card:hover {
+    transform: translateY(-2px) scale(1.02);
+    border-color: var(--accent-hover);
+    background: #252042;
+    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.25);
+  }
+  .upgrade-card.evolution {
+    border-color: var(--gold);
+    background: linear-gradient(135deg, #2b2210, #36203d);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
+  }
+  .card-icon {
+    font-size: 34px;
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.3);
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .card-info {
+    flex: 1;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .card-name {
+    font-weight: 700;
+    font-size: 16px;
+    color: #fff;
+  }
+  .card-tier {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(139, 92, 246, 0.15);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .upgrade-card.evolution .card-tier {
+    color: var(--gold);
+    background: rgba(251, 191, 36, 0.2);
+  }
+  .card-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  /* Chest Reward Animation */
+  .chest-box {
+    margin: 20px 0;
+    font-size: 70px;
+    animation: chestBounce 1s infinite alternate cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes chestBounce {
+    from { transform: scale(0.95) translateY(0); }
+    to { transform: scale(1.08) translateY(-10px); }
+  }
+
+  /* Buttons */
+  .btn-primary {
+    background: linear-gradient(135deg, #7c3aed, #9333ea);
+    color: #fff;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 12px 24px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+    transition: all 0.2s;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(124, 58, 237, 0.6);
+    filter: brightness(1.1);
+  }
+  .btn-secondary {
+    background: #231d3a;
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-secondary:hover {
+    background: #312852;
+    border-color: var(--accent);
+  }
+
+  /* Character & Meta Upgrades Selection Screen */
+  .hero-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin: 16px 0 24px;
+  }
+  .hero-card {
+    background: #1c1830;
+    border: 2px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .hero-card.selected {
+    border-color: var(--accent);
+    background: #252042;
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.4);
+  }
+  .hero-card.locked {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(0.7);
+  }
+  .hero-avatar {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+  .hero-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .hero-trait {
+    font-size: 12px;
+    color: var(--accent-hover);
+    margin: 2px 0 4px;
+  }
+  .hero-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* Armory Upgrades */
+  .armory-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 16px 0;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .armory-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1c1830;
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 10px 14px;
+  }
+  .armory-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+  }
+  .armory-icon { font-size: 24px; }
+  .armory-title { font-size: 14px; font-weight: 700; color: #fff; }
+  .armory-desc { font-size: 11px; color: var(--text-dim); }
+  .armory-pips { display: flex; gap: 4px; margin-top: 3px; }
+  .armory-pip {
+    width: 14px; height: 6px; border-radius: 2px; background: #372e5a;
+  }
+  .armory-pip.filled { background: var(--gold); box-shadow: 0 0 4px var(--gold); }
+  .buy-btn {
+    background: #2e264f;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .buy-btn:hover:not(:disabled) {
+    background: var(--gold);
+    color: #000;
+  }
+  .buy-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    border-color: #555;
+    color: #888;
+  }
+
+  /* Touch Joystick */
+  #joystickZone {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px dashed rgba(255, 255, 255, 0.15);
+    z-index: 40;
+    touch-action: none;
+    display: none;
+  }
+  #joystickKnob {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: rgba(139, 92, 246, 0.6);
+    border: 2px solid #fff;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    pointer-events: none;
+  }
+
+  /* Pause Button */
+  .pause-btn {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 50;
+    background: rgba(20, 17, 34, 0.85);
+    border: 1px solid var(--panel-border);
+    color: #e5e7eb;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* Warning / Boss Banner */
+  #bossBanner {
+    position: absolute;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(90deg, transparent, rgba(220, 38, 38, 0.9), transparent);
+    color: #fff;
+    padding: 8px 60px;
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-shadow: 0 2px 4px #000;
+    z-index: 30;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    text-transform: uppercase;
+  }
+  #bossBanner.show {
+    opacity: 1;
+    animation: bannerPulse 1.2s infinite;
+  }
+  @keyframes bannerPulse {
+    0%, 100% { transform: translateX(-50%) scale(1); }
+    50% { transform: translateX(-50%) scale(1.05); }
+  }
+
+  @media (max-width: 600px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .hud-stat { font-size: 13px; padding: 4px 8px; }
+    .timer-val { font-size: 15px; }
+    .modal-card { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back-btn">‹ Arcade</a>
+<button id="pauseBtn" class="pause-btn">⏸ Pause</button>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="joystickZone">
+  <div id="joystickKnob"></div>
+</div>
+
+<div id="bossBanner">⚠️ BOSS SPAWN ⚠️</div>
+
+<!-- INGAME HUD -->
+<div id="hud">
+  <div class="hud-top">
+    <div class="hud-stat kills-val">💀 <span id="killCount">0</span></div>
+    <div class="hud-stat timer-val"><span id="runTimer">00:00</span></div>
+    <div class="hud-stat gold-val">🪙 <span id="goldCount">0</span></div>
+  </div>
+
+  <div class="hud-bars">
+    <div class="bar-container">
+      <div id="hpBar" class="bar-fill hp-fill" style="width: 100%;"></div>
+      <div class="bar-label"><span id="hpText">100 / 100</span> HP</div>
+    </div>
+    <div class="bar-container">
+      <div id="xpBar" class="bar-fill xp-fill" style="width: 0%;"></div>
+      <div class="bar-label">LVL <span id="lvlText">1</span></div>
+    </div>
+    <div class="inventory-bar" id="inventoryRow"></div>
+  </div>
+</div>
+
+<!-- START / LOBBY MODAL -->
+<div id="startModal" class="modal-overlay active">
+  <div class="modal-card">
+    <div style="font-size: 44px; margin-bottom: 8px;">⚔️</div>
+    <h1 class="modal-title">CRYPT SURVIVOR</h1>
+    <p class="modal-subtitle">Überlebe 20 Minuten in der Gruft des Todes! Weiche Horden aus, kombiniere Zauber und besiege den Lichkönig.</p>
+
+    <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
+      <div class="hud-stat gold-val">Verfügbares Gold: 🪙 <span id="menuGold">0</span></div>
+    </div>
+
+    <!-- TABS -->
+    <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 16px;">
+      <button id="tabHeroBtn" class="btn-primary" style="padding: 8px 16px; font-size: 13px;">Helden wählen</button>
+      <button id="tabArmoryBtn" class="btn-secondary" style="padding: 8px 16px; font-size: 13px;">Lagerfeuer-Upgrades</button>
+    </div>
+
+    <!-- HERO SELECT -->
+    <div id="heroSection">
+      <div class="hero-grid" id="heroGrid"></div>
+      <button id="startGameBtn" class="btn-primary" style="width: 100%; margin-top: 8px; font-size: 17px;">
+        🚀 Lauf starten
+      </button>
+    </div>
+
+    <!-- ARMORY / SHOP -->
+    <div id="armorySection" style="display: none;">
+      <div class="armory-list" id="armoryList"></div>
+      <button id="backToHeroesBtn" class="btn-secondary" style="width: 100%;">Zurück zur Heldenauswahl</button>
+    </div>
+
+    <div style="margin-top: 16px; font-size: 12px; color: var(--text-dim);">
+      Steuerung: <b>WASD</b> / <b>Pfeiltasten</b> oder <b>Touch-Stick</b>. Angriffe erfolgen automatisch!
+    </div>
+  </div>
+</div>
+
+<!-- LEVEL UP MODAL -->
+<div id="levelUpModal" class="modal-overlay">
+  <div class="modal-card">
+    <div style="font-size: 36px; margin-bottom: 4px;">✨</div>
+    <h2 class="modal-title">STUFENAUFSTIEG!</h2>
+    <p class="modal-subtitle">Wähle eine Fähigkeit oder ein Artefakt zur Verstärkung deines Überlebenskampfes:</p>
+    <div class="card-grid" id="cardChoices"></div>
+  </div>
+</div>
+
+<!-- CHEST MODAL -->
+<div id="chestModal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="chest-box">🎁</div>
+    <h2 class="modal-title" style="color: var(--gold);">SCHATZTRUHE GEÖFFNET!</h2>
+    <p class="modal-subtitle" id="chestRewardSubtitle">+100 Gold & Boni gefunden!</p>
+    <div class="card-grid" id="chestRewardsList" style="margin-bottom: 20px;"></div>
+    <button id="closeChestBtn" class="btn-primary">Belohnung annehmen</button>
+  </div>
+</div>
+
+<!-- GAME OVER / VICTORY MODAL -->
+<div id="gameOverModal" class="modal-overlay">
+  <div class="modal-card">
+    <div id="endEmoji" style="font-size: 54px; margin-bottom: 10px;">💀</div>
+    <h2 id="endTitle" class="modal-title">DU BIST GEFALLEN</h2>
+    <p id="endSubtitle" class="modal-subtitle">Die Schatten der Gruft haben dich verschlungen.</p>
+
+    <div style="background: #1c1830; border: 1px solid var(--panel-border); border-radius: 12px; padding: 16px; margin: 16px 0; text-align: left; font-size: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+      <div>Zeit überlebt: <b id="statTime" style="color: #fff;">00:00</b></div>
+      <div>Monster besiegt: <b id="statKills" style="color: #f87171;">0</b></div>
+      <div>Stufe erreicht: <b id="statLvl" style="color: var(--blue);">1</b></div>
+      <div>Gold gesammelt: <b id="statGold" style="color: var(--gold);">0</b></div>
+      <div style="grid-column: span 2;">Rekord-Überlebenszeit: <b id="statBestTime" style="color: var(--accent-hover);">00:00</b></div>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button id="retryBtn" class="btn-primary" style="flex: 1;">Erneut versuchen</button>
+      <button id="menuBtn" class="btn-secondary" style="flex: 1;">Zum Hauptmenü</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAUSE MODAL -->
+<div id="pauseModal" class="modal-overlay">
+  <div class="modal-card">
+    <h2 class="modal-title">SPIEL PAUSIERT</h2>
+    <p class="modal-subtitle">Nimm kurz Atem, Krieger.</p>
+    <div style="margin: 20px 0; display: flex; flex-direction: column; gap: 10px;">
+      <button id="resumeBtn" class="btn-primary">Weiterkämpfen</button>
+      <button id="quitRunBtn" class="btn-secondary">Lauf aufgeben</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   CRYPT SURVIVOR: ROGUE DAWN
+   Full-featured Vampire Survivors style Action Roguelite
+   ========================================================= */
+
+// Audio helper via ArcadeCore with graceful fallback
+const Sfx = {
+  xp() { if (window.ArcadeCore) ArcadeCore.sounds.pop(1.6); },
+  coin() { if (window.ArcadeCore) ArcadeCore.sounds.coin(); },
+  hit() { if (window.ArcadeCore) ArcadeCore.sounds.hit(); },
+  slash() { if (window.ArcadeCore) ArcadeCore.sounds.playTone(550, 0.08, 'sawtooth', 0.1); },
+  boom() { if (window.ArcadeCore) ArcadeCore.sounds.explosion(); },
+  lvl() { if (window.ArcadeCore) ArcadeCore.sounds.powerup(); },
+  boss() { if (window.ArcadeCore) { ArcadeCore.sounds.playTone(180, 0.3, 'sawtooth', 0.25); } },
+  chest() { if (window.ArcadeCore) ArcadeCore.sounds.merge(8); },
+  gameover() { if (window.ArcadeCore) ArcadeCore.sounds.gameOver(); }
+};
+
+// Canvas & Engine Setup
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Meta Persistence
+const STORAGE_KEY = 'crypt_survivor_save';
+let saveState = {
+  gold: 0,
+  bestTime: 0,
+  totalKills: 0,
+  unlockedHeroes: ['paladin'],
+  upgrades: {
+    might: 0,     // +5% dmg
+    vitality: 0,  // +15 HP
+    swiftness: 0, // +4% speed
+    greed: 0,     // +10% coins
+    magnet: 0,    // +15% pickup
+    revival: 0    // +1 revive
+  }
+};
+
+function loadSave() {
+  try {
+    const d = localStorage.getItem(STORAGE_KEY);
+    if (d) {
+      const parsed = JSON.parse(d);
+      saveState = Object.assign(saveState, parsed);
+      if (!saveState.upgrades) saveState.upgrades = {};
+    }
+  } catch (e) {}
+}
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saveState));
+    if (saveState.totalKills > 0) {
+      localStorage.setItem('crypt_survivor_kills', saveState.totalKills);
+      if (window.ArcadeCore) ArcadeCore.saveScore('survivor', saveState.totalKills);
+    }
+  } catch (e) {}
+}
+loadSave();
+
+// HERO DEFINITIONS
+const HEROES = [
+  {
+    id: 'paladin',
+    name: 'Sir Roderick',
+    role: 'Heiliger Paladin',
+    avatar: '🛡️',
+    color: '#eab308',
+    weapon: 'sword',
+    hp: 120,
+    speed: 3.2,
+    desc: 'Robuster Ritter mit heiligem Langschwert und erhöhter Zähigkeit (+20 HP).',
+    reqText: 'Standardheld'
+  },
+  {
+    id: 'pyro',
+    name: 'Ignis der Rote',
+    role: 'Feuermagier',
+    avatar: '🧙‍♂️',
+    color: '#f97316',
+    weapon: 'fireball',
+    hp: 90,
+    speed: 3.4,
+    desc: 'Meister der Flammen: +30% Explosionsradius bei allen Zaubern.',
+    reqText: 'Schalte frei mit 500 Gesamt-Kills',
+    unlockCheck: () => saveState.totalKills >= 500
+  },
+  {
+    id: 'rogue',
+    name: 'Lyra Nachtschatten',
+    role: 'Meuchelmörderin',
+    avatar: '🗡️',
+    color: '#06b6d4',
+    weapon: 'dagger',
+    hp: 85,
+    speed: 4.1,
+    desc: 'Extrem flink (+25% Lauftempo), wirft rasante Klingen mit +15% Krit-Chance.',
+    reqText: 'Schalte frei mit 5 Min. Überlebenszeit',
+    unlockCheck: () => saveState.bestTime >= 300
+  },
+  {
+    id: 'necro',
+    name: 'Mortis Schattenrufer',
+    role: 'Nekromant',
+    avatar: '💀',
+    color: '#a855f7',
+    weapon: 'scythe',
+    hp: 100,
+    speed: 3.3,
+    desc: 'Schwingt die Todessense. Jeder 10. besiegte Feind erzeugt eine Seelenexplosion.',
+    reqText: 'Schalte frei mit 1.500 Gesamt-Kills',
+    unlockCheck: () => saveState.totalKills >= 1500
+  }
+];
+
+// ARMORY UPGRADES
+const ARMORY_DATA = [
+  { id: 'might', name: 'Kriegsstärke', icon: '⚔️', max: 5, baseCost: 150, costMult: 1.8, desc: '+6% Schaden pro Stufe' },
+  { id: 'vitality', name: 'Lebenskraft', icon: '❤️', max: 5, baseCost: 100, costMult: 1.6, desc: '+15 Max-HP pro Stufe' },
+  { id: 'swiftness', name: 'Windschuhe', icon: '👟', max: 5, baseCost: 120, costMult: 1.7, desc: '+4% Bewegungsgeschwindigkeit' },
+  { id: 'greed', name: 'Goldsucher', icon: '🪙', max: 5, baseCost: 100, costMult: 1.5, desc: '+12% Mehr Goldbeute' },
+  { id: 'magnet', name: 'Seelenmagnet', icon: '🧲', max: 5, baseCost: 100, costMult: 1.6, desc: '+20% Sammelreichweite' },
+  { id: 'revival', name: 'Phönixasche', icon: '🔥', max: 1, baseCost: 1000, costMult: 1.0, desc: 'Einmaliges Wiederaufstehen mit 50% HP' }
+];
+
+// WEAPONS DEFINITION
+const WEAPONS = {
+  sword: {
+    id: 'sword',
+    name: 'Heiliges Schwert',
+    icon: '⚔️',
+    type: 'weapon',
+    cooldown: 50,
+    timer: 0,
+    damage: 28,
+    area: 75,
+    evolution: 'excalibur',
+    partner: 'spinach',
+    desc: 'Schlägt kreisförmig nach nahen Monstern.'
+  },
+  fireball: {
+    id: 'fireball',
+    name: 'Feuerstab',
+    icon: '🔥',
+    type: 'weapon',
+    cooldown: 75,
+    timer: 0,
+    damage: 42,
+    count: 1,
+    evolution: 'supernova',
+    partner: 'clover',
+    desc: 'Schießt explodierende Feuerbälle auf Feinde.'
+  },
+  dagger: {
+    id: 'dagger',
+    name: 'Wurfmesser',
+    icon: '🗡️',
+    type: 'weapon',
+    cooldown: 28,
+    timer: 0,
+    damage: 18,
+    count: 2,
+    speed: 12,
+    evolution: 'thousand_edge',
+    partner: 'wings',
+    desc: 'Feuert schnelle Klingen in Blickrichtung.'
+  },
+  scythe: {
+    id: 'scythe',
+    name: 'Todessense',
+    icon: '💀',
+    type: 'weapon',
+    cooldown: 80,
+    timer: 0,
+    damage: 55,
+    evolution: 'reaper_call',
+    partner: 'heart',
+    desc: 'Wirbelt eine gigantische Geistersense durch Feinde.'
+  },
+  shields: {
+    id: 'shields',
+    name: 'Kreisende Schilde',
+    icon: '🛡️',
+    type: 'weapon',
+    cooldown: 0,
+    timer: 0,
+    damage: 16,
+    count: 2,
+    orbitRadius: 75,
+    orbitSpeed: 0.05,
+    evolution: 'aegis',
+    partner: 'armor',
+    desc: 'Schützende Runenschilde umkreisen dich permanent.'
+  },
+  thunder: {
+    id: 'thunder',
+    name: 'Donner-Ring',
+    icon: '⚡',
+    type: 'weapon',
+    cooldown: 65,
+    timer: 0,
+    damage: 50,
+    count: 1,
+    evolution: 'cataclysm',
+    partner: 'duplicator',
+    desc: 'Blitze schlagen zufällig in Monstergruppen ein.'
+  },
+  bible: {
+    id: 'bible',
+    name: 'Heiliges Buch',
+    icon: '📖',
+    type: 'weapon',
+    cooldown: 90,
+    timer: 0,
+    damage: 22,
+    duration: 180,
+    evolution: 'vespers',
+    partner: 'hourglass',
+    desc: 'Heilige Gesänge erzeugen eine schädigende Lichtzone.'
+  },
+  poison: {
+    id: 'poison',
+    name: 'Giftphiolen',
+    icon: '🧪',
+    type: 'weapon',
+    cooldown: 100,
+    timer: 0,
+    damage: 12,
+    evolution: 'plague',
+    partner: 'magnet',
+    desc: 'Hinterlässt ätzende Giftpfützen am Boden.'
+  },
+
+  // EVOLUTIONS
+  excalibur: {
+    id: 'excalibur',
+    name: 'Göttliches Excalibur',
+    icon: '✨⚔️',
+    type: 'weapon',
+    cooldown: 35,
+    timer: 0,
+    damage: 85,
+    area: 130,
+    isEvo: true,
+    desc: 'Gigantische heilige Schockwellen fegen ganze Horden weg!'
+  },
+  supernova: {
+    id: 'supernova',
+    name: 'Feuer-Supernova',
+    icon: '☄️',
+    type: 'weapon',
+    cooldown: 55,
+    timer: 0,
+    damage: 120,
+    count: 3,
+    isEvo: true,
+    desc: 'Drei kolossale Meteore verbrennen das Schlachtfeld.'
+  },
+  thousand_edge: {
+    id: 'thousand_edge',
+    name: 'Tausend Klingen',
+    icon: '🌪️🗡️',
+    type: 'weapon',
+    cooldown: 12,
+    timer: 0,
+    damage: 36,
+    count: 5,
+    isEvo: true,
+    desc: 'Ein unaufhörlicher Sturm durchbohrender Klingen!'
+  },
+  aegis: {
+    id: 'aegis',
+    name: 'Aegis Bastion',
+    icon: '🔰',
+    type: 'weapon',
+    cooldown: 0,
+    timer: 0,
+    damage: 38,
+    count: 5,
+    orbitRadius: 90,
+    orbitSpeed: 0.08,
+    isEvo: true,
+    desc: 'Fünf unzerstörbare Festungsschilde zermalmen Feinde.'
+  },
+  cataclysm: {
+    id: 'cataclysm',
+    name: 'Kataklysmus',
+    icon: '🌩️',
+    type: 'weapon',
+    cooldown: 45,
+    timer: 0,
+    damage: 110,
+    count: 4,
+    isEvo: true,
+    desc: 'Entfesselt vier vernichtende Donnerschläge gleichzeitig.'
+  },
+  reaper_call: {
+    id: 'reaper_call',
+    name: 'Ruf des Sensenmanns',
+    icon: '⚰️💀',
+    type: 'weapon',
+    cooldown: 40,
+    timer: 0,
+    damage: 130,
+    isEvo: true,
+    desc: 'Zwei gigantische Todessensen teilen das Schlachtfeld und stellen Leben wieder her.'
+  },
+  vespers: {
+    id: 'vespers',
+    name: 'Unheilige Vesper',
+    icon: '✨📖',
+    type: 'weapon',
+    cooldown: 50,
+    timer: 0,
+    damage: 55,
+    duration: 300,
+    isEvo: true,
+    desc: 'Eine permanente strahlende Lichtsphäre verbrennt alle Feinde in Reichweite.'
+  },
+  plague: {
+    id: 'plague',
+    name: 'Pestilenz-Aura',
+    icon: '☣️🧪',
+    type: 'weapon',
+    cooldown: 60,
+    timer: 0,
+    damage: 35,
+    isEvo: true,
+    desc: 'Hinterlässt ätzende Pestseen, die Feinde um 50% verlangsamen und auflösen.'
+  },
+};
+
+// PASSIVES DEFINITION
+const PASSIVES = {
+  spinach: { id: 'spinach', name: 'Spinat der Kraft', icon: '🥬', desc: '+10% Gesamtschaden', stat: 'might', val: 0.10 },
+  armor: { id: 'armor', name: 'Titan-Rüstung', icon: '🛡️', desc: 'Verringert erlittenen Schaden um 2', stat: 'armor', val: 2 },
+  wings: { id: 'wings', name: 'Engelsflügel', icon: '🪽', desc: '+10% Bewegungsgeschwindigkeit', stat: 'speed', val: 0.10 },
+  heart: { id: 'heart', name: 'Rubinherz', icon: '💖', desc: '+25 Max HP & leichte Lebensregeneration', stat: 'hp', val: 25 },
+  clover: { id: 'clover', name: 'Vierblättriges Klee', icon: '🍀', desc: '+15% Kritische Trefferchance', stat: 'crit', val: 0.15 },
+  hourglass: { id: 'hourglass', name: 'Chrono-Sanduhr', icon: '⏳', desc: '-10% Abklingzeit auf alle Angriffe', stat: 'cd', val: 0.10 },
+  duplicator: { id: 'duplicator', name: 'Duplikator-Ring', icon: '💍', desc: '+1 zusätzliches Projektil für Fernwaffen', stat: 'amount', val: 1 },
+  magnet: { id: 'magnet', name: 'Gravitationsstein', icon: '🧲', desc: '+30% Reichweite für XP-Edelsteine', stat: 'magnet', val: 0.30 }
+};
+
+// GAME STATE
+let state = 'menu'; // menu, playing, paused, levelup, chest, gameover
+let selectedHero = HEROES[0];
+let player = null;
+let enemies = [];
+let projectiles = [];
+let gems = [];
+let breakables = [];
+let damageTexts = [];
+let particles = [];
+let gameTime = 0; // seconds
+let frameCount = 0;
+let killCount = 0;
+let runGold = 0;
+let keys = {};
+let joystick = { active: false, startX: 0, startY: 0, x: 0, y: 0 };
+let bossSpawnedTimer = 0;
+let pendingChestRewards = [];
+
+// PLAYER CLASS
+class Player {
+  constructor(hero) {
+    player = this;
+    this.hero = hero;
+    this.x = 0;
+    this.y = 0;
+    this.vx = 0;
+    this.vy = 0;
+    this.facing = 1; // 1 right, -1 left
+    this.level = 1;
+    this.xp = 0;
+    this.xpNeeded = 10;
+    
+    // Calculate stats with armory upgrades
+    const vitRank = saveState.upgrades.vitality || 0;
+    const swiftRank = saveState.upgrades.swiftness || 0;
+    const mightRank = saveState.upgrades.might || 0;
+    const magRank = saveState.upgrades.magnet || 0;
+
+    this.maxHp = hero.hp + (vitRank * 15);
+    this.hp = this.maxHp;
+    this.baseSpeed = hero.speed * (1 + swiftRank * 0.04);
+    this.mightMult = 1 + (mightRank * 0.06);
+    this.pickupRadius = 90 * (1 + magRank * 0.2);
+    this.armorVal = 0;
+    this.critChance = hero.id === 'rogue' ? 0.20 : 0.05;
+    this.cdMult = 1;
+    this.extraAmount = 0;
+    this.revives = saveState.upgrades.revival || 0;
+    this.regenTimer = 0;
+
+    // Inventory: weapons & passives
+    this.weapons = {}; // id -> { lvl: 1, ... }
+    this.passives = {}; // id -> { lvl: 1, ... }
+
+    // Give starting weapon
+    this.addWeapon(hero.weapon);
+
+    // Orbit angle for shields
+    this.orbitAngle = 0;
+  }
+
+  addWeapon(id) {
+    if (!this.weapons[id]) {
+      this.weapons[id] = { ...WEAPONS[id], level: 1, timer: 0 };
+    } else {
+      this.weapons[id].level++;
+      this.weapons[id].damage = Math.round(this.weapons[id].damage * 1.3);
+      if (this.weapons[id].count) this.weapons[id].count++;
+    }
+    updateHudInventory();
+  }
+
+  addPassive(id) {
+    if (!this.passives[id]) {
+      this.passives[id] = { ...PASSIVES[id], level: 1 };
+    } else {
+      this.passives[id].level++;
+    }
+    this.recalcStats();
+    updateHudInventory();
+  }
+
+  recalcStats() {
+    let mightBonus = 0;
+    let speedBonus = 0;
+    let hpBonus = 0;
+    let armorBonus = 0;
+    let critBonus = 0;
+    let cdBonus = 0;
+    let amountBonus = 0;
+    let magBonus = 0;
+
+    for (const pId in this.passives) {
+      const p = this.passives[pId];
+      if (p.stat === 'might') mightBonus += p.val * p.level;
+      if (p.stat === 'speed') speedBonus += p.val * p.level;
+      if (p.stat === 'hp') hpBonus += p.val * p.level;
+      if (p.stat === 'armor') armorBonus += p.val * p.level;
+      if (p.stat === 'crit') critBonus += p.val * p.level;
+      if (p.stat === 'cd') cdBonus += p.val * p.level;
+      if (p.stat === 'amount') amountBonus += p.val * p.level;
+      if (p.stat === 'magnet') magBonus += p.val * p.level;
+    }
+
+    const mightRank = saveState.upgrades.might || 0;
+    const swiftRank = saveState.upgrades.swiftness || 0;
+    const magRank = saveState.upgrades.magnet || 0;
+
+    this.mightMult = (1 + mightRank * 0.06) * (1 + mightBonus);
+    this.armorVal = armorBonus;
+    this.critChance = (this.hero.id === 'rogue' ? 0.20 : 0.05) + critBonus;
+    this.cdMult = Math.max(0.4, 1 - cdBonus);
+    this.extraAmount = amountBonus;
+    this.pickupRadius = (90 * (1 + magRank * 0.2)) * (1 + magBonus);
+    
+    const targetMaxHp = this.hero.hp + (saveState.upgrades.vitality * 15) + hpBonus;
+    if (targetMaxHp > this.maxHp) {
+      this.hp += (targetMaxHp - this.maxHp);
+      this.maxHp = targetMaxHp;
+    }
+  }
+
+  takeDamage(amount) {
+    const reduced = Math.max(1, amount - this.armorVal);
+    this.hp -= reduced;
+    Sfx.hit();
+    spawnDamageText(this.x, this.y - 20, `-${reduced}`, '#ef4444');
+    
+    // Screen shake
+    screenShake = 6;
+
+    if (this.hp <= 0) {
+      if (this.revives > 0) {
+        this.revives--;
+        this.hp = Math.round(this.maxHp * 0.5);
+        Sfx.lvl();
+        spawnDamageText(this.x, this.y - 30, 'WIEDERBELEBT!', '#fbbf24');
+        // Clear nearby enemies in explosion
+        enemies.forEach(e => {
+          const d = Math.hypot(e.x - this.x, e.y - this.y);
+          if (d < 300) e.hp -= 200;
+        });
+      } else {
+        triggerGameOver(false);
+      }
+    }
+  }
+
+  gainXp(amount) {
+    this.xp += amount;
+    if (this.xp >= this.xpNeeded) {
+      this.xp -= this.xpNeeded;
+      this.level++;
+      this.xpNeeded = Math.round(this.xpNeeded * 1.35 + 8);
+      triggerLevelUp();
+    }
+  }
+
+  update() {
+    // Movement input
+    let dx = 0;
+    let dy = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+
+    // Joystick
+    if (joystick.active) {
+      dx += joystick.x;
+      dy += joystick.y;
+    }
+
+    const len = Math.hypot(dx, dy);
+    if (len > 0.01) {
+      const curSpeed = this.baseSpeed;
+      this.vx = (dx / len) * curSpeed;
+      this.vy = (dy / len) * curSpeed;
+      if (dx > 0) this.facing = 1;
+      else if (dx < 0) this.facing = -1;
+    } else {
+      this.vx *= 0.7;
+      this.vy *= 0.7;
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Passive regeneration from heart
+    if (this.passives.heart) {
+      this.regenTimer++;
+      if (this.regenTimer >= 180) { // every 3s
+        this.regenTimer = 0;
+        if (this.hp < this.maxHp) {
+          this.hp = Math.min(this.maxHp, this.hp + this.passives.heart.level);
+        }
+      }
+    }
+
+    // Orbit shield angles
+    this.orbitAngle += 0.05;
+
+    // Weapons auto-attack update
+    for (const wId in this.weapons) {
+      const w = this.weapons[wId];
+      if (w.cooldown === 0) continue; // continuous like shields
+      w.timer++;
+      const effectiveCd = Math.round(w.cooldown * this.cdMult);
+      if (w.timer >= effectiveCd) {
+        w.timer = 0;
+        fireWeapon(w, this);
+      }
+    }
+  }
+
+  draw(camX, camY) {
+    const scrX = this.x - camX;
+    const scrY = this.y - camY;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(scrX, scrY + 18, 16, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body / Hero
+    ctx.save();
+    ctx.translate(scrX, scrY);
+    if (this.facing === -1) ctx.scale(-1, 1);
+
+    // Glow aura
+    ctx.fillStyle = this.hero.color + '33';
+    ctx.beginPath();
+    ctx.arc(0, 0, 24, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Emoji Sprite
+    ctx.font = '28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.hero.avatar, 0, 0);
+
+    ctx.restore();
+
+    // Orbiting Shields if owned
+    const shieldWeapon = this.weapons.aegis || this.weapons.shields;
+    if (shieldWeapon) {
+      const count = shieldWeapon.isEvo ? 5 : (shieldWeapon.count || 2);
+      const rad = shieldWeapon.orbitRadius || 75;
+      for (let i = 0; i < count; i++) {
+        const ang = this.orbitAngle + (i * (Math.PI * 2 / count));
+        const ox = scrX + Math.cos(ang) * rad;
+        const oy = scrY + Math.sin(ang) * rad;
+        
+        ctx.fillStyle = shieldWeapon.isEvo ? '#fbbf24' : '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(ox, oy, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(shieldWeapon.isEvo ? '🔰' : '🛡️', ox, oy);
+      }
+    }
+  }
+}
+
+// WEAPON FIRING LOGIC
+function fireWeapon(w, p) {
+  const isCrit = Math.random() < p.critChance;
+  const dmg = Math.round(w.damage * p.mightMult * (isCrit ? 2.0 : 1.0));
+
+  if (w.id === 'sword' || w.id === 'excalibur') {
+    Sfx.slash();
+    // Find closest enemy
+    const target = getNearestEnemy(p.x, p.y);
+    const ang = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.facing === 1 ? 0 : Math.PI);
+    
+    projectiles.push({
+      type: 'slash',
+      x: p.x,
+      y: p.y,
+      angle: ang,
+      radius: w.id === 'excalibur' ? 120 : (w.area || 75),
+      damage: dmg,
+      isCrit: isCrit,
+      color: w.id === 'excalibur' ? '#fbbf24' : '#f3f4f6',
+      duration: 12,
+      timer: 0,
+      hitSet: new Set()
+    });
+  }
+  else if (w.id === 'fireball' || w.id === 'supernova') {
+    Sfx.slash();
+    const count = (w.count || 1) + p.extraAmount;
+    for (let i = 0; i < count; i++) {
+      const target = getRandomEnemy();
+      let ang = target ? Math.atan2(target.y - p.y, target.x - p.x) : Math.random() * Math.PI * 2;
+      ang += (Math.random() - 0.5) * 0.4;
+      projectiles.push({
+        type: 'fireball',
+        x: p.x,
+        y: p.y,
+        vx: Math.cos(ang) * 7,
+        vy: Math.sin(ang) * 7,
+        radius: w.isEvo ? 24 : 14,
+        blastRadius: w.isEvo ? 90 : 50,
+        damage: dmg,
+        isCrit: isCrit,
+        life: 70,
+        isEvo: w.isEvo
+      });
+    }
+  }
+  else if (w.id === 'dagger' || w.id === 'thousand_edge') {
+    Sfx.slash();
+    const count = (w.count || 2) + p.extraAmount;
+    const baseAng = p.facing === 1 ? 0 : Math.PI;
+    for (let i = 0; i < count; i++) {
+      const spread = (i - (count - 1) / 2) * 0.16;
+      projectiles.push({
+        type: 'dagger',
+        x: p.x,
+        y: p.y,
+        vx: Math.cos(baseAng + spread) * 12,
+        vy: Math.sin(baseAng + spread) * 12,
+        radius: 8,
+        damage: dmg,
+        isCrit: isCrit,
+        life: 45
+      });
+    }
+  }
+  else if (w.id === 'thunder' || w.id === 'cataclysm') {
+    const count = (w.count || 1) + p.extraAmount;
+    for (let i = 0; i < count; i++) {
+      const target = getRandomEnemy();
+      if (target) {
+        Sfx.boom();
+        screenShake = 4;
+        projectiles.push({
+          type: 'lightning',
+          tx: target.x,
+          ty: target.y,
+          radius: w.isEvo ? 70 : 45,
+          damage: dmg,
+          isCrit: isCrit,
+          duration: 16,
+          timer: 0
+        });
+      }
+    }
+  }
+  else if (w.id === 'scythe' || w.id === 'reaper_call') {
+    Sfx.slash();
+    const isEvo = w.isEvo || w.id === 'reaper_call';
+    const directions = isEvo ? [1, -1] : [(p.facing === 1 ? 1 : -1)];
+    directions.forEach(dir => {
+      projectiles.push({
+        type: 'scythe',
+        x: p.x,
+        y: p.y,
+        vx: dir * (isEvo ? 7 : 5),
+        vy: 0,
+        radius: isEvo ? 65 : 40,
+        damage: dmg,
+        isCrit: isCrit,
+        isEvo: isEvo,
+        life: isEvo ? 110 : 90,
+        rot: 0
+      });
+    });
+  }
+  else if (w.id === 'poison' || w.id === 'plague') {
+    const isEvo = w.isEvo || w.id === 'plague';
+    const count = isEvo ? 4 : 2;
+    for (let i = 0; i < count; i++) {
+      projectiles.push({
+        type: 'puddle',
+        x: p.x + (Math.random() - 0.5) * (isEvo ? 120 : 80),
+        y: p.y + (Math.random() - 0.5) * (isEvo ? 120 : 80),
+        radius: isEvo ? 70 : 45,
+        damage: dmg,
+        isEvo: isEvo,
+        life: isEvo ? 260 : 180,
+        tickTimer: 0
+      });
+    }
+  }
+  else if (w.id === 'bible' || w.id === 'vespers') {
+    const isEvo = w.isEvo || w.id === 'vespers';
+    projectiles.push({
+      type: 'aura',
+      radius: isEvo ? 140 : 90,
+      damage: dmg,
+      duration: isEvo ? 300 : 150,
+      isEvo: isEvo,
+      timer: 0
+    });
+  }
+}
+
+function getNearestEnemy(x, y) {
+  let closest = null;
+  let minD = Infinity;
+  for (const e of enemies) {
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d < minD) {
+      minD = d;
+      closest = e;
+    }
+  }
+  return closest;
+}
+
+function getRandomEnemy() {
+  if (enemies.length === 0) return null;
+  return enemies[Math.floor(Math.random() * enemies.length)];
+}
+
+// ENEMY TYPES
+const ENEMY_TYPES = {
+  bat: { name: 'Fledermaus', avatar: '🦇', hp: 18, speed: 2.8, dmg: 8, xp: 1, size: 14, color: '#9333ea' },
+  zombie: { name: 'Zombie', avatar: '🧟', hp: 35, speed: 1.5, dmg: 14, xp: 2, size: 16, color: '#16a34a' },
+  skeleton: { name: 'Skelett', avatar: '💀', hp: 55, speed: 2.1, dmg: 18, xp: 4, size: 16, color: '#cbd5e1' },
+  ghoul: { name: 'Gruft-Ghul', avatar: '👺', hp: 95, speed: 2.4, dmg: 22, xp: 6, size: 18, color: '#dc2626' },
+  ghost: { name: 'Phantom', avatar: '👻', hp: 120, speed: 2.9, dmg: 25, xp: 8, size: 20, color: '#38bdf8' },
+  necromancer: { name: 'Kultist', avatar: '🧙', hp: 160, speed: 1.8, dmg: 30, xp: 12, size: 20, color: '#a855f7' },
+  // MINI BOSSES
+  boss_bat: { name: 'Blutflügel Goliath', avatar: '🦇', hp: 1200, speed: 2.4, dmg: 35, xp: 50, size: 34, isBoss: true, color: '#7e22ce' },
+  boss_minotaur: { name: 'Knochen-Minotaurus', avatar: '🐂', hp: 3500, speed: 2.2, dmg: 45, xp: 120, size: 40, isBoss: true, color: '#b91c1c' },
+  boss_demon: { name: 'Abyss Dämonenfürst', avatar: '👹', hp: 7500, speed: 2.5, dmg: 55, xp: 250, size: 46, isBoss: true, color: '#ea580c' },
+  // FINAL BOSS
+  boss_lich: { name: 'Der Lichkönig', avatar: '👑', hp: 18000, speed: 2.0, dmg: 65, xp: 500, size: 52, isBoss: true, isFinal: true, color: '#6366f1' }
+};
+
+class Enemy {
+  constructor(typeKey, x, y) {
+    const def = ENEMY_TYPES[typeKey];
+    this.type = typeKey;
+    this.def = def;
+    this.x = x;
+    this.y = y;
+    this.maxHp = def.hp * (1 + (gameTime / 240)); // Scale with time
+    this.hp = this.maxHp;
+    this.speed = def.speed;
+    this.dmg = def.dmg;
+    this.size = def.size;
+    this.isBoss = !!def.isBoss;
+    this.vx = 0;
+    this.vy = 0;
+    this.hitFlash = 0;
+  }
+
+  update() {
+    if (this.hitFlash > 0) this.hitFlash--;
+
+    // Move towards player
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist > 1) {
+      this.vx = (dx / dist) * this.speed;
+      this.vy = (dy / dist) * this.speed;
+    }
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Contact damage to player
+    if (dist < this.size + 14) {
+      player.takeDamage(this.dmg);
+    }
+  }
+
+  draw(camX, camY) {
+    const scrX = this.x - camX;
+    const scrY = this.y - camY;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(scrX, scrY + this.size * 0.8, this.size * 0.8, this.size * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sprite
+    ctx.save();
+    ctx.translate(scrX, scrY);
+    if (this.vx < 0) ctx.scale(-1, 1);
+
+    if (this.hitFlash > 0) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.font = `${this.size * 1.5}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.def.avatar, 0, 0);
+    }
+    ctx.restore();
+
+    // Boss HP Bar
+    if (this.isBoss) {
+      const bw = 60;
+      const bh = 6;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(scrX - bw/2, scrY - this.size - 12, bw, bh);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(scrX - bw/2, scrY - this.size - 12, bw * (this.hp / this.maxHp), bh);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(scrX - bw/2, scrY - this.size - 12, bw, bh);
+    }
+  }
+}
+
+// BREAKABLE OBJECTS (Torches / Urns)
+class Breakable {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.hp = 1;
+    this.type = Math.random() < 0.5 ? 'urn' : 'torch';
+  }
+  hit() {
+    this.hp = 0;
+    Sfx.boom();
+    const r = Math.random();
+    if (r < 0.45) {
+      // Coins
+      const goldAmt = Math.floor(Math.random() * 25) + 10;
+      runGold += goldAmt;
+      saveState.gold += goldAmt;
+      Sfx.coin();
+      spawnDamageText(this.x, this.y, `+${goldAmt} 🪙`, '#fbbf24');
+    } else if (r < 0.65) {
+      // Meat heal
+      player.hp = Math.min(player.maxHp, player.hp + 35);
+      Sfx.lvl();
+      spawnDamageText(this.x, this.y, '+35 HP 🍖', '#10b981');
+    } else if (r < 0.75) {
+      // Magnet Orb
+      Sfx.coin();
+      gems.forEach(g => g.pull = true);
+      spawnDamageText(this.x, this.y, 'MAGNET ORB! 🧲', '#38bdf8');
+    } else {
+      // Big XP Gem
+      spawnGem(this.x, this.y, 25);
+    }
+  }
+  draw(camX, camY) {
+    const scrX = this.x - camX;
+    const scrY = this.y - camY;
+    ctx.font = '22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.type === 'urn' ? '🏺' : '🔥', scrX, scrY);
+  }
+}
+
+// XP GEM
+function spawnGem(x, y, value) {
+  let color = '#38bdf8'; // blue 1
+  let size = 5;
+  if (value >= 100) { color = '#fbbf24'; size = 9; }
+  else if (value >= 25) { color = '#ef4444'; size = 7; }
+  else if (value >= 5) { color = '#10b981'; size = 6; }
+
+  gems.push({ x, y, value, color, size, pull: false });
+}
+
+// DAMAGE TEXT
+function spawnDamageText(x, y, text, color = '#fff') {
+  damageTexts.push({ x, y, text, color, life: 40, vy: -1.2 });
+}
+
+// SCREEN SHAKE
+let screenShake = 0;
+
+// SPAWN DIRECTOR
+function updateSpawns() {
+  // Max enemies on field
+  const maxEnemies = Math.min(300, 40 + Math.floor(gameTime * 0.75));
+  if (enemies.length >= maxEnemies) return;
+
+  // Decide enemy types based on time
+  let choices = ['bat'];
+  if (gameTime >= 120) choices.push('zombie');
+  if (gameTime >= 240) choices.push('skeleton');
+  if (gameTime >= 360) choices.push('ghoul');
+  if (gameTime >= 600) choices.push('ghost');
+  if (gameTime >= 840) choices.push('necromancer');
+
+  const spawnBatch = Math.min(5, maxEnemies - enemies.length);
+  for (let i = 0; i < spawnBatch; i++) {
+    const type = choices[Math.floor(Math.random() * choices.length)];
+    const ang = Math.random() * Math.PI * 2;
+    const dist = (Math.max(canvas.width, canvas.height) / 2) + 60 + Math.random() * 80;
+    const ex = player.x + Math.cos(ang) * dist;
+    const ey = player.y + Math.sin(ang) * dist;
+    enemies.push(new Enemy(type, ex, ey));
+  }
+
+  // Boss Spawns
+  if (Math.floor(gameTime) === 180 && !bossSpawned[180]) { // 3:00
+    triggerBossSpawn('boss_bat', 180);
+  } else if (Math.floor(gameTime) === 420 && !bossSpawned[420]) { // 7:00
+    triggerBossSpawn('boss_minotaur', 420);
+  } else if (Math.floor(gameTime) === 660 && !bossSpawned[660]) { // 11:00
+    triggerBossSpawn('boss_demon', 660);
+  } else if (Math.floor(gameTime) === 1200 && !bossSpawned[1200]) { // 20:00 Final Boss
+    triggerBossSpawn('boss_lich', 1200);
+  }
+
+  // Scatter breakables
+  if (breakables.length < 15 && Math.random() < 0.05) {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 300 + Math.random() * 500;
+    breakables.push(new Breakable(player.x + Math.cos(ang) * dist, player.y + Math.sin(ang) * dist));
+  }
+}
+
+const bossSpawned = {};
+function triggerBossSpawn(bossKey, timeStamp) {
+  bossSpawned[timeStamp] = true;
+  Sfx.boss();
+  const banner = document.getElementById('bossBanner');
+  banner.textContent = `⚠️ ${ENEMY_TYPES[bossKey].name.toUpperCase()} ERSCHEINT! ⚠️`;
+  banner.classList.add('show');
+  setTimeout(() => banner.classList.remove('show'), 4000);
+
+  const ang = Math.random() * Math.PI * 2;
+  const dist = 400;
+  enemies.push(new Enemy(bossKey, player.x + Math.cos(ang) * dist, player.y + Math.sin(ang) * dist));
+}
+
+// MAIN GAME LOOP
+let lastTimestamp = 0;
+function gameLoop(timestamp) {
+  requestAnimationFrame(gameLoop);
+
+  if (state !== 'playing') {
+    return;
+  }
+
+  frameCount++;
+  if (frameCount % 60 === 0) {
+    gameTime += 1;
+    updateHudTime();
+  }
+
+  // Update Player
+  player.update();
+
+  // Screen shake decay
+  if (screenShake > 0) screenShake *= 0.9;
+  if (screenShake < 0.5) screenShake = 0;
+
+  // Update Spawns
+  if (frameCount % 45 === 0) {
+    updateSpawns();
+  }
+
+  // Update Enemies
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    e.update();
+
+    // Check contact with Orbiting shields
+    const shieldWeapon = player.weapons.aegis || player.weapons.shields;
+    if (shieldWeapon) {
+      const count = shieldWeapon.isEvo ? 5 : (shieldWeapon.count || 2);
+      const rad = shieldWeapon.orbitRadius || 75;
+      for (let j = 0; j < count; j++) {
+        const ang = player.orbitAngle + (j * (Math.PI * 2 / count));
+        const sx = player.x + Math.cos(ang) * rad;
+        const sy = player.y + Math.sin(ang) * rad;
+        if (Math.hypot(e.x - sx, e.y - sy) < e.size + 14) {
+          const isCrit = Math.random() < player.critChance;
+          const dmg = Math.round(shieldWeapon.damage * player.mightMult * (isCrit ? 2 : 1));
+          e.hp -= dmg;
+          e.hitFlash = 3;
+          spawnDamageText(e.x, e.y, `${dmg}`, isCrit ? '#fbbf24' : '#38bdf8');
+          // Pushback
+          e.x += Math.cos(ang) * 15;
+          e.y += Math.sin(ang) * 15;
+        }
+      }
+    }
+
+    if (e.hp <= 0) {
+      killCount++;
+      saveState.totalKills++;
+      // Drop XP Gem
+      spawnGem(e.x, e.y, e.def.xp);
+
+      // Boss Chest Drop
+      if (e.isBoss) {
+        Sfx.chest();
+        openChestModal(e.isFinal);
+      }
+
+      // Small gold drop chance
+      if (Math.random() < 0.15) {
+        const g = Math.floor(Math.random() * 8) + 2;
+        runGold += g;
+        saveState.gold += g;
+      }
+
+      enemies.splice(i, 1);
+    }
+  }
+
+  // Update Projectiles
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    if (p.type === 'slash') {
+      p.timer++;
+      // Collision with enemies in arc
+      enemies.forEach(e => {
+        if (!p.hitSet.has(e)) {
+          const d = Math.hypot(e.x - p.x, e.y - p.y);
+          if (d <= p.radius) {
+            e.hp -= p.damage;
+            e.hitFlash = 3;
+            p.hitSet.add(e);
+            spawnDamageText(e.x, e.y, `${p.damage}`, p.isCrit ? '#fbbf24' : p.color);
+          }
+        }
+      });
+      // Check breakables
+      breakables.forEach(b => {
+        if (b.hp > 0 && Math.hypot(b.x - p.x, b.y - p.y) <= p.radius) {
+          b.hit();
+        }
+      });
+      if (p.timer >= p.duration) projectiles.splice(i, 1);
+    }
+    else if (p.type === 'fireball') {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life--;
+      let explode = p.life <= 0;
+      enemies.forEach(e => {
+        if (Math.hypot(e.x - p.x, e.y - p.y) < e.size + p.radius) {
+          explode = true;
+        }
+      });
+      if (explode) {
+        Sfx.boom();
+        // AOE blast
+        enemies.forEach(e => {
+          const d = Math.hypot(e.x - p.x, e.y - p.y);
+          if (d <= p.blastRadius) {
+            e.hp -= p.damage;
+            e.hitFlash = 4;
+            spawnDamageText(e.x, e.y, `${p.damage}`, p.isCrit ? '#fbbf24' : '#f97316');
+          }
+        });
+        breakables.forEach(b => {
+          if (b.hp > 0 && Math.hypot(b.x - p.x, b.y - p.y) <= p.blastRadius) b.hit();
+        });
+        projectiles.splice(i, 1);
+      }
+    }
+    else if (p.type === 'dagger') {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life--;
+      let hit = false;
+      for (const e of enemies) {
+        if (Math.hypot(e.x - p.x, e.y - p.y) < e.size + p.radius) {
+          e.hp -= p.damage;
+          e.hitFlash = 3;
+          spawnDamageText(e.x, e.y, `${p.damage}`, p.isCrit ? '#fbbf24' : '#06b6d4');
+          hit = true;
+          break;
+        }
+      }
+      if (hit || p.life <= 0) projectiles.splice(i, 1);
+    }
+    else if (p.type === 'lightning') {
+      p.timer++;
+      if (p.timer === 1) {
+        enemies.forEach(e => {
+          if (Math.hypot(e.x - p.tx, e.y - p.ty) <= p.radius) {
+            e.hp -= p.damage;
+            e.hitFlash = 5;
+            spawnDamageText(e.x, e.y, `${p.damage}`, '#fbbf24');
+          }
+        });
+      }
+      if (p.timer >= p.duration) projectiles.splice(i, 1);
+    }
+    else if (p.type === 'scythe') {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += 0.2;
+      p.life--;
+      enemies.forEach(e => {
+        if (Math.hypot(e.x - p.x, e.y - p.y) < e.size + p.radius) {
+          e.hp -= p.damage * 0.2; // Continuous damage
+          e.hitFlash = 2;
+          if (p.isEvo && player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 0.05);
+        }
+      });
+      if (p.life <= 0) projectiles.splice(i, 1);
+    }
+    else if (p.type === 'puddle') {
+      p.life--;
+      p.tickTimer++;
+      if (p.tickTimer >= 20) { // every 20 frames
+        p.tickTimer = 0;
+        enemies.forEach(e => {
+          if (Math.hypot(e.x - p.x, e.y - p.y) <= p.radius) {
+            e.hp -= p.damage;
+            e.hitFlash = 2;
+            if (p.isEvo) e.speed = e.baseSpeed * 0.5;
+            spawnDamageText(e.x, e.y, `${p.damage}`, p.isEvo ? '#10b981' : '#a855f7');
+          }
+        });
+      }
+      if (p.life <= 0) projectiles.splice(i, 1);
+    }
+    else if (p.type === 'aura') {
+      p.timer++;
+      enemies.forEach(e => {
+        if (Math.hypot(e.x - player.x, e.y - player.y) <= p.radius) {
+          e.hp -= p.damage * 0.15;
+          e.hitFlash = 2;
+        }
+      });
+      if (p.timer >= p.duration) projectiles.splice(i, 1);
+    }
+  }
+
+  // Update Gems (Pickup & Magnet)
+  for (let i = gems.length - 1; i >= 0; i--) {
+    const g = gems[i];
+    const dx = player.x - g.x;
+    const dy = player.y - g.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist < player.pickupRadius || g.pull) {
+      g.pull = true;
+      const spd = Math.max(7, (player.pickupRadius - dist) * 0.15 + 6);
+      g.x += (dx / dist) * spd;
+      g.y += (dy / dist) * spd;
+
+      if (dist < 18) {
+        player.gainXp(g.value);
+        Sfx.xp();
+        gems.splice(i, 1);
+      }
+    }
+  }
+
+  // Update Damage Numbers
+  for (let i = damageTexts.length - 1; i >= 0; i--) {
+    const dt = damageTexts[i];
+    dt.y += dt.vy;
+    dt.life--;
+    if (dt.life <= 0) damageTexts.splice(i, 1);
+  }
+
+  // Clean breakables
+  for (let i = breakables.length - 1; i >= 0; i--) {
+    if (breakables[i].hp <= 0) breakables.splice(i, 1);
+  }
+
+  // Update HUD
+  updateHudStats();
+
+  // RENDER FRAME
+  render();
+}
+
+// RENDER
+function render() {
+  ctx.save();
+
+  // Screen shake offset
+  if (screenShake > 0) {
+    const ox = (Math.random() - 0.5) * screenShake * 2;
+    const oy = (Math.random() - 0.5) * screenShake * 2;
+    ctx.translate(ox, oy);
+  }
+
+  // Camera coordinates (centered on player)
+  const camX = player.x - canvas.width / 2;
+  const camY = player.y - canvas.height / 2;
+
+  // Draw Dungeon Tile Grid Background
+  ctx.fillStyle = '#0f0c1b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const tileSize = 64;
+  const startX = -((camX % tileSize) + tileSize);
+  const startY = -((camY % tileSize) + tileSize);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = startX; x < canvas.width + tileSize; x += tileSize) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+  }
+  for (let y = startY; y < canvas.height + tileSize; y += tileSize) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+  }
+  ctx.stroke();
+
+  // Floor Cobblestones Detail
+  const floorSeedX = Math.floor(camX / 300);
+  const floorSeedY = Math.floor(camY / 300);
+  ctx.fillStyle = 'rgba(139, 92, 246, 0.02)';
+  for (let fx = -1; fx <= Math.ceil(canvas.width / 300) + 1; fx++) {
+    for (let fy = -1; fy <= Math.ceil(canvas.height / 300) + 1; fy++) {
+      const rx = (fx * 300) - (camX % 300);
+      const ry = (fy * 300) - (camY % 300);
+      ctx.fillRect(rx + 40, ry + 40, 80, 80);
+    }
+  }
+
+  // Draw Breakables
+  breakables.forEach(b => b.draw(camX, camY));
+
+  // Draw XP Gems
+  gems.forEach(g => {
+    const gx = g.x - camX;
+    const gy = g.y - camY;
+    if (gx < -20 || gx > canvas.width + 20 || gy < -20 || gy > canvas.height + 20) return;
+    
+    ctx.fillStyle = g.color;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy - g.size);
+    ctx.lineTo(gx + g.size, gy);
+    ctx.lineTo(gx, gy + g.size);
+    ctx.lineTo(gx - g.size, gy);
+    ctx.closePath();
+    ctx.fill();
+
+    // Gem glow
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // Draw Projectiles
+  projectiles.forEach(p => {
+    if (p.type === 'slash') {
+      const sx = p.x - camX;
+      const sy = p.y - camY;
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.isCrit ? 6 : 4;
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.radius, p.angle - 0.7, p.angle + 0.7);
+      ctx.stroke();
+    }
+    else if (p.type === 'fireball') {
+      const fx = p.x - camX;
+      const fy = p.y - camY;
+      ctx.fillStyle = p.isEvo ? '#fbbf24' : '#f97316';
+      ctx.beginPath();
+      ctx.arc(fx, fy, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    else if (p.type === 'dagger') {
+      const dx = p.x - camX;
+      const dy = p.y - camY;
+      ctx.fillStyle = '#06b6d4';
+      ctx.beginPath();
+      ctx.arc(dx, dy, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    else if (p.type === 'lightning') {
+      const lx = p.tx - camX;
+      const ly = p.ty - camY;
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.4)';
+      ctx.beginPath();
+      ctx.arc(lx, ly, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(lx, 0);
+      ctx.lineTo(lx, ly);
+      ctx.stroke();
+    }
+    else if (p.type === 'scythe') {
+      const sx = p.x - camX;
+      const sy = p.y - camY;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(p.rot);
+      ctx.font = '36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = (p.isEvo ? '54px' : '36px') + ' sans-serif';
+      ctx.fillText(p.isEvo ? '⚰️' : '💀', 0, 0);
+      ctx.restore();
+    }
+    else if (p.type === 'puddle') {
+      const px = p.x - camX;
+      const py = p.y - camY;
+      ctx.fillStyle = p.isEvo ? 'rgba(16, 185, 129, 0.45)' : 'rgba(168, 85, 247, 0.35)';
+      ctx.beginPath();
+      ctx.arc(px, py, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    else if (p.type === 'aura') {
+      const ax = player.x - camX;
+      const ay = player.y - camY;
+      ctx.strokeStyle = p.isEvo ? 'rgba(251, 191, 36, 0.6)' : 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = p.isEvo ? 4 : 3;
+      if (p.isEvo) {
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.06)';
+        ctx.beginPath(); ctx.arc(ax, ay, p.radius, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(ax, ay, p.radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  });
+
+  // Draw Enemies
+  enemies.forEach(e => e.draw(camX, camY));
+
+  // Draw Player
+  player.draw(camX, camY);
+
+  // Draw Damage Texts
+  damageTexts.forEach(dt => {
+    const tx = dt.x - camX;
+    const ty = dt.y - camY;
+    ctx.font = 'bold 15px -apple-system, sans-serif';
+    ctx.fillStyle = dt.color;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.fillText(dt.text, tx, ty);
+    ctx.shadowBlur = 0;
+  });
+
+  ctx.restore();
+}
+
+// HUD UPDATES
+function updateHudStats() {
+  document.getElementById('killCount').textContent = killCount;
+  document.getElementById('goldCount').textContent = runGold;
+  
+  // HP Bar
+  const hpPct = Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100));
+  document.getElementById('hpBar').style.width = hpPct + '%';
+  document.getElementById('hpText').textContent = `${Math.ceil(player.hp)} / ${player.maxHp}`;
+
+  // XP Bar
+  const xpPct = Math.max(0, Math.min(100, (player.xp / player.xpNeeded) * 100));
+  document.getElementById('xpBar').style.width = xpPct + '%';
+  document.getElementById('lvlText').textContent = player.level;
+}
+
+function updateHudTime() {
+  const m = Math.floor(gameTime / 60);
+  const s = gameTime % 60;
+  const str = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  document.getElementById('runTimer').textContent = str;
+}
+
+function updateHudInventory() {
+  if (!player) return;
+  const row = document.getElementById('inventoryRow');
+  row.innerHTML = '';
+
+  // Weapons
+  for (const id in player.weapons) {
+    const w = player.weapons[id];
+    const slot = document.createElement('div');
+    slot.className = 'inv-slot';
+    slot.innerHTML = `${w.icon}<span class="lvl">${w.isEvo ? 'MAX' : 'v' + w.level}</span>`;
+    row.appendChild(slot);
+  }
+
+  // Passives
+  for (const id in player.passives) {
+    const p = player.passives[id];
+    const slot = document.createElement('div');
+    slot.className = 'inv-slot';
+    slot.innerHTML = `${p.icon}<span class="lvl">v${p.level}</span>`;
+    row.appendChild(slot);
+  }
+}
+
+// LEVEL UP MODAL
+function triggerLevelUp() {
+  state = 'levelup';
+  Sfx.lvl();
+
+  const container = document.getElementById('cardChoices');
+  container.innerHTML = '';
+
+  // Generate 3 choices
+  const pool = [];
+
+  // Check Evolution opportunities first!
+  for (const wId in player.weapons) {
+    const w = player.weapons[wId];
+    if (w.level >= 5 && !w.isEvo && w.evolution) {
+      if (player.passives[w.partner]) {
+        // Can evolve!
+        const evoDef = WEAPONS[w.evolution];
+        pool.unshift({
+          isEvolution: true,
+          oldWeapon: wId,
+          evoDef: evoDef
+        });
+      }
+    }
+  }
+
+  // Weapon upgrades or new weapons
+  const ownedWeaponsCount = Object.keys(player.weapons).length;
+  for (const wKey in WEAPONS) {
+    const w = WEAPONS[wKey];
+    if (w.isEvo) continue;
+    if (player.weapons[wKey]) {
+      if (player.weapons[wKey].level < 5 && !player.weapons[wKey].isEvo) {
+        pool.push({ type: 'weapon_upgrade', item: player.weapons[wKey] });
+      }
+    } else if (ownedWeaponsCount < 5) {
+      pool.push({ type: 'weapon_new', item: w });
+    }
+  }
+
+  // Passive upgrades or new passives
+  const ownedPassivesCount = Object.keys(player.passives).length;
+  for (const pKey in PASSIVES) {
+    const p = PASSIVES[pKey];
+    if (player.passives[pKey]) {
+      if (player.passives[pKey].level < 5) {
+        pool.push({ type: 'passive_upgrade', item: player.passives[pKey] });
+      }
+    } else if (ownedPassivesCount < 5) {
+      pool.push({ type: 'passive_new', item: p });
+    }
+  }
+
+  // Shuffle & pick 3
+  const shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+  // If pool was empty (all maxed), offer gold heal
+  if (shuffled.length === 0) {
+    shuffled.push({
+      type: 'gold_heal',
+      item: { name: 'Goldbeutel & Braten', icon: '🍗🪙', desc: '+100 Gold und stellt 50 HP wieder her.' }
+    });
+  }
+
+  shuffled.forEach(choice => {
+    const card = document.createElement('div');
+    card.className = 'upgrade-card' + (choice.isEvolution ? ' evolution' : '');
+
+    let icon = '';
+    let name = '';
+    let tier = 'NEU';
+    let desc = '';
+
+    if (choice.isEvolution) {
+      icon = choice.evoDef.icon;
+      name = choice.evoDef.name;
+      tier = '⚡ EVOLUTION';
+      desc = choice.evoDef.desc;
+    } else if (choice.type === 'weapon_upgrade') {
+      icon = choice.item.icon;
+      name = choice.item.name;
+      tier = `Stufe ${choice.item.level + 1}`;
+      desc = `Erhöht Schaden & Angriffsreichweite von ${choice.item.name}.`;
+    } else if (choice.type === 'weapon_new') {
+      icon = choice.item.icon;
+      name = choice.item.name;
+      tier = 'NEUE WAFFE';
+      desc = choice.item.desc;
+    } else if (choice.type === 'passive_upgrade') {
+      icon = choice.item.icon;
+      name = choice.item.name;
+      tier = `Stufe ${choice.item.level + 1}`;
+      desc = choice.item.desc;
+    } else if (choice.type === 'passive_new') {
+      icon = choice.item.icon;
+      name = choice.item.name;
+      tier = 'PASSIVES ARTEFAKT';
+      desc = choice.item.desc;
+    } else if (choice.type === 'gold_heal') {
+      icon = '🍗';
+      name = 'Großer Schmaus';
+      tier = 'HEILUNG';
+      desc = '+50 HP und +100 Bonusgold.';
+    }
+
+    card.innerHTML = `
+      <div class="card-icon">${icon}</div>
+      <div class="card-info">
+        <div class="card-header">
+          <div class="card-name">${name}</div>
+          <div class="card-tier">${tier}</div>
+        </div>
+        <div class="card-desc">${desc}</div>
+      </div>
+    `;
+
+    card.onclick = () => {
+      applyChoice(choice);
+      document.getElementById('levelUpModal').classList.remove('active');
+      state = 'playing';
+    };
+
+    container.appendChild(card);
+  });
+
+  document.getElementById('levelUpModal').classList.add('active');
+}
+
+function applyChoice(choice) {
+  if (choice.isEvolution) {
+    // Delete old weapon, add evolved
+    delete player.weapons[choice.oldWeapon];
+    player.weapons[choice.evoDef.id] = { ...choice.evoDef, level: 5, timer: 0 };
+    Sfx.lvl();
+    spawnDamageText(player.x, player.y - 40, 'WAFFE EVOLVIERT!', '#fbbf24');
+    updateHudInventory();
+  } else if (choice.type === 'weapon_upgrade' || choice.type === 'weapon_new') {
+    player.addWeapon(choice.item.id);
+  } else if (choice.type === 'passive_upgrade' || choice.type === 'passive_new') {
+    player.addPassive(choice.item.id);
+  } else if (choice.type === 'gold_heal') {
+    player.hp = Math.min(player.maxHp, player.hp + 50);
+    runGold += 100;
+    saveState.gold += 100;
+    Sfx.coin();
+  }
+}
+
+// CHEST REWARD MODAL
+function openChestModal(isFinalBoss) {
+  state = 'chest';
+  const modal = document.getElementById('chestModal');
+  const list = document.getElementById('chestRewardsList');
+  list.innerHTML = '';
+
+  const bonusGold = isFinalBoss ? 1000 : 250;
+  runGold += bonusGold;
+  saveState.gold += bonusGold;
+
+  document.getElementById('chestRewardSubtitle').textContent = `+${bonusGold} Gold & mächtige Upgrades erbeutet!`;
+
+  // Random free weapon or passive upgrade
+  const upgradeTargets = [...Object.values(player.weapons).filter(w => w.level < 5 && !w.isEvo), ...Object.values(player.passives).filter(p => p.level < 5)];
+  if (upgradeTargets.length > 0) {
+    const target = upgradeTargets[Math.floor(Math.random() * upgradeTargets.length)];
+    if (target.type === 'weapon') {
+      player.addWeapon(target.id);
+    } else {
+      player.addPassive(target.id);
+    }
+    const itemEl = document.createElement('div');
+    itemEl.className = 'upgrade-card';
+    itemEl.innerHTML = `
+      <div class="card-icon">${target.icon}</div>
+      <div class="card-info">
+        <div class="card-name">${target.name} auf Stufe ${target.level} aufgewertet!</div>
+        <div class="card-desc">Kostenlose Verbesserung durch Schatztruhe.</div>
+      </div>
+    `;
+    list.appendChild(itemEl);
+  }
+
+  modal.classList.add('active');
+
+  document.getElementById('closeChestBtn').onclick = () => {
+    modal.classList.remove('active');
+    if (isFinalBoss) {
+      triggerGameOver(true);
+    } else {
+      state = 'playing';
+    }
+  };
+}
+
+// GAME OVER / VICTORY
+function triggerGameOver(victory) {
+  state = 'gameover';
+  Sfx.gameover();
+
+  // Save stats
+  if (gameTime > saveState.bestTime) {
+    saveState.bestTime = gameTime;
+  }
+  saveProgress();
+
+  const modal = document.getElementById('gameOverModal');
+  document.getElementById('endEmoji').textContent = victory ? '👑🏆' : '💀';
+  document.getElementById('endTitle').textContent = victory ? 'SIEG! DER LICHKÖNIG IST BESIEGT!' : 'DU BIST GEFALLEN';
+  document.getElementById('endSubtitle').textContent = victory 
+    ? 'Du hast die Gruft gesäubert und das Licht in die Dunkelheit gebracht!' 
+    : 'Die Horden haben dich überwältigt. Verstärke dich am Lagerfeuer!';
+
+  const m = Math.floor(gameTime / 60);
+  const s = gameTime % 60;
+  document.getElementById('statTime').textContent = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  document.getElementById('statKills').textContent = killCount;
+  document.getElementById('statLvl').textContent = player.level;
+  document.getElementById('statGold').textContent = `+${runGold} 🪙`;
+
+  const bm = Math.floor(saveState.bestTime / 60);
+  const bs = saveState.bestTime % 60;
+  document.getElementById('statBestTime').textContent = `${bm < 10 ? '0' : ''}${bm}:${bs < 10 ? '0' : ''}${bs}`;
+
+  modal.classList.add('active');
+}
+
+// START GAME RUN
+function startRun() {
+  document.getElementById('startModal').classList.remove('active');
+  document.getElementById('gameOverModal').classList.remove('active');
+
+  player = new Player(selectedHero);
+  enemies = [];
+  projectiles = [];
+  gems = [];
+  breakables = [];
+  damageTexts = [];
+  gameTime = 0;
+  frameCount = 0;
+  killCount = 0;
+  runGold = 0;
+  for (const k in bossSpawned) delete bossSpawned[k];
+
+  updateHudStats();
+  updateHudTime();
+  updateHudInventory();
+
+  state = 'playing';
+}
+
+// UI & EVENT HANDLERS
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Escape') togglePause();
+});
+window.addEventListener('keyup', e => {
+  keys[e.code] = false;
+});
+
+// Pause handlers
+function togglePause() {
+  if (state === 'playing') {
+    state = 'paused';
+    document.getElementById('pauseModal').classList.add('active');
+  } else if (state === 'paused') {
+    state = 'playing';
+    document.getElementById('pauseModal').classList.remove('active');
+  }
+}
+document.getElementById('pauseBtn').onclick = togglePause;
+document.getElementById('resumeBtn').onclick = togglePause;
+document.getElementById('quitRunBtn').onclick = () => {
+  document.getElementById('pauseModal').classList.remove('active');
+  triggerGameOver(false);
+};
+
+// Retry & Menu
+document.getElementById('retryBtn').onclick = () => {
+  document.getElementById('gameOverModal').classList.remove('active');
+  startRun();
+};
+document.getElementById('menuBtn').onclick = () => {
+  document.getElementById('gameOverModal').classList.remove('active');
+  openLobby();
+};
+document.getElementById('startGameBtn').onclick = startRun;
+
+// Tabs
+const tabHeroBtn = document.getElementById('tabHeroBtn');
+const tabArmoryBtn = document.getElementById('tabArmoryBtn');
+const heroSection = document.getElementById('heroSection');
+const armorySection = document.getElementById('armorySection');
+
+tabHeroBtn.onclick = () => {
+  tabHeroBtn.className = 'btn-primary';
+  tabArmoryBtn.className = 'btn-secondary';
+  heroSection.style.display = 'block';
+  armorySection.style.display = 'none';
+};
+tabArmoryBtn.onclick = () => {
+  tabArmoryBtn.className = 'btn-primary';
+  tabHeroBtn.className = 'btn-secondary';
+  heroSection.style.display = 'none';
+  armorySection.style.display = 'block';
+  renderArmory();
+};
+document.getElementById('backToHeroesBtn').onclick = () => tabHeroBtn.click();
+
+function openLobby() {
+  state = 'menu';
+  document.getElementById('menuGold').textContent = saveState.gold;
+  renderHeroes();
+  document.getElementById('startModal').classList.add('active');
+}
+
+function renderHeroes() {
+  const grid = document.getElementById('heroGrid');
+  grid.innerHTML = '';
+
+  HEROES.forEach(h => {
+    const isUnlocked = h.id === 'paladin' || (h.unlockCheck && h.unlockCheck()) || saveState.unlockedHeroes.includes(h.id);
+    if (isUnlocked && !saveState.unlockedHeroes.includes(h.id)) {
+      saveState.unlockedHeroes.push(h.id);
+      saveProgress();
+    }
+
+    const card = document.createElement('div');
+    card.className = 'hero-card' + (selectedHero.id === h.id ? ' selected' : '') + (!isUnlocked ? ' locked' : '');
+
+    card.innerHTML = `
+      <div class="hero-avatar">${h.avatar}</div>
+      <div class="hero-name">${h.name}</div>
+      <div class="hero-trait">${h.role} • ${WEAPONS[h.weapon].icon} ${WEAPONS[h.weapon].name}</div>
+      <div class="hero-sub">${isUnlocked ? h.desc : '🔒 ' + h.reqText}</div>
+    `;
+
+    if (isUnlocked) {
+      card.onclick = () => {
+        selectedHero = h;
+        renderHeroes();
+      };
+    }
+
+    grid.appendChild(card);
+  });
+}
+
+function renderArmory() {
+  const list = document.getElementById('armoryList');
+  list.innerHTML = '';
+  document.getElementById('menuGold').textContent = saveState.gold;
+
+  ARMORY_DATA.forEach(u => {
+    const rank = saveState.upgrades[u.id] || 0;
+    const isMax = rank >= u.max;
+    const cost = Math.round(u.baseCost * Math.pow(u.costMult, rank));
+
+    const item = document.createElement('div');
+    item.className = 'armory-item';
+
+    let pips = '';
+    for (let i = 0; i < u.max; i++) {
+      pips += `<div class="armory-pip ${i < rank ? 'filled' : ''}"></div>`;
+    }
+
+    item.innerHTML = `
+      <div class="armory-left">
+        <div class="armory-icon">${u.icon}</div>
+        <div>
+          <div class="armory-title">${u.name} (Rang ${rank}/${u.max})</div>
+          <div class="armory-desc">${u.desc}</div>
+          <div class="armory-pips">${pips}</div>
+        </div>
+      </div>
+      <div>
+        <button class="buy-btn" ${isMax || saveState.gold < cost ? 'disabled' : ''}>
+          ${isMax ? 'MAX' : `${cost} 🪙`}
+        </button>
+      </div>
+    `;
+
+    const btn = item.querySelector('.buy-btn');
+    if (!isMax && saveState.gold >= cost) {
+      btn.onclick = () => {
+        saveState.gold -= cost;
+        saveState.upgrades[u.id] = (saveState.upgrades[u.id] || 0) + 1;
+        saveProgress();
+        Sfx.coin();
+        renderArmory();
+      };
+    }
+
+    list.appendChild(item);
+  });
+}
+
+// Touch joystick support for Mobile
+const joyZone = document.getElementById('joystickZone');
+const joyKnob = document.getElementById('joystickKnob');
+
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+  joyZone.style.display = 'block';
+
+  joyZone.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = joyZone.getBoundingClientRect();
+    joystick.active = true;
+    joystick.startX = rect.left + rect.width / 2;
+    joystick.startY = rect.top + rect.height / 2;
+    handleJoyMove(touch.clientX, touch.clientY);
+  }, { passive: false });
+
+  window.addEventListener('touchmove', e => {
+    if (!joystick.active) return;
+    const touch = e.touches[0];
+    handleJoyMove(touch.clientX, touch.clientY);
+  }, { passive: false });
+
+  window.addEventListener('touchend', () => {
+    joystick.active = false;
+    joystick.x = 0;
+    joystick.y = 0;
+    joyKnob.style.transform = `translate(-50%, -50%)`;
+  });
+
+  function handleJoyMove(clientX, clientY) {
+    const dx = clientX - joystick.startX;
+    const dy = clientY - joystick.startY;
+    const maxR = 45;
+    const dist = Math.hypot(dx, dy);
+    const clampedDist = Math.min(maxR, dist);
+    const ang = Math.atan2(dy, dx);
+    const kx = Math.cos(ang) * clampedDist;
+    const ky = Math.sin(ang) * clampedDist;
+
+    joyKnob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+    joystick.x = kx / maxR;
+    joystick.y = ky / maxR;
+  }
+}
+
+// Init
+openLobby();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

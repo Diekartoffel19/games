@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Backpack Gladiator</title>
+<title>Backpack Gladiator — Grid-Autobattler</title>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.lucius-website.xyz/script.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script defer src="https://umami.lucius-website.xyz/recorder.js" data-website-id="9d0997fa-7e37-41fa-beb7-d5b67a386b57"></script>
+<script src="../src/arcade-core.js"></script>
 <style>
   :root {
     --bg: #17141f; --panel: #231f31; --panel2: #2d2840; --line: #3d3657;
@@ -97,11 +101,26 @@
     .cell { width: 70px; height: 70px; font-size: 32px; }
     #detail { width: 100%; }
   }
+  .hl { outline: 3px solid #fff; outline-offset: 2px; animation: hlp 1s infinite; position: relative; z-index: 2; }
+  @keyframes hlp { 50% { outline-color: var(--gold); box-shadow: 0 0 16px var(--gold); } }
+  #coach {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(580px, calc(100vw - 24px));
+    background: var(--panel); border: 2px solid var(--gold); border-radius: 12px; padding: 12px 14px; z-index: 40;
+    box-shadow: 0 8px 30px rgba(0,0,0,.65); font-size: 15px; line-height: 1.5;
+  }
+  #coach.hide { display: none; }
+  #coach b { color: var(--accent); }
+  #coach .top { display: flex; justify-content: space-between; color: var(--dim); font-size: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+  #coach .top a { color: var(--dim); cursor: pointer; }
+  #coach .btns { display: flex; justify-content: flex-end; margin-top: 10px; }
+  body.tut { padding-bottom: 190px; }
 </style>
 </head>
 <body>
+<a href="../index.html" style="position:fixed;top:10px;right:12px;z-index:50;color:#ece8f5;text-decoration:none;font:600 14px 'Segoe UI',system-ui,sans-serif;background:rgba(35,31,49,.92);border:1px solid #3d3657;padding:6px 12px;border-radius:18px">‹ Arcade</a>
 <header>
   <h1>🎒 Backpack Gladiator</h1>
+  <button class="sec" id="tutBtn">❓ Tutorial</button>
   <div class="stats">
     <span id="sRound"></span><span id="sGold"></span><span id="sLives"></span><span id="sBest"></span>
   </div>
@@ -113,6 +132,11 @@
     <div id="detail"></div>
   </div>
   <div class="panel" id="side"></div>
+  <div id="coach" class="hide">
+    <div class="top"><span id="coachTop"></span><a id="coachSkip">Überspringen ✕</a></div>
+    <div id="coachBody"></div>
+    <div class="btns"><button id="coachNext"></button></div>
+  </div>
 </div>
 
 <script>
@@ -162,7 +186,9 @@ const $ = id => document.getElementById(id);
 const G = {};
 let timer = null;
 
-function newRun() {
+function newRun(tut) {
+  clearInterval(timer);
+  G.tut = tut ? 0 : null; G.tutHover = false;
   G.round = 1; G.gold = 10; G.lives = 3;
   G.grid = Array(GRID_N).fill(null);
   G.grid[5] = 'dolch';
@@ -176,6 +202,7 @@ function loadBest() { try { return +localStorage.getItem('bgBest') || 0; } catch
 function saveBest(v) { try { localStorage.setItem('bgBest', v); } catch (e) {} }
 
 function rollShop() {
+  if (G.tut != null) { G.shop = TUT_SHOP.slice(); return; }
   G.shop = Array.from({ length: 5 }, () => ITEM_IDS[Math.floor(Math.random() * ITEM_IDS.length)]);
 }
 
@@ -229,6 +256,7 @@ function render() {
   renderGrid();
   if (G.fight) renderBattle();
   else renderShop();
+  tutUpdate();
   showDetail(null);
 }
 
@@ -254,6 +282,7 @@ function clearAdj() { document.querySelectorAll('.cell.adj').forEach(c => c.clas
 function hoverCell(i) {
   clearAdj();
   neighbors(i).forEach(n => $('grid').children[n].classList.add('adj'));
+  if (G.tut === 3 && !G.tutHover && G.grid[i] === 'dolch') { G.tutHover = true; tutUpdate(); }
   if (G.grid[i]) showDetail({ id: G.grid[i], idx: i });
   else showDetail(null);
 }
@@ -304,6 +333,7 @@ function renderShop() {
     shop.appendChild(c);
   });
   $('reroll').onclick = () => {
+    if (G.tut != null) return toast('Im Tutorial gesperrt.');
     if (G.gold < 1) return toast('Zu wenig Gold.');
     G.gold--; rollShop(); G.sel = null; render();
   };
@@ -313,6 +343,7 @@ function renderShop() {
 function clickShop(i) {
   const id = G.shop[i];
   if (!id) return;
+  if (G.tut != null && TUT_BUY[G.tut] !== i) { toast('Folge erst der Anleitung 😉'); return; }
   if (G.gold < ITEMS[id].cost) { toast('Zu wenig Gold.'); return; }
   G.sel = G.sel && G.sel.src === 'shop' && G.sel.i === i ? null : { src: 'shop', i };
   render();
@@ -321,6 +352,7 @@ function clickShop(i) {
 
 function clickCell(i) {
   if (G.fight) return;
+  if (G.tut === 3 && G.grid[i] === 'dolch') G.tutHover = true;
   const sel = G.sel;
   if (!sel) {
     if (G.grid[i]) { G.sel = { src: 'grid', i }; render(); }
@@ -375,6 +407,7 @@ function makeEnemy(r) {
 // ---------- Kampf ----------
 
 function startFight() {
+  if (G.tut != null && G.tut < 5) { toast('Erst die Anleitung beenden – oder überspringen.'); return; }
   const idx = G.grid.map((id, i) => id ? i : -1).filter(i => i >= 0);
   const active = idx.filter(i => ['weapon', 'poison'].includes(ITEMS[G.grid[i]].type));
   if (!active.length) { toast('Du brauchst mindestens eine Waffe oder ein Giftitem.'); return; }
@@ -519,9 +552,10 @@ function renderBattle() {
   const nb = $('nextBtn');
   if (nb) nb.onclick = nextRound;
   const ab = $('againBtn');
-  if (ab) ab.onclick = newRun;
+  if (ab) ab.onclick = () => newRun();
   updateBattle();
   $('sLives').textContent = '❤️'.repeat(Math.max(G.lives, 0)) || '💀';
+  tutUpdate();
   $('sBest').textContent = `Best: Runde ${G.best}`;
 }
 
@@ -545,6 +579,7 @@ function updateBattle() {
 }
 
 function nextRound() {
+  if (G.tut != null) tutEnd();
   const won = G.fight.done === 'win';
   if (won) {
     G.gold += G.fight.gain;
@@ -555,7 +590,92 @@ function nextRound() {
   render();
 }
 
-newRun();
+// ---------- Tutorial ----------
+
+const TUT_SHOP = ['wetzstein', 'schild', 'trank', 'kraut', 'giftstein'];
+const TUT_BUY = { 1: 0, 2: 0, 4: 1 }; // Tutorial-Schritt -> erlaubter Shop-Slot
+const cellSel = i => `#grid .cell:nth-child(${i + 1})`;
+const shopSel = i => `#shop .card:nth-child(${i + 1})`;
+const emptySel = () => G.grid.map((id, i) => id ? null : cellSel(i)).filter(Boolean);
+const wetzOk = () => {
+  const w = G.grid.indexOf('wetzstein'), d = G.grid.indexOf('dolch');
+  return w >= 0 && d >= 0 && neighbors(d).includes(w);
+};
+
+const TUT = [
+  { btn: "Los geht's",
+    html: () => `<b>Willkommen, Gladiator!</b><br>Du hast 60 ❤️ und einen Rucksack mit 4×4 Feldern. Im Kampf lösen deine Items <b>von selbst</b> aus, sobald ihr Balken voll ist. Du baust, die Items kämpfen. Überlebe 10 Runden!` },
+  { ok: () => G.grid.includes('wetzstein') || (G.sel && G.sel.src === 'shop' && G.sel.i === 0),
+    html: () => `<b>Schritt 1 – Kaufen.</b><br>Dein Dolch 🗡️ liegt schon im Rucksack. Klicke im Shop auf den <b>Wetzstein 🔪</b> (4💰).`,
+    hl: () => [shopSel(0)] },
+  { ok: wetzOk,
+    html: () => G.grid.includes('wetzstein')
+      ? `Der Wetzstein liegt noch nicht <b>direkt</b> neben dem Dolch. Klicke ihn an, dann ein leuchtendes Feld neben dem Dolch.`
+      : G.sel
+        ? `<b>Schritt 2 – Platzieren.</b><br>Klicke ein <b>leuchtendes Feld</b> direkt neben dem Dolch. Nur Kanten zählen (oben/unten/links/rechts), keine Diagonalen!`
+        : `Wähle den Wetzstein im Shop erneut aus.`,
+    hl: () => {
+      const d = G.grid.indexOf('dolch'), w = G.grid.indexOf('wetzstein');
+      if (w < 0 && !G.sel) return [shopSel(0)];
+      const r = neighbors(d).filter(n => !G.grid[n]).map(cellSel);
+      if (w >= 0) r.push(cellSel(w));
+      return r;
+    } },
+  { ok: () => G.tutHover,
+    html: () => {
+      const d = G.grid.indexOf('dolch');
+      return `<b>Schritt 3 – Synergie.</b><br>Der Wetzstein kämpft nicht selbst, gibt aber <b>Nachbar-Klingen +3 Schaden</b>. Fahre mit der Maus über den Dolch (am Handy: antippen): statt 4 siehst du jetzt <b>${effAt(G.grid, d).dmg}</b> Schaden. Blau = Nachbarn.`;
+    },
+    hl: () => [cellSel(G.grid.indexOf('dolch'))] },
+  { ok: () => G.grid.includes('schild'),
+    html: () => `<b>Schritt 4 – Verteidigung.</b><br>Kaufe das <b>Schild 🛡️</b> und lege es auf ein freies Feld. Es gibt <b>Block</b>, der Schaden schluckt, aber um 1 pro Sekunde zerfällt. Gift ☠️ ignoriert Block.`,
+    hl: () => G.sel && G.sel.src === 'shop' ? emptySel() : [shopSel(1)] },
+  { ok: () => !!G.fight,
+    html: () => `<b>Schritt 5 – Kampf!</b><br>Mehr brauchst du für Runde 1 nicht. Items lassen sich später verschieben (anklicken, dann Zielfeld) oder verkaufen. Starte den Kampf!`,
+    hl: () => ['#fightBtn'] },
+  { ok: () => G.fight && G.fight.done,
+    html: () => `<b>Der Kampf läuft.</b><br>Oben der Gegner, unten du. Die <b>hellen Balken auf deinen Items</b> sind die Abklingzeit: voll = Item löst aus. Rot = Schaden, grün = Heilung, 🛡 = geblockt. Mit <b>Tempo 2×/4×</b> geht es schneller.`,
+    hl: () => ['.spd'] },
+  { btn: 'Tutorial beenden',
+    html: () => `${G.fight && G.fight.done === 'win' ? '<b>Sieg!</b> Dafür gibt es 7💰.' : '<b>Niederlage – kein Drama.</b> Du verlierst 1 ❤️ und baust um.'}<br>
+      • 10 Runden, 3 Leben, Boss in Runde 5 und 10<br>
+      • Item anklicken → <i>Verkaufen</i> bringt den halben Preis<br>
+      • Neu würfeln kostet 1💰<br>
+      • Kombos: Giftstein + Giftpilz, Uhrwerk beschleunigt Nachbarn, Blutkelch + Waffe heilt dich` },
+];
+
+function tutSeen() { try { return !!localStorage.getItem('bgTut'); } catch (e) { return true; } }
+
+function tutEnd() {
+  G.tut = null;
+  try { localStorage.setItem('bgTut', '1'); } catch (e) {}
+  tutUpdate();
+}
+
+function tutUpdate() {
+  const el = $('coach');
+  document.querySelectorAll('.hl').forEach(n => n.classList.remove('hl'));
+  if (G.tut == null) { el.classList.add('hide'); document.body.classList.remove('tut'); return; }
+  for (let guard = 0; guard < 10 && TUT[G.tut].ok && TUT[G.tut].ok(); guard++) G.tut++;
+  const s = TUT[G.tut];
+  $('coachTop').textContent = `Tutorial ${G.tut + 1}/${TUT.length}`;
+  $('coachBody').innerHTML = s.html();
+  $('coachNext').style.display = s.btn ? '' : 'none';
+  if (s.btn) $('coachNext').textContent = s.btn;
+  el.classList.remove('hide'); document.body.classList.add('tut');
+  if (s.hl) s.hl().forEach(sel => document.querySelectorAll(sel).forEach(n => n.classList.add('hl')));
+}
+
+$('coachNext').onclick = () => { if (G.tut === TUT.length - 1) tutEnd(); else { G.tut++; tutUpdate(); } };
+$('coachSkip').onclick = tutEnd;
+$('tutBtn').onclick = () => {
+  if ((G.fight && !G.fight.done) || G.round > 1 || G.grid.filter(Boolean).length > 1) {
+    if (!confirm('Neuen Run mit Tutorial starten? Dein aktueller Run geht verloren.')) return;
+  }
+  newRun(true);
+};
+
+newRun(!tutSeen());
 </script>
 </body>
 </html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Pigeon Post — Chaos Courier</title>
+<meta name="description" content="Flieg als Kurier-Taube durch die Stadt, sammle Briefe und weiche frechen Krähen und Wolkenkratzern aus!">
+<meta name="theme-color" content="#10182a">
+<link rel="stylesheet" href="../style.css">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<style>
+  body{background:#10182a;color:#f1f5f9;min-height:100vh;padding:24px 12px;font-family:system-ui,sans-serif;touch-action:manipulation}
+  .back{position:fixed;top:14px;left:14px}.wrap{width:min(860px,100%);margin:34px auto 0}
+  h1{font-size:clamp(1.6rem,5vw,2.5rem);margin:0;color:#f8fafc}.intro{color:#aab7cb;margin:6px 0 16px}
+  .hud{display:flex;justify-content:space-between;gap:10px;max-width:760px;margin:auto;padding:0 4px 10px;color:#cbd5e1;font-weight:750}
+  .hud b{color:#fbbf24}.frame{position:relative;max-width:760px;margin:auto;border:1px solid #34445f;border-radius:18px;overflow:hidden;box-shadow:0 18px 60px #0008;background:#8dd8f4}
+  canvas{display:block;width:100%;height:auto;margin:0;border:0;border-radius:0;background:#8dd8f4;touch-action:none}
+  .overlay{position:absolute;inset:0;display:grid;place-items:center;background:#10182a9c;padding:20px;text-align:center}
+  .panel{max-width:390px;background:#111827ed;border:1px solid #ffffff26;border-radius:20px;padding:24px;box-shadow:0 12px 40px #0006}
+  .panel h2{font-size:1.8rem;margin:0 0 8px}.panel p{color:#cbd5e1;line-height:1.5;margin:0 0 18px}
+  button{border:0;border-radius:12px;padding:12px 22px;background:#fbbf24;color:#211600;font:800 1rem system-ui;cursor:pointer;touch-action:manipulation}
+  .help{color:#aab7cb;font-size:.9rem;margin:12px 0}.touch{display:none;justify-content:center;gap:16px;margin:12px auto}
+  .touch button{width:72px;height:54px;padding:0;background:#263650;color:#fff;border:1px solid #ffffff25;font-size:1.3rem}
+  @media(max-width:700px){.touch{display:flex}.wrap{margin-top:46px}}
+</style>
+</head>
+<body>
+<a class="back" href="../index.html">← Zurück</a>
+<main class="wrap">
+  <h1>🐦 Pigeon Post</h1>
+  <p class="intro">Die schnellste Taube der Stadt. Der pünktlichste Brief? Eher nicht.</p>
+  <div class="hud"><span>✉️ Post: <b id="score">0</b></span><span>⏱️ <b id="time">45</b>s</span><span>🏆 Rekord: <b id="best">0</b></span></div>
+  <div class="frame">
+    <canvas id="game" width="760" height="500" aria-label="Pigeon Post Spiel"></canvas>
+    <div class="overlay" id="overlay"><div class="panel"><h2 id="title">Pigeon Post</h2><p id="message">Sammle Briefe, schnapp dir Donuts für Bonuspunkte und weich Krähen und Gewitterwolken aus. Du hast 45 Sekunden!</p><button id="start">Losflattern!</button></div></div>
+  </div>
+  <div class="touch"><button id="left" aria-label="Links">◀</button><button id="right" aria-label="Rechts">▶</button></div>
+  <p class="help">Steuerung: ← → oder A / D · Leertaste = Flügelschlag-Boost · Auf dem Handy die Pfeile halten</p>
+</main>
+<script>
+(() => {
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d'), W=canvas.width,H=canvas.height;
+  const overlay=document.getElementById('overlay'), scoreEl=document.getElementById('score'), timeEl=document.getElementById('time'), bestEl=document.getElementById('best');
+  const best=()=>window.ArcadeCore?Number(ArcadeCore.getScore('pigeonpost')||0):Number(localStorage.getItem('pigeonpost-best')||0);
+  bestEl.textContent=best();
+  let running=false,score=0,time=45,last=0,spawn=0,boost=0,player={x:W/2,y:H-88,vx:0},items=[],keys={},skyline=[];
+  for(let x=0;x<W;x+=38) skyline.push({x,w:24+Math.random()*28,h:55+Math.random()*105,win:Math.random()});
+  const start=()=>{score=0;time=45;spawn=0;boost=0;items=[];player={x:W/2,y:H-88,vx:0};scoreEl.textContent=0;timeEl.textContent=45;overlay.hidden=true;overlay.style.display='none';running=true;last=performance.now();requestAnimationFrame(loop)};
+  function addItem(){let kind=Math.random()<.68?'letter':Math.random()<.52?'donut':'crow';items.push({x:35+Math.random()*(W-70),y:-30,kind,v:100+Math.random()*95,spin:Math.random()*6})}
+  function draw(){
+    let g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#78c8f0');g.addColorStop(1,'#e5f8fc');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#ffffff90';for(let i=0;i<4;i++){let x=(i*230+40-(performance.now()/70)%900+900)%900-70,y=55+i%2*55;ctx.beginPath();ctx.arc(x,y,22,0,7);ctx.arc(x+25,y-10,28,0,7);ctx.arc(x+54,y,20,0,7);ctx.fill()}
+    ctx.fillStyle='#52647b';skyline.forEach((b,i)=>{ctx.fillRect(b.x,H-b.h,b.w,b.h);ctx.fillStyle='#f8d982';for(let yy=H-b.h+12;yy<H-8;yy+=18)for(let xx=b.x+7;xx<b.x+b.w-3;xx+=13)if((xx+yy+i)%3)ctx.fillRect(xx,yy,5,7);ctx.fillStyle='#52647b'});
+    ctx.fillStyle='#475569';ctx.fillRect(0,H-23,W,23);ctx.fillStyle='#fbbf24';for(let x=0;x<W;x+=80)ctx.fillRect(x,H-14,38,4);
+    items.forEach(it=>{ctx.save();ctx.translate(it.x,it.y);ctx.rotate(Math.sin(it.spin)*.16);if(it.kind==='letter'){ctx.fillStyle='#fffaf0';ctx.fillRect(-13,-10,26,20);ctx.strokeStyle='#e8a34b';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-12,-9);ctx.lineTo(0,1);ctx.lineTo(12,-9);ctx.stroke();ctx.fillStyle='#ef6a55';ctx.fillRect(5,-8,5,5)}else if(it.kind==='donut'){ctx.fillStyle='#ec8e5c';ctx.beginPath();ctx.arc(0,0,14,0,7);ctx.fill();ctx.fillStyle='#f8c9db';ctx.beginPath();ctx.arc(0,0,10,0,7);ctx.fill();ctx.fillStyle='#9b644b';ctx.beginPath();ctx.arc(0,0,4,0,7);ctx.fill()}else{ctx.fillStyle='#202735';ctx.beginPath();ctx.ellipse(0,0,19,12,0,0,7);ctx.fill();ctx.beginPath();ctx.moveTo(-14,0);ctx.lineTo(-28,-9);ctx.lineTo(-22,3);ctx.fill();ctx.fillStyle='#f97316';ctx.beginPath();ctx.moveTo(17,-3);ctx.lineTo(27,0);ctx.lineTo(17,3);ctx.fill();ctx.fillStyle='white';ctx.beginPath();ctx.arc(8,-5,3,0,7);ctx.fill()}ctx.restore()});
+    ctx.save();ctx.translate(player.x,player.y);if(player.vx<0)ctx.scale(-1,1);ctx.font='46px serif';ctx.textAlign='center';ctx.fillText(boost>0?'🕊️':'🐦',0,14);if(boost>0){ctx.fillStyle='#fbbf2488';ctx.beginPath();ctx.ellipse(-4,20,26,6,0,0,7);ctx.fill()}ctx.restore();
+  }
+  function finish(){running=false;let record=Math.max(score,best());if(window.ArcadeCore)ArcadeCore.saveScore('pigeonpost',record);else localStorage.setItem('pigeonpost-best',record);bestEl.textContent=record;document.getElementById('title').textContent=score>=record&&score>0?'🏆 Neuer Rekord!':'Schicht vorbei!';document.getElementById('message').textContent=`Zustellungen: ${score}. ${score>20?'Die Stadt dankt dir. Die Fensterbank eher nicht.':'Morgen gibt’s noch eine Runde!'}`;document.getElementById('start').textContent='Nochmal fliegen';overlay.hidden=false;overlay.style.display='grid'}
+  function loop(now){if(!running)return;let dt=Math.min((now-last)/1000,.04);last=now;time-=dt;if(time<=0){time=0;timeEl.textContent=0;draw();finish();return}timeEl.textContent=Math.ceil(time);spawn-=dt;if(spawn<=0){addItem();spawn=Math.max(.27,.78-score*.004)}
+    let dir=(keys.right?1:0)-(keys.left?1:0);player.vx+=(dir*430-player.vx)*Math.min(1,dt*7);if(keys.boost&&boost<=0)boost=.5;if(boost>0){player.x+=player.vx*dt*2.15;boost-=dt}else player.x+=player.vx*dt;player.x=Math.max(30,Math.min(W-30,player.x));
+    for(let i=items.length-1;i>=0;i--){let it=items[i];it.y+=it.v*dt;it.spin+=dt*4;if(Math.abs(it.x-player.x)<31&&Math.abs(it.y-player.y)<31){if(it.kind==='letter'){score+=10;if(window.ArcadeCore)ArcadeCore.Sounds.coin()}else if(it.kind==='donut'){score+=25;if(window.ArcadeCore)ArcadeCore.Sounds.pop(1.4)}else{score=Math.max(0,score-15);player.x+=(player.x<it.x?-1:1)*45;if(window.ArcadeCore)ArcadeCore.Sounds.hit()}scoreEl.textContent=score;items.splice(i,1)}else if(it.y>H+30)items.splice(i,1)}
+    draw();requestAnimationFrame(loop)
+  }
+  document.getElementById('start').addEventListener('click',start);window.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight',' ','a','d','A','D'].includes(e.key))e.preventDefault();if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a')keys.left=true;if(e.key==='ArrowRight'||e.key.toLowerCase()==='d')keys.right=true;if(e.key===' ')keys.boost=true});window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a')keys.left=false;if(e.key==='ArrowRight'||e.key.toLowerCase()==='d')keys.right=false;if(e.key===' ')keys.boost=false});
+  for(const [id,key] of [['left','left'],['right','right']]){const b=document.getElementById(id);b.addEventListener('pointerdown',e=>{e.preventDefault();keys[key]=true;b.setPointerCapture(e.pointerId)});for(const ev of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(ev,()=>keys[key]=false)}
+  overlay.style.display='grid';draw();
+})();
+</script>
+</body>
+</html>

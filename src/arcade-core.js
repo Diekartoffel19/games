@@ -5,9 +5,10 @@
 
 const ArcadeCore = (() => {
   let audioCtx = null;
-  let muted = localStorage.getItem('arcade_sound_muted') === 'true';
+  let muted = typeof localStorage !== 'undefined' ? localStorage.getItem('arcade_sound_muted') === 'true' : false;
 
   function getAudioContext() {
+    if (typeof window === 'undefined') return null;
     if (!audioCtx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) audioCtx = new AudioCtx();
@@ -225,8 +226,16 @@ const ArcadeCore = (() => {
   function isMuted() { return muted; }
   function toggleMute() {
     muted = !muted;
-    localStorage.setItem('arcade_sound_muted', muted ? 'true' : 'false');
-    window.dispatchEvent(new CustomEvent('arcade_mute_changed', { detail: { muted } }));
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('arcade_sound_muted', muted ? 'true' : 'false');
+      } catch (e) {}
+    }
+    if (typeof window !== 'undefined' && typeof CustomEvent !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('arcade_mute_changed', { detail: { muted } }));
+      } catch (e) {}
+    }
     return muted;
   }
 
@@ -251,26 +260,48 @@ const ArcadeCore = (() => {
     'gettingoverit': 'gettingoverit_best',
     'securityguard': 'securityguard_score',
     'skytower': 'skytower_best',
-    'duckskate': 'duckskate-best'
+    'duckskate': 'duckskate-best',
+    'survivor': 'crypt_survivor_kills',
+    'spire': 'spire_cards_best',
+    'neondefense': 'cyber_defense_stars',
+    'doener': 'doener_highscore',
+    'wg_putzen': 'wg_putzen_highscore',
+    'cannon_sheep': 'cannon_sheep_best_dist',
+    'buerostuhl': 'buerostuhl_best_lap',
+    'schwarzfahrer': 'schwarzfahrer_highscore'
   };
 
   function getScore(gameKey) {
-    const storageKey = SCORE_KEYS[gameKey] || gameKey;
-    const val = localStorage.getItem(storageKey);
-    return val !== null ? Number(val) || val : null;
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      const storageKey = SCORE_KEYS[gameKey] || gameKey;
+      let val = localStorage.getItem(storageKey);
+      if (val === null && storageKey !== gameKey) {
+        val = localStorage.getItem(gameKey);
+      }
+      return val !== null ? Number(val) || val : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   function saveScore(gameKey, val) {
-    const storageKey = SCORE_KEYS[gameKey] || gameKey;
-    localStorage.setItem(storageKey, val);
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const storageKey = SCORE_KEYS[gameKey] || gameKey;
+      localStorage.setItem(storageKey, val);
+    } catch (e) {}
   }
 
   function getAllScores() {
     const scores = {};
-    for (const [k, sk] of Object.entries(SCORE_KEYS)) {
-      const v = localStorage.getItem(sk);
-      if (v !== null) scores[k] = v;
-    }
+    if (typeof localStorage === 'undefined') return scores;
+    try {
+      for (const [k, sk] of Object.entries(SCORE_KEYS)) {
+        const v = localStorage.getItem(sk);
+        if (v !== null) scores[k] = v;
+      }
+    } catch (e) {}
     return scores;
   }
 
@@ -285,6 +316,15 @@ const ArcadeCore = (() => {
   return {
     getAudioContext,
     sounds: Sounds,
+    playTone: Sounds.playTone,
+    pop: Sounds.pop,
+    merge: Sounds.merge,
+    coin: Sounds.coin,
+    jump: Sounds.jump,
+    hit: Sounds.hit,
+    powerup: Sounds.powerup,
+    explosion: Sounds.explosion,
+    gameOver: Sounds.gameOver,
     isMuted,
     toggleMute,
     getScore,
@@ -296,4 +336,7 @@ const ArcadeCore = (() => {
 
 if (typeof window !== 'undefined') {
   window.ArcadeCore = ArcadeCore;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = ArcadeCore;
 }

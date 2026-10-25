@@ -2544,10 +2544,12 @@ function executeShot(shooter, target) {
   updateHUD();
 
   const isPlayerShooter = shooter === 'player';
-  const targetIsSelf = (shooter === target);
+  // Correctly normalize target ('self' or shooter means shooting self)
+  const actualTarget = (target === 'self' || target === shooter) ? shooter : target;
+  const targetIsSelf = (actualTarget === shooter);
 
   // Aiming visual animation
-  if (target === 'dealer') {
+  if (actualTarget === 'dealer') {
     setGunAim('aim_dealer');
   } else {
     setGunAim('aim_player');
@@ -2564,17 +2566,27 @@ function executeShot(shooter, target) {
       audio.playShotgunBlast();
       gameState.muzzleFlash = 1.0;
       gameState.screenShake = 22;
-      createSmoke(target === 'dealer' ? 480 : 480, target === 'dealer' ? 180 : 380, 25, 4);
+      createSmoke(actualTarget === 'dealer' ? 480 : 480, actualTarget === 'dealer' ? 180 : 380, 25, 4);
 
-      if (target === 'dealer') {
+      if (actualTarget === 'dealer') {
         gameState.dealerHp -= damage;
         gameState.dealerHitFlinch = 18;
-        logMessage(`BOOM! ${isPlayerShooter ? 'Du triffst' : 'Dealer trifft'} den Dealer mit einer SCHARFEN Patrone! (-${damage} HP)`, 'danger');
-        setDealerSpeech("Guter Treffer... Aber mein Puls schlägt noch.");
+        if (targetIsSelf) {
+          logMessage(`BOOM! Dealer schießt sich selbst an! SCHARFE Patrone! (-${damage} HP)`, 'danger');
+          setDealerSpeech("Ein fataler Rechenfehler meinerseits...");
+        } else {
+          logMessage(`BOOM! Du triffst den Dealer mit einer SCHARFEN Patrone! (-${damage} HP)`, 'danger');
+          setDealerSpeech("Guter Treffer... Aber mein Puls schlägt noch.");
+        }
       } else {
         gameState.playerHp -= damage;
-        logMessage(`BOOM! SCHARFE Patrone trifft ${isPlayerShooter ? 'DICH' : 'den Dealer'}! (-${damage} HP)`, 'danger');
-        setDealerSpeech(isPlayerShooter ? "Ein tödlicher Fehler." : "Ich habe mich verzockt.");
+        if (targetIsSelf) {
+          logMessage(`BOOM! Du hast dich selbst mit einer SCHARFEN Patrone getroffen! (-${damage} HP)`, 'danger');
+          setDealerSpeech("Ein tödlicher Fehler. Dein Mut hat dich verlassen.");
+        } else {
+          logMessage(`BOOM! Dealer trifft DICH mit einer SCHARFEN Patrone! (-${damage} HP)`, 'danger');
+          setDealerSpeech("Volltreffer. Nichts Persönliches.");
+        }
       }
 
       checkWireCutCondition();
@@ -2603,9 +2615,9 @@ function executeShot(shooter, target) {
       if (targetIsSelf) {
         // SIGNATURE MECHANIC: Shooting yourself with a blank awards an EXTRA TURN!
         if (isPlayerShooter) gameState.gambitsWon++;
-        logMessage(`${isPlayerShooter ? 'Du hast' : 'Dealer hat'} auf sich selbst geschossen und überlebt: ZUSÄTZLICHER ZUG!`, 'highlight');
+        logMessage(`${isPlayerShooter ? 'Du hast' : 'Dealer hat'} auf sich selbst geschossen: BLIND! ZUSÄTZLICHER ZUG!`, 'highlight');
         showBanner("🔄 BLIND: EXTRA-ZUG ERHALTEN!", 2200);
-        setDealerSpeech(isPlayerShooter ? "Eiskalte Nerven. Du darfst noch einmal." : "Genau wie berechnet.");
+        setDealerSpeech(isPlayerShooter ? "Eiskalte Nerven. Du darfst noch einmal schießen." : "Genau wie berechnet. Ich bin noch einmal dran.");
 
         setTimeout(() => {
           setGunAim('table');
@@ -2624,7 +2636,8 @@ function executeShot(shooter, target) {
         }, 1200);
       } else {
         // Shot at opponent with blank -> Turn passes normally
-        setDealerSpeech("Nur eine leere Hülse.");
+        logMessage(`${isPlayerShooter ? 'Du schießt' : 'Dealer schießt'} auf ${actualTarget === 'dealer' ? 'den Dealer' : 'dich'}: BLIND! Keine Wirkung.`, 'highlight');
+        setDealerSpeech("Nur eine leere Hülse. Jetzt wechselt der Zug.");
         setTimeout(() => {
           setGunAim('table');
           gameState.sawedOff = false;
