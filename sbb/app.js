@@ -1,5 +1,5 @@
 /**
- * Swiss Public Transport Delay Monitor
+ * Swiss Public Transport Delay Monitor & Stationboard
  * Powered by transport.opendata.ch API
  */
 
@@ -12,10 +12,18 @@ let monitorIntervalId = null;
 let countdownTimerId = null;
 let secondsRemaining = POLL_INTERVAL_SECONDS;
 let audioContext = null;
+let currentStationboardData = null;
 
-// DOM Elements
+// DOM Elements - Tabs
+const tabBtnSearch = document.getElementById('tabBtnSearch');
+const tabBtnBoard = document.getElementById('tabBtnBoard');
+const searchView = document.getElementById('searchView');
+const boardView = document.getElementById('boardView');
+
+// DOM Elements - Connection Search
 const inputFrom = document.getElementById('inputFrom');
 const inputTo = document.getElementById('inputTo');
+const btnGpsFrom = document.getElementById('btnGpsFrom');
 const suggestFrom = document.getElementById('suggestFrom');
 const suggestTo = document.getElementById('suggestTo');
 const inputDate = document.getElementById('inputDate');
@@ -25,6 +33,12 @@ const btnSearch = document.getElementById('btnSearch');
 const searchSpinner = document.getElementById('searchSpinner');
 const btnNow = document.getElementById('btnNow');
 const btnSwap = document.getElementById('btnSwap');
+const btnAddFavorite = document.getElementById('btnAddFavorite');
+const favoritesList = document.getElementById('favoritesList');
+const selectThreshold = document.getElementById('selectThreshold');
+const chkAudioAlarm = document.getElementById('chkAudioAlarm');
+
+// DOM Elements - Notifications & Status
 const permDot = document.getElementById('permDot');
 const permText = document.getElementById('permText');
 const btnRequestPerm = document.getElementById('btnRequestPerm');
@@ -41,12 +55,27 @@ const eventLog = document.getElementById('eventLog');
 const btnClearLog = document.getElementById('btnClearLog');
 const toastContainer = document.getElementById('toastContainer');
 
+// DOM Elements - Stationboard
+const boardForm = document.getElementById('boardForm');
+const boardStation = document.getElementById('boardStation');
+const suggestBoard = document.getElementById('suggestBoard');
+const btnGpsBoard = document.getElementById('btnGpsBoard');
+const boardLimit = document.getElementById('boardLimit');
+const btnLoadBoard = document.getElementById('btnLoadBoard');
+const boardSpinner = document.getElementById('boardSpinner');
+const boardResultsWrap = document.getElementById('boardResultsWrap');
+const boardTitle = document.getElementById('boardTitle');
+const boardUpdatedTime = document.getElementById('boardUpdatedTime');
+const btnBoardRefresh = document.getElementById('btnBoardRefresh');
+const boardList = document.getElementById('boardList');
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
   initDateTime();
   updatePermissionUI();
   setupEventListeners();
   loadSavedState();
+  renderFavorites();
 });
 
 function initDateTime() {
@@ -58,9 +87,18 @@ function initDateTime() {
 }
 
 function setupEventListeners() {
+  // Tab Switcher
+  tabBtnSearch.addEventListener('click', () => switchTab('search'));
+  tabBtnBoard.addEventListener('click', () => switchTab('board'));
+
   // Autocomplete
   setupAutocomplete(inputFrom, suggestFrom);
   setupAutocomplete(inputTo, suggestTo);
+  setupAutocomplete(boardStation, suggestBoard);
+
+  // GPS Locate
+  btnGpsFrom.addEventListener('click', () => locateStation(inputFrom));
+  btnGpsBoard.addEventListener('click', () => locateStation(boardStation));
 
   // Swap stations
   btnSwap.addEventListener('click', () => {
@@ -93,6 +131,26 @@ function setupEventListeners() {
     searchConnections();
   });
 
+  // Favorites
+  btnAddFavorite.addEventListener('click', addCurrentRouteToFavorites);
+
+  // Settings persistence
+  if (selectThreshold) {
+    const savedThreshold = localStorage.getItem('sbb_threshold');
+    if (savedThreshold) selectThreshold.value = savedThreshold;
+    selectThreshold.addEventListener('change', () => {
+      localStorage.setItem('sbb_threshold', selectThreshold.value);
+    });
+  }
+
+  if (chkAudioAlarm) {
+    const savedAudio = localStorage.getItem('sbb_audio_alarm');
+    if (savedAudio !== null) chkAudioAlarm.checked = savedAudio === 'true';
+    chkAudioAlarm.addEventListener('change', () => {
+      localStorage.setItem('sbb_audio_alarm', chkAudioAlarm.checked);
+    });
+  }
+
   // Notification permissions
   btnRequestPerm.addEventListener('click', requestNotificationPermission);
   btnTestNotify.addEventListener('click', () => {
@@ -100,7 +158,9 @@ function setupEventListeners() {
       '🚆 Test-Benachrichtigung',
       'Der ÖV-Verspätungs-Wächter ist aktiv und betriebsbereit.'
     );
-    playAlertChime();
+    if (chkAudioAlarm.checked) {
+      playAlertChime();
+    }
     showToast('Test-Benachrichtigung ausgelöst!', 'success');
   });
 
@@ -118,11 +178,84 @@ function setupEventListeners() {
     eventLog.innerHTML = '<p class="empty-state">Noch keine Ereignisse erfasst.</p>';
   });
 
+  // Stationboard form
+  boardForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    loadStationboard();
+  });
+
+  btnBoardRefresh.addEventListener('click', () => {
+    if (boardStation.value.trim()) {
+      loadStationboard();
+    }
+  });
+
   // Document click to close autocomplete dropdowns
   document.addEventListener('click', (e) => {
     if (!suggestFrom.contains(e.target) && e.target !== inputFrom) suggestFrom.hidden = true;
     if (!suggestTo.contains(e.target) && e.target !== inputTo) suggestTo.hidden = true;
+    if (!suggestBoard.contains(e.target) && e.target !== boardStation) suggestBoard.hidden = true;
   });
+}
+
+// --- Tabs Management ---
+function switchTab(target) {
+  if (target === 'search') {
+    tabBtnSearch.classList.add('active');
+    tabBtnSearch.setAttribute('aria-selected', 'true');
+    tabBtnBoard.classList.remove('active');
+    tabBtnBoard.setAttribute('aria-selected', 'false');
+    searchView.hidden = false;
+    boardView.hidden = true;
+  } else {
+    tabBtnBoard.classList.add('active');
+    tabBtnBoard.setAttribute('aria-selected', 'true');
+    tabBtnSearch.classList.remove('active');
+    tabBtnSearch.setAttribute('aria-selected', 'false');
+    searchView.hidden = true;
+    boardView.hidden = false;
+    if (!boardStation.value && inputFrom.value) {
+      boardStation.value = inputFrom.value;
+    }
+  }
+}
+
+// --- Geolocation (GPS) ---
+function locateStation(targetInput) {
+  if (!('geolocation' in navigator)) {
+    showToast('Geolocation wird vom Browser nicht unterstützt', 'danger');
+    return;
+  }
+
+  showToast('GPS-Position wird ermittelt...', 'success');
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const { latitude, longitude } = pos.coords;
+        const res = await fetch(`${API_BASE}/locations?x=${latitude}&y=${longitude}&type=station`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const stations = (data.stations || []).filter(s => s.name);
+
+        if (stations.length === 0) {
+          showToast('Keine Station in der Nähe gefunden', 'danger');
+          return;
+        }
+
+        const nearest = stations[0].name;
+        targetInput.value = nearest;
+        showToast(`📍 Gefunden: ${nearest}`, 'success');
+      } catch (err) {
+        console.error('GPS station lookup error:', err);
+        showToast('Fehler bei Haltestellensuche: ' + err.message, 'danger');
+      }
+    },
+    (err) => {
+      showToast('Standortermittlung fehlgeschlagen: ' + err.message, 'danger');
+    },
+    { enableHighAccuracy: true, timeout: 9000 }
+  );
 }
 
 // --- Autocomplete ---
@@ -171,6 +304,75 @@ function setupAutocomplete(inputElem, suggestElem) {
   });
 }
 
+// --- Favorites (Gespeicherte Strecken) ---
+function loadFavorites() {
+  try {
+    return JSON.parse(localStorage.getItem('sbb_favorites') || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveFavorites(favs) {
+  localStorage.setItem('sbb_favorites', JSON.stringify(favs));
+  renderFavorites();
+}
+
+function renderFavorites() {
+  const favs = loadFavorites();
+  if (favs.length === 0) {
+    favoritesList.innerHTML = '<span class="empty-state" style="padding:0;">Keine Favoriten vorhanden. Tippe auf "⭐ Zu Favoriten", um Strecken zu speichern.</span>';
+    return;
+  }
+
+  favoritesList.innerHTML = favs.map((fav, index) => `
+    <span class="fav-chip">
+      <span class="fav-chip-name" onclick="loadFavoriteRoute(${index})">${escapeHtml(fav.from)} ➔ ${escapeHtml(fav.to)}</span>
+      <button type="button" class="fav-chip-del" onclick="deleteFavoriteRoute(${index})" title="Favorit entfernen">&times;</button>
+    </span>
+  `).join('');
+}
+
+function addCurrentRouteToFavorites() {
+  const from = inputFrom.value.trim();
+  const to = inputTo.value.trim();
+
+  if (!from || !to) {
+    showToast('Bitte zuerst Start- und Zielstation eingeben', 'danger');
+    return;
+  }
+
+  const favs = loadFavorites();
+  const exists = favs.some(f => f.from.toLowerCase() === from.toLowerCase() && f.to.toLowerCase() === to.toLowerCase());
+
+  if (exists) {
+    showToast('Diese Strecke ist bereits in den Favoriten', 'success');
+    return;
+  }
+
+  favs.push({ from, to });
+  saveFavorites(favs);
+  showToast(`⭐ "${from} ➔ ${to}" zu Favoriten hinzugefügt!`, 'success');
+}
+
+window.loadFavoriteRoute = function(index) {
+  const favs = loadFavorites();
+  const fav = favs[index];
+  if (!fav) return;
+
+  inputFrom.value = fav.from;
+  inputTo.value = fav.to;
+  initDateTime();
+  searchConnections();
+};
+
+window.deleteFavoriteRoute = function(index) {
+  const favs = loadFavorites();
+  favs.splice(index, 1);
+  saveFavorites(favs);
+  showToast('Favorit entfernt', 'success');
+};
+
 // --- Search Connections ---
 async function searchConnections() {
   const from = inputFrom.value.trim();
@@ -187,10 +389,17 @@ async function searchConnections() {
   localStorage.setItem('sbb_from', from);
   localStorage.setItem('sbb_to', to);
 
+  // Transportation filters
+  const checkedBoxes = Array.from(document.querySelectorAll('input[name="transportType"]:checked'));
+  let typeParams = '';
+  if (checkedBoxes.length > 0 && checkedBoxes.length < 4) {
+    typeParams = checkedBoxes.map(b => `&transportations[]=${encodeURIComponent(b.value)}`).join('');
+  }
+
   setLoading(true);
 
   try {
-    const url = `${API_BASE}/connections?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${date}&time=${time}&limit=6`;
+    const url = `${API_BASE}/connections?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${date}&time=${time}&limit=6${typeParams}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -224,7 +433,6 @@ function renderConnections(connections, fromName, toName) {
     const arrTime = formatTime(conn.to.arrival);
     const depDelay = conn.from.delay;
     const arrDelay = conn.to.delay;
-    const maxDelay = Math.max(depDelay || 0, arrDelay || 0, ...getSectionDelays(conn));
 
     const duration = formatDuration(conn.duration);
     const transfers = conn.transfers;
@@ -269,19 +477,180 @@ function renderConnections(connections, fromName, toName) {
           <div class="products-list">
             ${products.map(p => `<span class="product-tag">${escapeHtml(p)}</span>`).join('')}
           </div>
-          <button type="button" class="btn btn-sm ${isCurrentlyMonitored ? 'btn-danger' : 'btn-primary'} btn-monitor-toggle"
-                  onclick="toggleMonitorConnection(${index})">
-            ${isCurrentlyMonitored ? 'Überwachung aktiv' : '🔔 Diese Verbindung überwachen'}
-          </button>
+          <div class="connection-actions">
+            <button type="button" class="btn btn-sm btn-ghost" onclick="toggleConnectionLegs(${index})" id="btnLegs-${index}" title="Details und Zwischenhalte einblenden">
+              Details & Teilstrecken ▼
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="exportIcs(${index})" title="In Kalender (.ics) exportieren">
+              📅 In Kalender
+            </button>
+            <button type="button" class="btn btn-sm ${isCurrentlyMonitored ? 'btn-danger' : 'btn-primary'} btn-monitor-toggle"
+                    onclick="toggleMonitorConnection(${index})">
+              ${isCurrentlyMonitored ? 'Überwachung aktiv' : '🔔 Diese Verbindung überwachen'}
+            </button>
+          </div>
         </div>
+
+        <!-- Expandable Leg Accordion -->
+        <div id="legsContainer-${index}" class="legs-container" hidden></div>
       </div>
     `;
   }).join('');
 
-  // Store connections in window for reference by click handler
+  // Store connections in window for reference
   window.lastFoundConnections = connections;
 }
 
+// --- Legs & Intermediate Stops Accordion ---
+window.toggleConnectionLegs = function(index) {
+  const container = document.getElementById(`legsContainer-${index}`);
+  const btn = document.getElementById(`btnLegs-${index}`);
+  if (!container || !btn) return;
+
+  if (!container.hidden) {
+    container.hidden = true;
+    btn.textContent = 'Details & Teilstrecken ▼';
+    return;
+  }
+
+  const conn = window.lastFoundConnections?.[index];
+  if (!conn || !conn.sections) return;
+
+  container.innerHTML = conn.sections.map((sec, secIdx) => {
+    // Footpath transfer
+    if (sec.walk) {
+      const walkMin = sec.walk.duration ? Math.round(sec.walk.duration / 60) : 5;
+      return `
+        <div class="leg-card walk-leg">
+          🚶 Fußweg / Umstieg: ca. <strong>${walkMin} Min</strong>
+        </div>
+      `;
+    }
+
+    if (sec.journey) {
+      const cat = sec.journey.category || 'Zug';
+      const num = sec.journey.number || '';
+      const head = `${cat} ${num}`.trim();
+      const depStn = sec.departure?.station?.name || 'Start';
+      const arrStn = sec.arrival?.station?.name || 'Ziel';
+      const depT = formatTime(sec.departure?.departure);
+      const arrT = formatTime(sec.arrival?.arrival);
+      const depPlat = sec.departure?.prognosis?.platform || sec.departure?.platform || '-';
+      const arrPlat = sec.arrival?.prognosis?.platform || sec.arrival?.platform || '-';
+      const depDel = sec.departure?.delay;
+      const arrDel = sec.arrival?.delay;
+
+      const passList = (sec.journey.passList || []).slice(1, -1); // Zwischenhalte
+
+      return `
+        <div class="leg-card">
+          <div class="leg-header">
+            <div>
+              <span class="leg-transport-badge">${escapeHtml(head)}</span>
+              <span style="margin-left: 8px; font-weight: 600;">Richtung: ${escapeHtml(sec.journey.to || arrStn)}</span>
+            </div>
+            <div>${sec.journey.operator ? `<span style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(sec.journey.operator)}</span>` : ''}</div>
+          </div>
+
+          <div class="leg-stops">
+            <div class="leg-stop-row">
+              <span class="leg-stop-name">🟢 Abfahrt: <strong>${escapeHtml(depStn)}</strong> (Gleis ${escapeHtml(depPlat)})</span>
+              <div style="display: flex; gap: 6px; align-items: baseline;">
+                <span class="leg-stop-time">${depT}</span>
+                ${renderDelayBadge(depDel, sec.departure?.prognosis?.departure)}
+              </div>
+            </div>
+
+            ${passList.length > 0 ? `
+              <details style="margin: 4px 0; font-size: 0.8rem; color: var(--text-muted); cursor: pointer;">
+                <summary>${passList.length} Zwischenhalte anzeigen</summary>
+                <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 3px; padding-left: 8px;">
+                  ${passList.map(p => `
+                    <div style="display: flex; justify-content: space-between;">
+                      <span>• ${escapeHtml(p.station?.name || '')}</span>
+                      <span>${formatTime(p.departure || p.arrival)} ${p.delay ? `(+${p.delay}m)` : ''}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </details>
+            ` : ''}
+
+            <div class="leg-stop-row">
+              <span class="leg-stop-name">🔴 Ankunft: <strong>${escapeHtml(arrStn)}</strong> (Gleis ${escapeHtml(arrPlat)})</span>
+              <div style="display: flex; gap: 6px; align-items: baseline;">
+                <span class="leg-stop-time">${arrT}</span>
+                ${renderDelayBadge(arrDel, sec.arrival?.prognosis?.arrival)}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return '';
+  }).join('');
+
+  container.hidden = false;
+  btn.textContent = 'Details & Teilstrecken ▲';
+};
+
+// --- Kalender Export (.ics) ---
+window.exportIcs = function(index) {
+  const conn = window.lastFoundConnections?.[index];
+  if (!conn) return;
+
+  const toIcsDate = (isoStr) => {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  };
+
+  const startUtc = toIcsDate(conn.from.departure);
+  const endUtc = toIcsDate(conn.to.arrival);
+  const nowUtc = toIcsDate(new Date().toISOString());
+
+  const fromName = conn.from.station.name;
+  const toName = conn.to.station.name;
+  const depPlatform = conn.from.prognosis?.platform || conn.from.platform || '-';
+  const products = (conn.products || []).join(', ');
+
+  const summary = `🚆 ${fromName} -> ${toName} (${products})`;
+  const description = `ÖV-Fahrt von ${fromName} (Gleis ${depPlatform}) nach ${toName}.\\nLinien: ${products}\\nUmstiege: ${conn.transfers}\\nDauer: ${formatDuration(conn.duration)}`;
+
+  const icsLines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//SBB Verspaetungs-Waechter//DE',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:sbb-${conn.from.departureTimestamp}-${Date.now()}@sbb-waechter`,
+    `DTSTAMP:${nowUtc}`,
+    `DTSTART:${startUtc}`,
+    `DTEND:${endUtc}`,
+    `SUMMARY:${summary}`,
+    `DESCRIPTION:${description}`,
+    `LOCATION:${fromName}, Gleis ${depPlatform}`,
+    'STATUS:CONFIRMED',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ];
+
+  const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const cleanDate = conn.from.departure.substring(0, 10);
+  a.download = `sbb_${fromName}_${toName}_${cleanDate}.ics`.replace(/\s+/g, '_');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('Kalender-Termin (.ics) gespeichert!', 'success');
+};
+
+// --- Monitoring Engine ---
 function getSectionDelays(conn) {
   const delays = [];
   if (conn.sections && Array.isArray(conn.sections)) {
@@ -301,7 +670,6 @@ function renderDelayBadge(delay, prognosisTime) {
   return `<span class="delay-badge warn">⚠️ +${delay} Min${progText}</span>`;
 }
 
-// --- Monitoring Engine ---
 window.toggleMonitorConnection = function(index) {
   const conn = window.lastFoundConnections?.[index];
   if (!conn) return;
@@ -315,7 +683,6 @@ window.toggleMonitorConnection = function(index) {
 };
 
 function startMonitoring(conn) {
-  // Ensure notification permission requested if default
   if (Notification.permission === 'default') {
     requestNotificationPermission();
   }
@@ -338,7 +705,6 @@ function startMonitoring(conn) {
   monitorCard.hidden = false;
   monitorCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  // Update list cards to reflect monitored connection
   if (window.lastFoundConnections) {
     renderConnections(window.lastFoundConnections, activeMonitor.fromName, activeMonitor.toName);
   }
@@ -346,7 +712,6 @@ function startMonitoring(conn) {
   addLogEntry(`Überwachung gestartet für ${activeMonitor.fromName} → ${activeMonitor.toName} (${depTime})`, 'ok');
   showToast(`Wächter aktiv: ${activeMonitor.fromName} → ${activeMonitor.toName}`, 'success');
 
-  // Start polling timer
   clearInterval(monitorIntervalId);
   clearInterval(countdownTimerId);
 
@@ -380,9 +745,7 @@ async function checkMonitoredConnection() {
     const data = await res.json();
     const connections = data.connections || [];
 
-    // Find the exact matching connection by scheduled departure timestamp
     const matched = connections.find(c => c.from.departureTimestamp === activeMonitor.departureTimestamp) || connections[0];
-
     if (!matched) return;
 
     renderActiveMonitorCard(matched);
@@ -392,8 +755,10 @@ async function checkMonitoredConnection() {
     const sectionDelays = getSectionDelays(matched);
     const currentMaxDelay = Math.max(depDelay, arrDelay, ...sectionDelays);
 
-    // Check if delay state changed or delay detected
-    if (currentMaxDelay > 0 && currentMaxDelay !== activeMonitor.lastKnownDelay) {
+    const threshold = parseInt(selectThreshold?.value || '1', 10);
+
+    // Trigger alert if delay meets or exceeds threshold
+    if (currentMaxDelay >= threshold && currentMaxDelay !== activeMonitor.lastKnownDelay) {
       triggerDelayAlarm(matched, currentMaxDelay);
     } else if (currentMaxDelay === 0 && activeMonitor.lastKnownDelay > 0) {
       addLogEntry(`Verbindung wieder pünktlich! (${activeMonitor.depTime} ${activeMonitor.fromName})`, 'ok');
@@ -409,13 +774,15 @@ async function checkMonitoredConnection() {
 function triggerDelayAlarm(conn, delayMinutes) {
   const line = (conn.products && conn.products[0]) ? conn.products[0] : 'Verbindung';
   const title = `⚠️ Verspätung: +${delayMinutes} Min für ${line}`;
-  const body = `${conn.from.station.name} (${formatTime(conn.from.departure)}) → ${conn.to.station.name}. Neu voraussichtlich ${formatTime(conn.from.prognosis?.departure || conn.from.departure)}`;
+  const body = `${conn.from.station.name} (${formatTime(conn.from.departure)}) → ${conn.to.station.name}. Neu ca. ${formatTime(conn.from.prognosis?.departure || conn.from.departure)}`;
 
-  // 1. Desktop / Push Web Notification
+  // 1. Desktop Notification
   sendNotification(title, body);
 
-  // 2. Play Audio Alert Chime
-  playAlertChime();
+  // 2. Play Audio Alert Chime (if enabled)
+  if (chkAudioAlarm && chkAudioAlarm.checked) {
+    playAlertChime();
+  }
 
   // 3. UI Toast
   showToast(title, 'danger');
@@ -428,7 +795,6 @@ function renderActiveMonitorCard(conn) {
   const depTime = formatTime(conn.from.departure);
   const arrTime = formatTime(conn.to.arrival);
   const depDelay = conn.from.delay;
-  const arrDelay = conn.to.delay;
   const products = (conn.products || []).join(', ');
 
   monitorDetails.innerHTML = `
@@ -460,6 +826,67 @@ function stopMonitoring() {
     renderConnections(window.lastFoundConnections, inputFrom.value, inputTo.value);
   }
   showToast('Überwachung gestoppt', 'success');
+}
+
+// --- Live Stationboard Engine ---
+async function loadStationboard() {
+  const station = boardStation.value.trim();
+  if (!station) {
+    showToast('Bitte eine Haltestelle angeben', 'danger');
+    return;
+  }
+
+  const limit = boardLimit.value || '20';
+  boardSpinner.hidden = false;
+  btnLoadBoard.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/stationboard?station=${encodeURIComponent(station)}&limit=${limit}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    currentStationboardData = data;
+    renderStationboard(data);
+    boardResultsWrap.hidden = false;
+  } catch (err) {
+    console.error('Stationboard error:', err);
+    showToast('Fehler beim Laden der Abfahrten: ' + err.message, 'danger');
+  } finally {
+    boardSpinner.hidden = true;
+    btnLoadBoard.disabled = false;
+  }
+}
+
+function renderStationboard(data) {
+  const stationName = data.station?.name || boardStation.value;
+  boardTitle.textContent = `Abfahrten ab: ${stationName}`;
+  boardUpdatedTime.textContent = `Stand: ${new Date().toLocaleTimeString('de-CH')}`;
+
+  const list = data.stationboard || [];
+  if (list.length === 0) {
+    boardList.innerHTML = '<p class="empty-state">Keine Abfahrten gefunden.</p>';
+    return;
+  }
+
+  boardList.innerHTML = list.map(item => {
+    const time = formatTime(item.stop?.departure);
+    const delay = item.stop?.delay;
+    const prognosisDep = item.stop?.prognosis?.departure;
+    const cat = item.category || 'ÖV';
+    const num = item.number || '';
+    const lineLabel = `${cat} ${num}`.trim();
+    const to = item.to || 'Unbekannt';
+    const platform = item.stop?.prognosis?.platform || item.stop?.platform || '-';
+
+    return `
+      <div class="board-row">
+        <span class="board-time-cell">${time}</span>
+        <div><span class="board-line-tag">${escapeHtml(lineLabel)}</span></div>
+        <span class="board-dest-cell" title="${escapeHtml(to)}">${escapeHtml(to)}</span>
+        <span class="board-plat-cell">Gleis ${escapeHtml(platform)}</span>
+        <div style="text-align: right;">${renderDelayBadge(delay, prognosisDep)}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 // --- Notifications & Audio ---
@@ -561,7 +988,6 @@ function formatTime(isoString) {
 
 function formatDuration(durationStr) {
   if (!durationStr) return '--';
-  // Example: 00d01:18:00
   const match = durationStr.match(/(\d+)d(\d{2}):(\d{2}):(\d{2})/);
   if (!match) return durationStr;
   const hours = parseInt(match[2], 10);

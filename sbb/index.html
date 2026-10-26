@@ -19,6 +19,16 @@
       </div>
       <p class="subtitle">Echtzeit-Überwachung & Benachrichtigung für Schweizer ÖV-Verbindungen</p>
       
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs" role="tablist">
+        <button type="button" class="tab-btn active" id="tabBtnSearch" role="tab" aria-selected="true">
+          <span>🚆</span> Verbindungen & Wächter
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnBoard" role="tab" aria-selected="false">
+          <span>🚏</span> Live-Abfahrtstafel
+        </button>
+      </nav>
+
       <!-- Notification Bar -->
       <div class="notification-bar" id="notificationBar">
         <div class="permission-status">
@@ -33,85 +43,174 @@
     </header>
 
     <main class="main-content">
-      <!-- Search Panel -->
-      <section class="card search-card">
-        <h2>Verbindung suchen</h2>
-        <form id="searchForm" class="search-form" autocomplete="off">
-          <div class="route-inputs">
-            <div class="input-group autocomplete-wrap">
-              <label for="inputFrom">Von (Startstation)</label>
-              <input type="text" id="inputFrom" placeholder="z. B. Zürich HB" required>
-              <div id="suggestFrom" class="suggestions-list" hidden></div>
+      <!-- Search Panel View -->
+      <div id="searchView">
+        <section class="card search-card">
+          <h2>Verbindung suchen</h2>
+          <form id="searchForm" class="search-form" autocomplete="off">
+            <div class="route-inputs">
+              <div class="input-group autocomplete-wrap">
+                <label for="inputFrom">Von (Startstation)</label>
+                <div class="input-with-action">
+                  <input type="text" id="inputFrom" placeholder="z. B. Zürich HB" required>
+                  <button type="button" id="btnGpsFrom" class="btn-input-action" title="Nächste Haltestelle via GPS ermitteln" aria-label="Standort ermitteln">📍</button>
+                </div>
+                <div id="suggestFrom" class="suggestions-list" hidden></div>
+              </div>
+
+              <button type="button" id="btnSwap" class="btn-swap" title="Start und Ziel tauschen" aria-label="Tauschen">
+                ⇄
+              </button>
+
+              <div class="input-group autocomplete-wrap">
+                <label for="inputTo">Nach (Zielstation)</label>
+                <input type="text" id="inputTo" placeholder="z. B. Bern" required>
+                <div id="suggestTo" class="suggestions-list" hidden></div>
+              </div>
             </div>
 
-            <button type="button" id="btnSwap" class="btn-swap" title="Start und Ziel tauschen" aria-label="Tauschen">
-              ⇄
-            </button>
-
-            <div class="input-group autocomplete-wrap">
-              <label for="inputTo">Nach (Zielstation)</label>
-              <input type="text" id="inputTo" placeholder="z. B. Bern" required>
-              <div id="suggestTo" class="suggestions-list" hidden></div>
+            <!-- Favorites Bar -->
+            <div class="favorites-bar">
+              <div class="favorites-header">
+                <span class="preset-label">Gespeicherte Strecken:</span>
+                <button type="button" id="btnAddFavorite" class="btn btn-xs btn-ghost" title="Aktuelle Strecke als Favorit speichern">⭐ Zu Favoriten</button>
+              </div>
+              <div id="favoritesList" class="favorites-chips"></div>
             </div>
+
+            <div class="time-inputs">
+              <div class="input-group">
+                <label for="inputDate">Datum</label>
+                <input type="date" id="inputDate" required>
+              </div>
+              <div class="input-group">
+                <label for="inputTime">Abfahrtszeit</label>
+                <input type="time" id="inputTime" required>
+              </div>
+              <div class="quick-presets">
+                <span class="preset-label">Schnellwahl:</span>
+                <button type="button" class="btn-chip" data-from="Zürich HB" data-to="Bern">Zürich ⇄ Bern</button>
+                <button type="button" class="btn-chip" data-from="Basel SBB" data-to="Zürich HB">Basel ⇄ Zürich</button>
+                <button type="button" class="btn-chip" data-from="Luzern" data-to="Zürich HB">Luzern ⇄ Zürich</button>
+              </div>
+            </div>
+
+            <!-- Filter & Watcher Options -->
+            <div class="advanced-options">
+              <div class="option-field">
+                <label for="selectThreshold">Alarm ab Verspätung:</label>
+                <select id="selectThreshold" class="form-select">
+                  <option value="1">Ab 1 Minute</option>
+                  <option value="3" selected>Ab 3 Minuten</option>
+                  <option value="5">Ab 5 Minuten</option>
+                  <option value="10">Ab 10 Minuten</option>
+                </select>
+              </div>
+              <div class="option-field">
+                <label class="toggle-label">
+                  <input type="checkbox" id="chkAudioAlarm" checked>
+                  <span>🔔 Signalton abspielen</span>
+                </label>
+              </div>
+              <div class="transport-filters">
+                <span class="filter-label">Verkehrsmittel:</span>
+                <label class="chk-chip"><input type="checkbox" name="transportType" value="train" checked> Zug</label>
+                <label class="chk-chip"><input type="checkbox" name="transportType" value="tram" checked> Tram</label>
+                <label class="chk-chip"><input type="checkbox" name="transportType" value="bus" checked> Bus</label>
+                <label class="chk-chip"><input type="checkbox" name="transportType" value="ship" checked> Schiff</label>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" id="btnSearch" class="btn btn-primary">
+                <span class="spinner" id="searchSpinner" hidden></span>
+                <span>Verbindungen suchen</span>
+              </button>
+              <button type="button" id="btnNow" class="btn btn-secondary">Jetzt abfahren</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Active Monitor Section -->
+        <section class="card monitor-card" id="monitorCard" hidden>
+          <div class="monitor-header">
+            <div class="monitor-title-wrap">
+              <span class="live-pulse"></span>
+              <h2>Aktive Überwachung</h2>
+            </div>
+            <button type="button" id="btnStopMonitor" class="btn btn-danger btn-sm">Überwachung stoppen</button>
           </div>
 
-          <div class="time-inputs">
-            <div class="input-group">
-              <label for="inputDate">Datum</label>
-              <input type="date" id="inputDate" required>
-            </div>
-            <div class="input-group">
-              <label for="inputTime">Abfahrtszeit</label>
-              <input type="time" id="inputTime" required>
-            </div>
-            <div class="quick-presets">
-              <span class="preset-label">Schnellwahl:</span>
-              <button type="button" class="btn-chip" data-from="Zürich HB" data-to="Bern">Zürich ⇄ Bern</button>
-              <button type="button" class="btn-chip" data-from="Basel SBB" data-to="Zürich HB">Basel ⇄ Zürich</button>
-              <button type="button" class="btn-chip" data-from="Luzern" data-to="Zürich HB">Luzern ⇄ Zürich</button>
-            </div>
+          <div id="monitorDetails" class="monitor-details">
+            <!-- Filled dynamically by JS -->
           </div>
 
-          <div class="form-actions">
-            <button type="submit" id="btnSearch" class="btn btn-primary">
-              <span class="spinner" id="searchSpinner" hidden></span>
-              <span>Verbindungen suchen</span>
-            </button>
-            <button type="button" id="btnNow" class="btn btn-secondary">Jetzt abfahren</button>
+          <div class="monitor-status-bar">
+            <span id="monitorTimer">Nächste Aktualisierung in: <strong>45s</strong></span>
+            <button type="button" id="btnRefreshNow" class="btn btn-ghost btn-sm">Jetzt prüfen</button>
           </div>
-        </form>
-      </section>
+        </section>
 
-      <!-- Active Monitor Section -->
-      <section class="card monitor-card" id="monitorCard" hidden>
-        <div class="monitor-header">
-          <div class="monitor-title-wrap">
-            <span class="live-pulse"></span>
-            <h2>Aktive Überwachung</h2>
+        <!-- Connection Results -->
+        <section class="card results-card" id="resultsSection" hidden>
+          <div class="results-header">
+            <h2>Gefundene Verbindungen</h2>
+            <span class="results-count" id="resultsMeta"></span>
           </div>
-          <button type="button" id="btnStopMonitor" class="btn btn-danger btn-sm">Überwachung stoppen</button>
-        </div>
+          <div id="connectionsList" class="connections-list">
+            <!-- Populated by JS -->
+          </div>
+        </section>
+      </div>
 
-        <div id="monitorDetails" class="monitor-details">
-          <!-- Filled dynamically by JS -->
-        </div>
+      <!-- Live Stationboard View -->
+      <div id="boardView" hidden>
+        <section class="card board-card">
+          <h2>🚏 Live-Abfahrtstafel</h2>
+          <form id="boardForm" class="board-form" autocomplete="off">
+            <div class="board-inputs">
+              <div class="input-group autocomplete-wrap flex-1">
+                <label for="boardStation">Station / Haltestelle</label>
+                <div class="input-with-action">
+                  <input type="text" id="boardStation" placeholder="z. B. Bern oder Zürich HB" required>
+                  <button type="button" id="btnGpsBoard" class="btn-input-action" title="Nächste Haltestelle via GPS ermitteln" aria-label="Standort ermitteln">📍</button>
+                </div>
+                <div id="suggestBoard" class="suggestions-list" hidden></div>
+              </div>
 
-        <div class="monitor-status-bar">
-          <span id="monitorTimer">Nächste Aktualisierung in: <strong>45s</strong></span>
-          <button type="button" id="btnRefreshNow" class="btn btn-ghost btn-sm">Jetzt prüfen</button>
-        </div>
-      </section>
+              <div class="input-group">
+                <label for="boardLimit">Anzahl Abfahrten</label>
+                <select id="boardLimit" class="form-select">
+                  <option value="10">10 Abfahrten</option>
+                  <option value="20" selected>20 Abfahrten</option>
+                  <option value="30">30 Abfahrten</option>
+                </select>
+              </div>
 
-      <!-- Connection Results -->
-      <section class="card results-card" id="resultsSection" hidden>
-        <div class="results-header">
-          <h2>Gefundene Verbindungen</h2>
-          <span class="results-count" id="resultsMeta"></span>
-        </div>
-        <div id="connectionsList" class="connections-list">
-          <!-- Populated by JS -->
-        </div>
-      </section>
+              <div class="board-submit-wrap">
+                <button type="submit" id="btnLoadBoard" class="btn btn-primary">
+                  <span class="spinner" id="boardSpinner" hidden></span>
+                  <span>Abfahrten laden</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Board Results Container -->
+          <div id="boardResultsWrap" class="board-results-wrap" hidden>
+            <div class="results-header" style="margin-top: 18px;">
+              <h3 id="boardTitle" style="font-size: 1.15rem; font-weight: 700;">Abfahrten</h3>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="results-count" id="boardUpdatedTime"></span>
+                <button type="button" id="btnBoardRefresh" class="btn btn-ghost btn-sm">Aktualisieren</button>
+              </div>
+            </div>
+            <div id="boardList" class="stationboard-list">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </section>
+      </div>
 
       <!-- Activity & Delay Log -->
       <section class="card log-card">
