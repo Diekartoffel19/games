@@ -401,7 +401,7 @@ function resizeCanvas() {
   canvas.height = H * dpr;
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   initWaterGrid();
 }
 window.addEventListener('resize', resizeCanvas);
@@ -799,7 +799,6 @@ const SHIP_TYPES = [
     draft: 16,
     sinkThreshold: 9999, // Can dive underwater on purpose!
     isSubmarine: true,
-    ballast: 0, // 0 = surfaced, 1 = deep dive
     color: '#273c75',
     accent: '#fbc531',
     draw: drawSubmarine
@@ -822,6 +821,7 @@ class Boat {
     this.isCapsized = false;
     this.isSunk = false;
     this.submergeTarget = 0; // for submarine ballast
+    this.ballast = 0;        // 0 = surfaced, 1 = deep dive
     this.sprayTimer = 0;
   }
 
@@ -835,12 +835,23 @@ class Boat {
     this.waterIngress = 0;
     this.isCapsized = false;
     this.isSunk = false;
+    this.submergeTarget = 0;
+    this.ballast = 0;
     this.throttle = 0;
+    const subBtn = document.getElementById('btnSubmarineDive');
+    if (subBtn) subBtn.textContent = '🟡 Abtauchen';
     document.getElementById('throttleSlider').value = 0;
     updateThrottle(0);
   }
 
   update(dt) {
+    // Substep so stiff buoyancy stays stable at high time speed
+    const steps = Math.ceil(dt / (1 / 120));
+    for (let s = 0; s < steps; s++) this.step(dt / steps);
+  }
+
+  step(dt) {
+    const f = dt * 60; // frame-rate independent damping exponent
     // Effective mass with flooded water
     const totalMass = this.spec.mass + (this.waterIngress * 0.05);
 
@@ -851,6 +862,7 @@ class Boat {
     let totalBuoyancy = 0;
     let torque = 0;
     let submergedSlices = 0;
+    const sliceWeight = (this.spec.mass * 9.81 * 4.2) / slices;
 
     const cosA = Math.cos(this.angle);
     const sinA = Math.sin(this.angle);
@@ -863,24 +875,28 @@ class Boat {
       const wy = this.y + (lx * sinA) + (this.spec.draft * cosA * 0.5);
 
       const waterY = getWaterY(wx);
-      const submergedDepth = waterY - wy;
+      // Depth capped at hull height: fully submerged slice gives max buoyancy
+      const submergedDepth = Math.min(wy - waterY, this.spec.height);
 
       if (submergedDepth > 0) {
         submergedSlices++;
         // Archimedes force per slice
-        let bForce = submergedDepth * sliceWidth * 0.35 * this.spec.buoyancyFactor;
+        // Scaled so a dry hull floats at draft / buoyancyFactor depth
+        let bForce = (submergedDepth / this.spec.draft) * sliceWeight * this.spec.buoyancyFactor;
 
         // Submarine ballast tuning
         if (this.spec.isSubmarine) {
-          bForce *= (1.0 - this.spec.ballast * 0.42);
+          bForce *= (1.0 - this.ballast * 0.98);
         }
+        // Sunk hull has lost its buoyancy
+        if (this.isSunk) bForce *= 0.02;
 
         // Add buoyant upward force
         totalBuoyancy += bForce;
 
         // Righting torque from buoyant center vs center of gravity
         const leverArm = lx * cosA;
-        torque -= bForce * leverArm * 0.008;
+        torque -= bForce * leverArm * 0.0019;
 
         // Water drag on submerged hull
         const relVx = this.vx - (windSpeed * 0.08);
@@ -889,8 +905,8 @@ class Boat {
 
         // Wave overtopping / ingress
         const deckY = wy - (this.spec.height * cosA);
-        if (waterY > deckY && !this.spec.isSubmarine && this.spec.sinkThreshold < 900) {
-          const overDepth = waterY - deckY;
+        if (waterY < deckY && !this.spec.isSubmarine && this.spec.sinkThreshold < 900) {
+          const overDepth = deckY - waterY;
           this.waterIngress += overDepth * dt * (this.spec.id === 'viking' ? 1.8 : 0.8);
           if (Math.random() < 0.2) {
             addBubble(wx, wy);
@@ -919,20 +935,20 @@ class Boat {
 
     // Submarine ballast dive / surface adjustment
     if (this.spec.isSubmarine) {
-      this.spec.ballast += (this.submergeTarget - this.spec.ballast) * 0.03;
+      this.ballast += (this.submergeTarget - this.ballast) * (1 - Math.pow(0.97, f));
     }
 
     // Gravity force
     const gravity = totalMass * 9.81 * 4.2;
 
-    // Net vertical acceleration
-    const netFvertical = (totalBuoyancy * 4.2) - gravity;
+    // Net vertical acceleration (screen y points down: gravity +, buoyancy -)
+    const netFvertical = gravity - totalBuoyancy;
     this.vy += (netFvertical / totalMass) * dt;
 
     // Water damping
-    this.vy *= 0.96;
-    this.vx *= 0.985;
-    this.angularVel *= 0.94;
+    this.vy *= Math.pow(0.96, f);
+    this.vx *= Math.pow(0.985, f);
+    this.angularVel *= Math.pow(0.94, f);
 
     // Self-righting torque (metacentric keel restoring force)
     const rightingMoment = -Math.sin(this.angle) * (this.spec.id === 'sailboat' ? 65 : 28);
@@ -942,7 +958,7 @@ class Boat {
     this.angularVel += (torque / (totalMass * 18)) * dt;
 
     // Propulsion / Throttle thrust along boat heading
-    const thrustMagnitude = this.throttle * this.spec.maxThrust;
+    const thrustMagnitude = this.throttle * this.spec.maxThrust * 0.03;
     const fx = Math.cos(this.angle) * thrustMagnitude;
     const fy = Math.sin(this.angle) * thrustMagnitude * 0.5;
 
@@ -973,8 +989,8 @@ class Boat {
       this.angularVel *= 0.8;
     }
 
-    // Wake and propeller spray
-    if (Math.abs(this.throttle) > 0.1 && submergedSlices > 2) {
+    // Wake and propeller spray (scaled to substep length)
+    if (Math.abs(this.throttle) > 0.1 && submergedSlices > 2 && Math.random() < f) {
       const sternX = this.x - Math.cos(this.angle) * halfL;
       const sternY = this.y - Math.sin(this.angle) * halfL;
       if (Math.random() < 0.6) {
@@ -989,7 +1005,7 @@ class Boat {
     const bowX = this.x + Math.cos(this.angle) * halfL;
     const bowY = this.y + Math.sin(this.angle) * halfL;
     const bowWaterY = getWaterY(bowX);
-    if (bowY > bowWaterY + 6 && Math.abs(this.vx) > 1.2) {
+    if (bowY > bowWaterY + 6 && Math.abs(this.vx) > 1.2 && Math.random() < f) {
       addSplash(bowX, bowWaterY, Math.floor(Math.abs(this.vx) * 2), this.vx * 0.4, -3);
     }
   }
@@ -1346,7 +1362,7 @@ function drawSubmarine(ctx, b) {
   // Ballast flood indicator LED
   ctx.beginPath();
   ctx.arc(0, 0, 4, 0, Math.PI * 2);
-  ctx.fillStyle = b.spec.ballast > 0.5 ? '#e74c3c' : '#2ecc71';
+  ctx.fillStyle = b.ballast > 0.5 ? '#e74c3c' : '#2ecc71';
   ctx.fill();
 }
 
@@ -1826,6 +1842,7 @@ function toggleHelp() {
 initWaterGrid();
 initShipGrid();
 resizeCanvas();
+activeBoat.reset(); // place boat on real water level
 requestAnimationFrame(loop);
 </script>
 </body>

@@ -416,13 +416,13 @@
     // AUDIO & HIGHSCORE PERSISTENCE ADAPTER
     // ==========================================
     const Audio = {
-      jump() { try { window.ArcadeCore?.sounds?.jump(); } catch(e){} },
-      hit() { try { window.ArcadeCore?.sounds?.hit(); } catch(e){} },
-      powerup() { try { window.ArcadeCore?.sounds?.powerup(); } catch(e){} },
-      pop(p = 1) { try { window.ArcadeCore?.sounds?.pop(p); } catch(e){} },
-      coin() { try { window.ArcadeCore?.sounds?.coin(); } catch(e){} },
-      explosion() { try { window.ArcadeCore?.sounds?.explosion(); } catch(e){} },
-      gameOver() { try { window.ArcadeCore?.sounds?.gameOver(); } catch(e){} }
+      jump() { try { window.ArcadeCore?.Sounds?.jump(); } catch(e){} },
+      hit() { try { window.ArcadeCore?.Sounds?.hit(); } catch(e){} },
+      powerup() { try { window.ArcadeCore?.Sounds?.powerup(); } catch(e){} },
+      pop(p = 1) { try { window.ArcadeCore?.Sounds?.pop(p); } catch(e){} },
+      coin() { try { window.ArcadeCore?.Sounds?.coin(); } catch(e){} },
+      explosion() { try { window.ArcadeCore?.Sounds?.explosion(); } catch(e){} },
+      gameOver() { try { window.ArcadeCore?.Sounds?.pop(0.5); } catch(e){} }
     };
 
     function getBestScore() {
@@ -902,13 +902,7 @@
     }
 
     window.addEventListener('keydown', onKeyDown);
-    if (typeof document !== 'undefined' && document.addEventListener) {
-      document.addEventListener('keydown', onKeyDown);
-    }
     window.addEventListener('keyup', onKeyUp);
-    if (typeof document !== 'undefined' && document.addEventListener) {
-      document.addEventListener('keyup', onKeyUp);
-    }
 
     function handlePrimaryAction() {
       if (gameState === STATE.TITLE_OR_AIM_ANGLE) {
@@ -928,6 +922,8 @@
     canvas.addEventListener('pointerdown', e => {
       if (gameState === STATE.TITLE_OR_AIM_ANGLE || gameState === STATE.CHARGING_POWER) {
         handlePrimaryAction();
+      } else if (gameState === STATE.FLYING) {
+        triggerBoost();
       }
     });
 
@@ -964,7 +960,8 @@
     function fireCannon() {
       gameState = STATE.FLYING;
       cannon.recoil = 18;
-      actionPrompt.style.opacity = '0';
+      actionPrompt.style.opacity = '1';
+      actionPrompt.textContent = 'Tippen oder LEERTASTE: Nitro-Boost zünden! 💨';
       tiltControls.style.opacity = '1';
 
       Audio.explosion();
@@ -993,7 +990,12 @@
       if (sheep.boostsLeft <= 0 || !sheep.isAirborne) return;
       sheep.boostsLeft--;
       boostCountSpan.textContent = sheep.boostsLeft;
-      if (sheep.boostsLeft === 0) btnBoost.disabled = true;
+      if (sheep.boostsLeft === 0) {
+        btnBoost.disabled = true;
+        actionPrompt.textContent = 'Gleitflug! Neigen mit ⮜ ⮞ oder A / D';
+      } else {
+        actionPrompt.textContent = `Tippen oder LEERTASTE: Nitro-Boost (${sheep.boostsLeft} übrig)! 💨`;
+      }
 
       Audio.pop(0.8);
       Audio.powerup();
@@ -1058,24 +1060,26 @@
             // Blast out!
             Audio.explosion();
             Audio.powerup();
-            sheep.vx = 1150;
+            sheep.vx = 1250;
             sheep.vy = -680;
             sheep.rotVel = 14;
+            sheep.stuckInCannon.obj.firingCooldown = 2.0;
             particles.addBurst(sheep.x, sheep.y, 25, '#fbbf24', 320);
             particles.addPopup(sheep.x, sheep.y - 40, 'SUPER-KANONE! 💥', '#f59e0b', 26);
             sheep.stuckInCannon = null;
           }
+          particles.update(dt);
           return;
         }
 
         // Air Tilt Control (Arrow keys or A/D)
         if (keys['ArrowLeft'] || keys['KeyA']) {
           sheep.rotVel -= 18 * dt;
-          sheep.vy += 25 * dt; // Dive
+          sheep.vy += 20 * dt; // Dive
         }
         if (keys['ArrowRight'] || keys['KeyD']) {
           sheep.rotVel += 18 * dt;
-          sheep.vy -= 40 * dt; // Slight lift
+          sheep.vy -= 35 * dt; // Slight lift
         }
 
         // Wind drag & Aerodynamic drag
@@ -1161,19 +1165,19 @@
 
         // 1. TRAMPOLINE
         if (obj.type === OBSTACLE_TYPES.TRAMPOLINE) {
-          if (sheep.x >= obj.x - obj.w / 2 && sheep.x <= obj.x + obj.w / 2) {
-            if (sheep.y + sheep.radius >= obj.y - 15 && sheep.y - sheep.radius <= obj.y + 15) {
+          if (sheep.x >= obj.x - obj.w * 0.55 && sheep.x <= obj.x + obj.w * 0.55) {
+            if (sheep.y + sheep.radius >= obj.y - 25 && sheep.y - sheep.radius <= obj.y) {
               if (sheep.vy > 0) {
                 Audio.jump();
                 Audio.powerup();
-                sheep.vy = -Math.max(680, Math.abs(sheep.vy) * 1.55);
-                sheep.vx = Math.max(sheep.vx * 1.25, 480);
+                sheep.vy = -Math.max(720, Math.abs(sheep.vy) * 1.6);
+                sheep.vx = Math.max(sheep.vx * 1.25, 520);
                 sheep.rotVel = (Math.random() - 0.5) * 20;
                 sheep.bounces++;
                 obj.springPhase = 1.0;
 
-                particles.addBurst(obj.x, obj.y, 16, '#38bdf8', 220);
-                particles.addPopup(obj.x, obj.y - 40, 'MEGA TRAMPOLIN! 🚀', '#38bdf8', 24);
+                particles.addBurst(obj.x, obj.y - 15, 18, '#38bdf8', 240);
+                particles.addPopup(obj.x, obj.y - 45, 'MEGA TRAMPOLIN! 🚀', '#38bdf8', 24);
               }
             }
           }
@@ -1186,54 +1190,61 @@
           const hubY = obj.y - 120;
           const distToHub = Math.hypot(sheep.x - obj.x, sheep.y - hubY);
 
-          if (distToHub <= obj.radius + sheep.radius && obj.hitCooldown <= 0) {
-            // Check blade tip collision
+          if (distToHub <= obj.radius + sheep.radius + 15 && (!obj.hitCooldown || obj.hitCooldown <= 0)) {
+            // Check blade collisions by sampling along 4 blades
+            let hitBlade = false;
             for (let b = 0; b < 4; b++) {
               const bAng = obj.bladeAngle + (b * Math.PI) / 2;
-              const bladeX = obj.x + Math.cos(bAng) * (obj.radius * 0.75);
-              const bladeY = hubY + Math.sin(bAng) * (obj.radius * 0.75);
+              for (let dist = 20; dist <= obj.radius; dist += 20) {
+                const bladeX = obj.x + Math.cos(bAng) * dist;
+                const bladeY = hubY + Math.sin(bAng) * dist;
+                if (Math.hypot(sheep.x - bladeX, sheep.y - bladeY) < 28) {
+                  hitBlade = true;
+                  obj.hitCooldown = 0.6;
+                  Audio.powerup();
+                  Audio.hit();
 
-              if (Math.hypot(sheep.x - bladeX, sheep.y - bladeY) < 38) {
-                obj.hitCooldown = 0.5;
-                Audio.powerup();
-                Audio.hit();
+                  // Fling in blade tangential direction
+                  const flingSpeed = 820 + Math.random() * 200;
+                  sheep.vx = Math.cos(bAng - Math.PI / 2) * flingSpeed + 480;
+                  sheep.vy = Math.sin(bAng - Math.PI / 2) * flingSpeed - 380;
+                  sheep.rotVel = 25;
+                  sheep.bounces++;
 
-                // Fling in blade direction
-                const flingSpeed = 780 + Math.random() * 250;
-                sheep.vx = Math.cos(bAng - Math.PI / 2) * flingSpeed + 450;
-                sheep.vy = Math.sin(bAng - Math.PI / 2) * flingSpeed - 350;
-                sheep.rotVel = 25;
-                sheep.bounces++;
-
-                particles.addBurst(bladeX, bladeY, 20, '#fbbf24', 260);
-                particles.addPopup(obj.x, hubY - 50, 'WINDMÜHLEN-SMASH! 💨', '#f59e0b', 26);
-                break;
+                  particles.addBurst(bladeX, bladeY, 20, '#fbbf24', 260);
+                  particles.addPopup(obj.x, hubY - 50, 'WINDMÜHLEN-SMASH! 💨', '#f59e0b', 26);
+                  break;
+                }
               }
+              if (hitBlade) break;
             }
           }
         }
         // 3. BOUNCY MUSHROOM
         else if (obj.type === OBSTACLE_TYPES.MUSHROOM) {
-          if (Math.hypot(sheep.x - obj.x, (sheep.y + sheep.radius) - (obj.y - 18)) < 32) {
+          const capY = obj.y - 18 * (obj.squish || 1);
+          if (Math.hypot(sheep.x - obj.x, (sheep.y + sheep.radius) - capY) < 36) {
             if (sheep.vy > 0) {
               Audio.jump();
-              sheep.vy = -Math.max(540, Math.abs(sheep.vy) * 1.4);
-              sheep.vx = Math.max(sheep.vx * 1.18, 420);
+              sheep.vy = -Math.max(560, Math.abs(sheep.vy) * 1.45);
+              sheep.vx = Math.max(sheep.vx * 1.2, 440);
               sheep.rotVel = (Math.random() - 0.5) * 16;
               sheep.bounces++;
               obj.squish = 0.4;
 
-              particles.addBurst(obj.x, obj.y - 20, 14, '#ef4444', 190);
+              particles.addBurst(obj.x, obj.y - 20, 16, '#ef4444', 200);
               particles.addPopup(obj.x, obj.y - 45, 'PILZ-BOUNCE! 🍄', '#f87171', 22);
             }
           }
         }
         // 4. BOOSTER CANNON
         else if (obj.type === OBSTACLE_TYPES.BOOSTER_CANNON) {
+          if (obj.firingCooldown > 0) obj.firingCooldown -= dt;
           const muzzleX = obj.x + 20;
           const muzzleY = obj.y - 30;
-          if (Math.hypot(sheep.x - muzzleX, sheep.y - muzzleY) < 32 && !sheep.stuckInCannon) {
+          if (Math.hypot(sheep.x - muzzleX, sheep.y - muzzleY) < 36 && !sheep.stuckInCannon && (!obj.firingCooldown || obj.firingCooldown <= 0)) {
             Audio.pop(1.6);
+            obj.firingCooldown = 2.0;
             sheep.stuckInCannon = { obj, timer: 0.28 };
           }
         }
@@ -1265,15 +1276,15 @@
         }
         // 7. GOLDEN CLOVER
         else if (obj.type === OBSTACLE_TYPES.CLOVER && !obj.collected) {
-          if (Math.hypot(sheep.x - obj.x, sheep.y - obj.y) < 34) {
+          if (Math.hypot(sheep.x - obj.x, sheep.y - obj.y) < 36) {
             obj.collected = true;
             sheep.cloversCollected++;
             Audio.coin();
             // Bonus forward impulse
-            sheep.vx += 160;
-            sheep.vy -= 120;
+            sheep.vx += 260;
+            sheep.vy = Math.min(sheep.vy - 160, -240);
             particles.addBurst(obj.x, obj.y, 18, '#4ade80', 200);
-            particles.addPopup(obj.x, obj.y - 30, '+50m KLEEBLATT! 🍀', '#4ade80', 22);
+            particles.addPopup(obj.x, obj.y - 30, '+SPEED KLEEBLATT! 🍀', '#4ade80', 24);
           }
         }
       }
@@ -1287,40 +1298,46 @@
       sheep.isGrounded = true;
 
       const slope = getGroundSlope(sheep.x);
-      const normalAngle = Math.atan2(1, -slope) - Math.PI / 2;
-      const nx = -Math.sin(normalAngle);
-      const ny = Math.cos(normalAngle);
+      const len = Math.hypot(1, slope);
+      // Unit normal pointing UP into the sky (ny < 0)
+      const nx = slope / len;
+      const ny = -1 / len;
 
-      // Dot product velocity with normal
+      // Unit tangent pointing along the ground to the right
+      const tx = 1 / len;
+      const ty = slope / len;
+
+      // Dot product of velocity with upward normal (negative when falling towards ground)
       const normalVel = sheep.vx * nx + sheep.vy * ny;
 
-      if (normalVel < -40) {
-        // Impact restitution
-        const restitution = 0.58;
-        sheep.vx -= (1 + restitution) * normalVel * nx;
-        sheep.vy -= (1 + restitution) * normalVel * ny;
+      if (normalVel < -35) {
+        // Impact bounce with restitution
+        const restitution = 0.55;
+        // Bounce component
+        const newNormalVel = -normalVel * restitution;
 
         // Tangent friction
-        const tx = -ny;
-        const ty = nx;
         const tangentVel = sheep.vx * tx + sheep.vy * ty;
-        const friction = 0.86;
-        sheep.vx = tangentVel * friction * tx + (sheep.vx - tangentVel * tx);
-        sheep.vy = tangentVel * friction * ty + (sheep.vy - tangentVel * ty);
+        const friction = 0.90;
+        const newTangentVel = tangentVel * friction;
 
-        sheep.rotVel = (sheep.vx * 0.08);
+        sheep.vx = newTangentVel * tx + newNormalVel * nx;
+        sheep.vy = newTangentVel * ty + newNormalVel * ny;
 
-        // Sound on hard impact
-        if (Math.abs(normalVel) > 120) {
+        sheep.rotVel = (sheep.vx * 0.05);
+
+        // Sound & particles on impact
+        if (Math.abs(normalVel) > 80) {
           Audio.hit();
           sheep.bounces++;
-          particles.addSmoke(sheep.x, sheep.y + sheep.radius, -sheep.vx * 0.3, -30, 4, 'rgba(16, 185, 129, 0.6)');
+          particles.addSmoke(sheep.x, sheep.y + sheep.radius, -sheep.vx * 0.2, -30, 4, 'rgba(16, 185, 129, 0.6)');
         }
       } else {
         // Low speed rolling / sliding along ground surface
-        sheep.vy = sheep.vx * slope;
-        sheep.vx *= 0.95;
-        if (Math.abs(sheep.vx) < 6) {
+        const tangentVel = (sheep.vx * tx + sheep.vy * ty) * 0.96;
+        sheep.vx = tangentVel * tx;
+        sheep.vy = tangentVel * ty;
+        if (Math.abs(sheep.vx) < 8) {
           sheep.vx = 0;
           sheep.vy = 0;
         }
@@ -1333,6 +1350,7 @@
     function onSheepStopped() {
       gameState = STATE.GAME_OVER;
       tiltControls.style.opacity = '0.3';
+      actionPrompt.style.opacity = '0';
 
       const finalDistMeters = Math.max(0, Math.round((sheep.x / PIXELS_PER_METER) * 10) / 10);
       const isNewRecord = finalDistMeters > highscore;
@@ -1391,7 +1409,7 @@
     // ==========================================
     function render() {
       ctx.save();
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // 1. SKY GRADIENT
       const skyGrad = ctx.createLinearGradient(0, 0, 0, viewH);
@@ -1501,10 +1519,11 @@
     function renderTerrain() {
       const startX = camera.x - 200;
       const endX = camera.x + viewW / camera.zoom + 200;
+      const bottomY = Math.max(1600, camera.y + (viewH / camera.zoom) + 600);
 
       ctx.save();
       // Lush grassy sublayer
-      const terrGrad = ctx.createLinearGradient(0, 400, 0, 1100);
+      const terrGrad = ctx.createLinearGradient(0, 400, 0, bottomY);
       terrGrad.addColorStop(0, '#10b981'); // Emerald grass
       terrGrad.addColorStop(0.15, '#059669');
       terrGrad.addColorStop(0.4, '#047857');
@@ -1512,11 +1531,11 @@
       ctx.fillStyle = terrGrad;
 
       ctx.beginPath();
-      ctx.moveTo(startX, 1600);
+      ctx.moveTo(startX, bottomY);
       for (let x = startX; x <= endX; x += 18) {
         ctx.lineTo(x, getGroundY(x));
       }
-      ctx.lineTo(endX, 1600);
+      ctx.lineTo(endX, bottomY);
       ctx.closePath();
       ctx.fill();
 
@@ -1914,7 +1933,8 @@
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.roundRect(cx - barW / 2, cy - barH / 2, barW, barH, 12);
+        if (ctx.roundRect) ctx.roundRect(cx - barW / 2, cy - barH / 2, barW, barH, 12);
+        else ctx.rect(cx - barW / 2, cy - barH / 2, barW, barH);
         ctx.fill();
         ctx.stroke();
 
@@ -1926,7 +1946,8 @@
         pGrad.addColorStop(1, '#ef4444');
         ctx.fillStyle = pGrad;
         ctx.beginPath();
-        ctx.roundRect(cx - barW / 2 + 4, cy - barH / 2 + 4, Math.max(0, fillW), barH - 8, 8);
+        if (ctx.roundRect) ctx.roundRect(cx - barW / 2 + 4, cy - barH / 2 + 4, Math.max(0, fillW), barH - 8, 8);
+        else ctx.rect(cx - barW / 2 + 4, cy - barH / 2 + 4, Math.max(0, fillW), barH - 8);
         ctx.fill();
 
         ctx.fillStyle = '#fff';
