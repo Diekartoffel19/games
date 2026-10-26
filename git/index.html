@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GitHistory</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<style>
+.tip{position:absolute;display:none;pointer-events:none;background:#0b0e14ee;border:1px solid var(--bd);border-radius:8px;padding:6px 10px;font-size:12px;max-width:260px;z-index:5}
+.badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;margin-right:6px;color:#fff}
+.badge.m{background:#ff6b9d;color:#000}.badge.open{background:#238636}.badge.merged{background:#8957e5}.badge.closed{background:#da3633}
+.tiles{display:flex;flex-wrap:wrap;gap:10px}
+.seg{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.seg button{padding:4px 12px;background:var(--card2);border:1px solid var(--bd);font-weight:500;font-size:12px}
+.seg button.on{background:var(--a);border-color:transparent}
+:root{--bg:#0b0e14;--card:#131824;--card2:#1a2132;--bd:#252d42;--tx:#e6e9f2;--mut:#8b94ab;--a:#7c5cff;--b:#00d4aa;--c:#ff6b9d;--d:#ffb84d}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 10% -10%,#1b1440 0,transparent 60%),radial-gradient(900px 500px at 100% 0,#06312c 0,transparent 55%),var(--bg);color:var(--tx);font:14px/1.5 system-ui,Segoe UI,sans-serif;min-height:100vh}
+.wrap{max-width:1200px;margin:0 auto;padding:24px 16px 60px}
+h1{margin:0;font-size:22px;background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;color:transparent}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:24px}
+form{display:flex;gap:8px;flex-wrap:wrap}
+input,button{font:inherit;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 12px}
+input:focus{outline:2px solid var(--a)}
+button{cursor:pointer;background:linear-gradient(135deg,var(--a),#5b3fe0);border:0;font-weight:600}
+button.ghost{background:var(--card);border:1px solid var(--bd);font-weight:400}
+button:hover{filter:brightness(1.15)}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(12,1fr)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px;min-width:0}
+.card h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.s3{grid-column:span 3}.s4{grid-column:span 4}.s5{grid-column:span 5}.s6{grid-column:span 6}.s7{grid-column:span 7}.s8{grid-column:span 8}.s12{grid-column:span 12}
+@media(max-width:900px){.grid>*{grid-column:span 12!important}}
+.profile{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.profile img{width:96px;height:96px;border-radius:50%;border:3px solid var(--a)}
+.profile h2{margin:0}
+.mut{color:var(--mut)}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-left:auto}
+.stat{background:var(--card2);border-radius:12px;padding:10px 16px;text-align:center;min-width:90px}
+.stat b{display:block;font-size:20px}
+.tabs{display:flex;gap:6px;margin:20px 0 16px}
+.tabs button{background:var(--card);border:1px solid var(--bd);font-weight:500}
+.tabs button.on{background:linear-gradient(135deg,var(--a),#5b3fe0);border-color:transparent}
+.chart{position:relative;height:260px}
+.chart.tall{height:340px}
+.repos{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.repo{background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px;cursor:pointer;transition:.15s}
+.repo:hover{border-color:var(--a);transform:translateY(-2px)}
+.repo b{color:var(--b)}
+.repo p{margin:4px 0 8px;color:var(--mut);font-size:13px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;gap:12px;font-size:12px;color:var(--mut);flex-wrap:wrap}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+.heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,14px);gap:3px;overflow-x:auto;padding-bottom:6px}
+.heat i{width:14px;height:14px;border-radius:3px;background:#1d2538}
+.hm{display:grid;grid-template-columns:36px repeat(24,1fr);gap:2px;font-size:10px;color:var(--mut)}
+.hm i{aspect-ratio:1;border-radius:3px;background:#1d2538;min-height:10px}
+.list{max-height:340px;overflow:auto}
+.list div{padding:7px 0;border-bottom:1px solid var(--bd);display:flex;gap:10px}
+.list a{color:var(--tx);text-decoration:none}.list a:hover{color:var(--b)}
+.list code{color:var(--d);flex:none}
+.err{background:#3a1420;border:1px solid #7a2540;padding:12px;border-radius:12px;margin:12px 0}
+.load{color:var(--mut);padding:40px;text-align:center}
+.back{margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>⏳ GitHistory</h1>
+  <form id="f">
+    <input id="u" placeholder="github username" autocomplete="off" required>
+    <input id="t" type="password" placeholder="token (optional, avoids rate limit)" style="width:260px">
+    <button>Explore</button>
+  </form>
+</header>
+<div id="app"><div class="load">Enter a GitHub username. Public data only. Without a token: 60 API calls/hour.</div></div>
+</div>
+<script>
+const $=s=>document.querySelector(s), app=$('#app');
+const PAL=['#7c5cff','#00d4aa','#ff6b9d','#ffb84d','#4da3ff','#a3e635','#f97316','#22d3ee','#e879f9','#facc15','#94a3b8'];
+const LANGC={JavaScript:'#f1e05a',TypeScript:'#3178c6',Python:'#3572A5',Java:'#b07219',Go:'#00ADD8',Rust:'#dea584','C++':'#f34b7d',C:'#aaa','C#':'#178600',HTML:'#e34c26',CSS:'#563d7c',Shell:'#89e051',Ruby:'#701516',PHP:'#4F5D95',Kotlin:'#A97BFF',Swift:'#F05138',Lua:'#000080',Vue:'#41b883',Dart:'#00B4AB'};
+const lc=(l,i=0)=>LANGC[l]||PAL[i%PAL.length];
+Chart.defaults.color='#8b94ab';Chart.defaults.borderColor='#252d42';Chart.defaults.font.family='system-ui';
+let charts=[],state={};
+$('#t').value=localStorage.ght||'';
+
+async function gh(path){
+  const h={Accept:'application/vnd.github+json'};const t=$('#t').value.trim();if(t)h.Authorization='Bearer '+t;
+  const r=await fetch('https://api.github.com'+path,{headers:h});
+  if(r.status===403||r.status===429)throw Error('Rate limited. Add a token or wait.');
+  if(r.status===404)throw Error('Not found: '+path);
+  if(r.status===202)return null;
+  if(!r.ok)throw Error('API error '+r.status);
+  return r.json();
+}
+async function pages(path,max){
+  let out=[];const sep=path.includes('?')?'&':'?';
+  for(let p=1;p<=max;p++){const d=await gh(`${path}${sep}per_page=100&page=${p}`);if(!d||!d.length)break;out=out.concat(d);if(d.length<100)break}
+  return out;
+}
+const mk=(el,cfg)=>{const c=new Chart(el,cfg);charts.push(c);return c};
+const disposers=[];
+const clear=()=>{charts.forEach(c=>c.destroy());charts=[];disposers.splice(0).forEach(f=>f())};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>n>=1000?(n/1000).toFixed(1)+'k':n;
+const card=(t,body,cls='s6')=>`<div class="card ${cls}"><h3>${t}</h3>${body}</div>`;
+const cv=(id,tall)=>`<div class="chart${tall?' tall':''}"><canvas id="${id}"></canvas></div>`;
+
+$('#f').onsubmit=e=>{e.preventDefault();localStorage.ght=$('#t').value.trim();location.hash='#'+$('#u').value.trim()};
+window.onhashchange=route;route();
+function route(){
+  const h=decodeURIComponent(location.hash.slice(1));if(!h)return;
+  const [u,r]=h.split('/');$('#u').value=u;
+  r?loadRepo(u,r):loadUser(u);
+}
+
+async function loadUser(u){
+  clear();app.innerHTML='<div class="load">Loading '+esc(u)+'…</div>';
+  try{
+    const [user,repos,events]=await Promise.all([gh('/users/'+u),pages(`/users/${u}/repos?sort=pushed`,5),pages(`/users/${u}/events/public`,3).catch(()=>[])]);
+    state={user,repos,events,tab:'overview'};renderUser();
+  }catch(e){app.innerHTML=`<div class="err">${esc(e.message)}</div>`}
+}
+function renderUser(){
+  clear();const {user,repos,events,tab}=state;
+  const stars=repos.reduce((a,r)=>a+r.stargazers_count,0),forks=repos.reduce((a,r)=>a+r.forks_count,0);
+  app.innerHTML=`
+  <div class="card profile"><img src="${user.avatar_url}">
+    <div><h2>${esc(user.name||user.login)} <span class="mut">@${user.login}</span></h2>
+    <div class="mut">${esc(user.bio||'')}</div>
+    <div class="mut">${user.location?'📍 '+esc(user.location)+' · ':''}Joined ${new Date(user.created_at).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'})} · <a style="color:var(--b)" target="_blank" href="${user.html_url}">profile ↗</a></div></div>
+    <div class="stats">${[['Repos',user.public_repos],['Stars',stars],['Forks',forks],['Followers',user.followers],['Following',user.following]].map(([k,v])=>`<div class="stat"><b>${fmt(v)}</b>${k}</div>`).join('')}</div>
+  </div>
+  <div class="tabs">${['overview','repos','activity','galaxy'].map(t=>`<button class="${t===tab?'on':''}" data-t="${t}">${t==='galaxy'?'🌌 3D Galaxy':t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div>
+  <div id="pane"></div>`;
+  document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{state.tab=b.dataset.t;renderUser()});
+  ({overview,repos:reposTab,activity,galaxy})[tab]();
+}
+
+function overview(){
+  const {user,repos}=state;
+  $('#pane').innerHTML=`<div class="grid">
+    ${card('Repos created per year',cv('c1'),'s7')}
+    ${card('Languages (by repo count)',cv('c2'),'s5')}
+    ${card('Most starred',cv('c3'),'s6')}
+    ${card('Account growth (cumulative repos)',cv('c4'),'s6')}
+    ${card('Last pushed (repo freshness)',cv('c5'),'s12')}</div>`;
+  const own=repos.filter(r=>!r.fork);
+  const yrs={};repos.forEach(r=>{const y=r.created_at.slice(0,4);(yrs[y]??={own:0,fork:0})[r.fork?'fork':'own']++});
+  const ys=Object.keys(yrs).sort();
+  mk($('#c1'),{type:'bar',data:{labels:ys,datasets:[{label:'Own',data:ys.map(y=>yrs[y].own),backgroundColor:'#7c5cff',borderRadius:6},{label:'Forks',data:ys.map(y=>yrs[y].fork),backgroundColor:'#00d4aa',borderRadius:6}]},options:{maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true,ticks:{precision:0}}}}});
+  const langs={};repos.forEach(r=>{if(r.language)langs[r.language]=(langs[r.language]||0)+1});
+  const le=Object.entries(langs).sort((a,b)=>b[1]-a[1]);
+  mk($('#c2'),{type:'doughnut',data:{labels:le.map(x=>x[0]),datasets:[{data:le.map(x=>x[1]),backgroundColor:le.map((x,i)=>lc(x[0],i)),borderColor:'#131824',borderWidth:3}]},options:{maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'right',labels:{boxWidth:10}}}}});
+  const top=[...repos].sort((a,b)=>b.stargazers_count-a.stargazers_count).slice(0,8);
+  mk($('#c3'),{type:'bar',data:{labels:top.map(r=>r.name),datasets:[{label:'Stars',data:top.map(r=>r.stargazers_count),backgroundColor:'#ffb84d',borderRadius:6}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},onClick:(e,a)=>a[0]&&(location.hash='#'+user.login+'/'+top[a[0].index].name)}});
+  const sorted=[...repos].sort((a,b)=>a.created_at.localeCompare(b.created_at));
+  mk($('#c4'),{type:'line',data:{labels:sorted.map(r=>r.created_at.slice(0,10)),datasets:[{label:'Repos',data:sorted.map((_,i)=>i+1),borderColor:'#ff6b9d',backgroundColor:'#ff6b9d33',fill:true,pointRadius:0,tension:.3,stepped:false}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxTicksLimit:8}}}}});
+  const now=Date.now(),bk=[['< 1 week',7],['< 1 month',30],['< 3 months',90],['< 1 year',365],['older',1e9]],cnt=bk.map(()=>0);
+  repos.forEach(r=>{const d=(now-new Date(r.pushed_at))/864e5;cnt[bk.findIndex(b=>d<b[1])]++});
+  mk($('#c5'),{type:'bar',data:{labels:bk.map(b=>b[0]),datasets:[{data:cnt,backgroundColor:['#00d4aa','#4da3ff','#7c5cff','#ffb84d','#8b94ab'],borderRadius:6}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{precision:0}}}}});
+}
+
+function reposTab(){
+  const {user,repos}=state;
+  $('#pane').innerHTML=`<div class="card"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <input id="q" placeholder="filter…" style="flex:1;min-width:160px">
+    <select id="so" style="border-radius:10px;background:var(--card);color:var(--tx);border:1px solid var(--bd);padding:9px"><option value="pushed_at">Recently pushed</option><option value="stargazers_count">Stars</option><option value="created_at">Newest</option><option value="size">Size</option></select></div>
+    <div class="repos" id="rl"></div></div>`;
+  const draw=()=>{
+    const q=$('#q').value.toLowerCase(),k=$('#so').value;
+    const l=repos.filter(r=>(r.name+(r.description||'')).toLowerCase().includes(q)).sort((a,b)=>k==='stargazers_count'||k==='size'?b[k]-a[k]:b[k].localeCompare(a[k]));
+    $('#rl').innerHTML=l.map(r=>`<div class="repo" data-n="${esc(r.name)}"><b>${esc(r.name)}</b>${r.fork?' <span class="mut">(fork)</span>':''}<p>${esc(r.description||'No description')}</p>
+      <div class="meta">${r.language?`<span><span class="dot" style="background:${lc(r.language)}"></span>${r.language}</span>`:''}<span>★ ${r.stargazers_count}</span><span>⑂ ${r.forks_count}</span><span>pushed ${r.pushed_at.slice(0,10)}</span></div></div>`).join('');
+    document.querySelectorAll('.repo').forEach(e=>e.onclick=()=>location.hash='#'+user.login+'/'+e.dataset.n);
+  };
+  $('#q').oninput=draw;$('#so').onchange=draw;draw();
+}
+
+function activity(){
+  const {events}=state;
+  if(!events.length){$('#pane').innerHTML='<div class="card load">No recent public events.</div>';return}
+  $('#pane').innerHTML=`<div class="grid">
+    ${card(`Activity heatmap (last 90 days, ${events.length} events)`,'<div class="heat" id="hm"></div>','s12')}
+    ${card('Event types',cv('a1'),'s4')}
+    ${card('By hour of day (local)',cv('a2'),'s8')}
+    ${card('By weekday',cv('a3'),'s4')}
+    ${card('Most active repos',cv('a4'),'s8')}
+    ${card('Recent events','<div class="list" id="ev"></div>','s12')}</div>`;
+  const day={};events.forEach(e=>{const k=e.created_at.slice(0,10);day[k]=(day[k]||0)+1});
+  const end=new Date();end.setHours(0,0,0,0);const start=new Date(end-90*864e5);start.setDate(start.getDate()-start.getDay());
+  let h='';const mx=Math.max(...Object.values(day));
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    const k=d.toISOString().slice(0,10),n=day[k]||0,a=n?(.25+.75*n/mx):0;
+    h+=`<i title="${k}: ${n} events" style="${n?`background:rgba(0,212,170,${a})`:''}"></i>`}
+  $('#hm').innerHTML=h;
+  const ty={};events.forEach(e=>{const t=e.type.replace('Event','');ty[t]=(ty[t]||0)+1});
+  const te=Object.entries(ty).sort((a,b)=>b[1]-a[1]);
+  mk($('#a1'),{type:'doughnut',data:{labels:te.map(x=>x[0]),datasets:[{data:te.map(x=>x[1]),backgroundColor:PAL,borderColor:'#131824',borderWidth:3}]},options:{maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'right',labels:{boxWidth:10}}}}});
+  const hr=Array(24).fill(0),wd=Array(7).fill(0);events.forEach(e=>{const d=new Date(e.created_at);hr[d.getHours()]++;wd[d.getDay()]++});
+  mk($('#a2'),{type:'bar',data:{labels:hr.map((_,i)=>i+'h'),datasets:[{data:hr,backgroundColor:'#7c5cff',borderRadius:4}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  mk($('#a3'),{type:'radar',data:{labels:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],datasets:[{data:wd,borderColor:'#ff6b9d',backgroundColor:'#ff6b9d44'}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  const rp={};events.forEach(e=>rp[e.repo.name]=(rp[e.repo.name]||0)+1);
+  const re=Object.entries(rp).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  mk($('#a4'),{type:'bar',data:{labels:re.map(x=>x[0]),datasets:[{data:re.map(x=>x[1]),backgroundColor:'#00d4aa',borderRadius:6}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  $('#ev').innerHTML=events.slice(0,60).map(e=>{
+    const p=e.payload;let what=e.type.replace('Event','');
+    if(e.type==='PushEvent')what=`pushed ${p.size||p.commits?.length||''} commit(s)`;
+    else if(p.action)what=`${p.action} ${e.type.replace('Event','').toLowerCase()}`;
+    return `<div><code>${e.created_at.slice(0,10)}</code><span>${esc(what)} → <a target="_blank" href="https://github.com/${e.repo.name}">${e.repo.name}</a></span></div>`}).join('');
+}
+
+/* ---------- 3D helpers ---------- */
+function scene3d(el,{h=520,cam=[0,30,80],auto=true,onFrame,bloom=.7}={}){
+  el.style.height=h+'px';el.style.position='relative';el.style.borderRadius='12px';el.style.overflow='hidden';
+  el.style.background='radial-gradient(circle at 50% 40%,#161c33,#080b12)';
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(55,el.clientWidth/h,.1,3000);camera.position.set(...cam);
+  const rd=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  rd.setPixelRatio(Math.min(devicePixelRatio,2));rd.setSize(el.clientWidth,h);el.appendChild(rd.domElement);
+  scene.background=new THREE.Color(0x080b12);
+  let comp=null;
+  if(bloom&&THREE.EffectComposer&&THREE.UnrealBloomPass){comp=new THREE.EffectComposer(rd);comp.addPass(new THREE.RenderPass(scene,camera));comp.addPass(new THREE.UnrealBloomPass(new THREE.Vector2(el.clientWidth,h),bloom,.55,.22))}
+  const ctl=new THREE.OrbitControls(camera,rd.domElement);ctl.enableDamping=true;ctl.autoRotate=auto;ctl.autoRotateSpeed=.5;
+  ctl.addEventListener('start',()=>ctl.autoRotate=false);
+  scene.add(new THREE.AmbientLight(0xffffff,.6));
+  const pl=new THREE.PointLight(0xffffff,.9);scene.add(pl);
+  const sp=new Float32Array(1800*3);
+  for(let i=0;i<sp.length;i+=3){const r=400+Math.random()*500,a=Math.random()*6.283,b=Math.acos(2*Math.random()-1);sp[i]=r*Math.sin(b)*Math.cos(a);sp[i+1]=r*Math.cos(b);sp[i+2]=r*Math.sin(b)*Math.sin(a)}
+  const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.BufferAttribute(sp,3));
+  scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0x8b94ab,size:1.4,sizeAttenuation:false})));
+  const tip=document.createElement('div');tip.className='tip';el.appendChild(tip);
+  const pickables=[],ray=new THREE.Raycaster(),mv=new THREE.Vector2(),dom=rd.domElement;let hov=null,down=null;
+  dom.addEventListener('pointermove',e=>{
+    const b=dom.getBoundingClientRect();mv.set((e.clientX-b.left)/b.width*2-1,-(e.clientY-b.top)/b.height*2+1);
+    ray.setFromCamera(mv,camera);const hit=ray.intersectObjects(pickables,false)[0];
+    hov=hit?hit.object:null;dom.style.cursor=hov?'pointer':'grab';
+    if(hov){tip.style.display='block';tip.innerHTML=hov.userData.tip;tip.style.left=Math.max(0,Math.min(e.clientX-b.left+14,b.width-270))+'px';tip.style.top=(e.clientY-b.top+14)+'px'}
+    else tip.style.display='none'});
+  dom.addEventListener('pointerleave',()=>{hov=null;tip.style.display='none'});
+  dom.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
+  dom.addEventListener('pointerup',e=>{if(down&&hov&&hov.userData.click&&Math.hypot(e.clientX-down[0],e.clientY-down[1])<5)hov.userData.click(hov);down=null});
+  let raf,dead=false;const clock=new THREE.Clock();
+  const loop=()=>{if(dead)return;raf=requestAnimationFrame(loop);ctl.update();pl.position.copy(camera.position);onFrame&&onFrame(clock.getElapsedTime());comp?comp.render():rd.render(scene,camera)};loop();
+  const ro=new ResizeObserver(()=>{const w=el.clientWidth;if(!w)return;camera.aspect=w/h;camera.updateProjectionMatrix();rd.setSize(w,h);comp&&comp.setSize(w,h)});ro.observe(el);
+  disposers.push(()=>{dead=true;cancelAnimationFrame(raf);ro.disconnect();ctl.dispose();
+    scene.traverse(o=>{o.geometry&&o.geometry.dispose();if(o.material){o.material.map&&o.material.map.dispose();o.material.dispose()}});
+    rd.dispose();el.innerHTML=''});
+  return {scene,camera,ctl,
+    add(mesh,tip,click){mesh.userData.tip=tip;mesh.userData.click=click;scene.add(mesh);pickables.push(mesh);return mesh}};
+}
+function label(txt,color='#8b94ab',s=1){
+  const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');
+  x.font='bold 30px system-ui';x.fillStyle=color;x.textAlign='center';x.textBaseline='middle';x.fillText(txt,128,32);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false}));
+  sp.scale.set(8*s,2*s,1);return sp;
+}
+const mon=d=>new Date(d).toLocaleDateString(undefined,{month:'short',year:'numeric'});
+
+/* ---------- user: 3D galaxy ---------- */
+let _glow;
+function glow(col,s,op){
+  if(!_glow){const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),g=x.createRadialGradient(64,64,0,64,64,64);
+    g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.25,'rgba(255,255,255,.35)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,128,128);_glow=new THREE.CanvasTexture(c)}
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:_glow,color:col,transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false}));
+  sp.scale.setScalar(s);return sp;
+}
+function galaxy(){
+  const {repos,user}=state;
+  $('#pane').innerHTML=`<div class="card"><h3>Repo galaxy · x = created · y = stars · z = language · size = repo size · octahedron = fork</h3><div id="g3"></div>
+    <div class="mut" style="margin-top:8px;font-size:12px">Drag to orbit · scroll to zoom · right-drag to pan · click a repo to open it</div></div>`;
+  if(!repos.length)return;
+  const bobs=[],spins=[];
+  const S=scene3d($('#g3'),{h:640,cam:[0,45,115],bloom:1.0,onFrame:t=>{
+    bobs.forEach(b=>{const o=Math.sin(t*.8+b.p)*.45;b.m.position.y=b.y+o;b.h.position.y=b.y+o});
+    spins.forEach(m=>m.rotation.y=t*.6)}});
+  const T=repos.map(r=>+new Date(r.created_at)),t0=Math.min(...T),t1=Math.max(...T),span=(t1-t0)||1;
+  const cnt={};repos.forEach(r=>{const l=r.language||'Other';cnt[l]=(cnt[l]||0)+1});
+  const L=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]),zs=10;
+  const zOf=l=>(L.indexOf(l)-(L.length-1)/2)*zs,X=t=>(t-t0)/span*100-50,zmax=zOf(L[L.length-1]);
+  S.ctl.target.set(0,12,0);
+  const grid=new THREE.GridHelper(Math.max(120,L.length*zs+30),24,0x2a3350,0x141a2c);grid.material.transparent=true;grid.material.opacity=.6;S.scene.add(grid);
+  // language nebulae
+  L.forEach((l,i)=>{const n=glow(new THREE.Color(lc(l,i)),90,.07);n.position.set(0,14,zOf(l));S.scene.add(n);
+    const lane=new THREE.Mesh(new THREE.PlaneGeometry(110,zs*.9),new THREE.MeshBasicMaterial({color:lc(l,i),transparent:true,opacity:.05,side:THREE.DoubleSide}));
+    lane.rotation.x=-Math.PI/2;lane.position.set(0,.02,zOf(l));S.scene.add(lane)});
+  const sphere=new THREE.SphereGeometry(1,32,20),octa=new THREE.OctahedronGeometry(1.25),ring=new THREE.RingGeometry(.9,1,40),drops=[],dcols=[];
+  repos.forEach((r,ri)=>{
+    const lang=r.language||'Other',col=new THREE.Color(lc(lang,L.indexOf(lang))),rad=.7+Math.log10(r.size+10)*.55;
+    let h=0;for(const ch of r.name)h=(h*31+ch.charCodeAt(0))|0;
+    const x=X(+new Date(r.created_at)),z=zOf(lang)+((Math.abs(h)%100)/100-.5)*6,y=Math.log2(r.stargazers_count+1)*4+rad+1;
+    const m=new THREE.Mesh(r.fork?octa:sphere,new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:r.fork?.5:.65,roughness:.25,metalness:.35,transparent:r.fork,opacity:r.fork?.8:1,flatShading:r.fork}));
+    m.scale.setScalar(rad);m.position.set(x,y,z);
+    S.add(m,`<b>${esc(r.name)}</b>${r.fork?' (fork)':''}<br>★ ${r.stargazers_count} · ${esc(lang)} · ${Math.round(r.size)} KB<br>created ${r.created_at.slice(0,10)}`,()=>location.hash='#'+user.login+'/'+r.name);
+    const hl=glow(col,rad*6,.55);hl.position.copy(m.position);S.scene.add(hl);
+    const rg=new THREE.Mesh(ring,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.55,side:THREE.DoubleSide}));
+    rg.rotation.x=-Math.PI/2;rg.scale.setScalar(rad*1.6);rg.position.set(x,.05,z);S.scene.add(rg);
+    bobs.push({m,h:hl,y,p:ri*1.7});if(r.fork)spins.push(m);
+    drops.push(x,0,z,x,y,z);dcols.push(col.r*.25,col.g*.25,col.b*.25,col.r,col.g,col.b);
+  });
+  const dg=new THREE.BufferGeometry();dg.setAttribute('position',new THREE.Float32BufferAttribute(drops,3));dg.setAttribute('color',new THREE.Float32BufferAttribute(dcols,3));
+  S.scene.add(new THREE.LineSegments(dg,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.6})));
+  [...repos].sort((a,b)=>b.stargazers_count-a.stargazers_count||b.size-a.size).slice(0,10).forEach(r=>{
+    const sp=label(r.name,'#e6e9f2',.9);
+    sp.position.set(X(+new Date(r.created_at)),Math.log2(r.stargazers_count+1)*4+(.7+Math.log10(r.size+10)*.55)*2+3.4,zOf(r.language||'Other'));S.scene.add(sp)});
+  for(let y=new Date(t0).getFullYear();y<=new Date(t1).getFullYear()+1;y++){
+    const t=+new Date(y,0,1);if(t<t0-span*.02||t>t1+span*.02)continue;
+    const sp=label(String(y),'#8b94ab');sp.position.set(X(t),.5,zmax+10);S.scene.add(sp)}
+  L.forEach((l,i)=>{const sp=label(l,lc(l,i));sp.position.set(-62,.5,zOf(l));S.scene.add(sp)});
+}
+
+/* ---------- repo: 3D git graph ---------- */
+function gitGraph3d(el,commits,onPick){
+  const n=commits.length,lanes=[],lane=[],idx={};
+  commits.forEach((c,i)=>{
+    idx[c.sha]=i;
+    let l=lanes.indexOf(c.sha);if(l<0){l=lanes.indexOf(null);if(l<0)l=lanes.length}
+    lanes.forEach((v,k)=>{if(v===c.sha)lanes[k]=null});
+    const ps=c.parents.map(p=>p.sha);
+    if(ps[0]&&!lanes.includes(ps[0]))lanes[l]=ps[0];
+    ps.slice(1).forEach(p=>{if(!lanes.includes(p)){let f=lanes.indexOf(null);if(f<0||f===l)f=lanes.length;lanes[f]=p}});
+    lane[i]=l;
+  });
+  const maxLane=Math.max(0,...lane),zsp=3,total=Math.min(160,Math.max(10,n*1.5)),sp=total/Math.max(1,n-1);
+  const P=i=>new THREE.Vector3(((n-1-i)/Math.max(1,n-1)-.5)*total,0,(lane[i]-maxLane/2)*zsp);
+  const S=scene3d(el,{h:540,cam:[0,total*.25+12,Math.max(32,total*.7)],auto:false});
+  const rad=Math.min(.6,Math.max(.15,sp*.4)),sph=new THREE.SphereGeometry(1,16,12),oct=new THREE.OctahedronGeometry(1.4);
+  const mats={},laneMat=l=>mats[l]??=(c=>new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:.5,roughness:.4}))(new THREE.Color(PAL[l%PAL.length]));
+  const pink=new THREE.MeshStandardMaterial({color:0xff6b9d,emissive:0xff6b9d,emissiveIntensity:.7,roughness:.3});
+  const hi=new THREE.Mesh(new THREE.SphereGeometry(1,16,12),new THREE.MeshBasicMaterial({color:0xffffff,wireframe:true,transparent:true,opacity:.8}));hi.visible=false;S.scene.add(hi);
+  const nodes=[];
+  commits.forEach((c,i)=>{
+    const merge=c.parents.length>1,m=new THREE.Mesh(merge?oct:sph,merge?pink:laneMat(lane[i]));
+    m.scale.setScalar(merge?rad*1.5:rad);m.position.copy(P(i));nodes[i]=m;
+    S.add(m,`${merge?'<span class="badge m">MERGE</span> ':''}<b>${c.sha.slice(0,7)}</b> ${esc(c.commit.message.split('\n')[0])}<br><span class="mut">${esc(c.commit.author.name)} · ${c.commit.author.date.slice(0,10)}</span>`,
+      ()=>{hi.visible=true;hi.position.copy(m.position);hi.scale.setScalar(m.scale.x*2);onPick(c)});
+  });
+  const pts=[],cols=[],pushSeg=(a,b,col)=>{pts.push(a.x,a.y,a.z,b.x,b.y,b.z);cols.push(col.r,col.g,col.b,col.r,col.g,col.b)};
+  commits.forEach((c,i)=>c.parents.forEach((p,pi)=>{
+    const j=idx[p.sha];if(j===undefined)return;
+    const a=P(i),b=P(j),col=new THREE.Color(pi?0xff6b9d:PAL[lane[i]%PAL.length]);
+    if(lane[i]===lane[j])pushSeg(a,b,col);
+    else{const m=a.clone().add(b).multiplyScalar(.5);m.y=1.5;pushSeg(a,m,col);pushSeg(m,b,col)}
+  }));
+  const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));lg.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));
+  S.scene.add(new THREE.LineSegments(lg,new THREE.LineBasicMaterial({vertexColors:true})));
+  const zf=(maxLane/2)*zsp+6,gs=Math.max(total+20,60),gr=new THREE.GridHelper(gs,Math.round(gs/5),0x2a3350,0x1a2138);gr.position.y=-3;S.scene.add(gr);
+  for(let k=0;k<=5&&n>1;k++){const i=Math.round(k*(n-1)/5),sp2=label(mon(commits[i].commit.author.date),'#8b94ab');sp2.position.set(P(i).x,-1,zf);S.scene.add(sp2)}
+}
+
+/* ---------- repo: 3D commit city ---------- */
+function commitCity(el,commits){
+  const D=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],g=Array.from({length:7},()=>Array(24).fill(0));
+  commits.forEach(c=>{const d=new Date(c.commit.author.date);g[d.getDay()][d.getHours()]++});
+  const mx=Math.max(1,...g.flat()),S=scene3d(el,{h:460,cam:[0,24,34]});
+  const box=new THREE.BoxGeometry(.8,1,.8),c0=new THREE.Color(0x3b2a8f),c1=new THREE.Color(0x00d4aa),c2=new THREE.Color(0xff6b9d);
+  g.forEach((row,d)=>row.forEach((n,h)=>{
+    const t=n/mx,col=n?(t<.5?c0.clone().lerp(c1,t*2):c1.clone().lerp(c2,(t-.5)*2)):new THREE.Color(0x1d2538),ht=n?.4+t*13:.1;
+    const m=new THREE.Mesh(box,new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:n?.35:0,roughness:.5}));
+    m.scale.y=ht;m.position.set((h-11.5)*1.05,ht/2,(d-3)*1.4);
+    S.add(m,`<b>${D[d]} ${h}:00</b><br>${n} commit${n===1?'':'s'}`);
+  }));
+  for(let h=0;h<24;h+=3){const s=label(h+'h');s.position.set((h-11.5)*1.05,.4,3*1.4+2.4);S.scene.add(s)}
+  D.forEach((d,i)=>{const s=label(d);s.position.set(-12.6*1.05-2.4,.4,(i-3)*1.4);S.scene.add(s)});
+}
+
+/* ---------- repo view ---------- */
+async function loadRepo(u,r){
+  clear();app.innerHTML=`<div class="load">Loading ${esc(u)}/${esc(r)} (commits, merges, PRs)…</div>`;
+  try{
+    const [repo,commits,langs,contrib,pulls,branches]=await Promise.all([
+      gh(`/repos/${u}/${r}`),
+      pages(`/repos/${u}/${r}/commits`,10).catch(()=>[]),
+      gh(`/repos/${u}/${r}/languages`).catch(()=>({})),
+      gh(`/repos/${u}/${r}/contributors?per_page=10`).catch(()=>[]),
+      pages(`/repos/${u}/${r}/pulls?state=all`,3).catch(()=>[]),
+      pages(`/repos/${u}/${r}/branches`,2).catch(()=>[])]);
+    renderRepo(repo,commits,langs||{},contrib||[],pulls,branches);
+  }catch(e){app.innerHTML=`<div class="back"><button class="ghost" onclick="location.hash='#${esc(u)}'">← back</button></div><div class="err">${esc(e.message)}</div>`}
+}
+const dur=ms=>ms<36e5?Math.max(1,Math.round(ms/6e4))+'m':ms<864e5?Math.round(ms/36e5)+'h':ms<2592e6?Math.round(ms/864e5)+'d':Math.round(ms/2592e6)+'mo';
+function monthKeys(a,b){const k=[];let [y,m]=a.split('-').map(Number);for(;;){const s=`${y}-${String(m).padStart(2,'0')}`;if(s>b)break;k.push(s);if(++m>12){m=1;y++}}return k}
+
+function renderRepo(repo,commits,langs,contrib,pulls,branches){
+  const merged=pulls.filter(p=>p.merged_at),open=pulls.filter(p=>p.state==='open'),closed=pulls.filter(p=>p.state==='closed'&&!p.merged_at);
+  const mc=commits.filter(c=>c.parents.length>1),ttm=merged.map(p=>new Date(p.merged_at)-new Date(p.created_at)).sort((a,b)=>a-b);
+  const med=ttm.length?dur(ttm[Math.floor(ttm.length/2)]):'–';
+  const tile=(k,v)=>`<div class="stat"><b>${v}</b>${k}</div>`;
+  app.innerHTML=`<div class="back"><button class="ghost" onclick="location.hash='#${repo.owner.login}'">← ${repo.owner.login}</button></div>
+  <div class="card"><h2 style="margin:0">${esc(repo.full_name)} <a style="font-size:13px;color:var(--b)" target="_blank" href="${repo.html_url}">open ↗</a></h2>
+    <div class="mut">${esc(repo.description||'')}</div>
+    <div class="meta" style="margin-top:8px"><span>★ ${repo.stargazers_count}</span><span>⑂ ${repo.forks_count}</span><span>👁 ${repo.watchers_count}</span><span>issues ${repo.open_issues_count}</span><span>created ${repo.created_at.slice(0,10)}</span><span>pushed ${repo.pushed_at.slice(0,10)}</span><span>${(repo.size/1024).toFixed(1)} MB</span><span>default branch: ${esc(repo.default_branch)}</span></div>
+    <div class="tiles" style="margin-top:14px">${tile('Commits loaded',commits.length>=1000?'1000+':commits.length)}${tile('Merge commits',mc.length)}${tile('Pull requests',pulls.length>=300?'300+':pulls.length)}${tile('Merged PRs',merged.length)}${tile('Open PRs',open.length)}${tile('Closed unmerged',closed.length)}${tile('Branches',branches.length>=200?'200+':branches.length)}${tile('Median time to merge',med)}</div></div>
+  <div style="height:16px"></div>
+  <div class="grid">
+    ${commits.length?card('3D git graph · oldest → newest · octahedron = merge commit · click a node','<div id="gg"></div><div id="cd" class="mut" style="margin-top:10px">Click a commit node for details.</div>','s12'):''}
+    ${commits.length?card('Commits per month',cv('r1',1),'s8'):''}
+    ${card('Languages (bytes)',cv('r2',1),'s4')}
+    ${commits.length?card('3D commit city · weekday × hour (height = commits)','<div id="cc"></div>','s12'):''}
+    ${commits.length?card('Cumulative commits',cv('r3'),'s6'):''}
+    ${card('Top contributors',cv('r4'),'s6')}
+    ${pulls.length?card('Pull requests: opened vs merged per month',cv('p1'),'s7'):''}
+    ${merged.length?card('Time to merge',cv('p2'),'s5'):''}
+    ${pulls.length?card('Pull requests & merges','<div class="seg" id="pf"></div><div class="list" id="pl"></div>','s12'):''}
+    ${commits.length?card('Commit log','<div class="seg" id="lf"></div><div class="list" id="r6"></div>','s12'):''}
+  </div>`;
+
+  const le=Object.entries(langs).sort((a,b)=>b[1]-a[1]);
+  if(le.length)mk($('#r2'),{type:'doughnut',data:{labels:le.map(x=>x[0]),datasets:[{data:le.map(x=>x[1]),backgroundColor:le.map((x,i)=>lc(x[0],i)),borderColor:'#131824',borderWidth:3}]},options:{maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{boxWidth:10}}}}});
+  const ce=contrib.map(c=>[c.login,c.contributions]);
+  const au={};commits.forEach(c=>{const n=c.author?.login||c.commit.author.name;au[n]=(au[n]||0)+1});
+  const ae=(ce.length?ce:Object.entries(au).sort((a,b)=>b[1]-a[1])).slice(0,8);
+  mk($('#r4'),{type:'bar',data:{labels:ae.map(x=>x[0]),datasets:[{data:ae.map(x=>x[1]),backgroundColor:'#ff6b9d',borderRadius:6}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+
+  if(commits.length){
+    gitGraph3d($('#gg'),commits,c=>showCommit(repo,c));
+    commitCity($('#cc'),commits);
+    const mo={};commits.forEach(c=>{const k=c.commit.author.date.slice(0,7);mo[k]=(mo[k]||0)+1});
+    const ks=Object.keys(mo).sort(),keys=monthKeys(ks[0],ks[ks.length-1]);
+    mk($('#r1'),{type:'bar',data:{labels:keys,datasets:[{data:keys.map(k=>mo[k]||0),backgroundColor:'#7c5cff',borderRadius:4}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxTicksLimit:12}}}}});
+    const asc=[...commits].reverse();
+    mk($('#r3'),{type:'line',data:{labels:asc.map(c=>c.commit.author.date.slice(0,10)),datasets:[{data:asc.map((_,i)=>i+1),borderColor:'#00d4aa',backgroundColor:'#00d4aa33',fill:true,pointRadius:0,tension:.2}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxTicksLimit:8}}}}});
+    const drawLog=f=>{
+      $('#lf').innerHTML=[['all',`All (${commits.length})`],['merge',`Merges only (${mc.length})`]].map(([k,t])=>`<button class="${k===f?'on':''}" data-f="${k}">${t}</button>`).join('');
+      $('#lf').querySelectorAll('button').forEach(b=>b.onclick=()=>drawLog(b.dataset.f));
+      $('#r6').innerHTML=(f==='merge'?mc:commits).slice(0,200).map(c=>`<div class="crow" data-sha="${c.sha}" style="cursor:pointer"><code>${c.sha.slice(0,7)}</code><span>${c.parents.length>1?'<span class="badge m">MERGE</span>':''}<a target="_blank" href="${c.html_url}">${esc(c.commit.message.split('\n')[0])}</a> <span class="mut">— ${esc(c.commit.author.name)}, ${c.commit.author.date.slice(0,10)}</span></span></div>`).join('')||'<div class="mut">None.</div>';
+      $('#r6').querySelectorAll('.crow').forEach(r=>r.onclick=e=>{if(e.target.tagName==='A')return;showCommit(repo,commits.find(c=>c.sha===r.dataset.sha));$('#cd').scrollIntoView({behavior:'smooth',block:'center'})});
+    };
+    drawLog('all');
+  }
+
+  if(pulls.length){
+    const ok=pulls.map(p=>p.created_at.slice(0,7)).concat(merged.map(p=>p.merged_at.slice(0,7))).sort(),pk=monthKeys(ok[0],ok[ok.length-1]);
+    const oc={},mg={};pulls.forEach(p=>{const k=p.created_at.slice(0,7);oc[k]=(oc[k]||0)+1});merged.forEach(p=>{const k=p.merged_at.slice(0,7);mg[k]=(mg[k]||0)+1});
+    mk($('#p1'),{type:'bar',data:{labels:pk,datasets:[{label:'Opened',data:pk.map(k=>oc[k]||0),backgroundColor:'#4da3ff',borderRadius:4},{label:'Merged',data:pk.map(k=>mg[k]||0),backgroundColor:'#8957e5',borderRadius:4}]},options:{maintainAspectRatio:false,scales:{x:{ticks:{maxTicksLimit:12}}}}});
+    if(merged.length){
+      const bk=[['< 1h',36e5],['< 1 day',864e5],['< 1 week',6048e5],['< 1 month',2592e6],['longer',Infinity]],bc=bk.map(()=>0);
+      ttm.forEach(t=>bc[bk.findIndex(b=>t<b[1])]++);
+      mk($('#p2'),{type:'bar',data:{labels:bk.map(b=>b[0]),datasets:[{data:bc,backgroundColor:['#00d4aa','#4da3ff','#7c5cff','#ffb84d','#ff6b9d'],borderRadius:6}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{precision:0}}}}});
+    }
+    const st=p=>p.merged_at?'merged':p.state;
+    const drawPR=f=>{
+      const cnt={all:pulls.length,merged:merged.length,open:open.length,closed:closed.length};
+      $('#pf').innerHTML=Object.keys(cnt).map(k=>`<button class="${k===f?'on':''}" data-f="${k}">${k} (${cnt[k]})</button>`).join('');
+      $('#pf').querySelectorAll('button').forEach(b=>b.onclick=()=>drawPR(b.dataset.f));
+      $('#pl').innerHTML=pulls.filter(p=>f==='all'||st(p)===f).slice(0,200).map(p=>`<div><code>#${p.number}</code><span><span class="badge ${st(p)}">${st(p).toUpperCase()}</span><a target="_blank" href="${p.html_url}">${esc(p.title)}</a> <span class="mut">— ${esc(p.user?.login||'?')} · ${esc(p.head.ref)} → ${esc(p.base.ref)} · ${p.created_at.slice(0,10)}${p.merged_at?' · merged in '+dur(new Date(p.merged_at)-new Date(p.created_at)):''}</span></span></div>`).join('')||'<div class="mut">None.</div>';
+    };
+    drawPR('all');
+  }
+}
+
+async function showCommit(repo,c){
+  const box=$('#cd');box.innerHTML='Loading '+c.sha.slice(0,7)+'…';
+  try{
+    const d=await gh(`/repos/${repo.full_name}/commits/${c.sha}`);
+    const fs=d.files||[];
+    box.innerHTML=`<div style="color:var(--tx)"><b style="color:var(--b)">${d.sha.slice(0,7)}</b> ${d.parents.length>1?'<span class="badge m">MERGE</span>':''} · ${esc(d.commit.author.name)} · ${new Date(d.commit.author.date).toLocaleString()} · <a style="color:var(--b)" target="_blank" href="${d.html_url}">open ↗</a>
+      <pre style="white-space:pre-wrap;margin:6px 0;font:inherit">${esc(d.commit.message)}</pre>
+      <div class="meta"><span style="color:#3fb950">+${d.stats?.additions??0}</span><span style="color:#f85149">−${d.stats?.deletions??0}</span><span>${fs.length} file(s)</span><span>parents: ${d.parents.map(p=>p.sha.slice(0,7)).join(', ')||'none'}</span></div>
+      <div style="margin-top:6px;max-height:160px;overflow:auto;font-size:12px">${fs.slice(0,40).map(f=>`<div>${esc(f.status[0].toUpperCase())} ${esc(f.filename)} <span style="color:#3fb950">+${f.additions}</span> <span style="color:#f85149">−${f.deletions}</span></div>`).join('')}</div></div>`;
+  }catch(e){box.innerHTML=`<span style="color:#f85149">${esc(e.message)}</span>`}
+}
+</script>
+</body>
+</html>

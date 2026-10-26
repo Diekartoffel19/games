@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Audio Stream</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+  :root { --bg:#111418; --fg:#e8eaed; --muted:#9aa0a6; --card:#1b2026; --acc:#4da3ff; --line:#2b323a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.4 system-ui, sans-serif; }
+  main { max-width:620px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:8px 0 16px; }
+  h2 { font-size:14px; margin:14px 0 2px; color:var(--acc); text-transform:uppercase; letter-spacing:.05em; }
+  .tabs { display:flex; gap:8px; margin-bottom:16px; }
+  .tabs button { flex:1; padding:12px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:8px; font-size:16px; cursor:pointer; }
+  .tabs button.active { background:var(--acc); color:#001; border-color:var(--acc); font-weight:600; }
+  section { display:none; }
+  section.active { display:block; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px; }
+  label { display:block; margin:8px 0 4px; color:var(--muted); font-size:14px; }
+  select, input[type=file], input[type=number] { width:100%; padding:8px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; font-size:15px; }
+  input[type=color] { width:100%; height:38px; padding:2px; background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+  input[type=range] { width:100%; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+  .row { display:flex; gap:8px; margin-top:12px; }
+  .row button { flex:1; padding:12px; border:0; border-radius:8px; background:var(--acc); color:#001; font-size:16px; font-weight:600; cursor:pointer; }
+  .row button:disabled { opacity:.4; cursor:default; }
+  .row button.sec { background:var(--line); color:var(--fg); }
+  .chk { display:flex; align-items:center; gap:8px; margin-top:10px; color:var(--fg); font-size:15px; }
+  .stats { color:var(--muted); font-size:14px; white-space:pre-line; margin-top:10px; }
+  .qrbox { background:#fff; border-radius:8px; display:flex; justify-content:center; align-items:center; overflow:hidden; }
+  .qrbox:fullscreen { border-radius:0; }
+  #qr { image-rendering:pixelated; display:block; }
+  .videobox { position:relative; background:#000; border-radius:10px; overflow:hidden; }
+  #video { width:100%; display:block; }
+  #overlay { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
+  #lock { position:absolute; left:8px; top:8px; padding:4px 10px; border-radius:14px; font-weight:700; font-size:14px; background:#b3261e; color:#fff; }
+  #lock.warn { background:#d99a00; color:#000; }
+  #lock.ok { background:#1e9e4a; color:#fff; }
+  #dbg { font:12px/1.5 ui-monospace, Consolas, monospace; color:var(--muted); white-space:pre; margin-top:10px; overflow-x:auto; }
+  #bar { height:6px; background:var(--line); border-radius:3px; margin-top:8px; overflow:hidden; }
+  #barfill { height:100%; width:0; background:var(--acc); }
+</style>
+</head>
+<body>
+<main>
+  <h1>QR Audio Stream</h1>
+  <div class="tabs">
+    <button id="tabSend" class="active">Send</button>
+    <button id="tabRecv">Scan / Listen</button>
+  </div>
+
+  <section id="secSend" class="active">
+    <div class="card">
+      <label for="file">Audio file</label>
+      <input id="file" type="file" accept="audio/*">
+
+      <h2>Audio</h2>
+      <label for="preset">Preset</label>
+      <select id="preset">
+        <option value="">Custom</option>
+        <option value="6000,4,8,L">Safe: 6 kHz, 4 bit, 8 codes/s</option>
+        <option value="8000,4,12,L" selected>Balanced: 8 kHz, 4 bit, 12 codes/s</option>
+        <option value="11025,4,16,L">Fast: 11 kHz, 4 bit, 16 codes/s</option>
+        <option value="16000,4,24,L">Max: 16 kHz, 4 bit, 24 codes/s</option>
+        <option value="4000,2,8,L">Tiny: 4 kHz, 2 bit, 8 codes/s</option>
+      </select>
+      <div class="grid">
+        <div>
+          <label for="srate">Sample rate (Hz)</label>
+          <input id="srate" type="number" min="3000" max="24000" step="500" value="8000">
+        </div>
+        <div>
+          <label for="bits">Bits per sample</label>
+          <select id="bits">
+            <option value="2">2 (rough)</option>
+            <option value="3">3</option>
+            <option value="4" selected>4 (best)</option>
+          </select>
+        </div>
+        <div>
+          <label for="cps">QR codes per second: <span id="cpsv">12</span></label>
+          <input id="cps" type="range" min="1" max="30" step="1" value="12">
+        </div>
+        <div>
+          <label for="norm">Normalize volume</label>
+          <select id="norm"><option value="1" selected>On</option><option value="0">Off</option></select>
+        </div>
+      </div>
+
+      <h2>QR code</h2>
+      <div class="grid">
+        <div>
+          <label for="ecc">Error correction</label>
+          <select id="ecc">
+            <option value="L" selected>L (7%, smallest)</option>
+            <option value="M">M (15%)</option>
+            <option value="Q">Q (25%)</option>
+            <option value="H">H (30%, largest)</option>
+          </select>
+        </div>
+        <div>
+          <label for="quiet">Quiet zone (modules)</label>
+          <input id="quiet" type="number" min="1" max="10" step="1" value="4">
+        </div>
+        <div>
+          <label for="fg">Dark color</label>
+          <input id="fg" type="color" value="#000000">
+        </div>
+        <div>
+          <label for="bg">Light color</label>
+          <input id="bg" type="color" value="#ffffff">
+        </div>
+      </div>
+      <label for="size">Max display size: <span id="sizev">560</span> px</label>
+      <input id="size" type="range" min="200" max="1000" step="20" value="560">
+
+      <label class="chk"><input id="local" type="checkbox"> Play audio on this device too</label>
+      <label class="chk"><input id="loop" type="checkbox" checked> Loop</label>
+      <div class="row">
+        <button id="play" disabled>Start streaming</button>
+        <button id="stop" class="sec" disabled>Stop</button>
+        <button id="full" class="sec">Fullscreen</button>
+      </div>
+      <div class="stats" id="sendStats">Choose a file.</div>
+      <div id="bar"><div id="barfill"></div></div>
+    </div>
+    <div class="qrbox" id="qrbox"><canvas id="qr" width="1" height="1"></canvas></div>
+  </section>
+
+  <section id="secRecv">
+    <div class="card">
+      <div class="videobox"><video id="video" playsinline muted></video><canvas id="overlay"></canvas><div id="lock">NO QR</div></div>
+      <div class="row">
+        <button id="scan">Start scanning</button>
+        <button id="scanStop" class="sec" disabled>Stop</button>
+      </div>
+      <details class="card" style="margin:12px 0 0" open>
+        <summary>Camera and decoding</summary>
+        <div class="grid">
+          <div>
+            <label for="camfps">Camera frame rate</label>
+            <select id="camfps">
+              <option value="15">15 fps</option>
+              <option value="24">24 fps</option>
+              <option value="30" selected>30 fps</option>
+              <option value="60">60 fps (if supported)</option>
+            </select>
+          </div>
+          <div>
+            <label for="camres">Camera resolution</label>
+            <select id="camres">
+              <option value="640x480">640x480</option>
+              <option value="1280x720">1280x720</option>
+              <option value="1920x1080" selected>1920x1080</option>
+              <option value="3840x2160">3840x2160 (slow)</option>
+            </select>
+          </div>
+          <div>
+            <label for="swidth">Decode resolution (width)</label>
+            <select id="swidth">
+              <option value="480">480 px (fastest)</option>
+              <option value="640">640 px</option>
+              <option value="960">960 px</option>
+              <option value="1280" selected>1280 px</option>
+              <option value="0">Full camera size (most CPU)</option>
+            </select>
+          </div>
+          <div>
+            <label for="maxdec">Max decodes per second</label>
+            <select id="maxdec">
+              <option value="0" selected>Unlimited (most CPU)</option>
+              <option value="60">60</option>
+              <option value="30">30</option>
+              <option value="15">15</option>
+              <option value="8">8 (battery saver)</option>
+            </select>
+          </div>
+          <div>
+            <label for="det">Decoder</label>
+            <select id="det">
+              <option value="auto" selected>Auto (native if available)</option>
+              <option value="bd">Native BarcodeDetector</option>
+              <option value="jsqr">jsQR (software)</option>
+            </select>
+          </div>
+          <div>
+            <label for="jbuf">Audio buffer</label>
+            <select id="jbuf">
+              <option value="0.5">0.5 s (low delay)</option>
+              <option value="0.8">0.8 s</option>
+              <option value="1.2" selected>1.2 s</option>
+              <option value="2">2 s (most stable)</option>
+            </select>
+          </div>
+          <div>
+            <label for="inv">jsQR: try inverted colors</label>
+            <select id="inv"><option value="0" selected>Off (faster)</option><option value="1">On</option></select>
+          </div>
+        </div>
+      </details>
+      <div class="stats" id="recvStats">Point the camera at the live QR code on the sender screen.</div>
+      <div id="dbg"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+/* ---------- IMA-style ADPCM (2, 3 or 4 bit) ---------- */
+const STEP = [7,8,9,10,11,12,13,14,16,17,19,21,23,25,28,31,34,37,41,45,50,55,60,66,73,80,88,97,107,118,130,143,157,173,190,209,230,253,279,307,337,371,408,449,494,544,598,658,724,796,876,963,1060,1166,1282,1411,1552,1707,1878,2066,2272,2499,2749,3024,3327,3660,4026,4428,4871,5358,5894,6484,7132,7845,8630,9493,10442,11487,12635,13899,15289,16818,18500,20350,22385,24623,27086,29794,32767];
+const IDX = { 2: [-1, 4], 3: [-1, -1, 2, 4], 4: [-1, -1, -1, -1, 2, 4, 6, 8] };
+const HDR = 10; // sid u8, seq u32, rate/100 u8, pred i16, idx u8, bits u8
+
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+
+function adpcmEncodeSample(s, st, bits) {
+  const m = bits - 1;
+  let diff = s - st.pred, code = 0;
+  if (diff < 0) { code = 1 << m; diff = -diff; }
+  let step = STEP[st.idx], vp = step >> m;
+  for (let k = m - 1; k >= 0; k--) {
+    if (diff >= step) { code |= 1 << k; diff -= step; vp += step; }
+    step >>= 1;
+  }
+  st.pred = clamp(st.pred + (code >> m ? -vp : vp), -32768, 32767);
+  st.idx = clamp(st.idx + IDX[bits][code & ((1 << m) - 1)], 0, 88);
+  return code;
+}
+
+function adpcmDecodeSample(code, st, bits) {
+  const m = bits - 1;
+  let step = STEP[st.idx], vp = step >> m;
+  for (let k = m - 1; k >= 0; k--) {
+    if (code & (1 << k)) vp += step;
+    step >>= 1;
+  }
+  st.pred = clamp(st.pred + (code >> m ? -vp : vp), -32768, 32767);
+  st.idx = clamp(st.idx + IDX[bits][code & ((1 << m) - 1)], 0, 88);
+  return st.pred;
+}
+
+/* ---------- tabs ---------- */
+const $ = id => document.getElementById(id);
+function showTab(name) {
+  $("tabSend").classList.toggle("active", name === "send");
+  $("tabRecv").classList.toggle("active", name === "recv");
+  $("secSend").classList.toggle("active", name === "send");
+  $("secRecv").classList.toggle("active", name === "recv");
+}
+$("tabSend").onclick = () => showTab("send");
+$("tabRecv").onclick = () => showTab("recv");
+
+/* ---------- sender ---------- */
+let sendCtx = null, decoded = null, frames = [], frameDur = 0, info = "";
+let playing = false, startT = 0, lastShown = -1, sid = 0, localSrc = null, seqBase = 0, previewIdx = 0;
+
+const audioParams = () => ({
+  rate: clamp(Math.round((+$("srate").value || 8000) / 100) * 100, 3000, 24000),
+  bits: +$("bits").value,
+  cps: +$("cps").value,
+  norm: $("norm").value === "1"
+});
+
+async function prepare() {
+  const f = $("file").files[0];
+  if (!f) return;
+  stopSend();
+  $("play").disabled = true;
+  $("sendStats").textContent = "Decoding...";
+  try {
+    // offline context: decoding needs no user gesture, unlike a live AudioContext
+    decoded = await new OfflineAudioContext(1, 1, 44100).decodeAudioData(await f.arrayBuffer());
+    await encodeAll();
+  } catch (e) {
+    $("sendStats").textContent = "Cannot decode this file: " + e.message;
+  }
+}
+
+let encodeToken = 0;
+async function encodeAll() {
+  if (!decoded) return;
+  const tok = ++encodeToken;
+  const { rate, bits, cps, norm } = audioParams();
+  $("sendStats").textContent = "Compressing...";
+  let pcm;
+  try {
+    // mono downmix + anti-alias low-pass + resample
+    const len = Math.ceil(decoded.duration * rate);
+    const off = new OfflineAudioContext(1, len, rate);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    let node = src;
+    if (rate < decoded.sampleRate) {
+      for (let i = 0; i < 2; i++) {
+        const lp = off.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.value = rate * 0.45;
+        lp.Q.value = 0.707;
+        node.connect(lp);
+        node = lp;
+      }
+    }
+    node.connect(off.destination);
+    src.start();
+    pcm = (await off.startRendering()).getChannelData(0);
+  } catch (e) {
+    $("sendStats").textContent = "Sample rate not supported by this browser: " + e.message;
+    return;
+  }
+  if (tok !== encodeToken) return;
+
+  let gain = 1;
+  if (norm) {
+    let peak = 0;
+    for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+    gain = peak > 0 ? 0.95 / peak : 1;
+  }
+
+  const payload = clamp(Math.round(rate * bits / 8 / cps), 16, 1100);
+  const perFrame = Math.floor(payload * 8 / bits);
+  const n = Math.ceil(pcm.length / perFrame);
+  const st = { pred: 0, idx: 0 };
+  frames = [];
+  for (let k = 0; k < n; k++) {
+    const buf = new Uint8Array(HDR + payload);
+    const dv = new DataView(buf.buffer);
+    dv.setUint8(5, rate / 100);
+    dv.setInt16(6, st.pred);
+    dv.setUint8(8, st.idx);
+    dv.setUint8(9, bits);
+    let acc = 0, nacc = 0, o = HDR;
+    for (let j = 0; j < perFrame; j++) {
+      const a = k * perFrame + j;
+      const s = a < pcm.length ? Math.round(clamp(pcm[a] * gain, -1, 1) * 32767) : 0;
+      acc |= adpcmEncodeSample(s, st, bits) << nacc;
+      nacc += bits;
+      while (nacc >= 8) { buf[o++] = acc & 255; acc >>= 8; nacc -= 8; }
+    }
+    if (nacc > 0) buf[o++] = acc & 255;
+    frames.push(buf);
+  }
+  frameDur = perFrame / rate;
+  const total = frames.length * (HDR + payload);
+  info = `${decoded.duration.toFixed(1)} s audio -> ${(total / 1024).toFixed(1)} KiB, ${frames.length} QR codes\n` +
+         `${(1 / frameDur).toFixed(1)} codes/s, ${payload + HDR} bytes/code, ${((HDR + payload) * 8 / frameDur / 1000).toFixed(1)} kbit/s`;
+  $("play").disabled = false;
+  previewIdx = 0;
+  refreshQR();
+}
+
+let encTimer = null;
+function scheduleEncode() {
+  stopSend();
+  clearTimeout(encTimer);
+  encTimer = setTimeout(encodeAll, 300);
+}
+
+$("file").onchange = prepare;
+for (const id of ["srate", "bits", "cps", "norm"]) {
+  $(id).addEventListener("input", () => {
+    $("preset").value = "";
+    $("cpsv").textContent = $("cps").value;
+    scheduleEncode();
+  });
+}
+$("preset").onchange = () => {
+  const v = $("preset").value;
+  if (!v) return;
+  const [r, b, c, e] = v.split(",");
+  $("srate").value = r; $("bits").value = b; $("cps").value = c; $("ecc").value = e;
+  $("cpsv").textContent = c;
+  scheduleEncode();
+};
+
+function drawQR(bytes, seq) {
+  const out = bytes.slice();
+  new DataView(out.buffer).setUint8(0, sid);
+  new DataView(out.buffer).setUint32(1, seq);
+  let bin = "";
+  for (let i = 0; i < out.length; i++) bin += String.fromCharCode(out[i]);
+  const qr = qrcode(0, $("ecc").value);
+  qr.addData(btoa(bin), "Byte");   // text payload: works with BarcodeDetector and jsQR
+  qr.make();
+  const m = qr.getModuleCount(), q = clamp(+$("quiet").value || 4, 1, 10), size = m + q * 2;
+  const fs = document.fullscreenElement === $("qrbox");
+  const avail = fs ? Math.min(innerWidth, innerHeight) : Math.min(+$("size").value, document.documentElement.clientWidth - 32);
+  const sc = Math.max(1, Math.floor(avail / size));   // integer scale, no blurry modules
+  const c = $("qr");
+  c.width = c.height = size * sc;
+  c.style.width = c.style.height = size * sc + "px";
+  $("qrbox").style.background = $("bg").value;
+  const g = c.getContext("2d");
+  g.fillStyle = $("bg").value;
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = $("fg").value;
+  for (let r = 0; r < m; r++)
+    for (let col = 0; col < m; col++)
+      if (qr.isDark(r, col)) g.fillRect((col + q) * sc, (r + q) * sc, sc, sc);
+  $("sendStats").textContent = `${info}\nQR version ${(m - 17) / 4} (${m}x${m} modules), ${sc} px/module, ${size * sc} px`;
+}
+
+function refreshQR() {
+  if (!frames.length) return;
+  const idx = playing ? Math.max(lastShown, 0) : previewIdx;
+  drawQR(frames[idx], seqBase + idx);
+}
+for (const id of ["ecc", "quiet", "fg", "bg"]) $(id).addEventListener("input", refreshQR);
+$("size").addEventListener("input", () => { $("sizev").textContent = $("size").value; refreshQR(); });
+$("full").onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else $("qrbox").requestFullscreen().catch(() => {}); };
+document.addEventListener("fullscreenchange", refreshQR);
+
+function tick() {
+  if (!playing) return;
+  const elapsed = (performance.now() - startT) / 1000;
+  let idx = Math.floor(elapsed / frameDur);
+  if (idx >= frames.length) {
+    if ($("loop").checked) {
+      startT = performance.now();
+      seqBase += frames.length;
+      idx = 0;
+      lastShown = -1;
+      if ($("local").checked) startLocal();
+    } else { stopSend(); return; }
+  }
+  if (idx !== lastShown) {
+    lastShown = idx;
+    drawQR(frames[idx], seqBase + idx);
+    $("barfill").style.width = (100 * idx / frames.length) + "%";
+  }
+  requestAnimationFrame(tick);
+}
+
+function startLocal() {
+  if (localSrc) try { localSrc.stop(); } catch (_) {}
+  localSrc = sendCtx.createBufferSource();
+  localSrc.buffer = decoded;
+  localSrc.connect(sendCtx.destination);
+  localSrc.start();
+}
+
+$("play").onclick = async () => {
+  if (!frames.length) return;
+  sendCtx = sendCtx || new (window.AudioContext || window.webkitAudioContext)();
+  await sendCtx.resume();
+  sid = (sid + 1 + Math.floor(Math.random() * 200)) & 255;
+  seqBase = 0;
+  lastShown = -1;
+  playing = true;
+  $("play").disabled = true;
+  $("stop").disabled = false;
+  if ($("local").checked) startLocal();
+  startT = performance.now();
+  requestAnimationFrame(tick);
+};
+
+function stopSend() {
+  playing = false;
+  if (localSrc) { try { localSrc.stop(); } catch (_) {} localSrc = null; }
+  $("play").disabled = !frames.length;
+  $("stop").disabled = true;
+  $("barfill").style.width = "0";
+}
+$("stop").onclick = stopSend;
+
+/* ---------- receiver ---------- */
+let rxCtx = null, stream = null, scanning = false;
+let rx = null, lastFrameAt = 0;
+
+const scanCanvas = document.createElement("canvas");
+const scanG = scanCanvas.getContext("2d", { willReadFrequently: true });
+
+function resetRx(sidv) {
+  rx = { sid: sidv, last: null, base: null, baseS: null, endS: null, lastVal: 0, got: 0, lost: 0, rebuffers: 0, dups: 0, bytes: 0, dur: 0, rate: 0, bits: 0, since: performance.now() };
+}
+
+function onFrame(b) {
+  if (b.length <= HDR) return "bad";
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const fsid = dv.getUint8(0), seq = dv.getUint32(1), rate = dv.getUint8(5) * 100, bits = dv.getUint8(9);
+  if (rate < 1000 || bits < 2 || bits > 4) return "bad";
+  if (!rx || rx.sid !== fsid) resetRx(fsid);
+  if (rx.last !== null && seq <= rx.last) { rx.dups++; return "dup"; }      // duplicate scan
+  if (rx.last !== null) rx.lost += seq - rx.last - 1;
+  rx.last = seq;
+  rx.got++;
+  rx.bytes += b.length;
+  rx.rate = rate;
+  rx.bits = bits;
+  lastFrameAt = performance.now();
+  arrivals.push(lastFrameAt);
+
+  // decode
+  const st = { pred: dv.getInt16(6), idx: clamp(dv.getUint8(8), 0, 88) };
+  const n = Math.floor((b.length - HDR) * 8 / bits);
+  const pcm = new Float32Array(n);
+  const mask = (1 << bits) - 1;
+  let acc = 0, nacc = 0, o = HDR;
+  for (let j = 0; j < n; j++) {
+    while (nacc < bits) { acc |= b[o++] << nacc; nacc += 8; }
+    pcm[j] = adpcmDecodeSample(acc & mask, st, bits) / 32768;
+    acc >>= bits; nacc -= bits;
+  }
+  const dur = n / rate;
+  rx.dur = dur;
+
+  // resample to the context rate on an exact sample grid so frames join without gaps or overlaps
+  const sr = rxCtx.sampleRate;
+  const startS = Math.round(seq * n * sr / rate), endS = Math.round((seq + 1) * n * sr / rate), outN = endS - startS;
+  const buf = rxCtx.createBuffer(1, outN, sr);
+  const out = buf.getChannelData(0), ratio = rate / sr, off = seq * n;
+  const at = i => pcm[clamp(i, 0, n - 1)];
+  for (let i = 0; i < outN; i++) {
+    const p = (startS + i) * ratio - off, i0 = Math.floor(p), f = p - i0;
+    const y0 = at(i0 - 1), y1 = at(i0), y2 = at(i0 + 1), y3 = at(i0 + 2);
+    out[i] = y1 + 0.5 * f * (y2 - y0 + f * (2 * y0 - 5 * y1 + 4 * y2 - y3 + f * (3 * (y1 - y2) + y3 - y0)));   // Catmull-Rom
+  }
+
+  // schedule (all times are integer sample counts)
+  const lead = Math.round(+$("jbuf").value * sr);
+  const nowS = Math.round(rxCtx.currentTime * sr);
+  if (rx.baseS === null) rx.baseS = nowS + lead - startS;
+  let rebuf = false;
+  if (rx.baseS + startS < nowS + Math.round(0.03 * sr)) {      // underrun: rebuffer
+    rx.baseS = nowS + lead - startS;
+    rx.rebuffers++;
+    rebuf = true;
+  }
+  const tS = rx.baseS + startS;
+
+  // gap or rebuffer: fade in, and fade the previous frame's tail out so there is no click
+  if (rx.endS === null || rx.endS !== tS) {
+    const fi = Math.min(outN, Math.round(0.004 * sr));
+    for (let i = 0; i < fi; i++) out[i] *= i / fi;
+    if (!rebuf && rx.endS !== null && rx.endS > nowS + 64) {
+      const tl = Math.round(0.006 * sr), tail = rxCtx.createBuffer(1, tl, sr), td = tail.getChannelData(0);
+      for (let i = 0; i < tl; i++) td[i] = rx.lastVal * (1 - (i + 1) / tl);
+      const ts = rxCtx.createBufferSource();
+      ts.buffer = tail;
+      ts.connect(rxChain().f1);
+      ts.start(rx.endS / sr);
+    }
+  }
+  rx.endS = rx.baseS + endS;
+  rx.lastVal = out[outN - 1];
+
+  const lp = rxChain();
+  lp.f1.frequency.value = lp.f2.frequency.value = Math.min(rate * 0.46, 20000);
+  const src = rxCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(lp.f1);
+  src.start(tS / sr);
+  return "ok";
+}
+
+let rxNodes = null;
+function rxChain() {                       // shared low-pass: removes imaging above the source bandwidth
+  if (!rxNodes || rxNodes.ctx !== rxCtx) {
+    const f1 = rxCtx.createBiquadFilter(), f2 = rxCtx.createBiquadFilter();
+    f1.type = f2.type = "lowpass";
+    f1.Q.value = f2.Q.value = 0.707;
+    f1.connect(f2);
+    f2.connect(rxCtx.destination);
+    rxNodes = { ctx: rxCtx, f1, f2 };
+  }
+  return rxNodes;
+}
+
+const arrivals = [];
+const dbg = { lastDecode: 0, vfT: [], loops: 0, detects: 0, bad: 0, ms: 0, lastDetect: 0, lastBad: 0, res: "", t0: 0, lastUi: 0, loopT: [] };
+const ov = $("overlay"), ovG = ov.getContext("2d");
+
+function drawBox(loc, color) {
+  ovG.clearRect(0, 0, ov.width, ov.height);
+  if (!loc) return;
+  ovG.strokeStyle = color; ovG.lineWidth = Math.max(3, ov.width / 150);
+  ovG.beginPath();
+  ovG.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
+  ovG.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
+  ovG.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
+  ovG.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
+  ovG.closePath(); ovG.stroke();
+}
+
+function updateUi(now) {
+  while (arrivals.length && now - arrivals[0] > 2000) arrivals.shift();
+  while (dbg.loopT.length && now - dbg.loopT[0] > 1000) dbg.loopT.shift();
+  const validAge = now - lastFrameAt, detAge = now - dbg.lastDetect, badAge = now - dbg.lastBad;
+  const lock = $("lock");
+  if (rx && validAge < 600) { lock.textContent = "LOCKED"; lock.className = "ok"; }
+  else if (badAge < 600) { lock.textContent = "QR SEEN, BAD DATA"; lock.className = "warn"; }
+  else if (detAge < 600) { lock.textContent = "QR SEEN (dup/old)"; lock.className = "warn"; }
+  else if (rx && validAge < 3000) { lock.textContent = "LOST - searching"; lock.className = "warn"; }
+  else { lock.textContent = "NO QR"; lock.className = ""; }
+
+  if (!rx) { $("recvStats").textContent = "Scanning... point at the live QR code."; }
+  else {
+    const total = rx.got + rx.lost;
+    $("recvStats").textContent = `frames: ${rx.got}   lost: ${rx.lost} (${total ? (100 * rx.lost / total).toFixed(1) : 0}%)   rebuffers: ${rx.rebuffers}`;
+  }
+  const aheadS = rx && rx.endS !== null ? rx.endS / rxCtx.sampleRate - rxCtx.currentTime : 0;
+  const el = (now - dbg.t0) / 1000;
+  while (dbg.vfT.length && now - dbg.vfT[0] > 1000) dbg.vfT.shift();
+  const ts = stream ? stream.getVideoTracks()[0].getSettings() : {};
+  $("dbg").textContent =
+`camera       ${dbg.res}
+camera fps   ${dbg.vfT.length} delivered (driver reports ${ts.frameRate ? Math.round(ts.frameRate) : "?"})
+scan rate    ${dbg.loopT.length} loops/s   decode ${dbg.ms.toFixed(1)} ms avg
+detections   ${dbg.detects}  (valid ${rx ? rx.got : 0}, dup ${rx ? rx.dups : 0}, bad ${dbg.bad})
+codes/s      ${(arrivals.length / 2).toFixed(1)}  (expect ${rx && rx.dur ? (1 / rx.dur).toFixed(1) : "-"})
+rx bitrate   ${rx && rx.since ? (rx.bytes * 8 / ((now - rx.since) / 1000) / 1000).toFixed(1) : "-"} kbit/s avg
+stream       sid ${rx ? rx.sid : "-"}  last seq ${rx && rx.last !== null ? rx.last : "-"}  ${rx && rx.rate ? rx.rate + " Hz, " + rx.bits + " bit" : ""}
+buffer ahead ${aheadS.toFixed(2)} s   audio ${rxCtx.state}  ${rxCtx.sampleRate} Hz
+last valid   ${lastFrameAt ? ((now - lastFrameAt) / 1000).toFixed(1) + " s ago" : "never"}
+session      ${el.toFixed(0)} s`;
+}
+
+let bd = null;
+try { if ("BarcodeDetector" in window) bd = new BarcodeDetector({ formats: ["qr_code"] }); } catch (_) { bd = null; }
+
+function b64ToBytes(str) {
+  try {
+    const bin = atob(str.trim());
+    const u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  } catch (_) { return null; }
+}
+
+const usingBD = () => !!bd && $("det").value !== "jsqr";
+
+async function findQR(v, w, h, img) {
+  if (usingBD()) {
+    try {
+      const r = await bd.detect(v);
+      if (!r.length) return null;
+      const k = w / v.videoWidth, p = r[0].cornerPoints.map(c => ({ x: c.x * k, y: c.y * k }));
+      return { text: r[0].rawValue, loc: { topLeftCorner: p[0], topRightCorner: p[1], bottomRightCorner: p[2], bottomLeftCorner: p[3] } };
+    } catch (_) { bd = null; }
+  }
+  const c = jsQR(img.data, w, h, { inversionAttempts: $("inv").value === "1" ? "attemptBoth" : "dontInvert" });
+  return c ? { text: c.data, loc: c.location } : null;
+}
+
+async function scanLoop() {
+  if (!scanning) return;
+  const v = $("video");
+  const now = performance.now();
+  const cap = +$("maxdec").value;
+  if (cap && now - dbg.lastDecode < 1000 / cap - 2) { requestAnimationFrame(scanLoop); return; }
+  dbg.lastDecode = now;
+  dbg.loops++; dbg.loopT.push(now);
+  if (v.readyState >= 2 && v.videoWidth) {
+    const sw = +$("swidth").value, w = sw ? Math.min(v.videoWidth, sw) : v.videoWidth, h = Math.round(v.videoHeight * w / v.videoWidth);
+    scanCanvas.width = w; scanCanvas.height = h;
+    if (ov.width !== w || ov.height !== h) { ov.width = w; ov.height = h; }
+    dbg.res = `${v.videoWidth}x${v.videoHeight} (scan ${w}x${h})  ${usingBD() ? "BarcodeDetector" : "jsQR"}`;
+    let img = null;
+    if (!usingBD()) { scanG.drawImage(v, 0, 0, w, h); img = scanG.getImageData(0, 0, w, h); }
+    const t = performance.now();
+    const code = await findQR(v, w, h, img);
+    dbg.ms = dbg.ms * 0.9 + (performance.now() - t) * 0.1;
+    if (!scanning) return;
+    if (code) {
+      dbg.detects++;
+      dbg.lastDetect = now;
+      const bytes = b64ToBytes(code.text);
+      const r = bytes ? onFrame(bytes) : "bad";
+      if (r === "bad") { dbg.bad++; dbg.lastBad = now; }
+      drawBox(code.loc, r === "bad" ? "#d99a00" : "#1e9e4a");
+    } else drawBox(null);
+  }
+  const n2 = performance.now();
+  if (n2 - dbg.lastUi > 200) { dbg.lastUi = n2; updateUi(n2); }
+  requestAnimationFrame(scanLoop);
+}
+
+function camConstraints() {
+  const [w, h] = $("camres").value.split("x").map(Number);
+  return { width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: +$("camfps").value } };
+}
+async function applyCam() {
+  if (!stream) return;
+  try { await stream.getVideoTracks()[0].applyConstraints(camConstraints()); } catch (_) {}
+}
+$("camfps").onchange = applyCam;
+$("camres").onchange = applyCam;
+
+function countVideoFrames() {
+  const v = $("video");
+  if (!scanning || !v.requestVideoFrameCallback) return;
+  dbg.vfT.push(performance.now());
+  v.requestVideoFrameCallback(countVideoFrames);
+}
+
+$("scan").onclick = async () => {
+  try {
+    rxCtx = rxCtx || new (window.AudioContext || window.webkitAudioContext)();
+    await rxCtx.resume();
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: Object.assign({ facingMode: "environment" }, camConstraints()),
+      audio: false
+    });
+    const v = $("video");
+    v.srcObject = stream;
+    await v.play();
+    try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (_) {}
+    rx = null;
+    lastFrameAt = 0;
+    arrivals.length = 0;
+    Object.assign(dbg, { loops: 0, detects: 0, bad: 0, ms: 0, lastDetect: 0, lastBad: 0, t0: performance.now(), lastUi: 0 });
+    scanning = true;
+    dbg.vfT.length = 0;
+    countVideoFrames();
+    $("scan").disabled = true;
+    $("scanStop").disabled = false;
+    requestAnimationFrame(scanLoop);
+  } catch (e) {
+    $("recvStats").textContent = "Camera error: " + e.message + "\n(Camera needs HTTPS or localhost.)";
+  }
+};
+
+$("scanStop").onclick = () => {
+  scanning = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  $("scan").disabled = false;
+  $("scanStop").disabled = true;
+  drawBox(null);
+  $("lock").textContent = "NO QR"; $("lock").className = "";
+  if (rxCtx) rxCtx.suspend();
+};
+</script>
+</body>
+</html>
