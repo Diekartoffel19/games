@@ -63,10 +63,10 @@
     <div class="panel">
       <h2>Your position</h2>
       <div class="row">
-        <div><label>Latitude</label><input id="lat" type="number" step="0.0001" value="47.3769"></div>
-        <div><label>Longitude</label><input id="lon" type="number" step="0.0001" value="8.5417"></div>
+        <div><label>Latitude</label><input id="lat" type="text" inputmode="decimal" autocomplete="off" value="47.3769"></div>
+        <div><label>Longitude</label><input id="lon" type="text" inputmode="decimal" autocomplete="off" value="8.5417"></div>
       </div>
-      <label>Altitude (m)</label><input id="alt" type="number" value="400">
+      <label>Altitude (m)</label><input id="alt" type="text" inputmode="decimal" autocomplete="off" value="400">
       <div class="row" style="margin-top:8px">
         <button id="geo">📍 Use my location</button>
       </div>
@@ -87,8 +87,8 @@
     <div class="panel">
       <h2>Pass settings</h2>
       <div class="row">
-        <div><label>Min elevation (°)</label><input id="minEl" type="number" value="10" min="0" max="89"></div>
-        <div><label>Days ahead</label><input id="days" type="number" value="3" min="1" max="10"></div>
+        <div><label>Min elevation (°)</label><input id="minEl" type="text" inputmode="decimal" autocomplete="off" value="10"></div>
+        <div><label>Days ahead</label><input id="days" type="text" inputmode="numeric" autocomplete="off" value="3"></div>
       </div>
       <label><input type="checkbox" id="visOnly" style="width:auto"> Only visible passes (naked eye)</label>
       <label><input type="checkbox" id="notify" style="width:auto"> Notify me 5 min before next pass</label>
@@ -142,13 +142,21 @@ let notifiedFor = null;
 function load(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
 function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
+// ---------- number inputs (accept "47,5" as well as "47.5") ----------
+function num(id, fallback = NaN) { const v = parseFloat($(id).value.trim().replace(",", ".")); return isFinite(v) ? v : fallback; }
+const wrapLon = lon => ((lon + 180) % 360 + 360) % 360 - 180;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
 // ---------- observer ----------
+let obsLat = 47.3769, obsLon = 8.5417;
 function observer() {
-  return { latitude: +$("lat").value * D2R, longitude: +$("lon").value * D2R, height: (+$("alt").value || 0) / 1000 };
+  return { latitude: obsLat * D2R, longitude: obsLon * D2R, height: num("alt", 0) / 1000 };
 }
 function setObserver(lat, lon) {
-  $("lat").value = lat.toFixed(4); $("lon").value = lon.toFixed(4);
-  saveObs(); obsMarker.setLatLng([lat, lon]);
+  if (!isFinite(lat) || !isFinite(lon)) { $("lat").value = obsLat.toFixed(4); $("lon").value = obsLon.toFixed(4); return; }
+  obsLat = clamp(lat, -90, 90); obsLon = wrapLon(lon);
+  $("lat").value = obsLat.toFixed(4); $("lon").value = obsLon.toFixed(4);
+  saveObs(); obsMarker.setLatLng([obsLat, obsLon]);
   if (current) computePasses();
 }
 function saveObs() { save("st-obs", { lat: $("lat").value, lon: $("lon").value, alt: $("alt").value }); }
@@ -157,8 +165,9 @@ function saveObs() { save("st-obs", { lat: $("lat").value, lon: $("lon").value, 
 function parseTle(text) {
   const lines = text.trim().split(/\r?\n/).map(l => l.trim());
   const out = [];
-  for (let i = 0; i + 2 < lines.length + 1; i += 3) {
-    if (lines[i + 1]?.startsWith("1 ") && lines[i + 2]?.startsWith("2 ")) out.push({ name: lines[i], l1: lines[i + 1], l2: lines[i + 2] });
+  for (let i = 0; i + 2 < lines.length; ) {
+    if (lines[i + 1]?.startsWith("1 ") && lines[i + 2]?.startsWith("2 ")) { out.push({ name: lines[i], l1: lines[i + 1], l2: lines[i + 2] }); i += 3; }
+    else i++;
   }
   return out;
 }
@@ -169,6 +178,7 @@ async function fetchTle(query) {
   if (cached && Date.now() - cached.t < 2 * 3600e3) return cached.list;
   const url = "https://celestrak.org/NORAD/elements/gp.php?" + (isId ? "CATNR=" : "NAME=") + encodeURIComponent(query) + "&FORMAT=tle";
   const res = await fetch(url);
+  if (!res.ok) throw new Error("HTTP " + res.status);
   const text = await res.text();
   const list = parseTle(text);
   if (list.length) save(key, { t: Date.now(), list });
@@ -234,7 +244,7 @@ function sunlit(pos, date) {
 // ---------- pass prediction ----------
 function computePasses() {
   if (!current) return;
-  const obs = observer(), minEl = +$("minEl").value || 0, days = Math.min(10, +$("days").value || 3);
+  const obs = observer(), minEl = clamp(num("minEl", 0), 0, 89), days = clamp(Math.round(num("days", 3)), 1, 10);
   const visOnly = $("visOnly").checked;
   const start = Date.now(), end = start + days * 86400e3, step = 20e3;
   const elAt = t => { const l = look(current.satrec, new Date(t), obs); return l ? l.el : -90; };
@@ -326,7 +336,7 @@ function downloadIcs(p) {
 }
 
 // ---------- map ----------
-const map = L.map("map", { worldCopyJump: true }).setView([+$("lat").value, +$("lon").value], 2);
+const map = L.map("map", { worldCopyJump: true }).setView([obsLat, obsLon], 2);
 const satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
   attribution: "Tiles © Esri", maxZoom: 12
 }).addTo(map);
@@ -339,7 +349,7 @@ const satMarker = L.marker([0, 0], { icon: L.divIcon({ html: "🛰️", classNam
 const footprint = L.circle([0, 0], { radius: 1, color: "#4fd1c5", weight: 1, fillOpacity: 0.08 });
 const trackLayer = L.layerGroup().addTo(map);
 const terminator = L.polygon([], { stroke: false, fillColor: "#000", fillOpacity: 0.35, interactive: false }).addTo(map);
-map.on("click", e => setObserver(e.latlng.lat, ((e.latlng.lng + 540) % 360) - 180));
+map.on("click", e => setObserver(e.latlng.lat, e.latlng.lng));
 
 function splitLine(pts) {
   const segs = [[]];
@@ -380,10 +390,10 @@ function tick() {
   $("clock").textContent = now.toLocaleString() + " · UTC " + now.toISOString().slice(11, 19);
   if (!current) return;
   const obs = observer(), l = look(current.satrec, now, obs), l2 = look(current.satrec, new Date(+now + 1000), obs);
-  if (!l) { $("stats").innerHTML = '<span class="muted">TLE propagation failed (decayed or stale TLE).</span>'; return; }
+  if (!l || !l2) { $("stats").innerHTML = '<span class="muted">TLE propagation failed (decayed or stale TLE).</span>'; return; }
   const speed = Math.hypot(l.vel.x, l.vel.y, l.vel.z), rr = l2.range - l.range;
   const lit = sunlit(l.pos, now), sunEl = sunElevation(now, obs);
-  const epochDays = (now - new Date(Date.UTC(2000 + +current.tle.l1.slice(18, 20), 0, 1)) ) / 86400e3 - (+current.tle.l1.slice(20, 32) - 1);
+  const epochDays = (now - new Date(Date.UTC((y => y < 57 ? 2000 + y : 1900 + y)(+current.tle.l1.slice(18, 20)), 0, 1)) ) / 86400e3 - (+current.tle.l1.slice(20, 32) - 1);
   $("stats").innerHTML =
     stat("Azimuth", l.az.toFixed(1) + "° " + compass(l.az)) +
     stat("Elevation", `<span style="color:${l.el > 0 ? "var(--good)" : "inherit"}">${l.el.toFixed(1)}°</span>`) +
@@ -397,7 +407,7 @@ function tick() {
     stat("Doppler 145.8 MHz", (-rr / 299792.458 * 145.8e6 / 1000).toFixed(2) + " kHz") +
     stat("Period", (2 * Math.PI / current.satrec.no).toFixed(1) + " min") +
     stat("TLE age", epochDays.toFixed(1) + " days");
-  satMarker.setLatLng([l.lat, l.lon]).addTo(map).bindTooltip(current.name);
+  satMarker.setLatLng([l.lat, l.lon]).addTo(map).unbindTooltip().bindTooltip(current.name);
   footprint.setLatLng([l.lat, l.lon]).setRadius(RE * Math.acos(RE / (RE + l.alt)) * 1000).addTo(map);
 
   // countdown
@@ -427,7 +437,12 @@ $("satBtn").onclick = () => findSat($("satq").value);
 $("satq").onkeydown = e => e.key === "Enter" && findSat($("satq").value);
 $("calc").onclick = computePasses;
 ["minEl", "days", "visOnly"].forEach(id => $(id).onchange = computePasses);
-["lat", "lon", "alt"].forEach(id => $(id).onchange = () => setObserver(+$("lat").value, +$("lon").value));
+["lat", "lon"].forEach(id => {
+  $(id).onchange = () => setObserver(num("lat"), num("lon"));
+  $(id).onkeydown = e => e.key === "Enter" && $(id).blur();
+});
+$("alt").onchange = () => { $("alt").value = String(Math.round(num("alt", 0))); saveObs(); if (current) computePasses(); };
+["minEl", "days"].forEach(id => $(id).onkeydown = e => e.key === "Enter" && computePasses());
 $("geo").onclick = () => {
   if (!navigator.geolocation) return alert("Geolocation not supported");
   navigator.geolocation.getCurrentPosition(p => {
@@ -448,12 +463,15 @@ $("place").onkeydown = e => e.key === "Enter" && searchPlace();
 $("notify").onchange = () => { if ($("notify").checked && "Notification" in window) Notification.requestPermission(); };
 
 const o = load("st-obs", null);
-if (o) { $("lat").value = o.lat; $("lon").value = o.lon; $("alt").value = o.alt; }
-obsMarker.setLatLng([+$("lat").value, +$("lon").value]);
-map.setView([+$("lat").value, +$("lon").value], 3);
+if (o) $("alt").value = o.alt ?? "400";
+const oLat = o ? parseFloat(String(o.lat).replace(",", ".")) : obsLat, oLon = o ? parseFloat(String(o.lon).replace(",", ".")) : obsLon;
+if (isFinite(oLat) && isFinite(oLon)) { obsLat = clamp(oLat, -90, 90); obsLon = wrapLon(oLon); }
+$("lat").value = obsLat.toFixed(4); $("lon").value = obsLon.toFixed(4);
+obsMarker.setLatLng([obsLat, obsLon]);
+map.setView([obsLat, obsLon], 3);
 drawSky(null); drawTerminator();
 const savedSat = load("st-sat", null);
-savedSat ? selectSat(savedSat) : findSat("25544");
+try { savedSat ? selectSat(savedSat) : findSat("25544"); } catch { findSat("25544"); }
 setInterval(tick, 1000); tick();
 setInterval(() => { drawTrack(); drawTerminator(); }, 60e3);
 </script>
