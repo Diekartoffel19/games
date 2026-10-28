@@ -613,4 +613,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initDictionary();
   initModal();
   initQuiz();
+  if (typeof initNumbers === 'function') initNumbers();
 });
