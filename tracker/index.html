@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Satellite Tracker</title>
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js"></script>
@@ -23,6 +24,7 @@
   .panel h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
   label { display: block; color: var(--muted); font-size: 12px; margin: 6px 0 2px; }
   input, select, button { font: inherit; color: var(--text); background: #0e1420; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
   input, select { width: 100%; }
   button { cursor: pointer; background: #1b2638; }
   button:hover { border-color: var(--accent); }
@@ -51,6 +53,23 @@
   @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
   .tablewrap { overflow-x: auto; }
   #msg { color: var(--warn); font-size: 12px; min-height: 16px; }
+  .radio-card { background: #0e1420; border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 6px; }
+  .radio-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .radio-title { font-weight: 600; font-size: 13px; color: var(--text); }
+  .radio-live-row { display: flex; justify-content: space-between; align-items: center; background: #131a26; border: 1px solid #1e293b; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .radio-sub { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; margin-bottom: 2px; }
+  .radio-main-freq { font-size: 17px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .radio-copy-btn { font-size: 11px; padding: 4px 8px; background: #1b2638; border: 1px solid var(--line); border-radius: 6px; color: var(--text); }
+  .radio-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .radio-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .rg-item { background: #131a26; padding: 6px 8px; border-radius: 6px; border: 1px solid #1a2332; }
+  .rg-item .k { display: block; font-size: 10px; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+  .rg-item .v { font-size: 12px; color: var(--text); font-weight: 500; word-break: break-word; }
+  .radio-tips { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.45; border-left: 2px solid var(--accent); padding-left: 8px; }
+  .radio-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .radio-tab { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: #1b2638; border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+  .radio-tab:hover { color: var(--text); border-color: var(--accent); }
+  .radio-tab.active { background: var(--accent); color: #062420; font-weight: 600; border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -94,6 +113,11 @@
       <label><input type="checkbox" id="notify" style="width:auto"> Notify me 5 min before next pass</label>
       <button class="primary" id="calc" style="width:100%;margin-top:8px">Calculate passes</button>
     </div>
+
+    <div class="panel" id="radioPanel">
+      <h2>📻 SDR & Frequency Guide</h2>
+      <div id="radioContent"></div>
+    </div>
   </aside>
 
   <section>
@@ -130,13 +154,108 @@ const S = satellite, D2R = Math.PI / 180, R2D = 180 / Math.PI, RE = 6371;
 const $ = id => document.getElementById(id);
 
 const PRESETS = [
-  ["ISS", 25544], ["Tiangong", 48274], ["Hubble", 20580], ["NOAA 15", 25338],
-  ["NOAA 18", 28654], ["NOAA 19", 33591], ["Meteor-M2 3", 57166], ["Terra", 25994], ["Landsat 9", 49260]
+  ["ISS", 25544], ["Tiangong", 48274],
+  ["Meteor-M2 3", 57166], ["Meteor-M2 4", 59051],
+  ["NOAA 15", 25338], ["NOAA 18", 28654], ["NOAA 19", 33591],
+  ["Hubble", 20580], ["Terra", 25994], ["Landsat 9", 49260]
 ];
+
+const RADIO_DB = {
+  // Meteor-M2 3 (57166)
+  57166: {
+    name: "Meteor-M N°2-3",
+    type: "Russian Weather Satellite (LRPT)",
+    antenna: "V-Dipole 120° (legs 53.4 cm, horiz. North-South) or QFH",
+    decoders: "SatDump (Demod: Meteor-M 2-x LRPT), SDR++, SDR#",
+    recAdvice: "Baseband IQ (.wav 16-bit, 250 kSps – 1.024 MSps) or Live in SatDump",
+    transmitters: [
+      { name: "LRPT Weather Image (Primary)", freqMHz: 137.100, mode: "LRPT (QPSK 72k/80k)", bw: "120–150 kHz", status: "Active (Daylight RGB, Night IR)" },
+      { name: "LRPT Secondary / Backup", freqMHz: 137.900, mode: "LRPT (QPSK 72k/80k)", bw: "120–150 kHz", status: "Alternate frequency" },
+      { name: "AHRPT L-Band High-Rate", freqMHz: 1700.000, mode: "AHRPT (QPSK 665.4 kbps)", bw: "1.5–2.0 MHz", status: "Requires 1.7 GHz Dish + LNA" }
+    ]
+  },
+  // Meteor-M2 4 (59051)
+  59051: {
+    name: "Meteor-M N°2-4",
+    type: "Russian Weather Satellite (LRPT)",
+    antenna: "V-Dipole 120° (legs 53.4 cm, horiz. North-South) or QFH",
+    decoders: "SatDump (Demod: Meteor-M 2-x LRPT), SDR++, SDR#",
+    recAdvice: "Baseband IQ (.wav 16-bit, 250 kSps – 1.024 MSps) or Live in SatDump",
+    transmitters: [
+      { name: "LRPT Weather Image (Primary)", freqMHz: 137.100, mode: "LRPT (QPSK 72k/80k)", bw: "120–150 kHz", status: "Active (Daylight RGB, Night IR)" },
+      { name: "LRPT Secondary / Backup", freqMHz: 137.900, mode: "LRPT (QPSK 72k/80k)", bw: "120–150 kHz", status: "Alternate frequency" },
+      { name: "AHRPT L-Band High-Rate", freqMHz: 1700.000, mode: "AHRPT (QPSK 665.4 kbps)", bw: "1.5–2.0 MHz", status: "Requires 1.7 GHz Dish + LNA" }
+    ]
+  },
+  // NOAA 15 (25338)
+  25338: {
+    name: "NOAA 15",
+    type: "US Weather Satellite (APT)",
+    antenna: "V-Dipole 120° (53.4 cm legs) or QFH (RHCP)",
+    decoders: "SatDump, WXtoImg, noaa-apt",
+    recAdvice: "FM Audio WAV (16-bit, 48 kHz mono) or Baseband IQ",
+    transmitters: [
+      { name: "APT Analog Weather Image", freqMHz: 137.620, mode: "APT (FM analog facsimile)", bw: "34–40 kHz", status: "Active (occasional motor sync glitch)" },
+      { name: "HRPT (L-Band)", freqMHz: 1702.500, mode: "HRPT (BPSK 665.4 kbps)", bw: "1.5–2.0 MHz", status: "Requires 1.7 GHz Dish + LNA" }
+    ]
+  },
+  // NOAA 18 (28654)
+  28654: {
+    name: "NOAA 18",
+    type: "US Weather Satellite (APT)",
+    antenna: "V-Dipole 120° (53.4 cm legs) or QFH (RHCP)",
+    decoders: "SatDump, WXtoImg, noaa-apt",
+    recAdvice: "FM Audio WAV (16-bit, 48 kHz mono) or Baseband IQ",
+    transmitters: [
+      { name: "APT Analog Weather Image", freqMHz: 137.9125, mode: "APT (FM analog facsimile)", bw: "34–40 kHz", status: "Active & Very Reliable" },
+      { name: "HRPT (L-Band)", freqMHz: 1707.000, mode: "HRPT (BPSK 665.4 kbps)", bw: "1.5–2.0 MHz", status: "Requires 1.7 GHz Dish + LNA" }
+    ]
+  },
+  // NOAA 19 (33591)
+  33591: {
+    name: "NOAA 19",
+    type: "US Weather Satellite (APT)",
+    antenna: "V-Dipole 120° (53.4 cm legs) or QFH (RHCP)",
+    decoders: "SatDump, WXtoImg, noaa-apt",
+    recAdvice: "FM Audio WAV (16-bit, 48 kHz mono) or Baseband IQ",
+    transmitters: [
+      { name: "APT Analog Weather Image", freqMHz: 137.100, mode: "APT (FM analog facsimile)", bw: "34–40 kHz", status: "Active (shares 137.1 MHz with Meteor)" },
+      { name: "HRPT (L-Band)", freqMHz: 1698.000, mode: "HRPT (BPSK 665.4 kbps)", bw: "1.5–2.0 MHz", status: "Requires 1.7 GHz Dish + LNA" }
+    ]
+  },
+  // ISS (25544)
+  25544: {
+    name: "ISS (Zarya)",
+    type: "Space Station Amateur Radio",
+    antenna: "Handheld Yagi, Nagoya 771, or V/UHF Vertical",
+    decoders: "Robot36 (Android), QSSTV, MMSSTV, Direwolf",
+    recAdvice: "NFM Audio WAV (16-bit 48 kHz mono)",
+    transmitters: [
+      { name: "FM Voice / SSTV Downlink", freqMHz: 145.800, mode: "FM (SSTV PD120 or Voice)", bw: "10–15 kHz", status: "Active during ARISS events" },
+      { name: "APRS Packet Radio", freqMHz: 145.825, mode: "AFSK 1200 AX.25", bw: "10–15 kHz", status: "Active 24/7" },
+      { name: "Crossband Repeater Downlink", freqMHz: 437.800, mode: "NFM (Uplink: 145.990 + 67Hz)", bw: "10–12.5 kHz", status: "Active crossband repeater" }
+    ]
+  },
+  // Tiangong (48274)
+  48274: {
+    name: "Tiangong Space Station",
+    type: "Chinese Space Station",
+    antenna: "VHF Yagi or Ground-plane",
+    decoders: "SDR++, SDR#",
+    recAdvice: "NFM Audio WAV (48 kHz)",
+    transmitters: [
+      { name: "VHF Amateur Payload", freqMHz: 145.985, mode: "FM Voice / Telemetry", bw: "10–15 kHz", status: "Periodic amateur tests" }
+    ]
+  }
+};
 
 let current = null;   // { name, satrec, tle }
 let passes = [];
 let notifiedFor = null;
+let selectedTxIndex = 0;
+let customFreqMHz = null;
+let lastDopplerHz = 0;
+let lastRxFreqMHz = null;
 
 // ---------- storage helpers ----------
 function load(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
@@ -166,14 +285,49 @@ function parseTle(text) {
   const lines = text.trim().split(/\r?\n/).map(l => l.trim());
   const out = [];
   for (let i = 0; i + 2 < lines.length; ) {
-    if (lines[i + 1]?.startsWith("1 ") && lines[i + 2]?.startsWith("2 ")) { out.push({ name: lines[i], l1: lines[i + 1], l2: lines[i + 2] }); i += 3; }
+    if (lines[i + 1]?.startsWith("1 ") && lines[i + 2]?.startsWith("2 ")) {
+      out.push({ name: lines[i].replace(/\s+/g, " ").trim(), l1: lines[i + 1].trim(), l2: lines[i + 2].trim() });
+      i += 3;
+    }
     else i++;
   }
   return out;
 }
+
+const SATELLITE_ALIASES = {
+  "meteor m2 3": "57166",
+  "meteor m2 4": "59051",
+  "meteor m2-3": "57166",
+  "meteor m2-4": "59051",
+  "meteor 2 3": "57166",
+  "meteor 2 4": "59051",
+  "meteor m 2 3": "57166",
+  "meteor m 2 4": "59051",
+  "meteor m 2-3": "57166",
+  "meteor m 2-4": "59051",
+  "meteor m2": "METEOR-M2",
+  "meteor": "METEOR",
+  "iss": "25544",
+  "space station": "25544",
+  "zarya": "25544",
+  "tiangong": "48274",
+  "css": "48274",
+  "hubble": "20580",
+  "hubble space telescope": "20580",
+  "hst": "20580",
+  "noaa 15": "25338",
+  "noaa 18": "28654",
+  "noaa 19": "33591",
+  "noaa 20": "43013",
+  "noaa 21": "54234",
+  "terra": "25994",
+  "landsat 8": "39084",
+  "landsat 9": "49260"
+};
+
 async function fetchTle(query) {
   const isId = /^\d+$/.test(query);
-  const key = "st-tle-" + query.toLowerCase();
+  const key = "st-tle-" + query.toLowerCase().replace(/\s+/g, " ").trim();
   const cached = load(key, null);
   if (cached && Date.now() - cached.t < 2 * 3600e3) return cached.list;
   const url = "https://celestrak.org/NORAD/elements/gp.php?" + (isId ? "CATNR=" : "NAME=") + encodeURIComponent(query) + "&FORMAT=tle";
@@ -184,11 +338,35 @@ async function fetchTle(query) {
   if (list.length) save(key, { t: Date.now(), list });
   return list;
 }
+
 async function findSat(query) {
-  query = query.trim(); if (!query) return;
+  const raw = String(query || "").trim().replace(/\s+/g, " ");
+  if (!raw) return;
   $("msg").textContent = "Loading…"; $("results").innerHTML = "";
+
+  const normKey = raw.toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  const aliasTarget = SATELLITE_ALIASES[normKey] || SATELLITE_ALIASES[raw.toLowerCase()];
+
   try {
-    const list = await fetchTle(query);
+    let list = [];
+    if (aliasTarget) {
+      list = await fetchTle(aliasTarget);
+    }
+    if (!list.length) {
+      list = await fetchTle(raw);
+    }
+    // If not found and query contains spaces, try hyphenating (e.g. "meteor m2" -> "meteor-m2")
+    if (!list.length && raw.includes(" ")) {
+      list = await fetchTle(raw.replace(/\s+/g, "-"));
+    }
+    // If still not found, try first token if 3+ characters
+    if (!list.length && raw.includes(" ")) {
+      const firstWord = raw.split(" ")[0];
+      if (firstWord.length >= 3) {
+        list = await fetchTle(firstWord);
+      }
+    }
+
     if (!list.length) { $("msg").textContent = "No satellite found."; return; }
     $("msg").textContent = "";
     if (list.length === 1) return selectSat(list[0]);
@@ -202,9 +380,135 @@ async function findSat(query) {
 }
 function selectSat(t) {
   current = { name: t.name, tle: t, satrec: S.twoline2satrec(t.l1, t.l2) };
+  selectedTxIndex = 0;
+  customFreqMHz = null;
   save("st-sat", t);
   $("satTitle").textContent = t.name + " · NORAD " + t.l1.slice(2, 7).trim();
   drawTrack(); computePasses();
+  renderRadioGuide();
+}
+
+function getRadioProfile(sat) {
+  if (!sat) return null;
+  const norad = sat.tle?.l1 ? parseInt(sat.tle.l1.slice(2, 7).trim(), 10) : null;
+  if (norad && RADIO_DB[norad]) return RADIO_DB[norad];
+  const name = (sat.name || "").toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  if (/meteor.*2\s*4/i.test(name)) return RADIO_DB[59051];
+  if (/meteor.*2\s*3/i.test(name)) return RADIO_DB[57166];
+  if (/meteor/i.test(name)) return RADIO_DB[57166];
+  if (/noaa\s*15/i.test(name)) return RADIO_DB[25338];
+  if (/noaa\s*18/i.test(name)) return RADIO_DB[28654];
+  if (/noaa\s*19/i.test(name)) return RADIO_DB[33591];
+  if (/iss|zarya|space\s*station/i.test(name)) return RADIO_DB[25544];
+  if (/tiangong/i.test(name)) return RADIO_DB[48274];
+  return null;
+}
+
+function getActiveTx() {
+  const prof = getRadioProfile(current);
+  if (customFreqMHz) {
+    return { name: "Custom Frequency", freqMHz: customFreqMHz, mode: "Custom (SDR)", bw: "Adjustable", status: "User defined" };
+  }
+  if (prof && prof.transmitters && prof.transmitters[selectedTxIndex]) {
+    return prof.transmitters[selectedTxIndex];
+  }
+  return { name: "VHF Space / Default", freqMHz: 145.800, mode: "NFM / FM", bw: "12–25 kHz", status: "Default center" };
+}
+
+function renderRadioGuide() {
+  const container = $("radioContent");
+  if (!container) return;
+  if (!current) {
+    container.innerHTML = '<div class="muted" style="font-size:12px;">Load a satellite to view radio frequencies and SDR recording settings.</div>';
+    return;
+  }
+  const prof = getRadioProfile(current);
+  const activeTx = getActiveTx();
+  const txList = prof ? prof.transmitters : [];
+  
+  let tabsHtml = "";
+  if (txList.length > 1) {
+    tabsHtml = '<div class="radio-tabs">' + txList.map((tx, idx) => {
+      const activeCls = (!customFreqMHz && idx === selectedTxIndex) ? " active" : "";
+      return `<button class="radio-tab${activeCls}" onclick="selectTransmitter(${idx})">${tx.freqMHz.toFixed(3)} MHz · ${tx.mode.split(' ')[0]}</button>`;
+    }).join("") + '</div>';
+  }
+
+  const ant = prof ? prof.antenna : "VHF/UHF Omnidirectional, Dipole or Turnstile";
+  const dec = prof ? prof.decoders : "SatDump, SDR++, SDR#, Gpredict";
+  const rec = prof ? prof.recAdvice : "Baseband IQ (.wav 16-bit, 250 kSps – 1 MSps) or NFM Audio 48 kHz";
+  const note = activeTx.status ? activeTx.status : "Adjust gain to optimize SNR without clipping.";
+
+  container.innerHTML = `
+    ${prof ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:12px;font-weight:700;color:var(--text);">${prof.name}</span>
+      <span class="badge vis">${prof.type.split(' ')[0]}</span>
+    </div>` : ''}
+    ${tabsHtml}
+    <div class="radio-card">
+      <div class="radio-header">
+        <span class="radio-title">${activeTx.name}</span>
+        <span class="badge ${activeTx.status && activeTx.status.includes('Active') ? 'vis' : 'nvis'}">${activeTx.status ? activeTx.status.split(' ')[0] : 'Idle'}</span>
+      </div>
+      <div class="radio-live-row">
+        <div>
+          <div class="radio-sub">TUNED RX FREQ (DOPPLER LIVE)</div>
+          <div class="radio-main-freq" id="liveRxFreq">${(lastRxFreqMHz || activeTx.freqMHz).toFixed(4)} MHz</div>
+        </div>
+        <button class="radio-copy-btn" id="copyFreqBtn" onclick="copyRxFreq()">📋 Copy</button>
+      </div>
+      <div class="radio-detail-grid">
+        <div class="rg-item"><span class="k">Nominal Tx</span><span class="v" id="radTx">${activeTx.freqMHz.toFixed(4)} MHz</span></div>
+        <div class="rg-item"><span class="k">Doppler Shift</span><span class="v" id="radDop">${(lastDopplerHz >= 0 ? "+" : "") + (lastDopplerHz / 1000).toFixed(2)} kHz</span></div>
+        <div class="rg-item"><span class="k">Modulation</span><span class="v" id="radMode">${activeTx.mode}</span></div>
+        <div class="rg-item"><span class="k">RX Bandwidth</span><span class="v" id="radBw">${activeTx.bw}</span></div>
+        <div class="rg-item" style="grid-column: 1/-1"><span class="k">Antenna</span><span class="v">${ant}</span></div>
+        <div class="rg-item" style="grid-column: 1/-1"><span class="k">Recommended Decoder</span><span class="v">${dec}</span></div>
+        <div class="rg-item" style="grid-column: 1/-1"><span class="k">Recording Settings</span><span class="v">${rec}</span></div>
+      </div>
+      <div class="radio-tips" id="radNotes">${note}</div>
+    </div>
+    <div style="margin-top:10px; border-top: 1px solid var(--line); padding-top: 8px;">
+      <label style="font-size:11px;">Custom frequency for live Doppler (MHz)</label>
+      <div class="row">
+        <input id="customFreq" type="text" inputmode="decimal" placeholder="e.g. 137.100 or 145.800" value="${customFreqMHz ? customFreqMHz : ''}">
+        <button id="customFreqBtn" style="flex:0">Tune</button>
+      </div>
+    </div>
+  `;
+
+  const cfInput = $("customFreq");
+  const cfBtn = $("customFreqBtn");
+  if (cfBtn && cfInput) {
+    const applyCustom = () => {
+      const v = parseFloat(cfInput.value.trim().replace(",", "."));
+      if (isFinite(v) && v > 0) {
+        customFreqMHz = v;
+      } else {
+        customFreqMHz = null;
+      }
+      renderRadioGuide();
+    };
+    cfBtn.onclick = applyCustom;
+    cfInput.onkeydown = e => { if (e.key === "Enter") applyCustom(); };
+  }
+}
+
+function selectTransmitter(idx) {
+  selectedTxIndex = idx;
+  customFreqMHz = null;
+  renderRadioGuide();
+}
+
+function copyRxFreq() {
+  const activeTx = getActiveTx();
+  const freqStr = (lastRxFreqMHz || activeTx.freqMHz).toFixed(4);
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(freqStr).then(() => {
+      const btn = $("copyFreqBtn");
+      if (btn) { btn.textContent = "✓ Copied"; setTimeout(() => btn.textContent = "📋 Copy", 1500); }
+    });
+  }
 }
 
 // ---------- math ----------
@@ -332,7 +636,7 @@ function downloadIcs(p) {
     "END:VEVENT","END:VCALENDAR"].join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
-  a.download = current.name.replace(/\W+/g, "_") + "_pass.ics"; a.click();
+  a.download = current.name.trim().replace(/\s+/g, "_").replace(/[^\w.-]+/g, "") + "_pass.ics"; a.click();
 }
 
 // ---------- map ----------
@@ -394,6 +698,15 @@ function tick() {
   const speed = Math.hypot(l.vel.x, l.vel.y, l.vel.z), rr = l2.range - l.range;
   const lit = sunlit(l.pos, now), sunEl = sunElevation(now, obs);
   const epochDays = (now - new Date(Date.UTC((y => y < 57 ? 2000 + y : 1900 + y)(+current.tle.l1.slice(18, 20)), 0, 1)) ) / 86400e3 - (+current.tle.l1.slice(20, 32) - 1);
+  const activeTx = getActiveTx();
+  const dopHz = -rr / 299792.458 * (activeTx.freqMHz * 1e6);
+  lastDopplerHz = dopHz;
+  lastRxFreqMHz = activeTx.freqMHz + dopHz / 1e6;
+  const liveFreqEl = $("liveRxFreq");
+  if (liveFreqEl) liveFreqEl.textContent = lastRxFreqMHz.toFixed(4) + " MHz";
+  const dopEl = $("radDop");
+  if (dopEl) dopEl.textContent = (dopHz >= 0 ? "+" : "") + (dopHz / 1000).toFixed(2) + " kHz";
+
   $("stats").innerHTML =
     stat("Azimuth", l.az.toFixed(1) + "° " + compass(l.az)) +
     stat("Elevation", `<span style="color:${l.el > 0 ? "var(--good)" : "inherit"}">${l.el.toFixed(1)}°</span>`) +
@@ -401,10 +714,11 @@ function tick() {
     stat("Range rate", (rr >= 0 ? "+" : "") + rr.toFixed(2) + " km/s") +
     stat("Altitude", l.alt.toFixed(0) + " km") +
     stat("Speed", speed.toFixed(2) + " km/s") +
+    stat("Tuned Freq", `<span style="color:var(--accent)">${lastRxFreqMHz.toFixed(4)} MHz</span>`) +
+    stat("Doppler", (dopHz >= 0 ? "+" : "") + (dopHz / 1000).toFixed(2) + " kHz") +
     stat("Sub-point", l.lat.toFixed(2) + ", " + l.lon.toFixed(2)) +
     stat("Sunlight", lit ? "☀️ sunlit" : "🌑 eclipse") +
     stat("Sun at you", sunEl.toFixed(0) + "°") +
-    stat("Doppler 145.8 MHz", (-rr / 299792.458 * 145.8e6 / 1000).toFixed(2) + " kHz") +
     stat("Period", (2 * Math.PI / current.satrec.no).toFixed(1) + " min") +
     stat("TLE age", epochDays.toFixed(1) + " days");
   satMarker.setLatLng([l.lat, l.lon]).addTo(map).unbindTooltip().bindTooltip(current.name);
@@ -434,15 +748,17 @@ PRESETS.forEach(([n, id]) => {
   b.onclick = () => findSat(String(id)); $("presets").appendChild(b);
 });
 $("satBtn").onclick = () => findSat($("satq").value);
-$("satq").onkeydown = e => e.key === "Enter" && findSat($("satq").value);
+$("satq").onkeydown = e => { if (e.key === "Enter") findSat($("satq").value); };
 $("calc").onclick = computePasses;
 ["minEl", "days", "visOnly"].forEach(id => $(id).onchange = computePasses);
 ["lat", "lon"].forEach(id => {
   $(id).onchange = () => setObserver(num("lat"), num("lon"));
-  $(id).onkeydown = e => e.key === "Enter" && $(id).blur();
+});
+["lat", "lon", "alt"].forEach(id => {
+  $(id).onkeydown = e => { if (e.key === "Enter") $(id).blur(); };
 });
 $("alt").onchange = () => { $("alt").value = String(Math.round(num("alt", 0))); saveObs(); if (current) computePasses(); };
-["minEl", "days"].forEach(id => $(id).onkeydown = e => e.key === "Enter" && computePasses());
+["minEl", "days"].forEach(id => $(id).onkeydown = e => { if (e.key === "Enter") computePasses(); });
 $("geo").onclick = () => {
   if (!navigator.geolocation) return alert("Geolocation not supported");
   navigator.geolocation.getCurrentPosition(p => {
@@ -451,7 +767,7 @@ $("geo").onclick = () => {
   }, e => alert("Location error: " + e.message));
 };
 async function searchPlace() {
-  const q = $("place").value.trim(); if (!q) return;
+  const q = $("place").value.trim().replace(/\s+/g, " "); if (!q) return;
   try {
     const r = await (await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(q))).json();
     if (!r.length) return alert("Place not found");
@@ -459,7 +775,7 @@ async function searchPlace() {
   } catch (e) { alert("Search failed: " + e.message); }
 }
 $("placeBtn").onclick = searchPlace;
-$("place").onkeydown = e => e.key === "Enter" && searchPlace();
+$("place").onkeydown = e => { if (e.key === "Enter") searchPlace(); };
 $("notify").onchange = () => { if ($("notify").checked && "Notification" in window) Notification.requestPermission(); };
 
 const o = load("st-obs", null);
@@ -469,7 +785,7 @@ if (isFinite(oLat) && isFinite(oLon)) { obsLat = clamp(oLat, -90, 90); obsLon = 
 $("lat").value = obsLat.toFixed(4); $("lon").value = obsLon.toFixed(4);
 obsMarker.setLatLng([obsLat, obsLon]);
 map.setView([obsLat, obsLon], 3);
-drawSky(null); drawTerminator();
+drawSky(null); drawTerminator(); renderRadioGuide();
 const savedSat = load("st-sat", null);
 try { savedSat ? selectSat(savedSat) : findSat("25544"); } catch { findSat("25544"); }
 setInterval(tick, 1000); tick();
