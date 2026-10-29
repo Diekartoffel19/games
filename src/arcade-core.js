@@ -269,7 +269,8 @@ const ArcadeCore = (() => {
     'cannon_sheep': 'cannon_sheep_best_dist',
     'buerostuhl': 'buerostuhl_best_lap',
     'schwarzfahrer': 'schwarzfahrer_highscore',
-    'squidgame': 'squidgame_won'
+    'squidgame': 'squidgame_won',
+    'propaganda': 'propaganda_votes'
   };
 
   function getScore(gameKey) {
