@@ -268,7 +268,8 @@ const ArcadeCore = (() => {
     'wg_putzen': 'wg_putzen_highscore',
     'cannon_sheep': 'cannon_sheep_best_dist',
     'buerostuhl': 'buerostuhl_best_lap',
-    'schwarzfahrer': 'schwarzfahrer_highscore'
+    'schwarzfahrer': 'schwarzfahrer_highscore',
+    'squidgame': 'squidgame_won'
   };
 
   function getScore(gameKey) {

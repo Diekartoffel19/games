@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Molecule Lab</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;--mute:#8b949e;--acc:#58a6ff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:13px system-ui,sans-serif;overflow:hidden}
+  #app{display:flex;height:100vh}
+  #side{width:300px;background:var(--panel);border-right:1px solid var(--line);padding:12px;overflow-y:auto}
+  #view{flex:1;position:relative}
+  h1{font-size:16px;margin:0 0 10px}
+  h2{font-size:12px;text-transform:uppercase;color:var(--mute);margin:16px 0 6px;letter-spacing:.05em}
+  .tabs{display:flex;gap:4px}
+  .tabs button{flex:1}
+  button,select,input,textarea{background:#21262d;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit}
+  button{cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.on{background:var(--acc);color:#000;border-color:var(--acc)}
+  textarea{width:100%;height:70px;resize:vertical;font-family:monospace;text-transform:uppercase}
+  .row{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
+  .el{width:38px;font-weight:600}
+  .info{font-family:monospace;font-size:12px;line-height:1.6;white-space:pre-wrap;color:#c9d1d9}
+  .hint{color:var(--mute);font-size:12px;line-height:1.5}
+  label{display:flex;align-items:center;gap:6px;margin:4px 0}
+  #tip{position:absolute;pointer-events:none;background:#000c;padding:4px 8px;border-radius:4px;font-size:12px;display:none}
+  #measure{position:absolute;left:12px;bottom:12px;background:#000a;padding:6px 10px;border-radius:6px;font-family:monospace}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="side">
+    <h1>Molecule Lab</h1>
+    <div class="tabs"><button id="tDNA" class="on">DNA</button><button id="tMol">Molecule builder</button></div>
+
+    <div id="pDNA">
+      <h2>Sequence (5'→3')</h2>
+      <textarea id="seq">ATGCGTACGTTAGCCGATCGGATC</textarea>
+      <div class="row">
+        <select id="form"><option value="B">B-DNA</option><option value="A">A-DNA</option></select>
+        <button id="rand">Random</button>
+      </div>
+      <label><input type="checkbox" id="showBack" checked> Backbone</label>
+      <label><input type="checkbox" id="showHb" checked> H-bonds</label>
+      <label><input type="checkbox" id="showAxis"> Helix axis</label>
+      <label><input type="checkbox" id="spin" checked> Auto-rotate</label>
+      <h2>Stats</h2>
+      <div class="info" id="dnaInfo"></div>
+      <h2>Legend</h2>
+      <div class="hint"><span style="color:#4caf50">■ A</span> &nbsp;<span style="color:#f44336">■ T</span> &nbsp;<span style="color:#ffc107">■ G</span> &nbsp;<span style="color:#2196f3">■ C</span> &nbsp;<span style="color:#ff8000">● P</span> &nbsp;<span style="color:#bbb">● sugar C1'</span><br>
+      Scale is 1 unit = 1 Å. Geometry uses published helix parameters (rise, twist, radius, groove offset).</div>
+    </div>
+
+    <div id="pMol" class="hidden">
+      <h2>Element</h2>
+      <div class="row" id="els"></div>
+      <h2>Edit</h2>
+      <div class="row">
+        <button id="add">Add atom</button><button id="bond">Bond ⟳</button><button id="del">Delete</button>
+      </div>
+      <div class="row">
+        <button id="fillH">Fill H</button><button id="opt">Optimize</button><button id="clear">Clear</button>
+      </div>
+      <div class="row"><button id="xyz">Export .xyz</button></div>
+      <h2>Presets</h2>
+      <div class="row" id="presets"></div>
+      <h2>Molecule</h2>
+      <div class="info" id="molInfo"></div>
+      <h2>How to</h2>
+      <div class="hint">
+        Click atom: select. Shift+click: multi-select.<br>
+        <b>Add atom</b>: new atom of chosen element bonded to selection (or alone).<br>
+        <b>Bond ⟳</b>: with 2 selected, cycles none→single→double→triple.<br>
+        Element button with atoms selected: changes their element.<br>
+        <b>Fill H</b>: satisfies valence. <b>Optimize</b>: relaxes geometry (bond lengths from covalent radii, VSEPR angles).<br>
+        Select 2 atoms: distance. 3: angle. 4: dihedral.<br>
+        Keys: Del = delete, A = add, B = bond, H = fill H, O = optimize.
+      </div>
+    </div>
+  </div>
+  <div id="view"><div id="tip"></div><div id="measure" class="hidden"></div></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// ---------- scene ----------
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(devicePixelRatio);
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+const camera = new THREE.PerspectiveCamera(45,1,0.1,2000);
+camera.position.set(0,0,60);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.AmbientLight(0xffffff,0.45));
+const sun = new THREE.DirectionalLight(0xffffff,0.8); sun.position.set(30,40,50); scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff,0.3); fill.position.set(-30,-20,-40); scene.add(fill);
+let root = new THREE.Group(); scene.add(root);
+
+function resize(){ const w=view.clientWidth,h=view.clientHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+addEventListener('resize',resize); resize();
+
+const sphereGeo = new THREE.SphereGeometry(1,24,16);
+const cylGeo = new THREE.CylinderGeometry(1,1,1,12);
+const matCache = {};
+function mat(c){ return matCache[c] || (matCache[c] = new THREE.MeshPhongMaterial({color:c,shininess:60})); }
+function sphere(p,r,c){ const m=new THREE.Mesh(sphereGeo,mat(c)); m.position.copy(p); m.scale.setScalar(r); return m; }
+function cyl(a,b,r,c){
+  const d=new THREE.Vector3().subVectors(b,a), L=d.length();
+  const m=new THREE.Mesh(cylGeo,mat(c));
+  m.position.copy(a).addScaledVector(d,0.5);
+  m.scale.set(r,L,r);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());
+  return m;
+}
+function clearRoot(){ scene.remove(root); root.traverse(o=>{ if(o.geometry && o.geometry!==sphereGeo && o.geometry!==cylGeo) o.geometry.dispose(); }); root=new THREE.Group(); scene.add(root); }
+
+// ---------- DNA ----------
+// Helix parameters (Saenger; Olson et al. 2001). Radii in Å, angles in degrees.
+const FORMS = {
+  B:{rise:3.38, twist:36.0, rP:8.91, rC:5.9, pHalf:72, cHalf:63, pZ:1.6, incl:-1.2},
+  A:{rise:2.56, twist:32.7, rP:8.9,  rC:7.5, pHalf:80, cHalf:72, pZ:2.4, incl:19}
+};
+const BASE_COL = {A:0x4caf50,T:0xf44336,G:0xffc107,C:0x2196f3};
+const COMP = {A:'T',T:'A',G:'C',C:'G'};
+const NUC_MW = {A:313.21,C:289.18,G:329.21,T:304.2}; // dNMP residue masses, g/mol
+const dnaPick = [];
+
+function buildDNA(){
+  clearRoot(); dnaPick.length=0;
+  const seq = document.getElementById('seq').value.toUpperCase().replace(/[^ACGT]/g,'');
+  if(!seq.length){ document.getElementById('dnaInfo').textContent='Enter A, C, G, T'; return; }
+  const f = FORMS[document.getElementById('form').value];
+  const showBack = document.getElementById('showBack').checked;
+  const showHb = document.getElementById('showHb').checked;
+  const n = seq.length, z0 = -(n-1)*f.rise/2, D=Math.PI/180;
+  const P1=[],P2=[];
+  const pos = (r,a,z)=>new THREE.Vector3(r*Math.cos(a),z,r*Math.sin(a));
+  for(let i=0;i<n;i++){
+    const th=i*f.twist*D, y=z0+i*f.rise;
+    const b1=seq[i], b2=COMP[b1];
+    // C1' atoms of the pair sit at ±cHalf around the minor-groove direction
+    const c1=pos(f.rC,th+f.cHalf*D,y), c2=pos(f.rC,th-f.cHalf*D,y);
+    const p1=pos(f.rP,th+f.pHalf*D,y+f.pZ), p2=pos(f.rP,th-f.pHalf*D,y-f.pZ);
+    P1.push(p1); P2.push(p2);
+    // bases: purines reach further across the pair than pyrimidines
+    const mid=new THREE.Vector3().addVectors(c1,c2).multiplyScalar(.5);
+    mid.y += Math.tan(f.incl*D)*0; // inclination shown via slab tilt below
+    const purine1 = b1==='A'||b1==='G';
+    const split = purine1 ? 0.58 : 0.42;
+    const j=new THREE.Vector3().lerpVectors(c1,c2,split);
+    [[c1,j,b1,1,i],[c2,j,b2,2,i]].forEach(([c,e,b,s,idx])=>{
+      const d=new THREE.Vector3().subVectors(e,c), L=d.length();
+      const g=new THREE.BoxGeometry(L,0.9,2.4);
+      const m=new THREE.Mesh(g,mat(BASE_COL[b]));
+      m.position.copy(c).addScaledVector(d,.5);
+      const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0),d.clone().normalize());
+      const tilt=new THREE.Quaternion().setFromAxisAngle(d.clone().normalize(),f.incl*D*(s===1?1:-1)*0.5);
+      m.quaternion.copy(tilt.multiply(q));
+      m.userData={tip:`${b} (strand ${s}, ${s===1?idx+1:n-idx}) — pairs with ${COMP[b]}`};
+      root.add(m); dnaPick.push(m);
+      root.add(sphere(c,0.7,0xbbbbbb));
+      root.add(cyl(c, s===1?p1:p2, 0.25, 0x999999));
+    });
+    if(showHb){
+      const nh = (b1==='G'||b1==='C')?3:2;
+      const ax=new THREE.Vector3().subVectors(c2,c1).normalize();
+      const perp=new THREE.Vector3(-ax.z,0,ax.x);
+      for(let k=0;k<nh;k++){
+        const o=(k-(nh-1)/2)*0.7;
+        const a=j.clone().addScaledVector(ax,-0.75).addScaledVector(perp,o);
+        const b=j.clone().addScaledVector(ax,0.75).addScaledVector(perp,o);
+        root.add(cyl(a,b,0.08,0xffffff));
+      }
+    }
+  }
+  if(showBack){
+    const tube=(pts,c)=>{ if(pts.length<2){ root.add(sphere(pts[0],1,0xff8000)); return; }
+      root.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),pts.length*8,0.55,8,false),mat(c)));
+      pts.forEach(p=>root.add(sphere(p,1.0,0xff8000))); };
+    tube(P1,0x8a6bd1); tube(P2,0x2ab3a6);
+  }
+  if(document.getElementById('showAxis').checked)
+    root.add(cyl(new THREE.Vector3(0,z0-3,0),new THREE.Vector3(0,-z0+3,0),0.12,0x666666));
+
+  const gc=[...seq].filter(b=>b==='G'||b==='C').length;
+  const comp=[...seq].reverse().map(b=>COMP[b]).join('');
+  const mw=s=>[...s].reduce((a,b)=>a+NUC_MW[b],0)-61.96;
+  const tm = n<14 ? 2*(n-gc)+4*gc : 64.9+41*(gc-16.4)/n;
+  document.getElementById('dnaInfo').textContent =
+`Form       ${document.getElementById('form').value}-DNA
+Base pairs ${n}
+Length     ${(n*f.rise).toFixed(1)} Å (${(n*f.rise/10).toFixed(2)} nm)
+Turns      ${(n*f.twist/360).toFixed(2)} (${(360/f.twist).toFixed(1)} bp/turn)
+Rise/twist ${f.rise} Å / ${f.twist}°
+GC content ${(100*gc/n).toFixed(1)} %
+Tm (est.)  ${tm.toFixed(1)} °C
+MW (ds)    ${((mw(seq)+mw(comp))/1000).toFixed(2)} kDa
+Complement 5'-${comp}-3'`;
+  camera.position.set(0,0,Math.max(45,n*f.rise*1.1)); controls.target.set(0,0,0);
+}
+
+// ---------- Molecule builder ----------
+const EL = { // covalent radius Å (Cordero 2008), CPK color, valence, mass
+  H:{r:.31,c:0xffffff,v:1,m:1.008}, C:{r:.76,c:0x505050,v:4,m:12.011}, N:{r:.71,c:0x3050f8,v:3,m:14.007},
+  O:{r:.66,c:0xff0d0d,v:2,m:15.999}, F:{r:.57,c:0x90e050,v:1,m:18.998}, P:{r:1.07,c:0xff8000,v:3,m:30.974},
+  S:{r:1.05,c:0xffff30,v:2,m:32.06}, Cl:{r:1.02,c:0x1ff01f,v:1,m:35.45}, Br:{r:1.20,c:0xa62929,v:1,m:79.904},
+  I:{r:1.39,c:0x940094,v:1,m:126.9}
+};
+let atoms=[], bonds=[], sel=[], curEl='C';
+const atomMeshes=[];
+
+const neighbors = i => bonds.filter(b=>b.a===i||b.b===i).map(b=>({j:b.a===i?b.b:b.a,o:b.o}));
+const bondOf = (i,j) => bonds.find(b=>(b.a===i&&b.b===j)||(b.a===j&&b.b===i));
+const usedVal = i => neighbors(i).reduce((s,n)=>s+n.o,0);
+function bondLen(i,j,o){ const r=EL[atoms[i].el].r+EL[atoms[j].el].r; return r*[1,1,0.87,0.78][o]; }
+function idealAngle(i){
+  const nb=neighbors(i), maxO=Math.max(0,...nb.map(n=>n.o)), el=atoms[i].el;
+  if(maxO===3 || (nb.filter(n=>n.o===2).length===2 && nb.length===2)) return 180;
+  if(maxO===2 || (nb.length===3 && el==='C' && usedVal(i)<4)) return 120;
+  if(el==='O'||el==='S') return nb.length===2 ? 104.5 : 109.5;
+  if(el==='N') return nb.length===3 ? 107 : 109.5;
+  return 109.5;
+}
+
+function addAtom(el, p){ atoms.push({el,p:p.clone()}); return atoms.length-1; }
+function addBond(a,b,o=1){ const x=bondOf(a,b); if(x) x.o=o; else bonds.push({a,b,o}); }
+function delAtoms(list){
+  const set=new Set(list);
+  const map=[]; let k=0; atoms.forEach((_,i)=>map[i]=set.has(i)?-1:k++);
+  atoms=atoms.filter((_,i)=>!set.has(i));
+  bonds=bonds.filter(b=>!set.has(b.a)&&!set.has(b.b)).map(b=>({a:map[b.a],b:map[b.b],o:b.o}));
+  sel=[];
+}
+function freeDir(i){
+  const nb=neighbors(i), p=atoms[i].p;
+  const s=new THREE.Vector3();
+  nb.forEach(n=>s.add(new THREE.Vector3().subVectors(atoms[n.j].p,p).normalize()));
+  let d=s.negate();
+  if(d.length()<0.1){
+    d=new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5);
+    if(nb.length===1){ const a=new THREE.Vector3().subVectors(atoms[nb[0].j].p,p).normalize(); d.addScaledVector(a,-d.dot(a)); }
+  }
+  return d.normalize();
+}
+function attach(el,i){
+  const p=atoms[i].p.clone().addScaledVector(freeDir(i),EL[el].r+EL[atoms[i].el].r);
+  const j=addAtom(el,p); addBond(i,j,1); return j;
+}
+function fillH(){
+  const n=atoms.length;
+  for(let i=0;i<n;i++){ if(atoms[i].el==='H') continue; let m=EL[atoms[i].el].v-usedVal(i); while(m-->0) attach('H',i); }
+}
+
+// gradient-descent force field: bond stretch, 1-3 angle terms, non-bonded repulsion
+function relax(steps=300){
+  const N=atoms.length; if(N<2) return;
+  const one3=[];
+  for(let i=0;i<N;i++){
+    const nb=neighbors(i), th=idealAngle(i)*Math.PI/180;
+    for(let a=0;a<nb.length;a++) for(let b=a+1;b<nb.length;b++){
+      const la=bondLen(i,nb[a].j,nb[a].o), lb=bondLen(i,nb[b].j,nb[b].o);
+      one3.push([nb[a].j,nb[b].j,Math.sqrt(la*la+lb*lb-2*la*lb*Math.cos(th))]);
+    }
+  }
+  const close=new Set(); bonds.forEach(b=>close.add(b.a+'_'+b.b).add(b.b+'_'+b.a));
+  one3.forEach(([a,b])=>close.add(a+'_'+b).add(b+'_'+a));
+  const F=atoms.map(()=>new THREE.Vector3()), d=new THREE.Vector3();
+  const spring=(i,j,r0,k)=>{ d.subVectors(atoms[j].p,atoms[i].p); const L=d.length()||1e-3; const f=k*(L-r0)/L; F[i].addScaledVector(d,f); F[j].addScaledVector(d,-f); };
+  for(let s=0;s<steps;s++){
+    F.forEach(f=>f.set(0,0,0));
+    bonds.forEach(b=>spring(b.a,b.b,bondLen(b.a,b.b,b.o),1.0));
+    one3.forEach(([a,b,r])=>spring(a,b,r,0.4));
+    for(let i=0;i<N;i++) for(let j=i+1;j<N;j++){
+      if(close.has(i+'_'+j)) continue;
+      d.subVectors(atoms[j].p,atoms[i].p); const L=d.length()||1e-3, r0=(atoms[i].el==='H'||atoms[j].el==='H')?2.4:3.0;
+      if(L<r0){ const f=0.15*(L-r0)/L; F[i].addScaledVector(d,f); F[j].addScaledVector(d,-f); }
+    }
+    const step=0.25;
+    atoms.forEach((a,i)=>{ if(F[i].length()>1) F[i].normalize(); a.p.addScaledVector(F[i],step); });
+  }
+  const c=new THREE.Vector3(); atoms.forEach(a=>c.add(a.p)); c.divideScalar(N); atoms.forEach(a=>a.p.sub(c));
+}
+
+function drawMol(){
+  clearRoot(); atomMeshes.length=0;
+  atoms.forEach((a,i)=>{
+    const r=a.el==='H'?0.25:0.38;
+    const m=sphere(a.p,r,EL[a.el].c); m.userData={i,tip:`${a.el}${i+1}`}; root.add(m); atomMeshes.push(m);
+    if(sel.includes(i)){ const h=sphere(a.p,r+0.15,0x58a6ff); h.material=new THREE.MeshBasicMaterial({color:0x58a6ff,transparent:true,opacity:.35}); root.add(h); }
+  });
+  bonds.forEach(b=>{
+    const A=atoms[b.a].p,B=atoms[b.b].p, ax=new THREE.Vector3().subVectors(B,A).normalize();
+    let off=new THREE.Vector3(0,0,1); const nb=neighbors(b.a).find(n=>n.j!==b.b)||neighbors(b.b).find(n=>n.j!==b.a);
+    if(nb) off.subVectors(atoms[nb.j].p,A); off.addScaledVector(ax,-off.dot(ax)); if(off.length()<1e-3) off.set(1,0,0).cross(ax); off.normalize();
+    const offs = b.o===1?[0]:b.o===2?[-.13,.13]:[-.2,0,.2];
+    const mid=new THREE.Vector3().lerpVectors(A,B,.5);
+    offs.forEach(o=>{
+      const a=A.clone().addScaledVector(off,o), m=mid.clone().addScaledVector(off,o), c=B.clone().addScaledVector(off,o);
+      const r=b.o===1?0.12:0.07;
+      root.add(cyl(a,m,r,EL[atoms[b.a].el].c)); root.add(cyl(m,c,r,EL[atoms[b.b].el].c));
+    });
+  });
+  molStats(); measure();
+}
+function molStats(){
+  const cnt={}; atoms.forEach(a=>cnt[a.el]=(cnt[a.el]||0)+1);
+  const order=['C','H',...Object.keys(cnt).filter(e=>e!=='C'&&e!=='H').sort()];
+  const formula=order.filter(e=>cnt[e]).map(e=>e+(cnt[e]>1?cnt[e]:'')).join('')||'—';
+  const mw=atoms.reduce((s,a)=>s+EL[a.el].m,0);
+  const open=atoms.map((a,i)=>EL[a.el].v-usedVal(i)).filter(x=>x>0).reduce((s,x)=>s+x,0);
+  const over=atoms.filter((a,i)=>usedVal(i)>EL[a.el].v).length;
+  document.getElementById('molInfo').textContent=
+`Formula   ${formula}
+MW        ${mw.toFixed(3)} g/mol
+Atoms     ${atoms.length}   Bonds ${bonds.length}
+Open val. ${open}${over?`\n⚠ ${over} atom(s) over valence`:''}
+Selected  ${sel.map(i=>atoms[i].el+(i+1)).join(', ')||'—'}`;
+}
+function measure(){
+  const box=document.getElementById('measure'), P=sel.map(i=>atoms[i].p), D=180/Math.PI;
+  let t='';
+  if(P.length===2) t=`d = ${P[0].distanceTo(P[1]).toFixed(3)} Å`;
+  if(P.length===3){ const a=new THREE.Vector3().subVectors(P[0],P[1]),b=new THREE.Vector3().subVectors(P[2],P[1]); t=`∠ = ${(a.angleTo(b)*D).toFixed(2)}°`; }
+  if(P.length===4){
+    const b1=new THREE.Vector3().subVectors(P[1],P[0]),b2=new THREE.Vector3().subVectors(P[2],P[1]),b3=new THREE.Vector3().subVectors(P[3],P[2]);
+    const n1=b1.clone().cross(b2),n2=b2.clone().cross(b3),m=n1.clone().cross(b2.clone().normalize());
+    t=`dihedral = ${(Math.atan2(m.dot(n2),n1.dot(n2))*D).toFixed(2)}°`;
+  }
+  box.textContent=t; box.classList.toggle('hidden',!t);
+}
+
+// presets: rough 2D heavy-atom layouts, H added and geometry relaxed on load
+const PRESETS = {
+  Water:{a:[['O',0,0]],b:[]},
+  Methane:{a:[['C',0,0]],b:[]},
+  Ammonia:{a:[['N',0,0]],b:[]},
+  'CO₂':{a:[['C',0,0],['O',1.2,0],['O',-1.2,0]],b:[[0,1,2],[0,2,2]]},
+  Ethanol:{a:[['C',0,0],['C',1.3,.7],['O',2.6,0]],b:[[0,1,1],[1,2,1]]},
+  Ethyne:{a:[['C',0,0],['C',1.2,0]],b:[[0,1,3]]},
+  Benzene:{a:[0,1,2,3,4,5].map(k=>['C',1.39*Math.cos(k*Math.PI/3),1.39*Math.sin(k*Math.PI/3)]),b:[[0,1,2],[1,2,1],[2,3,2],[3,4,1],[4,5,2],[5,0,1]]},
+  Caffeine:{a:[
+    ['C',1.21,.7],['C',1.21,-.7],['C',0,-1.4],['N',-1.21,-.7],['C',-1.21,.7],['N',0,1.4],
+    ['N',2.55,1.13],['C',3.37,0],['N',2.55,-1.13],
+    ['O',0,-2.63],['O',-2.28,1.32],['C',-2.28,-1.32],['C',0,2.9],['C',3.0,-2.5]],
+    b:[[0,1,2],[1,2,1],[2,3,1],[3,4,1],[4,5,1],[5,0,1],[0,6,1],[6,7,2],[7,8,1],[8,1,1],[2,9,2],[4,10,2],[3,11,1],[5,12,1],[8,13,1]]}
+};
+function loadPreset(name){
+  const p=PRESETS[name]; atoms=[]; bonds=[]; sel=[];
+  p.a.forEach(([el,x,y])=>addAtom(el,new THREE.Vector3(x,y,(Math.random()-.5)*.05)));
+  p.b.forEach(([a,b,o])=>addBond(a,b,o));
+  fillH(); relax(600); drawMol(); frame();
+}
+function frame(){ let r=3; atoms.forEach(a=>r=Math.max(r,a.p.length())); camera.position.set(0,0,r*3+6); controls.target.set(0,0,0); }
+
+// ---------- UI ----------
+let mode='dna';
+const $=id=>document.getElementById(id);
+function setMode(m){
+  mode=m; $('tDNA').classList.toggle('on',m==='dna'); $('tMol').classList.toggle('on',m==='mol');
+  $('pDNA').classList.toggle('hidden',m!=='dna'); $('pMol').classList.toggle('hidden',m!=='mol');
+  $('measure').classList.add('hidden');
+  if(m==='dna') buildDNA(); else { drawMol(); frame(); }
+}
+$('tDNA').onclick=()=>setMode('dna'); $('tMol').onclick=()=>setMode('mol');
+['seq','form','showBack','showHb','showAxis'].forEach(id=>$(id).addEventListener('input',buildDNA));
+$('rand').onclick=()=>{ $('seq').value=Array.from({length:12+Math.random()*30|0},()=>'ACGT'[Math.random()*4|0]).join(''); buildDNA(); };
+
+Object.keys(EL).forEach(e=>{
+  const b=document.createElement('button'); b.className='el'+(e===curEl?' on':''); b.textContent=e;
+  b.style.borderBottom=`3px solid #${EL[e].c.toString(16).padStart(6,'0')}`;
+  b.onclick=()=>{ curEl=e; document.querySelectorAll('.el').forEach(x=>x.classList.toggle('on',x===b));
+    if(sel.length){ sel.forEach(i=>atoms[i].el=e); drawMol(); } };
+  $('els').appendChild(b);
+});
+Object.keys(PRESETS).forEach(n=>{ const b=document.createElement('button'); b.textContent=n; b.onclick=()=>loadPreset(n); $('presets').appendChild(b); });
+
+function doAdd(){
+  if(!sel.length){ const j=addAtom(curEl,new THREE.Vector3(atoms.length?4:0,0,0)); sel=[j]; }
+  else sel=sel.map(i=>attach(curEl,i));
+  relax(150); drawMol();
+}
+function doBond(){
+  if(sel.length!==2) return;
+  const [a,b]=sel, x=bondOf(a,b);
+  if(!x) addBond(a,b,1); else if(x.o<3) x.o++; else bonds=bonds.filter(y=>y!==x);
+  drawMol();
+}
+function doDel(){ if(sel.length){ delAtoms(sel); drawMol(); } }
+function doOpt(){ let k=0; const t=setInterval(()=>{ relax(40); drawMol(); if(++k>=15) clearInterval(t); },30); }
+$('add').onclick=doAdd; $('bond').onclick=doBond; $('del').onclick=doDel;
+$('fillH').onclick=()=>{ fillH(); relax(300); drawMol(); };
+$('opt').onclick=doOpt;
+$('clear').onclick=()=>{ atoms=[]; bonds=[]; sel=[]; drawMol(); };
+$('xyz').onclick=()=>{
+  const txt=`${atoms.length}\nMolecule Lab export\n`+atoms.map(a=>`${a.el.padEnd(2)} ${a.p.x.toFixed(4)} ${a.p.y.toFixed(4)} ${a.p.z.toFixed(4)}`).join('\n')+'\n';
+  const u=URL.createObjectURL(new Blob([txt],{type:'text/plain'})); const l=document.createElement('a'); l.href=u; l.download='molecule.xyz'; l.click(); URL.revokeObjectURL(u);
+};
+addEventListener('keydown',e=>{
+  if(mode!=='mol'||e.target.tagName==='TEXTAREA'||e.target.tagName==='INPUT') return;
+  const k=e.key.toLowerCase();
+  if(k==='delete'||k==='backspace') doDel(); else if(k==='a') doAdd(); else if(k==='b') doBond();
+  else if(k==='h') $('fillH').click(); else if(k==='o') doOpt();
+});
+
+// picking
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2(); let downAt=null;
+function pick(e,list){ const r=renderer.domElement.getBoundingClientRect(); mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); ray.setFromCamera(mouse,camera); return ray.intersectObjects(list)[0]; }
+renderer.domElement.addEventListener('pointerdown',e=>downAt=[e.clientX,e.clientY]);
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(mode!=='mol'||!downAt||Math.hypot(e.clientX-downAt[0],e.clientY-downAt[1])>4) return;
+  const h=pick(e,atomMeshes);
+  if(!h){ sel=[]; }
+  else { const i=h.object.userData.i;
+    if(e.shiftKey){ sel=sel.includes(i)?sel.filter(x=>x!==i):[...sel,i]; } else sel=[i]; }
+  drawMol();
+});
+renderer.domElement.addEventListener('pointermove',e=>{
+  const h=pick(e,mode==='dna'?dnaPick:atomMeshes), tip=$('tip');
+  if(h){ const r=view.getBoundingClientRect(); tip.style.display='block'; tip.style.left=(e.clientX-r.left+12)+'px'; tip.style.top=(e.clientY-r.top+12)+'px'; tip.textContent=h.object.userData.tip; }
+  else tip.style.display='none';
+});
+
+(function loop(){ requestAnimationFrame(loop);
+  if(mode==='dna'&&$('spin').checked) root.rotation.y+=0.004; else root.rotation.y=0;
+  controls.update(); renderer.render(scene,camera); })();
+buildDNA();
+loadPreset('Caffeine'); setMode('dna');
+</script>
+</body>
+</html>
