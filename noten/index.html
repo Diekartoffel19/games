@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notenrechner Pro | Gewichtung, Zeugnis, Wunschnote & Punkte-Schlüssel</title>
+  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="header-inner">
+      <div class="header-top">
+        <a href="../index.html#school" class="back-link">← Zurück zur Schule-Übersicht</a>
+        <div class="header-controls">
+          <select id="systemSelect" class="system-select" aria-label="Notensystem wählen">
+            <option value="CH">🇨🇭 Schweiz (6 = Beste, 1 = Schlechteste, Pass ≥ 4.0)</option>
+            <option value="DE">🇩🇪 Deutschland (1 = Beste, 6 = Schlechteste, Pass ≤ 4.0)</option>
+            <option value="AT">🇦🇹 Österreich (1 = Beste, 5 = Schlechteste, Pass ≤ 4.0)</option>
+            <option value="PT">🎓 Oberstufe / Punkte (15 = Beste, 0 = Schlechteste, Pass ≥ 5)</option>
+          </select>
+          <button id="roundingBtn" class="theme-btn" title="Rundung für Zeugnisnoten einstellen">
+            <span>🎯</span> <span id="roundingText">Rundung: 0.5</span>
+          </button>
+          <button id="themeToggle" class="theme-btn" title="Dark/Light Mode umschalten">
+            <span id="themeIcon">🌙</span> <span id="themeText">Dark</span>
+          </button>
+        </div>
+      </div>
+      <h1 class="header-title">📊 Notenrechner Pro & Zeugnis-Planer</h1>
+      <p class="header-subtitle">
+        Fächer & Semesternoten mit frei wählbaren Gewichtungen, schriftlich/mündlich-Aufteilung, Streichnoten, Wunschnoten-Simulator, Pluspunkte/Kompensations-Check und Prüfungspunkte-Umrechner.
+      </p>
+    </div>
+  </header>
+
+  <!-- Semester Bar -->
+  <div class="semester-bar">
+    <div class="semester-inner">
+      <div class="semester-tabs" id="semesterTabs"></div>
+      <div class="semester-actions">
+        <button class="btn btn-sm" id="loadDemoBtn" title="Beispiel-Fächer & Noten laden">✨ Demo-Daten</button>
+        <button class="btn btn-sm" id="exportBtn" title="Alle Daten als JSON-Datei sichern">💾 Export</button>
+        <button class="btn btn-sm" id="importBtn" title="JSON-Backup importieren">📂 Import</button>
+        <input type="file" id="importFileInput" accept=".json" style="display:none;">
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-container">
+    <div class="nav-tabs">
+      <button class="nav-btn active" data-tab="tab-dashboard">
+        <span>📚</span> Fächer & Noten (Gewichtung)
+      </button>
+      <button class="nav-btn" data-tab="tab-target">
+        <span>🎯</span> Wunschnoten- & Was-wäre-wenn-Rechner
+      </button>
+      <button class="nav-btn" data-tab="tab-points">
+        <span>📝</span> Punkte → Note (Prüfungsschlüssel)
+      </button>
+      <button class="nav-btn" data-tab="tab-promotion">
+        <span>🏆</span> Zeugnis, Pluspunkte & Statistik
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main>
+
+    <!-- Global KPI Bar -->
+    <div class="kpi-grid" id="kpiGrid">
+      <div class="kpi-card">
+        <div class="kpi-label">Gesamtschnitt (Exakt)</div>
+        <div class="kpi-value" id="kpiExactAvg">–</div>
+        <div class="kpi-sub" id="kpiExactSub">Gewichtet nach Fach-Faktor</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Zeugnisschnitt (Gerundet)</div>
+        <div class="kpi-value" id="kpiRoundedAvg">–</div>
+        <div class="kpi-sub" id="kpiRoundedSub">Schnitt der gerundeten Zeugnisnoten</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label" id="kpiBalanceLabel">Plus- / Minuspunkte</div>
+        <div class="kpi-value" id="kpiBalanceValue">–</div>
+        <div class="kpi-sub" id="kpiBalanceSub">Kompensation & Promotions-Check</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Erfasste Prüfungen</div>
+        <div class="kpi-value" id="kpiTotalExams">0</div>
+        <div class="kpi-sub" id="kpiTotalSubjects">0 Fächer im aktuellen Semester</div>
+      </div>
+    </div>
+
+    <!-- TAB 1: DASHBOARD (FÄCHER & NOTEN) -->
+    <div id="tab-dashboard" class="tab-pane active">
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><span>➕</span> Neues Fach hinzufügen</h2>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button class="btn btn-sm" id="openQuickMultiExamBtn">⚡ Schnell-Eintrag</button>
+          </div>
+        </div>
+        <form id="addSubjectForm" class="form-grid">
+          <div class="form-group" style="grid-column: span 2;">
+            <label for="subName">Fachname</label>
+            <input type="text" id="subName" class="input" placeholder="z.B. Mathematik, Französisch, Geschichte..." required>
+          </div>
+          <div class="form-group">
+            <label for="subWeight">Fach-Gewichtung im Zeugnis</label>
+            <input type="number" id="subWeight" class="input" value="1" min="0" max="10" step="0.25" required>
+          </div>
+          <div class="form-group">
+            <label for="subMode">Berechnungs-Modus</label>
+            <select id="subMode" class="select">
+              <option value="direct">Direkte Prüfungsgewichtung (z.B. 1x, 2x, 0.5x)</option>
+              <option value="categories">Kategorien-Gewichtung (z.B. 60% Schriftlich / 40% Mündlich)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="subTarget">Zielnote (Optional)</label>
+            <input type="number" id="subTarget" class="input" placeholder="z.B. 5.0" step="0.1">
+          </div>
+          <div class="form-group">
+            <label for="subCore">Fach-Typ</label>
+            <select id="subCore" class="select">
+              <option value="core">⭐ Kernfach / Hauptfach</option>
+              <option value="normal">📘 Nebenfach / Grundlagenfach</option>
+              <option value="none">💤 Zählt nicht zum Schnitt</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <button type="submit" class="btn btn-primary" style="width:100%;">+ Fach anlegen</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="subjectsContainer" class="subjects-grid"></div>
+    </div>
+
+    <!-- TAB 2: WUNSCHNOTEN & WAS-WÄRE-WENN RECHNER -->
+    <div id="tab-target" class="tab-pane">
+      <div class="two-col">
+        <!-- Left: Wunschnoten-Rechner -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><span>🎯</span> Wunschnoten-Rechner (Welche Note brauche ich?)</h2>
+          </div>
+          <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:1rem;">
+            Berechne exakt, welche Note du in der nächsten Prüfung schreiben musst, um deinen Wunschschnitt oder eine gerundete Zeugnisnote zu erreichen.
+          </p>
+
+          <div class="form-grid" style="grid-template-columns: 1fr 1fr; margin-bottom:1rem;">
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label for="targetSubjectSelect">Fach auswählen (oder manuell eingeben)</label>
+              <select id="targetSubjectSelect" class="select"></select>
+            </div>
+            <div class="form-group">
+              <label for="targetCurAvg">Aktueller Schnitt</label>
+              <input type="number" id="targetCurAvg" class="input" step="0.01" value="4.35">
+            </div>
+            <div class="form-group">
+              <label for="targetCurWeight">Bisherige Gesamtgewichtung</label>
+              <input type="number" id="targetCurWeight" class="input" step="0.1" value="3">
+            </div>
+            <div class="form-group">
+              <label for="targetGoalGrade">Gewünschter neuer Schnitt</label>
+              <input type="number" id="targetGoalGrade" class="input" step="0.05" value="4.75">
+            </div>
+            <div class="form-group">
+              <label for="targetNextWeight">Gewichtung der nächsten Prüfung</label>
+              <input type="number" id="targetNextWeight" class="input" step="0.1" value="1">
+            </div>
+          </div>
+
+          <div id="targetResultBox" class="callout"></div>
+
+          <h3 style="font-size:0.95rem; margin: 1.1rem 0 0.5rem;">📊 Übersicht für alle Zeugnis-Stufen in diesem Fach:</h3>
+          <div class="table-wrap">
+            <table class="data-table" id="targetStepsTable">
+              <thead>
+                <tr>
+                  <th>Ziel-Zeugnisnote</th>
+                  <th>Nötiger Schnitt (ab)</th>
+                  <th>Benötigte Note (nächster Test)</th>
+                  <th>Machbarkeit</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Right: Was-wäre-wenn Simulator -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><span>🧪</span> Was-wäre-wenn Simulator (Hypothetische Noten)</h2>
+          </div>
+          <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:1rem;">
+            Simuliere eine oder mehrere zukünftige Prüfungen in einem Fach, ohne deine echten Noten zu überschreiben.
+          </p>
+
+          <div class="form-group" style="margin-bottom:0.85rem;">
+            <label for="simSubjectSelect">Fach für Simulation wählen</label>
+            <select id="simSubjectSelect" class="select"></select>
+          </div>
+
+          <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr auto; margin-bottom:0.85rem;">
+            <div class="form-group">
+              <label for="simGradeVal">Simulierte Note</label>
+              <input type="number" id="simGradeVal" class="input" step="0.1" value="5.5">
+            </div>
+            <div class="form-group">
+              <label for="simGradeWeight">Gewichtung</label>
+              <input type="number" id="simGradeWeight" class="input" step="0.1" value="1">
+            </div>
+            <div class="form-group">
+              <label for="simGradeCat">Kategorie</label>
+              <select id="simGradeCat" class="select">
+                <option value="written">📝 Schriftlich</option>
+                <option value="oral">🗣️ Mündlich</option>
+                <option value="project">🔬 Projekt / Praktikum</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <button type="button" class="btn btn-primary" id="addSimGradeBtn">+ Simulieren</button>
+            </div>
+          </div>
+
+          <div id="simGradesList" class="grades-list" style="margin-bottom:1rem;"></div>
+          <div id="simComparisonBox" class="callout"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: PUNKTE -> NOTE (PRÜFUNGSSCHLÜSSEL) -->
+    <div id="tab-points" class="tab-pane">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><span>📝</span> Punkte-zu-Note Rechner</h2>
+          </div>
+          <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:1rem;">
+            Berechne aus erreichten Prüfungspunkten und Maximalpunktzahl sofort die exakte Note (inkl. linearer Schweizer Formel, Knick-Skala ab Bestehensgrenze oder IHK/KMK-Prozentschlüssel).
+          </p>
+
+          <div class="form-grid" style="grid-template-columns: 1fr 1fr; margin-bottom:1rem;">
+            <div class="form-group">
+              <label for="ptMax">Maximale Punktzahl (100%)</label>
+              <input type="number" id="ptMax" class="input" value="40" min="1" step="0.5">
+            </div>
+            <div class="form-group">
+              <label for="ptEarned">Erreichte Punkte</label>
+              <input type="number" id="ptEarned" class="input" value="31.5" min="0" step="0.25">
+            </div>
+            <div class="form-group">
+              <label for="ptFormula">Berechnungs-Formel / Maßstab</label>
+              <select id="ptFormula" class="select">
+                <option value="linear">Linear klassisch: (Punkte / Max) × Spanne + Basis</option>
+                <option value="threshold">Mit Bestehensgrenze (z.B. 60% = Note 4.0)</option>
+                <option value="kmk">KMK / IHK Schlüssel (Deutschland Standard)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ptPassPct">Bestehensgrenze (Note 4.0) in %</label>
+              <input type="number" id="ptPassPct" class="input" value="60" min="20" max="90" step="1">
+            </div>
+          </div>
+
+          <div id="ptResultBox" class="callout callout-success"></div>
+
+          <div style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); display:flex; gap:0.5rem; align-items:end; flex-wrap:wrap;">
+            <div class="form-group" style="flex:1; min-width:180px;">
+              <label for="ptTransferSubject">Direkt in ein Fach übernehmen:</label>
+              <select id="ptTransferSubject" class="select"></select>
+            </div>
+            <div class="form-group" style="width:150px;">
+              <label for="ptTransferTitle">Prüfungsname</label>
+              <input type="text" id="ptTransferTitle" class="input" placeholder="Test Punkte">
+            </div>
+            <button type="button" class="btn btn-primary" id="ptTransferBtn">📥 Note eintragen</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><span>📋</span> Vollständige Notentabelle (Punkteschlüssel)</h2>
+            <div style="display:flex; gap:0.4rem;">
+              <select id="ptStepSelect" class="select" style="width:auto; padding:0.3rem 0.6rem; font-size:0.8rem;">
+                <option value="1">1.0 Punkte-Schritte</option>
+                <option value="0.5" selected>0.5 Punkte-Schritte</option>
+                <option value="grades">Nach Notenstufen</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap" style="max-height:430px; overflow-y:auto;">
+            <table class="data-table" id="ptScaleTable">
+              <thead>
+                <tr>
+                  <th>Punkte</th>
+                  <th>Prozent</th>
+                  <th>Exakte Note</th>
+                  <th>Gerundet</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: ZEUGNIS, PLUSPUNKTE & STATISTIK -->
+    <div id="tab-promotion" class="tab-pane">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><span>🏅</span> Zeugnis-Tabelle & Promotions-Check</h2>
+          </div>
+          <div id="promotionStatusBox" class="callout"></div>
+          <div class="table-wrap">
+            <table class="data-table" id="reportCardTable">
+              <thead>
+                <tr>
+                  <th>Fach</th>
+                  <th>Typ</th>
+                  <th>Faktor</th>
+                  <th>Schnitt (Exakt)</th>
+                  <th>Zeugnisnote</th>
+                  <th>Plus / Minus</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><span>📊</span> Fächer-Ranking & Noten-Verteilung</h2>
+          </div>
+          <div id="subjectChartContainer" style="margin-top:0.5rem;"></div>
+          <hr style="border:none; border-top:1px solid var(--border); margin:1.25rem 0;">
+          <h3 style="font-size:0.98rem; margin-bottom:0.75rem;">🌍 Jahres-/Gesamtübersicht über alle Semester</h3>
+          <div class="table-wrap">
+            <table class="data-table" id="allSemestersTable">
+              <thead>
+                <tr>
+                  <th>Semester / Zeitraum</th>
+                  <th>Fächer</th>
+                  <th>Prüfungen</th>
+                  <th>Exakter Schnitt</th>
+                  <th>Zeugnisschnitt</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Subject Settings / Category Weights Modal -->
+  <div class="modal-backdrop" id="subjectModalBackdrop">
+    <div class="modal">
+      <div class="card-header">
+        <h3 class="card-title" id="modalSubjectTitle">⚙️ Fach-Einstellungen & Gewichtung</h3>
+        <button class="icon-btn" id="closeSubjectModal" style="font-size:1.2rem;">✕</button>
+      </div>
+      <form id="editSubjectForm">
+        <input type="hidden" id="editSubId">
+        <div class="form-grid" style="grid-template-columns: 1fr 1fr; margin-bottom:0.85rem;">
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label for="editSubName">Fachname</label>
+            <input type="text" id="editSubName" class="input" required>
+          </div>
+          <div class="form-group">
+            <label for="editSubWeight">Zeugnis-Gewichtung (Faktor)</label>
+            <input type="number" id="editSubWeight" class="input" step="0.25" min="0" max="10" required>
+          </div>
+          <div class="form-group">
+            <label for="editSubTarget">Persönliche Zielnote</label>
+            <input type="number" id="editSubTarget" class="input" step="0.1" placeholder="z.B. 5.0">
+          </div>
+          <div class="form-group">
+            <label for="editSubCore">Fach-Status</label>
+            <select id="editSubCore" class="select">
+              <option value="core">⭐ Kernfach / Hauptfach</option>
+              <option value="normal">📘 Nebenfach / Grundlagenfach</option>
+              <option value="none">💤 Zählt nicht zum Zeugnisschnitt</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="editSubDropWorst">Streichnote (Schlechteste streichen)</label>
+            <select id="editSubDropWorst" class="select">
+              <option value="no">Nein (Alle Noten zählen)</option>
+              <option value="yes">Ja (Schlechteste Prüfung automatisch streichen)</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label for="editSubMode">Berechnungs-Modus für Prüfungen</label>
+            <select id="editSubMode" class="select">
+              <option value="direct">Direkte Prüfungsgewichtung (Jede Note hat eigenes Gewicht wie 1x, 2x, 0.5x)</option>
+              <option value="categories">Kategorien-Gewichtung (z.B. Schriftlich 60% / Mündlich 40% / Projekt 0%)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="categoryWeightsBox" class="callout" style="display:none; margin-bottom:1rem;">
+          <div style="font-weight:800; font-size:0.85rem; margin-bottom:0.5rem;">⚖️ Kategorien-Gewichtung (in % oder Verhältnis):</div>
+          <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+            <div class="form-group">
+              <label for="catWeightWritten">📝 Schriftlich (%)</label>
+              <input type="number" id="catWeightWritten" class="input" value="60" min="0" max="100" step="5">
+            </div>
+            <div class="form-group">
+              <label for="catWeightOral">🗣️ Mündlich (%)</label>
+              <input type="number" id="catWeightOral" class="input" value="40" min="0" max="100" step="5">
+            </div>
+            <div class="form-group">
+              <label for="catWeightProject">🔬 Projekt / Prakt. (%)</label>
+              <input type="number" id="catWeightProject" class="input" value="0" min="0" max="100" step="5">
+            </div>
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.4rem;">
+            Hinweis: Innerhalb einer Kategorie werden die dort eingetragenen Noten ebenfalls mit ihrer Einzelgewichtung verrechnet. Ist eine Kategorie noch leer, wird ihr Gewicht anteilig auf die belegten Kategorien verteilt.
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; gap:0.5rem; margin-top:1rem;">
+          <button type="button" class="btn btn-danger" id="deleteSubjectBtn">🗑️ Fach löschen</button>
+          <div style="display:flex; gap:0.5rem;">
+            <button type="button" class="btn" id="cancelSubjectModal">Abbrechen</button>
+            <button type="submit" class="btn btn-primary">💾 Speichern</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
