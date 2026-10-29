@@ -419,7 +419,8 @@ function puff(x, z, color) {
 
 // ---------- Input / state ----------
 const keys = {};
-let camMode = 0, trackSel = +(localStorage.racerTrack || 0) % TRACKS.length;
+let camMode = 0, trackSel = (parseInt(localStorage.racerTrack, 10) || 0) % TRACKS.length;
+if (trackSel < 0) trackSel = 0;
 addEventListener("keydown", e => {
   keys[e.code] = true;
   if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
@@ -428,7 +429,7 @@ addEventListener("keydown", e => {
     if (e.code === "Enter") startTrack(trackSel);
     return;
   }
-  if (e.code === "KeyR") reset();
+  if (e.code === "KeyR" && state !== "menu") reset();
   if (e.code === "KeyE" || e.code === "Enter") respawn();
   if (e.code === "KeyC") camMode = (camMode + 1) % 3;
   if (e.code === "Escape") showMenu("");
@@ -445,7 +446,7 @@ document.querySelectorAll(".rt-btn[data-key]").forEach(btn => {
   btn.addEventListener("pointercancel", () => set(false));
 });
 $("btnCam")?.addEventListener("pointerdown", e => { e.preventDefault(); camMode = (camMode + 1) % 3; });
-$("btnRestart")?.addEventListener("pointerdown", e => { e.preventDefault(); reset(); });
+$("btnRestart")?.addEventListener("pointerdown", e => { e.preventDefault(); if (state !== "menu") reset(); });
 $("btnCp")?.addEventListener("pointerdown", e => { e.preventDefault(); respawn(); });
 
 let car, lap, nextCp, lastCpSample, raceTime, lapStart, lastLap, state = "menu", countdown, trackIdx, boost, airTime;
@@ -603,10 +604,14 @@ function startTrack(n) {
   reset();
 }
 
+// spawn a few car lengths BEHIND the start line, centered, so the car never sits inside the gantry/line
+const SPAWN_BACK = 8;
+const spawnIdx = () => (SAMPLES - SPAWN_BACK) % SAMPLES;
+
 function reset() {
-  const p = pts[3], dir = tangents[3];
+  const si = spawnIdx(), p = pts[si], dir = tangents[si];
   car = { x: p.x, z: p.z, y: 0, vy: 0, angle: Math.atan2(dir.z, dir.x), vx: 0, vz: 0, steer: 0, yawRate: 0 };
-  lap = 0; nextCp = 1; lastCpSample = 3; raceTime = 0; lapStart = 0; lastLap = null; trackIdx = 3; boost = 0; airTime = 0;
+  lap = 0; nextCp = 1; lastCpSample = si; raceTime = 0; lapStart = 0; lastLap = null; trackIdx = si; boost = 0; airTime = 0;
   drift = { active: false, pts: 0, idle: 0, total: 0, flash: 0, flashText: "" };
   state = "countdown"; countdown = 3.99;
   skids.count = 0; skidHead = 0;
@@ -799,13 +804,15 @@ function update(dt) {
   if (state === "finished") { car.vx *= Math.pow(0.3, dt); car.vz *= Math.pow(0.3, dt); }
 
   // --- Ghost car: replay best race ---
-  if (ghostTrail.length > 1 && (state === "race" || state === "countdown")) {
+  if (ghostTrail.length > 1 && state === "race") {
     ghostMesh.visible = true;
     const f = Math.min(raceTime / GHOST_DT, ghostTrail.length - 1.001), k = Math.floor(f), u = f - k;
     const a = ghostTrail[k], b = ghostTrail[k + 1];
     ghostMesh.position.set(a[0] + (b[0] - a[0]) * u, (a[3] || 0) + 0.5, a[1] + (b[1] - a[1]) * u);
     let da = b[2] - a[2]; da = Math.atan2(Math.sin(da), Math.cos(da));
     ghostMesh.rotation.y = -(a[2] + da * u);
+    // hide the ghost while it overlaps the player, otherwise you "sit inside" it at the start
+    ghostMesh.visible = Math.hypot(ghostMesh.position.x - car.x, ghostMesh.position.z - car.z) > 30;
   } else ghostMesh.visible = false;
 
   // --- visuals ---
@@ -872,9 +879,9 @@ function loop(t) {
   requestAnimationFrame(loop);
 }
 buildTrack(trackSel);
-const p0 = pts[3];
-car = { x: p0.x, z: p0.z, y: 0, angle: 0 };
-carMesh.position.set(p0.x, 0, p0.z); carMesh.rotation.y = -Math.atan2(tangents[3].z, tangents[3].x);
+const s0 = spawnIdx(), p0 = pts[s0], a0 = Math.atan2(tangents[s0].z, tangents[s0].x);
+car = { x: p0.x, z: p0.z, y: 0, angle: a0 };
+carMesh.position.set(p0.x, 0, p0.z); carMesh.rotation.y = -a0;
 showMenu("");
 requestAnimationFrame(loop);
 </script>
