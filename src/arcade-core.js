@@ -270,7 +270,8 @@ const ArcadeCore = (() => {
     'buerostuhl': 'buerostuhl_best_lap',
     'schwarzfahrer': 'schwarzfahrer_highscore',
     'squidgame': 'squidgame_won',
-    'propaganda': 'propaganda_votes'
+    'propaganda': 'propaganda_votes',
+    'hexfront': 'hexfront_score'
   };
 
   function getScore(gameKey) {
