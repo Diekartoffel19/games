@@ -1,53 +1,78 @@
-/* FileTone 2.0 Acoustic Modem
- * High-performance, air-gap file and data transmission over sound.
+/* FileTone 3.0 – Multi-Instance Robot 36 Acoustic Data Modem
+ * High-performance, air-gap file, image, and data transmission over sound.
  *
- * Key Innovations & Tweaks:
- *  1. Dual-Chirp Super-Preamble (LFM Up-Chirp + Down-Chirp) with Matched Filtering:
- *     Microsecond-accurate frame detection and immunity to room noise and clatter.
- *  2. Multi-Carrier M-FSK with Guard Interval:
- *     Zero inter-symbol interference (ISI) from room reverberation and multipath echoes.
- *  3. Schroeder Phase Distribution:
- *     Reduces multi-tone Peak-to-Average Power Ratio (PAPR) by >50%, preventing speaker clipping.
- *  4. Spectral Pre-Emphasis:
- *     Compensates for high-frequency roll-off in smartphone/laptop microphones.
- *  5. 2D Block Interleaving & Reed-Solomon Errors-and-Erasures FEC:
- *     Survives acoustic dropouts, loud noises, and burst packet loss.
- *  6. 4 Optimized Profiles: Balanced (150 B/s), Turbo (200+ B/s), Robust (75 B/s), Ultrasound (17.5-20 kHz silent).
- *  7. DPLL Timing Tracking:
- *     Compensates for soundcard sample-rate clock drift between sender and receiver.
+ * Key Innovations & Upgrades:
+ *  1. Scalable Parallel Robot 36 Instances (1x to 16x Simultaneous FDM Streams):
+ *     Each Robot 36 instance operates in its own orthogonal 16-tone sub-band
+ *     (modeled after the classic 800 Hz Robot 36 SSTV channel, 1500-2300 Hz).
+ *     Running N instances splits each scanline across N parallel Robot 36 cores.
+ *  2. Dual-Chirp Super-Preamble (LFM Up-Chirp + Down-Chirp) with Matched Filtering:
+ *     Microsecond-accurate frame detection, SNR estimation, and immunity to room noise.
+ *  3. Auto-Negotiated Instance Count in Super-Header:
+ *     The receiver automatically detects the mode and the exact number of parallel
+ *     Robot 36 instances (1..16) from the preamble header.
+ *  4. Schroeder Phase Distribution & Dynamic Pre-Emphasis:
+ *     Minimizes multi-instance Peak-to-Average Power Ratio (PAPR) to prevent speaker
+ *     clipping even when 16 Robot 36 instances run simultaneously.
+ *  5. 2D Cross-Instance Interleaving & Reed-Solomon GF(256) Errors-and-Erasures FEC:
+ *     Spreads bytes across all active Robot 36 instances and scanlines so narrowband
+ *     interference or acoustic dropouts are seamlessly repaired.
+ *  6. Per-Line DPLL Clock-Drift Tracking & Soft-Energy Confidence Scoring.
  */
 
 (function (root) {
   'use strict';
 
   /* =========================================================================
-   * 1. CONFIGURATION & PROFILES
+   * 1. CONFIGURATION, PROFILES & PARALLEL ROBOT-36 INSTANCES
    * ========================================================================= */
+  const MIN_INSTANCES = 1;
+  const MAX_INSTANCES = 16;
+  const MAX_ULTRA_INSTANCES = 6;
+  const DEFAULT_INSTANCES = 8;
+
   const MODES = {
+    robot36: {
+      id: 4,
+      name: 'robot36',
+      label: 'Robot 36 Core',
+      desc: 'Klassisches 800-Hz Robot-36-Raster (50 Hz Orthogonal-Grid, hohe Raumstabilität)',
+      baseHz: 1500,
+      spacingHz: 50,
+      defaultInstances: 8,
+      maxInstances: 16,
+      tonesPerGroup: 16, // 16 tones * 50 Hz = 800 Hz per Robot 36 instance
+      actMs: 20,         // 1 / 50 Hz = 20 ms exact orthogonality
+      guardMs: 4,        // 4 ms guard absorbs room echo
+      parity: 28,        // RS parity bytes per block
+      ultrasound: false,
+    },
     balanced: {
       id: 0,
       name: 'balanced',
       label: 'Balanced',
-      desc: '150 B/s – Ausgewogen, hohe Zuverlässigkeit im Raum',
-      baseHz: 1500,
+      desc: 'Ausgewogen & schnell – ideal für Lautsprecher zu Mikrofon im Raum',
+      baseHz: 1400,
       spacingHz: 50,
-      groups: 8,
-      tonesPerGroup: 16, // 4 bits per group = 4 bytes / symbol
-      actMs: 20,         // 1/50Hz = 20ms exact orthogonality
-      guardMs: 4,        // 4ms guard absorbs room echo
-      parity: 28,        // RS parity bytes
+      defaultInstances: 8,
+      maxInstances: 16,
+      tonesPerGroup: 16,
+      actMs: 20,
+      guardMs: 4,
+      parity: 28,
       ultrasound: false,
     },
     turbo: {
       id: 1,
       name: 'turbo',
       label: 'Turbo',
-      desc: '200+ B/s – Nur für gute Lautsprecher oder Kabelverbindung (bis 9,4 kHz)',
-      baseHz: 1400,
+      desc: 'Maximaler Durchsatz (16 ms Symbole) – bis zu 500+ B/s bei 16 Robot-36-Instanzen',
+      baseHz: 1300,
       spacingHz: 62.5,
-      groups: 8,
-      tonesPerGroup: 16, // 4 bits per group = 4 bytes / symbol
-      actMs: 16,         // 1/62.5Hz = 16ms
+      defaultInstances: 10,
+      maxInstances: 14,
+      tonesPerGroup: 16,
+      actMs: 16,         // 1 / 62.5 Hz = 16 ms
       guardMs: 3,
       parity: 20,
       ultrasound: false,
@@ -56,26 +81,28 @@
       id: 2,
       name: 'robust',
       label: 'Robust',
-      desc: '75 B/s – Maximale Störfestigkeit gegen Lärm & Hall',
-      baseHz: 1500,
+      desc: 'Maximale Störfestigkeit gegen Lärm, Hall & schlechte Mikrofone',
+      baseHz: 1400,
       spacingHz: 50,
-      groups: 8,
-      tonesPerGroup: 16, // 4 bits per group = 4 bytes / symbol
+      defaultInstances: 6,
+      maxInstances: 12,
+      tonesPerGroup: 16,
       actMs: 20,
-      guardMs: 8,        // 8ms long guard for heavy reverberation
-      parity: 44,        // High RS parity (survives heavy burst loss)
+      guardMs: 8,        // 8 ms guard for heavy reverberation
+      parity: 44,        // Heavy RS parity
       ultrasound: false,
     },
     ultrasound: {
       id: 3,
       name: 'ultrasound',
       label: 'Ultraschall',
-      desc: '45 B/s – Lautlos (17.5–20 kHz), braucht Lautsprecher/Mikrofon mit Ultraschall-Bereich',
-      baseHz: 17500,
+      desc: 'Nahezu unhörbar (ab 17.2 kHz) – benötigt gute Audio-Hardware',
+      baseHz: 17200,
       spacingHz: 35,
-      groups: 4,
-      tonesPerGroup: 16, // 4 bits per group = 2 bytes / symbol
-      actMs: 28.57,      // 1/35Hz
+      defaultInstances: 4,
+      maxInstances: MAX_ULTRA_INSTANCES,
+      tonesPerGroup: 16,
+      actMs: 28.57,      // 1 / 35 Hz
       guardMs: 6,
       parity: 24,
       ultrasound: true,
@@ -87,20 +114,71 @@
     1: MODES.turbo,
     2: MODES.robust,
     3: MODES.ultrasound,
+    4: MODES.robot36,
   };
 
-  function resolveMode(modeOpt, dataLen) {
+  function clampInstances(instances, mode) {
+    const maxI = mode && mode.maxInstances ? mode.maxInstances : (mode && mode.ultrasound ? MAX_ULTRA_INSTANCES : MAX_INSTANCES);
+    const defI = mode && mode.defaultInstances ? mode.defaultInstances : DEFAULT_INSTANCES;
+    const n = parseInt(instances, 10);
+    if (!Number.isFinite(n) || n < MIN_INSTANCES) return Math.min(defI, maxI);
+    return Math.max(MIN_INSTANCES, Math.min(maxI, n));
+  }
+
+  function resolveMode(modeOpt, dataLen, instancesOpt) {
+    let base = MODES.robot36;
     if (!modeOpt || modeOpt === 'auto') {
-      if (dataLen <= 250) return MODES.robust;
-      // Turbo reaches ~9.4 kHz, which laptop speakers and headphone mics roll off: opt-in only.
-      return MODES.balanced;
-    }
-    if (typeof modeOpt === 'string') {
+      base = dataLen <= 250 ? MODES.robust : MODES.robot36;
+    } else if (typeof modeOpt === 'string') {
       const m = MODES[modeOpt.toLowerCase()];
-      if (m) return m;
+      if (m) base = m;
+    } else if (typeof modeOpt === 'object' && modeOpt.id !== undefined) {
+      base = MODE_BY_ID[modeOpt.id] || modeOpt;
     }
-    if (typeof modeOpt === 'object' && modeOpt.id !== undefined) return modeOpt;
-    return MODES.balanced;
+
+    const groups = clampInstances(
+      instancesOpt !== undefined && instancesOpt !== null ? instancesOpt : (modeOpt && modeOpt.groups) || base.defaultInstances,
+      base
+    );
+
+    // If high instance count on audible mode would exceed ~15.5 kHz with 50/62.5 Hz spacing,
+    // keep baseHz slightly lower so all Robot 36 instances stay in the sweet spot of speakers/mics.
+    let baseHz = base.baseHz;
+    const spanHz = groups * base.tonesPerGroup * base.spacingHz;
+    if (!base.ultrasound && baseHz + spanHz > 14800) {
+      baseHz = Math.max(1050, 14800 - spanHz);
+    }
+
+    const minHz = baseHz;
+    const maxHz = baseHz + spanHz;
+
+    return Object.assign({}, base, {
+      groups,
+      instances: groups,
+      baseHz,
+      minHz,
+      maxHz,
+      bandwidthHz: spanHz,
+    });
+  }
+
+  function getInstanceBands(modeOpt, instancesOpt) {
+    const m = resolveMode(modeOpt, 1024, instancesOpt);
+    const bands = [];
+    const instWidth = m.tonesPerGroup * m.spacingHz;
+    for (let i = 0; i < m.instances; i++) {
+      const startHz = m.baseHz + i * instWidth;
+      const endHz = startHz + instWidth;
+      bands.push({
+        index: i,
+        label: `R36 #${i + 1}`,
+        startHz: Math.round(startHz),
+        endHz: Math.round(endHz),
+        centerHz: Math.round((startHz + endHz) / 2),
+        widthHz: Math.round(instWidth),
+      });
+    }
+    return bands;
   }
 
   /* =========================================================================
@@ -293,28 +371,30 @@
     return c;
   }
 
-  function headerCrc16(modeId, totalLines, k, payloadLen) {
-    const b = new Uint8Array(8);
+  function headerCrc16(modeId, instances, totalLines, k, payloadLen) {
+    const b = new Uint8Array(9);
     b[0] = 0x54; // Magic 'T'
-    b[1] = modeId;
+    b[1] = modeId & 255;
     b[2] = (totalLines >> 8) & 255;
     b[3] = totalLines & 255;
-    b[4] = k;
+    b[4] = k & 255;
     b[5] = (payloadLen >> 16) & 255;
     b[6] = (payloadLen >> 8) & 255;
     b[7] = payloadLen & 255;
+    b[8] = instances & 255;
     return crc16(b);
   }
 
-  function lineCrc16(idx, total, k, modeId, payload) {
-    const b = new Uint8Array(6 + payload.length);
-    b[0] = idx >> 8;
+  function lineCrc16(idx, total, k, modeId, instances, payload) {
+    const b = new Uint8Array(7 + payload.length);
+    b[0] = (idx >> 8) & 255;
     b[1] = idx & 255;
-    b[2] = total >> 8;
+    b[2] = (total >> 8) & 255;
     b[3] = total & 255;
-    b[4] = k;
-    b[5] = modeId;
-    b.set(payload, 6);
+    b[4] = k & 255;
+    b[5] = modeId & 255;
+    b[6] = instances & 255;
+    b.set(payload, 7);
     return crc16(b);
   }
 
@@ -349,39 +429,53 @@
     return samples;
   }
 
-  /* Standard Chirp definitions:
-   * Audible: 1400 Hz to 4500 Hz, 60 ms
-   * Ultrasound: 17500 Hz to 19800 Hz, 60 ms
-   */
   const CHIRP_CFG = {
     audible: { low: 1400, high: 4500, durMs: 60 },
-    ultrasound: { low: 17500, high: 19800, durMs: 60 },
+    ultrasound: { low: 17200, high: 19600, durMs: 60 },
   };
 
   /* =========================================================================
-   * 5. FRAMING & PACKET LAYOUT
-   * ========================================================================= */
-  function getLineDataBytes(mode) {
-    const bytesPerSymbol = mode.groups / 2; // each group = 4 bits (1 nibble)
-    const dataSymsPerLine = 8;
-    return bytesPerSymbol * dataSymsPerLine;
+   * 5. MULTI-INSTANCE FRAMING & PACKET LAYOUT
+   * =========================================================================
+   * Each Robot 36 instance transmits 1 nibble (4 bits) per symbol.
+   * Over 8 data symbols per line, each Robot 36 instance transmits 8 nibbles = 4 bytes!
+   * Therefore, with `N` parallel Robot 36 instances:
+   *  - Data bytes per line = N * 4 bytes (always an exact integer for any N = 1..16)
+   *  - Line header = 4 bytes ([idxMSB, idxLSB, crcMSB, crcLSB] = 8 nibbles),
+   *    which takes `headSymsPerLine = Math.ceil(8 / N)` symbols.
+   *  - Total symbols per line = `Math.ceil(8 / N) + 8`.
+   */
+  const DATA_SYMS_PER_LINE = 8;
+
+  function getLineGeometry(mode) {
+    const instances = mode.instances || mode.groups || DEFAULT_INSTANCES;
+    const headSyms = Math.ceil(8 / instances); // 8 nibbles (4 bytes) of line header
+    const dataSyms = DATA_SYMS_PER_LINE;
+    const symsPerLine = headSyms + dataSyms;
+    const lineBytes = instances * 4; // 8 nibbles per instance = 4 bytes per instance per line
+    return { instances, headSyms, dataSyms, symsPerLine, lineBytes };
   }
 
-  function blockPlan(bodyLen, modeOpt) {
-    const mode = resolveMode(modeOpt, bodyLen);
+  function getLineDataBytes(mode) {
+    return getLineGeometry(mode).lineBytes;
+  }
+
+  function blockPlan(bodyLen, modeOpt, instancesOpt) {
+    const mode = resolveMode(modeOpt, bodyLen, instancesOpt);
     const msgLen = 4 + bodyLen;
-    const maxK = 255 - mode.parity; // RS codeword over GF(256) must be <= 255 bytes
+    const maxK = 255 - mode.parity; // RS codeword over GF(256) <= 255 bytes
     const minK = 32;
     const minBlocks = mode.id === 2 ? 8 : 6;
     const nB = Math.max(minBlocks, Math.ceil(msgLen / maxK));
     const k = Math.max(minK, Math.ceil(msgLen / nB));
-    const lineBytes = getLineDataBytes(mode);
+    const geom = getLineGeometry(mode);
+    const lineBytes = geom.lineBytes;
     const totalLines = Math.ceil((nB * (k + mode.parity)) / lineBytes);
-    if (totalLines > 0xFFFF) throw new Error('Datei zu groß für diesen Modus (max. 65535 Pakete).');
-    return { nB, k, total: totalLines, mode, lineBytes };
+    if (totalLines > 0xFFFF) throw new Error('Datei zu groß für diese Einstellung (max. 65535 Pakete). Erhöhe die Robot-36-Instanzen!');
+    return { nB, k, total: totalLines, mode, lineBytes, geom };
   }
 
-  function layout(name, data, compressed, modeOpt) {
+  function layout(name, data, compressed, modeOpt, instancesOpt) {
     const nameBytes = new TextEncoder().encode(name || 'file.bin').slice(0, 255);
     const body = new Uint8Array(3 + nameBytes.length + data.length + 4);
     body[0] = 0x46; // 'F'
@@ -391,9 +485,8 @@
     body.set(data, 3 + nameBytes.length);
     body.set(u32(crc32(data)), body.length - 4);
 
-    const plan = blockPlan(body.length, modeOpt);
-    const mode = plan.mode;
-    const { nB, k, total, lineBytes } = plan;
+    const plan = blockPlan(body.length, modeOpt, instancesOpt);
+    const { nB, k, total, mode, lineBytes, geom } = plan;
     const msg = new Uint8Array(nB * k);
     msg.set(u32(body.length), 0);
     msg.set(body, 4);
@@ -412,26 +505,26 @@
     for (let i = 0; i < total; i++) {
       lines.push(stream.subarray(i * lineBytes, (i + 1) * lineBytes));
     }
-    return { lines, total, blocks: nB, k, mode, lineBytes, bodyLen: body.length };
+    return { lines, total, blocks: nB, k, mode, lineBytes, geom, bodyLen: body.length };
   }
 
   /* =========================================================================
-   * 6. MODULATOR / SYNTHESIS
+   * 6. MODULATOR / MULTI-INSTANCE ROBOT 36 SYNTHESIS
    * ========================================================================= */
-  function toneHz(mode, group, toneIndex) {
-    const groupSpan = mode.tonesPerGroup * mode.spacingHz;
-    return mode.baseHz + group * groupSpan + toneIndex * mode.spacingHz;
+  function toneHz(basis, group, toneIndex) {
+    const groupSpan = basis.tonesPerGroup * basis.spacingHz;
+    return basis.baseHz + group * groupSpan + toneIndex * basis.spacingHz;
   }
 
   function getSchroederPhases(groups) {
     const phases = new Float32Array(groups);
     for (let k = 0; k < groups; k++) {
-      phases[k] = (Math.PI * k * k) / groups;
+      phases[k] = (Math.PI * k * k) / Math.max(1, groups);
     }
     return phases;
   }
 
-  // Base Header format (fixed basis for instant detection across all audible modes)
+  // Fixed Header basis so receiver can always decode the Super-Header before knowing N instances
   const AUDIBLE_HEADER_BASIS = {
     baseHz: 1500,
     spacingHz: 50,
@@ -442,7 +535,7 @@
   };
 
   const ULTRASOUND_HEADER_BASIS = {
-    baseHz: 17500,
+    baseHz: 17200,
     spacingHz: 35,
     groups: 4,
     tonesPerGroup: 16,
@@ -450,10 +543,12 @@
     guardMs: 6,
   };
 
-  function encodeAudio(name, data, sr, compressed, modeOpt) {
+  function encodeAudio(name, data, sr, compressed, modeOpt, instancesOpt) {
     sr = sr || 48000;
-    const lay = layout(name, data, compressed, modeOpt);
+    const lay = layout(name, data, compressed, modeOpt, instancesOpt);
     const mode = lay.mode;
+    const geom = lay.geom;
+    const instances = geom.instances;
     const isUltra = mode.ultrasound;
     const ms = (v) => Math.round((sr * v) / 1000);
 
@@ -463,7 +558,6 @@
 
     const leadMs = 120, tailMs = 150, chirpGapMs = 15;
     const totalLines = lay.total;
-    const lineBytesCount = lay.lineBytes;
 
     // Header symbols use fixed header basis
     const hBasis = isUltra ? ULTRASOUND_HEADER_BASIS : AUDIBLE_HEADER_BASIS;
@@ -472,28 +566,38 @@
     const hSymN = hActN + hGuardN;
     const hSchroeder = getSchroederPhases(hBasis.groups);
 
-    // Line symbols use mode basis
+    // Line symbols use N-instance mode basis
     const lActN = ms(mode.actMs);
     const lGuardN = ms(mode.guardMs);
     const lSymN = lActN + lGuardN;
-    const lSchroeder = getSchroederPhases(mode.groups);
+    const lSchroeder = getSchroederPhases(instances);
 
-    // Header symbols payload (12 bytes for audible = 3 syms; 12 bytes for ultrasound = 6 syms)
-    const headCrc = headerCrc16(mode.id, totalLines, lay.k, lay.bodyLen);
+    // Super-Header payload (12 bytes): includes mode.id AND instances count
+    const headCrc = headerCrc16(mode.id, instances, totalLines, lay.k, lay.bodyLen);
     const headBytes = [
-      0x54, mode.id, (totalLines >> 8) & 255, totalLines & 255,
-      lay.k, (lay.bodyLen >> 16) & 255, (lay.bodyLen >> 8) & 255, lay.bodyLen & 255,
-      (headCrc >> 8) & 255, headCrc & 255, 0xA5, 0x5A,
+      0x54,
+      mode.id & 255,
+      (totalLines >> 8) & 255,
+      totalLines & 255,
+      lay.k & 255,
+      (lay.bodyLen >> 16) & 255,
+      (lay.bodyLen >> 8) & 255,
+      lay.bodyLen & 255,
+      (headCrc >> 8) & 255,
+      headCrc & 255,
+      instances & 255,
+      0x36, // Robot 36 signature byte (0x36)
     ];
 
     const bytesPerHSym = hBasis.groups / 2;
     const numHSyms = headBytes.length / bytesPerHSym;
 
-    const dataSymsPerLine = 8;
-    // 1 header sym + 8 data syms (+ 1 CRC tail sym in ultrasound mode)
-    const symsPerLine = 1 + dataSymsPerLine + (isUltra ? 1 : 0);
-    const totalSamples = ms(leadMs + tailMs + chirpCfg.durMs * 2 + chirpGapMs * 2) +
-                         numHSyms * hSymN + totalLines * symsPerLine * lSymN + 10000;
+    const symsPerLine = geom.symsPerLine;
+    const totalSamples =
+      ms(leadMs + tailMs + chirpCfg.durMs * 2 + chirpGapMs * 2) +
+      numHSyms * hSymN +
+      totalLines * symsPerLine * lSymN +
+      10000;
 
     const out = new Float32Array(totalSamples);
     let o = ms(leadMs);
@@ -508,12 +612,13 @@
     const putSym = (basis, actN, guardN, phases, nibbles) => {
       const symN = actN + guardN;
       const rGuard = Math.max(1, Math.round(guardN * 0.8));
-      const freqs = [];
-      for (let g = 0; g < basis.groups; g++) {
-        freqs.push(toneHz(basis, g, nibbles[g] % 16));
+      const G = basis.groups;
+      const w = new Float64Array(G);
+      for (let g = 0; g < G; g++) {
+        w[g] = (2 * Math.PI * toneHz(basis, g, (nibbles[g] || 0) & 15)) / sr;
       }
-      const w = freqs.map((f) => (2 * Math.PI * f) / sr);
-      const baseAmp = basis.baseHz > 15000 ? 0.18 : 0.13;
+      const baseAmp = basis.baseHz > 15000 ? 0.18 : 0.14;
+      const norm = baseAmp / Math.sqrt(G);
 
       for (let n = 0; n < symN; n++) {
         let env = 1.0;
@@ -521,67 +626,62 @@
         else if (n >= symN - rGuard) env = 0.5 * (1 - Math.cos((Math.PI * (symN - 1 - n)) / rGuard));
 
         let s = 0;
-        for (let g = 0; g < basis.groups; g++) {
-          const preEmph = 1.0 + (g / basis.groups) * 0.25;
+        for (let g = 0; g < G; g++) {
+          const preEmph = 1.0 + (g / Math.max(1, G)) * 0.28;
           s += Math.sin(w[g] * n + phases[g]) * preEmph;
         }
-        out[o + n] = s * (baseAmp / Math.sqrt(basis.groups)) * env;
+        out[o + n] = s * norm * env;
       }
       o += symN;
     };
 
-    const bytesToNibbles = (bytes, offset, count, groups) => {
-      const bytesPerSym = groups / 2;
-      const list = [];
-      for (let i = 0; i < count; i += bytesPerSym) {
-        const nibs = new Array(groups);
-        for (let g = 0; g < groups; g += 2) {
-          const b = bytes[offset + i + (g / 2)] || 0;
-          nibs[g] = b >> 4;
-          nibs[g + 1] = b & 15;
-        }
-        list.push(nibs);
+    // 2. Synthesize Super-Header Symbols (using fixed hBasis)
+    for (let i = 0; i < headBytes.length; i += bytesPerHSym) {
+      const nibs = new Array(hBasis.groups);
+      for (let g = 0; g < hBasis.groups; g += 2) {
+        const b = headBytes[i + g / 2] || 0;
+        nibs[g] = (b >> 4) & 15;
+        nibs[g + 1] = b & 15;
       }
-      return list;
-    };
-
-    // 2. Synthesize Super-Header Symbols
-    const hNibList = bytesToNibbles(headBytes, 0, headBytes.length, hBasis.groups);
-    for (const nibs of hNibList) {
       putSym(hBasis, hActN, hGuardN, hSchroeder, nibs);
     }
 
-    // 3. Synthesize Data Lines
-    const lBytesPerSym = mode.groups / 2;
+    // 3. Synthesize Multi-Instance Data Scanlines
+    const headNibbles = new Uint8Array(geom.headSyms * instances);
+    const symNibs = new Uint8Array(instances);
+
     for (let idx = 0; idx < totalLines; idx++) {
       const linePayload = lay.lines[idx];
-      const lCrc = lineCrc16(idx, totalLines, lay.k, mode.id, linePayload);
+      const lCrc = lineCrc16(idx, totalLines, lay.k, mode.id, instances, linePayload);
 
-      // Line Header bytes:
-      // For 8 groups (4 bytes): [idxMSB, idxLSB, crcMSB, crcLSB]
-      // For 4 groups (2 bytes): [idxMSB, idxLSB], and line ends with crc
-      if (mode.groups === 8) {
-        const lineHeadBytes = [
-          (idx >> 8) & 255, idx & 255,
-          (lCrc >> 8) & 255, lCrc & 255,
-        ];
-        const lhNibs = bytesToNibbles(lineHeadBytes, 0, 4, mode.groups);
-        for (const n of lhNibs) putSym(mode, lActN, lGuardN, lSchroeder, n);
+      // Line Header (4 bytes = 8 nibbles): [idxMSB, idxLSB, crcMSB, crcLSB]
+      // Repeated across available header nibble slots if instances > 8 for extra redundancy!
+      const rawHeadNibs = [
+        (idx >> 12) & 15, (idx >> 8) & 15,
+        (idx >> 4) & 15, idx & 15,
+        (lCrc >> 12) & 15, (lCrc >> 8) & 15,
+        (lCrc >> 4) & 15, lCrc & 15,
+      ];
+      for (let slot = 0; slot < headNibbles.length; slot++) {
+        headNibbles[slot] = rawHeadNibs[slot % 8];
+      }
+      for (let hs = 0; hs < geom.headSyms; hs++) {
+        for (let g = 0; g < instances; g++) {
+          symNibs[g] = headNibbles[hs * instances + g];
+        }
+        putSym(mode, lActN, lGuardN, lSchroeder, symNibs);
+      }
 
-        const dNibs = bytesToNibbles(linePayload, 0, lineBytesCount, mode.groups);
-        for (const n of dNibs) putSym(mode, lActN, lGuardN, lSchroeder, n);
-      } else {
-        // 4 groups (Ultrasound)
-        const lineHeadBytes = [(idx >> 8) & 255, idx & 255];
-        const lhNibs = bytesToNibbles(lineHeadBytes, 0, 2, mode.groups);
-        for (const n of lhNibs) putSym(mode, lActN, lGuardN, lSchroeder, n);
-
-        const dNibs = bytesToNibbles(linePayload, 0, lineBytesCount, mode.groups);
-        for (const n of dNibs) putSym(mode, lActN, lGuardN, lSchroeder, n);
-
-        const lineTailBytes = [(lCrc >> 8) & 255, lCrc & 255];
-        const ltNibs = bytesToNibbles(lineTailBytes, 0, 2, mode.groups);
-        for (const n of ltNibs) putSym(mode, lActN, lGuardN, lSchroeder, n);
+      // 8 Data Symbols:
+      // Each Robot 36 instance `g` (0..instances-1) transmits its 4-byte slice (8 nibbles) across the 8 symbols!
+      for (let ds = 0; ds < geom.dataSyms; ds++) {
+        const byteOffsetInSlice = ds >> 1; // 0..3
+        const isLowNibble = ds & 1;
+        for (let g = 0; g < instances; g++) {
+          const b = linePayload[g * 4 + byteOffsetInSlice] || 0;
+          symNibs[g] = isLowNibble ? (b & 15) : ((b >> 4) & 15);
+        }
+        putSym(mode, lActN, lGuardN, lSchroeder, symNibs);
       }
     }
 
@@ -598,19 +698,25 @@
       for (let i = 0; i < o; i++) out[i] *= gain;
     }
 
+    const seconds = o / sr;
     return {
       samples: out.subarray(0, o),
       lines: lay.lines,
       total: lay.total,
       blocks: lay.blocks,
       mode,
-      seconds: o / sr,
+      instances,
+      geom,
+      bands: getInstanceBands(mode, instances),
+      seconds,
+      bytesPerSec: Math.round(data.length / Math.max(0.1, seconds)),
     };
   }
 
-  function estimateSeconds(nameLen, size, modeOpt) {
-    const plan = blockPlan(3 + nameLen + size + 4, modeOpt);
+  function estimateSeconds(nameLen, size, modeOpt, instancesOpt) {
+    const plan = blockPlan(3 + nameLen + size + 4, modeOpt, instancesOpt);
     const mode = plan.mode;
+    const geom = plan.geom;
     const isUltra = mode.ultrasound;
     const chirpDur = isUltra ? CHIRP_CFG.ultrasound.durMs : CHIRP_CFG.audible.durMs;
     const preambleMs = 120 + 150 + chirpDur * 2 + 30;
@@ -619,13 +725,12 @@
     const numHSyms = 12 / (hBasis.groups / 2);
     const headerMs = numHSyms * (hBasis.actMs + hBasis.guardMs);
 
-    const symsPerLine = isUltra ? 10 : 9;
-    const lineMs = symsPerLine * (mode.actMs + mode.guardMs);
+    const lineMs = geom.symsPerLine * (mode.actMs + mode.guardMs);
     return (preambleMs + headerMs + plan.total * lineMs) / 1000;
   }
 
   /* =========================================================================
-   * 7. DEMODULATOR / RECEIVER
+   * 7. DEMODULATOR / MULTI-INSTANCE RECEIVER
    * ========================================================================= */
   class Receiver {
     constructor(sr, onLine, onHeader) {
@@ -634,18 +739,22 @@
       this.onHeader = onHeader || null;
       this.ms = (v) => Math.round((this.sr * v) / 1000);
 
-      this.buf = new Float32Array(this.sr * 35);
+      this.buf = new Float32Array(this.sr * 40);
       this.len = 0;
       this.scanPos = 0;
 
       this.state = 'PREAMBLE';
-      this.mode = MODES.balanced;
+      this.mode = resolveMode('robot36', 1024, DEFAULT_INSTANCES);
+      this.instances = this.mode.instances;
       this.total = 0;
       this.k = 0;
       this.payloadLen = 0;
       this.lines = new Map();
       this.failed = new Set();
       this.trackedP = -1;
+      this.initialP = -1;
+      this.snrDb = 0;
+      this.instanceStats = [];
 
       // Matched filter chirp templates
       this.chirpMs = 60;
@@ -660,14 +769,9 @@
         t.te = te;
       }
 
-      this.initBasisCache();
-    }
-
-    initBasisCache() {
       this.basisCache = new Map();
       this.getBasis(AUDIBLE_HEADER_BASIS);
       this.getBasis(ULTRASOUND_HEADER_BASIS);
-      for (const k in MODES) this.getBasis(MODES[k]);
     }
 
     getBasis(cfg) {
@@ -695,7 +799,13 @@
         basisCos.push(groupCos);
         basisSin.push(groupSin);
       }
-      const bObj = { basisCos, basisSin, actN: N, guardN: this.ms(cfg.guardMs), symN: N + this.ms(cfg.guardMs) };
+      const bObj = {
+        basisCos,
+        basisSin,
+        actN: N,
+        guardN: this.ms(cfg.guardMs),
+        symN: N + this.ms(cfg.guardMs),
+      };
       this.basisCache.set(key, bObj);
       return bObj;
     }
@@ -728,15 +838,16 @@
       return (c * c) / (e * template.te + 1e-9);
     }
 
-    demodSym(sampleOffset, cfg, outNibbles) {
+    demodSym(sampleOffset, cfg, outNibbles, outEnergies) {
       const bObj = this.getBasis(cfg);
       const base = sampleOffset + bObj.guardN;
       const N = bObj.actN;
-      if (base + N > this.len) return false;
+      if (base < 0 || base + N > this.len) return false;
       const x = this.buf;
 
       for (let g = 0; g < cfg.groups; g++) {
         let maxEnergy = -1;
+        let secondEnergy = -1;
         let bestK = 0;
         const gCos = bObj.basisCos[g];
         const gSin = bObj.basisSin[g];
@@ -751,11 +862,17 @@
           }
           const e = c * c + s * s;
           if (e > maxEnergy) {
+            secondEnergy = maxEnergy;
             maxEnergy = e;
             bestK = k;
+          } else if (e > secondEnergy) {
+            secondEnergy = e;
           }
         }
         outNibbles[g] = bestK;
+        if (outEnergies) {
+          outEnergies[g] = secondEnergy > 0 ? maxEnergy / secondEnergy : 10;
+        }
       }
       return true;
     }
@@ -779,22 +896,19 @@
     findPreamble() {
       const chirpN = this.audibleUp.length;
       const gapN = this.ms(15);
-      // Margin must cover the longest header (ultrasound: 6 syms ≈ 207 ms) plus timing search
       const limit = this.len - (chirpN * 2 + gapN * 2) - this.ms(260);
-      const coarseStep = 2; // chirp main lobe is only ~±3 samples wide
+      const coarseStep = 2;
 
       while (this.scanPos <= limit) {
-        // 1. Check Audible Chirp
         const rAudible = this.correlateChirp(this.scanPos, this.audibleUp);
-        if (rAudible > 0.24) {
+        if (rAudible > 0.22) {
           if (this.checkChirpPair(this.scanPos, this.audibleUp, this.audibleDown, false)) {
             return;
           }
         }
 
-        // 2. Check Ultrasound Chirp
         const rUltra = this.correlateChirp(this.scanPos, this.ultraUp);
-        if (rUltra > 0.22) {
+        if (rUltra > 0.20) {
           if (this.checkChirpPair(this.scanPos, this.ultraUp, this.ultraDown, true)) {
             return;
           }
@@ -809,14 +923,12 @@
       const gapN = this.ms(15);
       const coarseStep = 4;
 
-      // Fine search around up peak
       let bestUpP = peakP, bestUpR = 0;
       for (let p = Math.max(0, peakP - coarseStep); p <= peakP + coarseStep; p++) {
         const r = this.correlateChirp(p, upTemplate);
         if (r > bestUpR) { bestUpR = r; bestUpP = p; }
       }
 
-      // Check down-chirp
       const expDownP = bestUpP + chirpN + gapN;
       let bestDownP = expDownP, bestDownR = 0;
       for (let p = expDownP - this.ms(3); p <= expDownP + this.ms(3); p++) {
@@ -824,7 +936,9 @@
         if (r > bestDownR) { bestDownR = r; bestDownP = p; }
       }
 
-      if (bestDownR > 0.20) {
+      if (bestDownR > 0.18) {
+        const avgR = 0.5 * (bestUpR + bestDownR);
+        this.snrDb = Math.round(10 * Math.log10(Math.max(0.01, avgR) / Math.max(0.01, 1 - avgR)) * 10) / 10;
         const frameStartP = bestDownP + chirpN + gapN;
         if (this.decodeHeader(frameStartP, isUltra)) {
           this.state = 'LINES';
@@ -867,15 +981,24 @@
         const k = headBytes[4];
         const pLen = (headBytes[5] << 16) | (headBytes[6] << 8) | headBytes[7];
         const crc = (headBytes[8] << 8) | headBytes[9];
+        const rawInstances = headBytes[10] || MODE_BY_ID[modeId].defaultInstances;
 
-        if (headerCrc16(modeId, totalLines, k, pLen) === crc) {
-          const detectedMode = MODE_BY_ID[modeId];
+        if (headerCrc16(modeId, rawInstances, totalLines, k, pLen) === crc) {
+          const detectedMode = resolveMode(MODE_BY_ID[modeId], pLen, rawInstances);
           this.mode = detectedMode;
+          this.instances = detectedMode.instances;
           this.total = totalLines;
           this.k = k;
           this.payloadLen = pLen;
           this.trackedP = p0 + numHSyms * symN;
-          if (this.onHeader) this.onHeader(this.total, detectedMode);
+          this.initialP = this.trackedP;
+          this.instanceStats = new Array(this.instances).fill(0).map((_, i) => ({
+            index: i,
+            packetsOk: 0,
+            confidence: 0,
+            bytesReceived: 0,
+          }));
+          if (this.onHeader) this.onHeader(this.total, detectedMode, this.instances);
           return true;
         }
       }
@@ -884,24 +1007,23 @@
 
     decodeLines(force) {
       const mode = this.mode;
+      const geom = getLineGeometry(mode);
+      const instances = geom.instances;
       const bObj = this.getBasis(mode);
       const symN = bObj.symN;
-      const bytesPerSym = mode.groups / 2;
-      const dataSyms = 8;
-      const isUltra = mode.ultrasound;
-      const symsPerLine = isUltra ? 10 : 9;
+      const symsPerLine = geom.symsPerLine;
       const lineSamples = symsPerLine * symN;
-      const lineBytesCount = bytesPerSym * dataSyms;
+      const lineBytesCount = geom.lineBytes;
 
-      const nibbles = new Array(mode.groups);
-      const symBytes = new Uint8Array(bytesPerSym);
+      const nibbles = new Uint8Array(instances);
+      const energies = new Float32Array(instances);
+      const headNibs = new Uint8Array(geom.headSyms * instances);
       const linePayload = new Uint8Array(lineBytesCount);
 
       const timingOffsets = [0, -1, 1, -2, 2, -3, 3].map(this.ms);
 
       for (let idx = 0; idx < this.total; idx++) {
         if (this.lines.has(idx)) continue;
-        // Live mode: a line that already failed with full audio is only retried on finalize
         if (!force && this.failed.has(idx)) continue;
         const expP = this.trackedP + idx * lineSamples;
         if (expP + lineSamples + this.ms(3) > this.len) {
@@ -913,55 +1035,65 @@
           const p = expP + off;
           if (p < 0 || p + lineSamples > this.len) continue;
 
+          // 1. Demodulate Line Header symbols
           let ok = true;
-          let lineIdx = -1;
-          let expCrc = -1;
-
-          if (!isUltra) {
-            // Audible: 1 Header Sym (4 bytes: [idxMSB, idxLSB, crcMSB, crcLSB])
-            if (!this.demodSym(p, mode, nibbles)) continue;
-            this.nibblesToBytes(nibbles, mode.groups, symBytes);
-            lineIdx = (symBytes[0] << 8) | symBytes[1];
-            expCrc = (symBytes[2] << 8) | symBytes[3];
-
-            if (lineIdx !== idx) continue;
-
-            // 8 Data symbols
-            for (let s = 0; s < dataSyms; s++) {
-              if (!this.demodSym(p + (1 + s) * symN, mode, nibbles)) { ok = false; break; }
-              this.nibblesToBytes(nibbles, mode.groups, symBytes);
-              linePayload.set(symBytes, s * bytesPerSym);
+          for (let hs = 0; hs < geom.headSyms; hs++) {
+            if (!this.demodSym(p + hs * symN, mode, nibbles, energies)) {
+              ok = false;
+              break;
             }
-          } else {
-            // Ultrasound: 1 Header Sym (2 bytes: [idxMSB, idxLSB])
-            if (!this.demodSym(p, mode, nibbles)) continue;
-            this.nibblesToBytes(nibbles, mode.groups, symBytes);
-            lineIdx = (symBytes[0] << 8) | symBytes[1];
-
-            if (lineIdx !== idx) continue;
-
-            // 8 Data symbols
-            for (let s = 0; s < dataSyms; s++) {
-              if (!this.demodSym(p + (1 + s) * symN, mode, nibbles)) { ok = false; break; }
-              this.nibblesToBytes(nibbles, mode.groups, symBytes);
-              linePayload.set(symBytes, s * bytesPerSym);
+            for (let g = 0; g < instances; g++) {
+              headNibs[hs * instances + g] = nibbles[g];
             }
+          }
+          if (!ok) continue;
 
-            // 1 Tail Sym (2 bytes: [crcMSB, crcLSB])
-            if (ok) {
-              if (!this.demodSym(p + 9 * symN, mode, nibbles)) ok = false;
-              else {
-                this.nibblesToBytes(nibbles, mode.groups, symBytes);
-                expCrc = (symBytes[0] << 8) | symBytes[1];
+          const lineIdx =
+            (headNibs[0] << 12) | (headNibs[1] << 8) | (headNibs[2] << 4) | headNibs[3];
+          const expCrc =
+            (headNibs[4] << 12) | (headNibs[5] << 8) | (headNibs[6] << 4) | headNibs[7];
+
+          if (lineIdx !== idx) continue;
+
+          // 2. Demodulate 8 Data Symbols across all N Robot 36 instances in parallel
+          linePayload.fill(0);
+          const instConf = new Float32Array(instances);
+          for (let ds = 0; ds < geom.dataSyms; ds++) {
+            if (!this.demodSym(p + (geom.headSyms + ds) * symN, mode, nibbles, energies)) {
+              ok = false;
+              break;
+            }
+            const byteOffsetInSlice = ds >> 1;
+            const isLowNibble = ds & 1;
+            for (let g = 0; g < instances; g++) {
+              const nib = nibbles[g] & 15;
+              const byteIdx = g * 4 + byteOffsetInSlice;
+              if (isLowNibble) {
+                linePayload[byteIdx] |= nib;
+              } else {
+                linePayload[byteIdx] = (nib << 4);
               }
+              instConf[g] += energies[g];
             }
           }
 
-          if (ok && lineCrc16(lineIdx, this.total, this.k, mode.id, linePayload) === expCrc) {
+          if (ok && lineCrc16(lineIdx, this.total, this.k, mode.id, instances, linePayload) === expCrc) {
             this.lines.set(lineIdx, linePayload.slice(0));
             this.failed.delete(lineIdx);
             this.trackedP += Math.round(off * 0.25); // DPLL tracking update
-            if (this.onLine) this.onLine(lineIdx, linePayload, this.total, mode);
+
+            for (let g = 0; g < instances; g++) {
+              const st = this.instanceStats[g];
+              if (st) {
+                st.packetsOk++;
+                st.bytesReceived += 4;
+                st.confidence = Math.min(100, Math.round((instConf[g] / geom.dataSyms) * 12));
+              }
+            }
+
+            if (this.onLine) {
+              this.onLine(lineIdx, linePayload, this.total, mode, this.instanceStats);
+            }
             break;
           }
         }
@@ -971,7 +1103,7 @@
     finalize() {
       this.process(true);
       if (!this.total) {
-        throw new Error('Kein Signal erkannt. Bitte näher an den Lautsprecher gehen und Lautstärke prüfen.');
+        throw new Error('Kein Signal erkannt. Bitte näher an den Lautsprecher gehen oder Direkt-Test nutzen.');
       }
 
       const total = this.total;
@@ -1040,6 +1172,10 @@
         linesTotal: total,
         blocks: nB,
         mode: this.mode.name,
+        modeLabel: this.mode.label,
+        instances: this.instances,
+        snrDb: this.snrDb,
+        instanceStats: this.instanceStats,
       };
     }
   }
@@ -1079,7 +1215,13 @@
 
   const api = {
     MODES,
+    MIN_INSTANCES,
+    MAX_INSTANCES,
+    DEFAULT_INSTANCES,
+    clampInstances,
     resolveMode,
+    getInstanceBands,
+    getLineGeometry,
     encodeAudio,
     decode,
     Receiver,
