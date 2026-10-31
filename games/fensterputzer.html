@@ -299,7 +299,7 @@
       if (k === 'KeyS' || k === 'ArrowDown') keys.s = true;
       if (k === 'Space') {
         ev.preventDefault();
-        fireWaterBlaster();
+        if (!ev.repeat) fireWaterBlaster();
       }
     });
     window.addEventListener('keyup', (ev) => {
@@ -317,12 +317,19 @@
       el.addEventListener('pointerdown', () => keys[prop] = true);
       el.addEventListener('pointerup', () => keys[prop] = false);
       el.addEventListener('pointerleave', () => keys[prop] = false);
+      el.addEventListener('pointercancel', () => keys[prop] = false);
     }
     bindHold('btnLUp', 'q');
     bindHold('btnLDown', 'a');
     bindHold('btnRUp', 'e');
     bindHold('btnRDown', 'd');
     document.getElementById('btnSpray').addEventListener('click', fireWaterBlaster);
+    // Don't keep focus on buttons (otherwise Space would also "click" them again)
+    document.querySelectorAll('button').forEach(b => b.addEventListener('pointerup', () => b.blur()));
+    // Release all keys when the window loses focus / the tab is hidden (otherwise ropes keep winding)
+    function releaseKeys() { for (const k in keys) keys[k] = false; }
+    window.addEventListener('blur', releaseKeys);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) releaseKeys(); else lastTime = performance.now(); });
 
     // Squeegee pointer tracking
     const pointer = { x: width / 2, y: height / 2, active: false };
@@ -394,6 +401,8 @@
       gondola.rightY = cy + 65 + (Math.random() - 0.5) * 40;
       gondola.bucketX = 0;
       gondola.bucketVx = 0;
+      pigeons = [];
+      fallingHazards = [];
     }
 
     function getCleanPercent() {
@@ -544,6 +553,7 @@
     document.getElementById('startBtn').addEventListener('click', () => {
       document.getElementById('modal').hidden = true;
       resetGame();
+      lastTime = performance.now();
       state = 'PLAYING';
     });
 
@@ -557,6 +567,7 @@
 
     let lastTime = performance.now();
     function update(now) {
+      requestAnimationFrame(update);
       const dt = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
 
@@ -567,6 +578,7 @@
           floorTransition -= dt;
           gondola.leftY -= 110 * dt;
           gondola.rightY -= 110 * dt;
+          swingVx *= 0.9;
           if (floorTransition <= 0) {
             floor++;
             setupFloor(floor);
@@ -648,6 +660,8 @@
             });
           }
 
+          gondola.leftY = Math.max(height * 0.24, Math.min(height * 0.78, gondola.leftY));
+          gondola.rightY = Math.max(height * 0.24, Math.min(height * 0.78, gondola.rightY));
           const avgY = (gondola.leftY + gondola.rightY) * 0.5;
           const gx = width / 2 + swingX;
           for (let i = fallingHazards.length - 1; i >= 0; i--) {
@@ -691,7 +705,6 @@
       }
 
       draw();
-      requestAnimationFrame(update);
     }
 
     function draw() {
