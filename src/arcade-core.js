@@ -274,7 +274,9 @@ const ArcadeCore = (() => {
     'hexfront': 'hexfront_score',
     'einkaufswagen': 'ek_best',
     'fensterputzer': 'fp_best',
-    'kofferstapler': 'ks_best'
+    'kofferstapler': 'ks_best',
+    'microwave': 'mw_best',
+    'magnet': 'mag_best'
   };
 
   function getScore(gameKey) {

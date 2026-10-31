@@ -135,19 +135,6 @@ Dieses Dokument sammelt innovative, humorvolle und extrem suchterzeugende Spieli
 
 ---
 
-### 🍲 13. Microwave Meltdown (Die Büro-Mikrowelle)
-* **Tagline:** Was passiert, wenn man Alufolie, eine CD und ein rohes Ei in die Mikrowelle packt? Finde es heraus – stoppe aber rechtzeitig!
-* **Genre:** High-Stakes Timing / Chain Reaction
-* **Core Loop:**
-  * Bestücke die Mikrowelle mit absurden Objekten.
-  * Starte den Timer: Je länger es brutzelt, desto mehr Punkte und Plasma-Entladungen entstehen.
-  * Du musst die Mikrowelle exakt 0,1 Sekunden vor der Zerstörung stoppen!
-* **Chaos-Faktor:**
-  * Wunderschöne, bunte Funken- und Plasma-Shader-Effekte auf Retro-Mikrowellen-Display.
-* **Tech-Stack:** Partikel-Plasma-Systeme, summende Mikrowellen-Audiofrequenzen per Oszillator.
-
----
-
 ### 🐦 14. Tauben-Börse: Das Brotkrumen-Monopol
 * **Tagline:** Kontrolliere den 500-köpfigen Taubenschwarm im Park wie eine gigantische Naturgewalt!
 * **Genre:** Schwarm-Simulator / Arcade
@@ -200,18 +187,6 @@ Dieses Dokument sammelt innovative, humorvolle und extrem suchterzeugende Spieli
 * **Chaos-Faktor:**
   * In späteren Levels gibt es bis zu 3 Klone aus unterschiedlichen Zeitepochen gleichzeitig!
 * **Tech-Stack:** Frame-by-Frame Input-Recording & Replay-Ghost Queue.
-
----
-
-### 🧲 18. Magnet-Puzzler: Polaritäts-Panik
-* **Tagline:** Du bist ein Magnet. Schalte zwischen PLUS und MINUS um, um dich durch ein Feld aus Metallträgern zu katapultieren.
-* **Genre:** Physics Puzzle / Momentum
-* **Core Loop:**
-  * Blau stößt Blau ab und zieht Rot an.
-  * Nutze die Anziehungskraft, um an Decken zu hängen oder die Abstoßung für meterhohe Super-Jumps.
-* **Chaos-Faktor:**
-  * Metallschrott und lose Büroklammern im Raum fliegen dir bei falscher Polung wie Pfeile ins Gesicht.
-* **Tech-Stack:** Physikalisches Coulomb-Kraft-Modell ($F = k \cdot \frac{q_1 q_2}{r^2}$) in Echtzeit.
 
 ---
 

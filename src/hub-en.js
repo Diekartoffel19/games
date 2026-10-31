@@ -1,5 +1,7 @@
 // English card texts for the hub (index.html). null name = keep original name.
 window.HUB_EN = {
+  magnet: ['Magnet Puzzler: Polarity Panic', 'You are a high-powered electromagnet! Switch between PLUS (Red) and MINUS (Blue) to cling to ceilings, launch across laser chasms with Coulomb force and repel flying scrap paperclips!'],
+  microwave: ['Microwave Meltdown: The Office Microwave', 'What happens when you put tin foil, a 90s CD-ROM, a metal fork and a raw egg into the office microwave? Unleash high-voltage plasma lightning and stop 0.1s before meltdown!'],
   einkaufswagen: ['Shopping Cart Rally: Supermarket Derby', 'Race an overloaded shopping cart with a jammed front wheel through the supermarket! Smash ravioli pyramids, collect deposit slips, upgrade with WD-40 and enjoy slow-mo ragdoll crashes!'],
   fensterputzer: ['Window Cleaner 9000: Skyscraper Chaos', 'Clean grimy windows on a 200 m skyscraper from a swaying rope gondola! Keep both winches balanced, scare off pecking pigeons with a water pistol and uncover absurd office scenes!'],
   kofferstapler: ['Luggage Stacker Extreme: Airport Jenga', 'Stack hard-shell suitcases, slippery cooler boxes, guitars and wobbling dog crates into the swaying cargo hold with real Matter.js physics and survive the turbulence test!'],
