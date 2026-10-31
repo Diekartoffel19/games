@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Suitcase Stacker Extreme — Airport Luggage Jenga</title>
+  <meta name="description" content="Stack suitcases, slippery coolers, surfboards and vibrating pet carriers into a swaying airplane cargo hold with real Matter.js physics!">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+  <script src="matter.min.js"></script>
+  <script>
+    if (typeof Matter === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"><\/script>');
+    }
+  </script>
+  <script src="../src/arcade-core.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #090d16;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none; -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hud-top {
+      position: fixed;
+      top: 12px; left: 12px; right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 20;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .hud-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+    }
+    .btn-hud {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      backdrop-filter: blur(8px);
+    }
+    .btn-hud:hover { background: rgba(30, 41, 59, 0.95); }
+
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 8px 14px;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+      flex-wrap: wrap;
+    }
+    .stat-box { display: flex; flex-direction: column; min-width: 68px; }
+    .stat-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; font-weight: 700; }
+    .stat-val { font-size: 1.05rem; font-weight: 800; color: #f8fafc; font-variant-numeric: tabular-nums; }
+    .stat-val.gold { color: #fbbf24; }
+    .stat-val.cyan { color: #38bdf8; }
+    .stat-val.red { color: #fb7185; }
+
+    .controls-bar {
+      position: fixed;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      padding: 8px 14px;
+      border-radius: 16px;
+      z-index: 25;
+      backdrop-filter: blur(8px);
+    }
+    .ctrl-btn {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #f8fafc;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 0.88rem;
+      cursor: pointer;
+    }
+    .ctrl-btn:active { background: #f59e0b; color: #0f172a; }
+    .ctrl-btn.drop {
+      background: linear-gradient(135deg, #f59e0b, #ea580c);
+      border-color: #fbbf24;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 10, 18, 0.84);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+    }
+    .modal-backdrop[hidden] { display: none; }
+    .modal-card {
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 20px;
+      max-width: 520px;
+      width: 100%;
+      padding: 26px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+      text-align: center;
+    }
+    .modal-card h1 {
+      margin: 0 0 8px;
+      font-size: 1.85rem;
+      font-weight: 900;
+      background: linear-gradient(90deg, #fbbf24, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .modal-sub {
+      color: #94a3b8;
+      font-size: 0.94rem;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #ffffff;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hud-top">
+    <div class="hud-left">
+      <a href="../index.html" class="btn-hud">← Hub</a>
+      <button id="muteBtn" class="btn-hud" type="button">🔊 Sound</button>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat-box">
+        <span class="stat-label">Flight Level</span>
+        <span class="stat-val cyan" id="hudFlight">Flight #1</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Remaining</span>
+        <span class="stat-val" id="hudRemaining">8 bags</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Lost</span>
+        <span class="stat-val red" id="hudLost">0 / 3</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Score</span>
+        <span class="stat-val gold" id="hudScore">0</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Best</span>
+        <span class="stat-val gold" id="hudBest">0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls-bar">
+    <button class="ctrl-btn" id="btnLeft">◀ Left (A)</button>
+    <button class="ctrl-btn" id="btnRot">🔄 Rotate (R)</button>
+    <button class="ctrl-btn drop" id="btnDrop">⬇ Drop (Space)</button>
+    <button class="ctrl-btn" id="btnRight">Right (D) ▶</button>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="modal-backdrop" id="modal">
+    <div class="modal-card">
+      <div style="font-size:3rem; margin-bottom:4px;" id="modalEmoji">🧳✈️</div>
+      <h1 id="modalTitle">Suitcase Stacker Extreme</h1>
+      <p class="modal-sub" id="modalDesc">
+        Stack all the luggage into the swaying airplane cargo hold!
+        Watch out for <b>slippery coolers 🧊</b>, <b>bouncy sports bags 🏀</b> and <b>vibrating dog crates 🐶</b>!
+        After the last bag comes the <b>4-second takeoff turbulence test</b>!
+      </p>
+      <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:14px;">
+        Controls: <b>Mouse / A &amp; D</b> to aim &bull; <b>R / W</b> to rotate &bull; <b>Click / SPACE</b> to stack
+      </div>
+      <button class="btn-primary" id="startBtn">✈️ Start loading!</button>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const GAME_KEY = 'kofferstapler';
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const muteBtn = document.getElementById('muteBtn');
+    function updateMuteUi() {
+      const m = window.ArcadeCore && ArcadeCore.isMuted();
+      muteBtn.textContent = m ? '🔇 Muted' : '🔊 Sound';
+    }
+    muteBtn.addEventListener('click', () => {
+      if (window.ArcadeCore) ArcadeCore.toggleMute();
+      updateMuteUi();
+    });
+    updateMuteUi();
+
+    let bestScore = Number(window.ArcadeCore ? ArcadeCore.getScore(GAME_KEY) : localStorage.getItem('ks_best')) || 0;
+
+    const LUGGAGE_TYPES = [
+      {
+        id: 'suitcase',
+        name: 'Hardshell Suitcase',
+        emoji: '🧳',
+        w: 76, h: 50,
+        color: '#3b82f6',
+        border: '#93c5fd',
+        friction: 0.65,
+        restitution: 0.1,
+        density: 0.002,
+        points: 100
+      },
+      {
+        id: 'cooler',
+        name: 'Frosty Cooler (Slippery!)',
+        emoji: '🧊',
+        w: 68, h: 46,
+        color: '#06b6d4',
+        border: '#cffafe',
+        friction: 0.015,
+        restitution: 0.15,
+        density: 0.0022,
+        points: 150
+      },
+      {
+        id: 'pet',
+        name: 'Wobbly Dog Crate',
+        emoji: '🐶',
+        w: 64, h: 54,
+        color: '#f59e0b',
+        border: '#fde68a',
+        friction: 0.55,
+        restitution: 0.2,
+        density: 0.002,
+        vibrates: true,
+        points: 180
+      },
+      {
+        id: 'surf',
+        name: 'Long Guitar Case',
+        emoji: '🎸',
+        w: 118, h: 30,
+        color: '#8b5cf6',
+        border: '#ddd6fe',
+        friction: 0.6,
+        restitution: 0.1,
+        density: 0.0018,
+        points: 140
+      },
+      {
+        id: 'bouncy',
+        name: 'Overstuffed Gym Bag (Bouncy!)',
+        emoji: '🏀',
+        w: 62, h: 44,
+        color: '#10b981',
+        border: '#a7f3d0',
+        friction: 0.5,
+        restitution: 0.78,
+        density: 0.0016,
+        points: 160
+      },
+      {
+        id: 'safe',
+        name: 'Heavy Gold Safe',
+        emoji: '⚓',
+        w: 56, h: 56,
+        color: '#64748b',
+        border: '#e2e8f0',
+        friction: 0.75,
+        restitution: 0.02,
+        density: 0.006,
+        points: 220
+      }
+    ];
+
+    const Engine = Matter.Engine;
+    const World = Matter.World;
+    const Bodies = Matter.Bodies;
+    const Body = Matter.Body;
+
+    let engine = null;
+    let cargoFloor = null;
+    let leftLip = null;
+    let rightLip = null;
+    let stackedBodies = [];
+
+    let state = 'MENU'; // MENU, AIMING, TURBULENCE
+    let flightLevel = 1;
+    let remainingToDrop = 8;
+    let lostCount = 0;
+    const maxLost = 3;
+    let score = 0;
+    let turbulenceTimer = 0;
+    let dropCooldown = 0;
+    let floorAngle = 0;
+    let floatingTexts = [];
+
+    const crane = {
+      x: width / 2,
+      angle: 0,
+      currentType: LUGGAGE_TYPES[0]
+    };
+
+    function pickNextLuggage() {
+      crane.currentType = LUGGAGE_TYPES[Math.floor(Math.random() * LUGGAGE_TYPES.length)];
+      crane.angle = 0;
+    }
+
+    function initPhysicsWorld() {
+      engine = Engine.create();
+      engine.world.gravity.y = 1.0;
+      stackedBodies = [];
+
+      const bayW = Math.min(430, width * 0.78);
+      const bayY = height * 0.76;
+      const cx = width / 2;
+
+      cargoFloor = Bodies.rectangle(cx, bayY, bayW, 24, {
+        isStatic: true,
+        friction: 0.8
+      });
+      leftLip = Bodies.rectangle(cx - bayW / 2 + 10, bayY - 22, 20, 28, {
+        isStatic: true,
+        friction: 0.8
+      });
+      rightLip = Bodies.rectangle(cx + bayW / 2 - 10, bayY - 22, 20, 28, {
+        isStatic: true,
+        friction: 0.8
+      });
+
+      World.add(engine.world, [cargoFloor, leftLip, rightLip]);
+    }
+
+    function setCargoBayTilt(angleRad) {
+      floorAngle = angleRad;
+      const bayW = Math.min(430, width * 0.78);
+      const bayY = height * 0.76;
+      const cx = width / 2;
+
+      Body.setPosition(cargoFloor, { x: cx, y: bayY });
+      Body.setAngle(cargoFloor, angleRad);
+
+      const lx = cx + Math.cos(angleRad) * (-bayW / 2 + 10) - Math.sin(angleRad) * (-22);
+      const ly = bayY + Math.sin(angleRad) * (-bayW / 2 + 10) + Math.cos(angleRad) * (-22);
+      Body.setPosition(leftLip, { x: lx, y: ly });
+      Body.setAngle(leftLip, angleRad);
+
+      const rx = cx + Math.cos(angleRad) * (bayW / 2 - 10) - Math.sin(angleRad) * (-22);
+      const ry = bayY + Math.sin(angleRad) * (bayW / 2 - 10) + Math.cos(angleRad) * (-22);
+      Body.setPosition(rightLip, { x: rx, y: ry });
+      Body.setAngle(rightLip, angleRad);
+    }
+
+    function startFlight(level) {
+      flightLevel = level;
+      remainingToDrop = 6 + level * 2;
+      turbulenceTimer = 0;
+      dropCooldown = 0;
+      floorAngle = 0;
+      crane.x = width / 2;
+      initPhysicsWorld();
+      pickNextLuggage();
+      state = 'AIMING';
+      updateHud();
+    }
+
+    function dropCurrentLuggage() {
+      if (state !== 'AIMING' || dropCooldown > 0 || remainingToDrop <= 0) return;
+      const t = crane.currentType;
+      const dropY = 125;
+
+      const body = Bodies.rectangle(crane.x, dropY, t.w, t.h, {
+        friction: t.friction,
+        restitution: t.restitution,
+        density: t.density,
+        angle: crane.angle
+      });
+      body.luggageMeta = t;
+      body.shakeTimer = 1.2 + Math.random();
+
+      World.add(engine.world, body);
+      stackedBodies.push(body);
+
+      if (window.ArcadeCore) ArcadeCore.pop(1.0);
+      score += t.points;
+      remainingToDrop--;
+      dropCooldown = 0.55;
+
+      if (remainingToDrop > 0) {
+        pickNextLuggage();
+      } else {
+        // Trigger Takeoff Turbulence Shake Test!
+        state = 'TURBULENCE';
+        turbulenceTimer = 4.2;
+        if (window.ArcadeCore) ArcadeCore.playTone(180, 0.3, 'sawtooth', 0.15);
+        floatingTexts.push({
+          x: width / 2,
+          y: height * 0.32,
+          text: '✈️ TURBULENCE TEST! WILL THE STACK HOLD FOR 4s?',
+          color: '#fbbf24',
+          size: 22,
+          life: 2.5
+        });
+      }
+      updateHud();
+    }
+
+    function rotateCrane() {
+      if (state !== 'AIMING') return;
+      crane.angle = (crane.angle + Math.PI / 4) % (Math.PI * 2);
+      if (window.ArcadeCore) ArcadeCore.playTone(540, 0.06, 'sine', 0.1);
+    }
+
+    // Input Handling
+    const keys = { left: false, right: false };
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+      if (e.code === 'KeyR' || e.code === 'KeyW' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        rotateCrane();
+      }
+      if (e.code === 'Space' || e.code === 'ArrowDown' || e.code === 'KeyS') {
+        e.preventDefault();
+        dropCurrentLuggage();
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (state === 'AIMING') {
+        const bayW = Math.min(430, width * 0.78);
+        crane.x = Math.max(width / 2 - bayW / 2 + 30, Math.min(width / 2 + bayW / 2 - 30, e.clientX));
+      }
+    });
+    canvas.addEventListener('pointerdown', (e) => {
+      if (state === 'AIMING') {
+        const bayW = Math.min(430, width * 0.78);
+        crane.x = Math.max(width / 2 - bayW / 2 + 30, Math.min(width / 2 + bayW / 2 - 30, e.clientX));
+        dropCurrentLuggage();
+      }
+    });
+
+    document.getElementById('btnLeft').addEventListener('pointerdown', () => keys.left = true);
+    document.getElementById('btnLeft').addEventListener('pointerup', () => keys.left = false);
+    document.getElementById('btnRight').addEventListener('pointerdown', () => keys.right = true);
+    document.getElementById('btnRight').addEventListener('pointerup', () => keys.right = false);
+    document.getElementById('btnRot').addEventListener('click', rotateCrane);
+    document.getElementById('btnDrop').addEventListener('click', dropCurrentLuggage);
+
+    function updateHud() {
+      document.getElementById('hudFlight').textContent = `Flight #${flightLevel}`;
+      document.getElementById('hudRemaining').textContent = `${remainingToDrop} bags`;
+      document.getElementById('hudLost').textContent = `${lostCount} / ${maxLost}`;
+      document.getElementById('hudScore').textContent = score.toLocaleString('en-US');
+      document.getElementById('hudBest').textContent = bestScore.toLocaleString('en-US');
+    }
+
+    function triggerGameOver() {
+      state = 'MENU';
+      if (window.ArcadeCore) ArcadeCore.gameOver();
+      if (score > bestScore) {
+        bestScore = score;
+        if (window.ArcadeCore) ArcadeCore.saveScore(GAME_KEY, bestScore);
+        try { localStorage.setItem('ks_best', String(bestScore)); } catch (e) {}
+      }
+      updateHud();
+
+      document.getElementById('modalEmoji').textContent = '🧳💥';
+      document.getElementById('modalTitle').textContent = 'Cargo scattered across the tarmac!';
+      document.getElementById('modalDesc').innerHTML =
+        `Flights cleared: <b>${flightLevel - 1}</b> &bull; Total score: <b>${score.toLocaleString('en-US')}</b><br>` +
+        `Best: <b>${bestScore.toLocaleString('en-US')}</b>`;
+      document.getElementById('startBtn').textContent = '✈️ Start a new shift!';
+      document.getElementById('modal').hidden = false;
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      document.getElementById('modal').hidden = true;
+      score = 0;
+      lostCount = 0;
+      startFlight(1);
+    });
+
+    let lastTime = performance.now();
+    function update(now) {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (dropCooldown > 0) dropCooldown -= dt;
+
+      if (state === 'AIMING' || state === 'TURBULENCE') {
+        const bayW = Math.min(430, width * 0.78);
+        if (keys.left) crane.x -= 320 * dt;
+        if (keys.right) crane.x += 320 * dt;
+        crane.x = Math.max(width / 2 - bayW / 2 + 30, Math.min(width / 2 + bayW / 2 - 30, crane.x));
+
+        // Calculate center-of-mass torque + turbulence tilt
+        let torqueSum = 0;
+        for (const b of stackedBodies) {
+          const relX = (b.position.x - width / 2) / (bayW * 0.5);
+          torqueSum += relX * b.mass * 0.015;
+
+          // Vibrating Pet Carrier jumps periodically!
+          if (b.luggageMeta && b.luggageMeta.vibrates) {
+            b.shakeTimer -= dt;
+            if (b.shakeTimer <= 0) {
+              b.shakeTimer = 1.4 + Math.random() * 1.2;
+              Body.applyForce(b, b.position, {
+                x: (Math.random() - 0.5) * 0.025,
+                y: -0.035
+              });
+              floatingTexts.push({
+                x: b.position.x,
+                y: b.position.y - 25,
+                text: '🐶 WOOF!',
+                color: '#fde68a',
+                size: 15,
+                life: 0.65
+              });
+            }
+          }
+        }
+
+        let targetTilt = Math.max(-0.22, Math.min(0.22, torqueSum));
+        if (state === 'TURBULENCE') {
+          turbulenceTimer -= dt;
+          targetTilt += Math.sin(now * 0.012) * (0.08 + flightLevel * 0.015);
+          if (turbulenceTimer <= 0) {
+            // Flight cleared!
+            const bonus = stackedBodies.length * 100 + flightLevel * 250;
+            score += bonus;
+            if (window.ArcadeCore) ArcadeCore.powerup();
+            floatingTexts.push({
+              x: width / 2,
+              y: height * 0.35,
+              text: `🛫 FLIGHT #${flightLevel} TOOK OFF! +${bonus} BONUS!`,
+              color: '#4ade80',
+              size: 24,
+              life: 1.8
+            });
+            startFlight(flightLevel + 1);
+          }
+        }
+
+        const newAngle = floorAngle + (targetTilt - floorAngle) * Math.min(1, dt * 5);
+        setCargoBayTilt(newAngle);
+
+        Engine.update(engine, 1000 / 60);
+
+        // Check for fallen luggage
+        for (let i = stackedBodies.length - 1; i >= 0; i--) {
+          const b = stackedBodies[i];
+          if (b.position.y > height + 60) {
+            World.remove(engine.world, b);
+            stackedBodies.splice(i, 1);
+            lostCount++;
+            if (window.ArcadeCore) ArcadeCore.hit();
+            floatingTexts.push({
+              x: Math.max(80, Math.min(width - 80, b.position.x)),
+              y: height - 90,
+              text: '💥 BAG LOST!',
+              color: '#fb7185',
+              size: 20,
+              life: 1.2
+            });
+            updateHud();
+            if (lostCount >= maxLost) {
+              triggerGameOver();
+              break;
+            }
+          }
+        }
+      }
+
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.y -= 45 * dt;
+        ft.life -= dt;
+        if (ft.life <= 0) floatingTexts.splice(i, 1);
+      }
+
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function draw() {
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(0, 0, width, height);
+
+      // Airplane Fuselage Cross-Section Circle in background
+      const cx = width / 2;
+      const bayY = height * 0.76;
+      const bayW = Math.min(430, width * 0.78);
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.arc(cx, bayY - 120, bayW * 0.66, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Crane Preview at Top
+      if (state === 'AIMING' && remainingToDrop > 0) {
+        const t = crane.currentType;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+        ctx.setLineDash([6, 6]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(crane.x, 125);
+        ctx.lineTo(crane.x, bayY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.save();
+        ctx.translate(crane.x, 125);
+        ctx.rotate(crane.angle);
+        ctx.fillStyle = t.color;
+        ctx.strokeStyle = t.border;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(-t.w / 2, -t.h / 2, t.w, t.h, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = '24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(t.emoji, 0, 0);
+        ctx.restore();
+
+        ctx.font = '800 13px system-ui, sans-serif';
+        ctx.fillStyle = '#cbd5e1';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Next luggage: ${t.emoji} ${t.name}`, cx, 78);
+      }
+
+      if (state === 'TURBULENCE') {
+        ctx.font = '900 22px system-ui, sans-serif';
+        ctx.fillStyle = '#fbbf24';
+        ctx.textAlign = 'center';
+        ctx.fillText(`🌪️ TURBULENCE TEST: ${turbulenceTimer.toFixed(1)}s`, cx, 88);
+      }
+
+      // Draw Cargo Bay Platform
+      if (cargoFloor) {
+        ctx.save();
+        ctx.translate(cargoFloor.position.x, cargoFloor.position.y);
+        ctx.rotate(cargoFloor.angle);
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.fillRect(-bayW / 2, -12, bayW, 24);
+        ctx.strokeRect(-bayW / 2, -12, bayW, 24);
+
+        // Side Lips
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(-bayW / 2, -36, 20, 28);
+        ctx.fillRect(bayW / 2 - 20, -36, 20, 28);
+        ctx.restore();
+      }
+
+      // Draw Stacked Luggage Bodies
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const b of stackedBodies) {
+        const t = b.luggageMeta;
+        ctx.save();
+        ctx.translate(b.position.x, b.position.y);
+        ctx.rotate(b.angle);
+
+        ctx.fillStyle = t.color;
+        ctx.strokeStyle = t.border;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(-t.w / 2, -t.h / 2, t.w, t.h, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        // Handle / Straps detail
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-t.w * 0.25, -t.h / 2);
+        ctx.lineTo(-t.w * 0.25, t.h / 2);
+        ctx.moveTo(t.w * 0.25, -t.h / 2);
+        ctx.lineTo(t.w * 0.25, t.h / 2);
+        ctx.stroke();
+
+        ctx.font = '24px sans-serif';
+        ctx.fillText(t.emoji, 0, 0);
+        ctx.restore();
+      }
+
+      // Floating Texts
+      for (const ft of floatingTexts) {
+        ctx.save();
+        ctx.font = `900 ${ft.size}px system-ui, sans-serif`;
+        ctx.fillStyle = '#000';
+        ctx.fillText(ft.text, ft.x + 2, ft.y + 2);
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      }
+    }
+
+    initPhysicsWorld();
+    updateHud();
+    requestAnimationFrame(update);
+  })();
+  </script>
+</body>
+</html>

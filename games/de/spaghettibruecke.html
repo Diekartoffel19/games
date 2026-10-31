@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Spaghetti-Brücken-Duell — Statik-Crash</title>
+  <meta name="description" content="Baue eine Brücke nur aus rohen Nudeln und Marshmallows – welche Konstruktion hält den dicken Hamster aus?">
+  <link rel="stylesheet" href="../../style.css">
+  <link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+  <script src="../../src/arcade-core.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0f1b2d; color: #f1f5f9;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; user-select: none; touch-action: none; }
+    #c { display: block; width: 100%; height: 100%; }
+    .hud { position: fixed; top: 10px; left: 10px; display: flex; gap: 8px; z-index: 10; }
+    .btn-hud { background: rgba(15,23,42,.88); border: 1px solid rgba(255,255,255,.2); color: #f1f5f9; padding: 8px 14px;
+      border-radius: 10px; font-weight: 700; font-size: .85rem; cursor: pointer; text-decoration: none; }
+    .btn-hud:hover { background: rgba(30,41,59,.95); }
+    .bar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); display: none; gap: 10px; z-index: 10; }
+    .bar.on { display: flex; }
+    .bar .btn-hud { padding: 10px 18px; font-size: .95rem; }
+    .bar .go { background: #16a34a; border-color: #4ade80; }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    <a href="../../index.html" class="btn-hud">← Hub</a>
+    <button id="muteBtn" class="btn-hud" type="button">🔊 Ton</button>
+  </div>
+  <canvas id="c"></canvas>
+  <div class="bar" id="bar">
+    <button class="btn-hud" id="undoBtn" type="button">↶ Rückgängig (Z)</button>
+    <button class="btn-hud go" id="doneBtn" type="button">✓ Fertig (Enter)</button>
+  </div>
+
+<script>
+(() => {
+  const GAME_KEY = 'spaghettibruecke';
+  const AC = () => window.ArcadeCore;
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  const bar = document.getElementById('bar');
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  const muteBtn = document.getElementById('muteBtn');
+  const updMute = () => { muteBtn.textContent = (AC() && AC().isMuted()) ? '🔇 Stumm' : '🔊 Ton'; };
+  muteBtn.onclick = () => { if (AC()) AC().toggleMute(); updMute(); };
+  updMute();
+
+  // ---- world constants ----
+  const WW = 1000, WH = 600;
+  const CL = 250, CR = 750, CY = 330;           // cliff edges and top
+  const GRID = 50, MAXLEN = 120, BUDGET = 45, BUILD_TIME = 45;
+  const GRAV = 900, TENS = 0.09, COMP = 0.17, BALL_R = 22;
+  const PCOL = ['#f97316', '#38bdf8'], PNAME = ['Spieler 1', 'Spieler 2'];
+
+  const gridPts = [];
+  const key = (x, y) => x + ',' + y;
+
+  function makeWorld() {
+    const w = { nodes: [], beams: [], map: new Map(), used: 0, frags: [], t: 0, ball: null, done: false, outcome: null, maxX: 0, tCross: 0, endT: 0, cracks: 0 };
+    for (const [x, ys] of [[CL, null], [CR, null]]) for (let y = CY; y <= CY + 150; y += GRID) addNode(w, x, y, true);
+    return w;
+  }
+  function addNode(w, x, y, fixed = false) {
+    const k = key(x, y); if (w.map.has(k)) return w.map.get(k);
+    const n = { x, y, px: x, py: y, fixed, deg: 0 };
+    w.nodes.push(n); w.map.set(k, n); return n;
+  }
+  function beamCost(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) / GRID; }
+  function hasBeam(w, a, b) { return w.beams.some(s => (s.a === a && s.b === b) || (s.a === b && s.b === a)); }
+  function addBeam(w, a, b) {
+    const len = Math.hypot(a.x - b.x, a.y - b.y);
+    if (a === b || len < 1 || len > MAXLEN + 1 || hasBeam(w, a, b)) return false;
+    if (a.fixed && b.fixed) return false;
+    if (w.used + len / GRID > BUDGET + 1e-6) return false;
+    w.beams.push({ a, b, len, broken: false, stress: 0 }); a.deg++; b.deg++; w.used += len / GRID; return true;
+  }
+  function removeBeam(w, s) {
+    const i = w.beams.indexOf(s); if (i < 0) return;
+    w.beams.splice(i, 1); w.used -= s.len / GRID;
+    for (const n of [s.a, s.b]) {
+      n.deg--;
+      if (!n.fixed && n.deg <= 0) { w.nodes.splice(w.nodes.indexOf(n), 1); w.map.delete(key(n.x, n.y)); }
+    }
+  }
+  function validPoint(x, y) { return x >= CL && x <= CR && y >= 200 && y <= 550; }
+
+  // ---- state ----
+  let state = 'menu';   // menu | build | handoff | test | result
+  let cur = 0, worlds = [null, null], buildT = 0, drag = null, mouse = { x: 0, y: 0 }, testT = 0, resultInfo = null;
+  let best = Number(AC() ? AC().getScore(GAME_KEY) : 0) || 0;
+
+  function startBuild(i) { cur = i; worlds[i] = makeWorld(); buildT = BUILD_TIME; drag = null; state = 'build'; bar.classList.add('on'); }
+  function finishBuild() {
+    bar.classList.remove('on'); drag = null;
+    if (cur === 0) state = 'handoff';
+    else startTest();
+  }
+  function startTest() {
+    for (const w of worlds) {
+      w.t = 0; w.done = false; w.frags = [];
+      w.ball = { x: 110, y: CY - BALL_R, vx: 0, vy: 0, ang: 0, contact: false };
+      w.maxX = 110;
+    }
+    testT = 0; state = 'test';
+    if (AC()) AC().powerup();
+  }
+
+  // ---- view transform ----
+  function view(panel) {
+    if (state === 'build') {
+      const s = Math.min(W / WW, (H - 70) / WH);
+      return { s, ox: (W - WW * s) / 2, oy: 52, h: WH * s };
+    }
+    const ph = (H - 54) / 2, s = Math.min(W / WW, ph / WH);
+    return { s, ox: (W - WW * s) / 2, oy: 54 + panel * ph + (ph - WH * s) / 2, h: WH * s };
+  }
+  function toWorld(px, py) { const v = view(0); return { x: (px - v.ox) / v.s, y: (py - v.oy) / v.s }; }
+  function snap(p) { return { x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID }; }
+  function nodeAt(w, p, r = 24) {
+    let best = null, bd = r;
+    for (const n of w.nodes) { const d = Math.hypot(n.x - p.x, n.y - p.y); if (d < bd) { bd = d; best = n; } }
+    return best;
+  }
+  function beamAt(w, p, r = 10) {
+    let best = null, bd = r;
+    for (const s of w.beams) {
+      const dx = s.b.x - s.a.x, dy = s.b.y - s.a.y, t = Math.max(0, Math.min(1, ((p.x - s.a.x) * dx + (p.y - s.a.y) * dy) / (dx * dx + dy * dy)));
+      const d = Math.hypot(s.a.x + dx * t - p.x, s.a.y + dy * t - p.y);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
+
+  // ---- input ----
+  cv.addEventListener('pointerdown', e => {
+    if (state === 'menu') { startBuild(0); return; }
+    if (state === 'handoff') { startBuild(1); return; }
+    if (state === 'result') { state = 'menu'; return; }
+    if (state !== 'build') return;
+    const w = worlds[cur], p = toWorld(e.clientX, e.clientY);
+    if (e.button === 2) { const s = beamAt(w, p); if (s) removeBeam(w, s); return; }
+    const n = nodeAt(w, p);
+    if (n) { drag = { from: n }; mouse = p; cv.setPointerCapture(e.pointerId); }
+  });
+  cv.addEventListener('pointermove', e => { mouse = toWorld(e.clientX, e.clientY); });
+  cv.addEventListener('pointerup', e => {
+    if (state !== 'build' || !drag) return;
+    const w = worlds[cur], q = snap(toWorld(e.clientX, e.clientY));
+    const from = drag.from; drag = null;
+    if (!validPoint(q.x, q.y)) return;
+    const existing = w.map.get(key(q.x, q.y));
+    const target = existing || { x: q.x, y: q.y, tmp: true };
+    const len = Math.hypot(from.x - target.x, from.y - target.y);
+    if (len < 1 || len > MAXLEN + 1) { if (AC()) AC().hit(); return; }
+    const node = existing || addNode(w, q.x, q.y);
+    if (!addBeam(w, from, node)) {
+      if (!existing && node.deg === 0) { w.nodes.splice(w.nodes.indexOf(node), 1); w.map.delete(key(node.x, node.y)); }
+      if (AC()) AC().hit();
+    } else if (AC()) AC().playTone(300 + Math.random() * 200, .05, 'square', .09);
+  });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  function undo() {
+    if (state !== 'build') return; const w = worlds[cur];
+    if (w.beams.length) removeBeam(w, w.beams[w.beams.length - 1]);
+  }
+  document.getElementById('undoBtn').onclick = undo;
+  document.getElementById('doneBtn').onclick = () => { if (state === 'build') finishBuild(); };
+  addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'z' || k === 'backspace') undo();
+    else if (k === 'enter' || k === ' ') {
+      e.preventDefault();
+      if (state === 'build') finishBuild();
+      else if (state === 'menu') startBuild(0);
+      else if (state === 'handoff') startBuild(1);
+      else if (state === 'result') state = 'menu';
+    } else if (k === 'escape') location.href = '../../index.html';
+  });
+
+  // ---- physics ----
+  function step(w, h) {
+    // nodes (verlet)
+    for (const n of w.nodes) {
+      if (n.fixed) continue;
+      const vx = (n.x - n.px) * 0.998, vy = (n.y - n.py) * 0.998;
+      n.px = n.x; n.py = n.y; n.x += vx; n.y += vy + GRAV * h * h;
+    }
+    for (let it = 0; it < 22; it++) {
+      for (const s of w.beams) {
+        if (s.broken) continue;
+        const dx = s.b.x - s.a.x, dy = s.b.y - s.a.y, d = Math.hypot(dx, dy) || 1e-6;
+        const diff = (d - s.len) / d;
+        const fa = s.a.fixed ? 0 : (s.b.fixed ? 1 : .5), fb = s.b.fixed ? 0 : (s.a.fixed ? 1 : .5);
+        s.a.x += dx * diff * fa; s.a.y += dy * diff * fa;
+        s.b.x -= dx * diff * fb; s.b.y -= dy * diff * fb;
+      }
+    }
+    for (const s of w.beams) {
+      if (s.broken) continue;
+      const d = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y), strain = (d - s.len) / s.len;
+      s.stress = strain >= 0 ? strain / TENS : -strain / COMP;
+      if (s.stress >= 1) breakBeam(w, s);
+    }
+    // ball
+    const b = w.ball;
+    if (w.t < 1.5 || w.done) return;
+    b.vy += GRAV * h;
+    if (b.contact && b.vx < 130) b.vx += 520 * h;
+    b.x += b.vx * h; b.y += b.vy * h; b.contact = false;
+    for (let pass = 0; pass < 2; pass++) {
+      for (const rect of [{ xmax: CL, ymin: CY }, { xmin: CR, ymin: CY }]) {
+        const cx = rect.xmax !== undefined ? Math.min(b.x, rect.xmax) : Math.max(b.x, rect.xmin), cy = Math.max(b.y, rect.ymin);
+        const dx = b.x - cx, dy = b.y - cy, d = Math.hypot(dx, dy);
+        if (d < BALL_R && d > 1e-6 && b.y < CY + 60) {
+          const nx = dx / d, ny = dy / d; b.x += nx * (BALL_R - d); b.y += ny * (BALL_R - d);
+          const vn = b.vx * nx + b.vy * ny; if (vn < 0) { b.vx -= vn * nx; b.vy -= vn * ny; }
+          if (ny < -.3) b.contact = true;
+        }
+      }
+      for (const s of w.beams) {
+        if (s.broken) continue;
+        const dx = s.b.x - s.a.x, dy = s.b.y - s.a.y, l2 = dx * dx + dy * dy;
+        const t = Math.max(0, Math.min(1, ((b.x - s.a.x) * dx + (b.y - s.a.y) * dy) / l2));
+        const cx = s.a.x + dx * t, cy = s.a.y + dy * t, ex = b.x - cx, ey = b.y - cy, d = Math.hypot(ex, ey), minD = BALL_R + 3;
+        if (d < minD && d > 1e-6) {
+          const nx = ex / d, ny = ey / d, ov = minD - d;
+          b.x += nx * ov * .3; b.y += ny * ov * .3;
+          const ns = ov * .7;
+          if (!s.a.fixed) { s.a.x -= nx * ns * (1 - t); s.a.y -= ny * ns * (1 - t); }
+          if (!s.b.fixed) { s.b.x -= nx * ns * t; s.b.y -= ny * ns * t; }
+          const vn = b.vx * nx + b.vy * ny; if (vn < 0) { b.vx -= vn * nx; b.vy -= vn * ny; }
+          if (ny < -.3) b.contact = true;
+        }
+      }
+    }
+    b.ang += b.vx * h / BALL_R;
+    if (b.x > w.maxX) w.maxX = b.x;
+    if (b.x > 830) { w.done = true; w.outcome = 'cross'; w.tCross = w.t - 1.5; w.endT = w.t; if (AC()) AC().coin(); }
+    else if (b.y > 575) { w.done = true; w.outcome = 'fall'; w.endT = w.t; if (AC()) AC().explosion(); }
+    else if (w.t > 40) { w.done = true; w.outcome = 'stuck'; w.endT = w.t; }
+  }
+  function breakBeam(w, s) {
+    s.broken = true; w.cracks++;
+    const mx = (s.a.x + s.b.x) / 2, my = (s.a.y + s.b.y) / 2, ang = Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x);
+    for (let i = 0; i < 2; i++) w.frags.push({ x: mx + (i ? 1 : -1) * Math.cos(ang) * s.len / 4, y: my + (i ? 1 : -1) * Math.sin(ang) * s.len / 4,
+      vx: (Math.random() - .5) * 140, vy: -Math.random() * 120, a: ang, va: (Math.random() - .5) * 10, l: s.len / 2, life: 3 });
+    for (let i = 0; i < 4; i++) w.frags.push({ x: mx, y: my, vx: (Math.random() - .5) * 220, vy: -Math.random() * 160, a: Math.random() * 6, va: (Math.random() - .5) * 14, l: 6 + Math.random() * 8, life: 2 });
+    if (AC()) AC().playTone(160 + Math.random() * 200, .06, 'sawtooth', .12);
+  }
+
+  // ---- loop ----
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    if (state === 'build') { buildT -= dt; if (buildT <= 0) finishBuild(); }
+    else if (state === 'test') {
+      acc += dt; const h = 1 / 180; let n = 0;
+      while (acc >= h && n++ < 10) { acc -= h; for (const w of worlds) { if (!w.done || w.t - w.endT < 1.2) { w.t += h; step(w, h); } } }
+      for (const w of worlds) for (const f of w.frags) { f.vy += GRAV * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.a += f.va * dt; f.life -= dt; }
+      for (const w of worlds) w.frags = w.frags.filter(f => f.life > 0);
+      testT += dt;
+      if (worlds.every(w => w.done && w.t - w.endT >= 1.2)) finishTest();
+    }
+    draw();
+    requestAnimationFrame(frame);
+  }
+  function finishTest() {
+    const [a, b] = worlds;
+    const rank = w => w.outcome === 'cross' ? 100000 - w.tCross * 100 : w.maxX;
+    let win = -1;
+    const ra = rank(a), rb = rank(b);
+    if (Math.abs(ra - rb) > .5) win = ra > rb ? 0 : 1;
+    else if (Math.abs(a.used - b.used) > .01) win = a.used < b.used ? 0 : 1;
+    resultInfo = { win };
+    state = 'result';
+    const best1 = Math.max(...worlds.map(w => w.outcome === 'cross' ? 1000 + Math.round((BUDGET - w.used) * 10) : Math.round(w.maxX - 110)));
+    if (best1 > best) { best = best1; if (AC()) AC().saveScore(GAME_KEY, best1); }
+    if (AC()) AC().gameOver();
+  }
+
+  // ---- drawing ----
+  function text(s, x, y, size, col, align = 'center', weight = 800) {
+    ctx.font = `${weight} ${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.fillStyle = col; ctx.fillText(s, x, y);
+  }
+  function stressCol(v) {
+    v = Math.max(0, Math.min(1, v));
+    if (v < .5) return mix([74, 222, 128], [250, 204, 21], v / .5);
+    return mix([250, 204, 21], [239, 68, 68], (v - .5) / .5);
+  }
+  function mix(a, b, t) { return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`; }
+
+  function drawWorld(w, v, testing, i) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, v.oy - (testing ? 0 : 0), W, v.h); ctx.clip();
+    ctx.translate(v.ox, v.oy); ctx.scale(v.s, v.s);
+    // sky
+    const g = ctx.createLinearGradient(0, 0, 0, WH); g.addColorStop(0, '#1e3a5f'); g.addColorStop(1, '#0b1626');
+    ctx.fillStyle = g; ctx.fillRect(-v.ox / v.s, 0, W / v.s, WH);
+    // water
+    ctx.fillStyle = '#0e4b7a'; ctx.fillRect(-v.ox / v.s, 545, W / v.s, 100);
+    ctx.fillStyle = 'rgba(255,255,255,.12)'; for (let x = CL; x < CR; x += 40) ctx.fillRect(x + (testT * 20 % 40), 552, 22, 3);
+    // cliffs
+    ctx.fillStyle = '#5b4636'; ctx.fillRect(-v.ox / v.s, CY, CL + v.ox / v.s, WH - CY);
+    ctx.fillRect(CR, CY, 600, WH - CY);
+    ctx.fillStyle = '#4ade80'; ctx.fillRect(-v.ox / v.s, CY - 8, CL + v.ox / v.s, 10); ctx.fillRect(CR, CY - 8, 600, 10);
+    text('START', 110, CY + 36, 18, '#fde68a'); text('🍝 ZIEL', 860, CY + 36, 18, '#fde68a');
+    // build-grid
+    if (!testing) {
+      ctx.fillStyle = 'rgba(255,255,255,.1)';
+      for (let x = CL; x <= CR; x += GRID) for (let y = 200; y <= 550; y += GRID) ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+    }
+    // beams
+    ctx.lineCap = 'round';
+    for (const s of w.beams) {
+      if (s.broken) continue;
+      ctx.strokeStyle = testing ? stressCol(s.stress) : '#e9cf86'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(s.a.x, s.a.y); ctx.lineTo(s.b.x, s.b.y); ctx.stroke();
+      if (!testing) { ctx.strokeStyle = 'rgba(120,80,20,.5)'; ctx.lineWidth = 1.2; ctx.stroke(); }
+    }
+    for (const f of w.frags) {
+      ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.a); ctx.strokeStyle = '#e9cf86'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(-f.l / 2, 0); ctx.lineTo(f.l / 2, 0); ctx.stroke(); ctx.restore();
+    }
+    // nodes (marshmallows)
+    for (const n of w.nodes) {
+      if (n.deg === 0 && !n.fixed) continue;
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.fixed ? 7 : 8, 0, 6.3);
+      ctx.fillStyle = n.fixed ? '#94a3b8' : '#fbcfe8'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = n.fixed ? '#334155' : '#be185d'; ctx.stroke();
+    }
+    // build preview
+    if (!testing && drag) {
+      const q = snap(mouse), len = Math.hypot(drag.from.x - q.x, drag.from.y - q.y);
+      const ok = validPoint(q.x, q.y) && len > 1 && len <= MAXLEN + 1 && w.used + len / GRID <= BUDGET + 1e-6;
+      ctx.setLineDash([8, 6]); ctx.strokeStyle = ok ? '#4ade80' : '#ef4444'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(drag.from.x, drag.from.y); ctx.lineTo(q.x, q.y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, 6.3); ctx.fillStyle = ok ? 'rgba(74,222,128,.5)' : 'rgba(239,68,68,.5)'; ctx.fill();
+    }
+    // hamster ball
+    if (testing && w.ball) {
+      const b = w.ball;
+      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.ang);
+      ctx.beginPath(); ctx.arc(0, 0, BALL_R, 0, 6.3); ctx.fillStyle = 'rgba(186,230,253,.28)'; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(224,242,254,.9)'; ctx.stroke();
+      ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🐹', 0, 2); ctx.textBaseline = 'alphabetic';
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function draw() {
+    ctx.fillStyle = '#0f1b2d'; ctx.fillRect(0, 0, W, H);
+    if (state === 'menu') {
+      text('🍝 Spaghetti-Brücken-Duell', W / 2, H * .22, Math.min(46, W / 14), '#f1f5f9');
+      text('Statik-Crash · 2 Spieler an einem Gerät', W / 2, H * .22 + 34, 17, '#fdba74', 'center', 600);
+      [
+        'Jeder baut nacheinander in 45 Sekunden eine Brücke aus Nudeln und Marshmallows.',
+        'Ziehe mit der Maus von einem Marshmallow zu einem Rasterpunkt, um eine Nudel zu legen.',
+        'Rechtsklick auf Nudel: löschen · Z: Rückgängig · Budget: 45 Nudel-Einheiten.',
+        'Danach rollt ein dicker Hamster im Ball gleichzeitig über beide Brücken.',
+        'Grün = stabil · Gelb = hohe Last · Rot = bricht gleich!',
+      ].forEach((l, i) => text(l, W / 2, H * .4 + i * 28, Math.min(17, W / 26), '#cbd5e1', 'center', 600));
+      text('▶ Leertaste / Tippen zum Starten', W / 2, H * .8, 24, '#fde047');
+      if (best) text(`Bester Score: ${best}`, W / 2, H * .8 + 34, 15, '#94a3b8', 'center', 600);
+      return;
+    }
+    if (state === 'handoff') {
+      text(`${PNAME[0]} ist fertig!`, W / 2, H * .38, 36, PCOL[0]);
+      text(`${PNAME[1]}, du bist dran – ${PNAME[0]}s Brücke bleibt geheim.`, W / 2, H * .38 + 44, 20, '#e2e8f0', 'center', 600);
+      text('Leertaste / Tippen: Bauen starten', W / 2, H * .6, 22, '#fde047');
+      return;
+    }
+    if (state === 'build') {
+      const w = worlds[cur], v = view(0);
+      drawWorld(w, v, false);
+      text(`${PNAME[cur]} baut`, W / 2, 28, 22, PCOL[cur]);
+      text(`⏱ ${Math.ceil(buildT)} s`, W / 2 + 130, 28, 20, buildT < 10 ? '#ef4444' : '#f1f5f9', 'left');
+      const left = Math.max(0, BUDGET - w.used);
+      text(`🍝 ${left.toFixed(1)} / ${BUDGET}`, W - 16, 28, 20, left < 5 ? '#ef4444' : '#fde68a', 'right');
+      text(`Max. Länge: ${MAXLEN / GRID * 1} Einheiten`, W - 16, 50, 13, '#94a3b8', 'right', 600);
+      return;
+    }
+    // test / result
+    for (let i = 0; i < 2; i++) {
+      const v = view(i);
+      drawWorld(worlds[i], v, true, i);
+      ctx.save(); ctx.fillStyle = 'rgba(15,23,42,.8)'; ctx.fillRect(10, v.oy + 8, 190, 30); ctx.restore();
+      text(`${PNAME[i]} · ${worlds[i].used.toFixed(1)} 🍝`, 18, v.oy + 29, 16, PCOL[i], 'left');
+      const w = worlds[i];
+      const msg = !w.done ? (w.t < 1.5 ? 'Bereit…' : '') : w.outcome === 'cross' ? `✅ Geschafft in ${w.tCross.toFixed(1)} s` : w.outcome === 'fall' ? '💦 Platsch!' : '⏳ Steckt fest';
+      if (msg) text(msg, W / 2, v.oy + v.h / 2 - 60, 30, w.outcome === 'cross' ? '#4ade80' : '#f87171');
+      ctx.fillStyle = PCOL[i]; ctx.fillRect(0, v.oy, W, 2);
+    }
+    if (state === 'result') {
+      ctx.fillStyle = 'rgba(8,12,24,.72)'; ctx.fillRect(0, H * .3, W, H * .34);
+      const w = resultInfo.win;
+      text(w < 0 ? '🤝 Unentschieden!' : `🏆 ${PNAME[w]} gewinnt!`, W / 2, H * .42, Math.min(46, W / 12), w < 0 ? '#fde047' : PCOL[w]);
+      if (w >= 0) {
+        const L = worlds[1 - w];
+        text(`${PNAME[1 - w]}s Brücke ${L.outcome === 'cross' ? 'war langsamer' : L.outcome === 'fall' ? 'ist eingestürzt' : 'hat nicht gereicht'}…`, W / 2, H * .42 + 36, 19, '#cbd5e1', 'center', 600);
+      }
+      text('Leertaste: Hauptmenü', W / 2, H * .58, 20, '#fde047');
+    }
+  }
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

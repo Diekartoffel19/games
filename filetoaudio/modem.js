@@ -414,19 +414,35 @@
   /* =========================================================================
    * 4. CHIRP PREAMBLE (LINEAR FREQUENCY MODULATION)
    * ========================================================================= */
-  function generateChirp(sr, durMs, f0, f1) {
+  function generateChirpPair(sr, durMs, f0, f1) {
     const N = Math.round(sr * (durMs / 1000));
-    const samples = new Float32Array(N);
+    const sin = new Float32Array(N);
+    const cos = new Float32Array(N);
     const taper = Math.max(1, Math.round(N * 0.08));
+    let te = 0;
     for (let n = 0; n < N; n++) {
       const t = n / sr;
       const f = f0 + (f1 - f0) * (n / (2 * N));
       let s = Math.sin(2 * Math.PI * f * t);
-      if (n < taper) s *= 0.5 * (1 - Math.cos((Math.PI * n) / taper));
-      else if (n >= N - taper) s *= 0.5 * (1 - Math.cos((Math.PI * (N - 1 - n)) / taper));
-      samples[n] = s;
+      let c = Math.cos(2 * Math.PI * f * t);
+      if (n < taper) {
+        const w = 0.5 * (1 - Math.cos((Math.PI * n) / taper));
+        s *= w;
+        c *= w;
+      } else if (n >= N - taper) {
+        const w = 0.5 * (1 - Math.cos((Math.PI * (N - 1 - n)) / taper));
+        s *= w;
+        c *= w;
+      }
+      sin[n] = s;
+      cos[n] = c;
+      if (n % 2 === 0) te += 0.5 * (s * s + c * c);
     }
-    return samples;
+    return { sin, cos, te, length: N };
+  }
+
+  function generateChirp(sr, durMs, f0, f1) {
+    return generateChirpPair(sr, durMs, f0, f1).sin;
   }
 
   const CHIRP_CFG = {
@@ -750,24 +766,18 @@
       this.k = 0;
       this.payloadLen = 0;
       this.lines = new Map();
-      this.failed = new Set();
+      this.candidates = new Map();
       this.trackedP = -1;
       this.initialP = -1;
       this.snrDb = 0;
       this.instanceStats = [];
 
-      // Matched filter chirp templates
+      // Quadrature matched filter templates (immune to acoustic phase shifts)
       this.chirpMs = 60;
-      this.audibleUp = generateChirp(this.sr, this.chirpMs, CHIRP_CFG.audible.low, CHIRP_CFG.audible.high);
-      this.audibleDown = generateChirp(this.sr, this.chirpMs, CHIRP_CFG.audible.high, CHIRP_CFG.audible.low);
-      this.ultraUp = generateChirp(this.sr, this.chirpMs, CHIRP_CFG.ultrasound.low, CHIRP_CFG.ultrasound.high);
-      this.ultraDown = generateChirp(this.sr, this.chirpMs, CHIRP_CFG.ultrasound.high, CHIRP_CFG.ultrasound.low);
-
-      for (const t of [this.audibleUp, this.audibleDown, this.ultraUp, this.ultraDown]) {
-        let te = 0;
-        for (let n = 0; n < t.length; n += 2) te += t[n] * t[n];
-        t.te = te;
-      }
+      this.audibleUp = generateChirpPair(this.sr, this.chirpMs, CHIRP_CFG.audible.low, CHIRP_CFG.audible.high);
+      this.audibleDown = generateChirpPair(this.sr, this.chirpMs, CHIRP_CFG.audible.high, CHIRP_CFG.audible.low);
+      this.ultraUp = generateChirpPair(this.sr, this.chirpMs, CHIRP_CFG.ultrasound.low, CHIRP_CFG.ultrasound.high);
+      this.ultraDown = generateChirpPair(this.sr, this.chirpMs, CHIRP_CFG.ultrasound.high, CHIRP_CFG.ultrasound.low);
 
       this.basisCache = new Map();
       this.getBasis(AUDIBLE_HEADER_BASIS);
@@ -824,23 +834,29 @@
       this.len += chunk.length;
     }
 
+    // Quadrature (I & Q) Matched Filter correlation: phase invariant (0..360 deg)
     correlateChirp(p, template) {
-      const N = template.length;
+      const N = template.length || template.sin.length;
       if (p < 0 || p + N > this.len) return 0;
       const x = this.buf;
-      let c = 0, e = 0;
+      const tSin = template.sin;
+      const tCos = template.cos;
+      let cS = 0, cC = 0, e = 0;
       for (let n = 0; n < N; n += 2) {
         const s = x[p + n];
-        c += s * template[n];
+        cS += s * tSin[n];
+        cC += s * tCos[n];
         e += s * s;
       }
       if (e < 1e-9) return 0;
-      return (c * c) / (e * template.te + 1e-9);
+      return (cS * cS + cC * cC) / (e * template.te + 1e-9);
     }
 
     demodSym(sampleOffset, cfg, outNibbles, outEnergies) {
       const bObj = this.getBasis(cfg);
-      const base = sampleOffset + bObj.guardN;
+      // Center the active DFT integration window within the symbol duration
+      // leaving equal guard margin on both sides to eliminate inter-symbol interference and echo!
+      const base = sampleOffset + Math.round(bObj.guardN * 0.5);
       const N = bObj.actN;
       if (base < 0 || base + N > this.len) return false;
       const x = this.buf;
@@ -896,19 +912,19 @@
     findPreamble() {
       const chirpN = this.audibleUp.length;
       const gapN = this.ms(15);
-      const limit = this.len - (chirpN * 2 + gapN * 2) - this.ms(260);
-      const coarseStep = 2;
+      const limit = this.len - (chirpN * 2 + gapN * 2) - this.ms(200);
+      const coarseStep = 6;
 
       while (this.scanPos <= limit) {
         const rAudible = this.correlateChirp(this.scanPos, this.audibleUp);
-        if (rAudible > 0.22) {
+        if (rAudible > 0.16) {
           if (this.checkChirpPair(this.scanPos, this.audibleUp, this.audibleDown, false)) {
             return;
           }
         }
 
         const rUltra = this.correlateChirp(this.scanPos, this.ultraUp);
-        if (rUltra > 0.20) {
+        if (rUltra > 0.15) {
           if (this.checkChirpPair(this.scanPos, this.ultraUp, this.ultraDown, true)) {
             return;
           }
@@ -921,22 +937,26 @@
     checkChirpPair(peakP, upTemplate, downTemplate, isUltra) {
       const chirpN = upTemplate.length;
       const gapN = this.ms(15);
-      const coarseStep = 4;
 
+      // Search a local window around peakP to lock onto the exact maximum
       let bestUpP = peakP, bestUpR = 0;
-      for (let p = Math.max(0, peakP - coarseStep); p <= peakP + coarseStep; p++) {
+      const searchRadius = 24;
+      for (let p = Math.max(0, peakP - searchRadius); p <= Math.min(this.len - chirpN, peakP + searchRadius); p++) {
         const r = this.correlateChirp(p, upTemplate);
         if (r > bestUpR) { bestUpR = r; bestUpP = p; }
       }
 
+      if (bestUpR < 0.18) return false;
+
       const expDownP = bestUpP + chirpN + gapN;
       let bestDownP = expDownP, bestDownR = 0;
-      for (let p = expDownP - this.ms(3); p <= expDownP + this.ms(3); p++) {
+      const downSearchRadius = Math.max(16, this.ms(4));
+      for (let p = Math.max(0, expDownP - downSearchRadius); p <= Math.min(this.len - chirpN, expDownP + downSearchRadius); p++) {
         const r = this.correlateChirp(p, downTemplate);
         if (r > bestDownR) { bestDownR = r; bestDownP = p; }
       }
 
-      if (bestDownR > 0.18) {
+      if (bestDownR > 0.14) {
         const avgR = 0.5 * (bestUpR + bestDownR);
         this.snrDb = Math.round(10 * Math.log10(Math.max(0.01, avgR) / Math.max(0.01, 1 - avgR)) * 10) / 10;
         const frameStartP = bestDownP + chirpN + gapN;
@@ -952,14 +972,19 @@
       const hBasis = isUltra ? ULTRASOUND_HEADER_BASIS : AUDIBLE_HEADER_BASIS;
       const bObj = this.getBasis(hBasis);
       const symN = bObj.symN;
-      const bytesPerSym = hBasis.groups / 2;
+      const bytesPerSym = hBasis.groups / 2; 
       const numHSyms = 12 / bytesPerSym;
 
       const nibbles = new Array(hBasis.groups);
       const symBytes = new Uint8Array(bytesPerSym);
       const headBytes = new Uint8Array(12);
 
-      const offsets = [0, -1, 1, -2, 2, -3, 3].map(this.ms);
+      // Search fine offsets around startP (sample-level precision)
+      const offsets = [
+        0, -2, 2, -4, 4, -6, 6, -8, 8, -12, 12, -16, 16, -20, 20, -28, 28, -36, 36, -48, 48,
+        -this.ms(2), this.ms(2), -this.ms(3), this.ms(3)
+      ];
+
       for (const off of offsets) {
         const p0 = startP + off;
         let ok = true;
@@ -1020,16 +1045,14 @@
       const headNibs = new Uint8Array(geom.headSyms * instances);
       const linePayload = new Uint8Array(lineBytesCount);
 
-      const timingOffsets = [0, -1, 1, -2, 2, -3, 3].map(this.ms);
+      const timingOffsets = [0, -2, 2, -4, 4, -6, 6, -8, 8, -12, 12, -16, 16, -20, 20, -28, 28, -36, 36];
 
       for (let idx = 0; idx < this.total; idx++) {
         if (this.lines.has(idx)) continue;
-        if (!force && this.failed.has(idx)) continue;
         const expP = this.trackedP + idx * lineSamples;
-        if (expP + lineSamples + this.ms(3) > this.len) {
+        if (expP + lineSamples + this.ms(2) > this.len) {
           if (!force) break;
         }
-        this.failed.add(idx);
 
         for (const off of timingOffsets) {
           const p = expP + off;
@@ -1055,9 +1078,10 @@
 
           if (lineIdx !== idx) continue;
 
-          // 2. Demodulate 8 Data Symbols across all N Robot 36 instances in parallel
+          // 2. Demodulate Data Symbols across all N instances in parallel
           linePayload.fill(0);
           const instConf = new Float32Array(instances);
+          let totalEnergy = 0;
           for (let ds = 0; ds < geom.dataSyms; ds++) {
             if (!this.demodSym(p + (geom.headSyms + ds) * symN, mode, nibbles, energies)) {
               ok = false;
@@ -1074,12 +1098,25 @@
                 linePayload[byteIdx] = (nib << 4);
               }
               instConf[g] += energies[g];
+              totalEnergy += energies[g];
             }
           }
 
-          if (ok && lineCrc16(lineIdx, this.total, this.k, mode.id, instances, linePayload) === expCrc) {
+          if (!ok) continue;
+
+          const isCrcValid = (lineCrc16(lineIdx, this.total, this.k, mode.id, instances, linePayload) === expCrc);
+
+          // Save candidate in case CRC failed but lineIdx matched
+          if (!this.candidates.has(lineIdx) || isCrcValid) {
+            this.candidates.set(lineIdx, {
+              payload: linePayload.slice(0),
+              crcOk: isCrcValid,
+              conf: totalEnergy
+            });
+          }
+
+          if (isCrcValid) {
             this.lines.set(lineIdx, linePayload.slice(0));
-            this.failed.delete(lineIdx);
             this.trackedP += Math.round(off * 0.25); // DPLL tracking update
 
             for (let g = 0; g < instances; g++) {
@@ -1113,70 +1150,84 @@
       const lineBytesCount = getLineDataBytes(this.mode);
       const nB = Math.floor((total * lineBytesCount) / S);
 
-      const coded = new Uint8Array(total * lineBytesCount);
-      for (const [idx, buf] of this.lines) {
-        coded.set(buf, idx * lineBytesCount);
-      }
-      whiten(coded);
-
-      const msg = new Uint8Array(nB * k);
-      let fixed = 0, failed = 0;
-
-      for (let b = 0; b < nB; b++) {
-        const blk = new Uint8Array(S);
-        const erasePos = [];
-        for (let pos = 0; pos < S; pos++) {
-          const streamIdx = pos * nB + b;
-          blk[pos] = coded[streamIdx];
-          const lineIdx = Math.floor(streamIdx / lineBytesCount);
-          if (!this.lines.has(lineIdx)) erasePos.push(pos);
+      const tryDecodeMsg = (useCandidatesAsData) => {
+        const coded = new Uint8Array(total * lineBytesCount);
+        for (let i = 0; i < total; i++) {
+          if (this.lines.has(i)) {
+            coded.set(this.lines.get(i), i * lineBytesCount);
+          } else if (useCandidatesAsData && this.candidates.has(i)) {
+            coded.set(this.candidates.get(i).payload, i * lineBytesCount);
+          }
         }
-        try {
-          const res = rsDecode(blk, parity, erasePos);
-          msg.set(res.data, b * k);
-          fixed += res.fixed;
-        } catch (e) {
-          failed++;
+        whiten(coded);
+
+        const msg = new Uint8Array(nB * k);
+        let fixed = 0, failed = 0;
+
+        for (let b = 0; b < nB; b++) {
+          const blk = new Uint8Array(S);
+          const erasePos = [];
+          for (let pos = 0; pos < S; pos++) {
+            const streamIdx = pos * nB + b;
+            blk[pos] = coded[streamIdx];
+            const lineIdx = Math.floor(streamIdx / lineBytesCount);
+            const hasData = this.lines.has(lineIdx) || (useCandidatesAsData && this.candidates.has(lineIdx));
+            if (!hasData) erasePos.push(pos);
+          }
+
+          try {
+            const res = rsDecode(blk, parity, erasePos);
+            msg.set(res.data, b * k);
+            fixed += res.fixed;
+          } catch (e) {
+            failed++;
+          }
         }
-      }
 
-      const got = this.lines.size;
-      if (failed > 0) {
-        throw new Error(`Signal zu stark beschädigt: ${failed} von ${nB} Blöcken nicht wiederherstellbar (${got}/${total} Pakete empfangen).`);
-      }
+        if (failed > 0) return null;
 
-      const bodyLen = rd32(msg, 0);
-      if (bodyLen < 7 || bodyLen > msg.length - 4) {
-        throw new Error('Beschädigter Header im Datenstrom.');
-      }
-      const body = msg.subarray(4, 4 + bodyLen);
-      if (body[0] !== 0x46 || (body[1] !== 0x41 && body[1] !== 0x5A)) {
-        throw new Error('Ungültiges Datenformat (Magic Mismatch).');
-      }
+        const bodyLen = rd32(msg, 0);
+        if (bodyLen < 7 || bodyLen > msg.length - 4) return null;
+        const body = msg.subarray(4, 4 + bodyLen);
+        if (body[0] !== 0x46 || (body[1] !== 0x41 && body[1] !== 0x5A)) return null;
 
-      const nameLen = body[2];
-      const name = new TextDecoder().decode(body.subarray(3, 3 + nameLen));
-      const data = body.slice(3 + nameLen, body.length - 4);
-      const expectedCrc = rd32(body, body.length - 4);
+        const nameLen = body[2];
+        const name = new TextDecoder().decode(body.subarray(3, 3 + nameLen));
+        const data = body.slice(3 + nameLen, body.length - 4);
+        const expectedCrc = rd32(body, body.length - 4);
 
-      if (crc32(data) !== expectedCrc) {
-        throw new Error('CRC32-Prüfsummenfehler: Datei beschädigt.');
-      }
+        if (crc32(data) !== expectedCrc) return null;
 
-      return {
-        name,
-        data,
-        compressed: body[1] === 0x5A,
-        fixedBytes: fixed,
-        linesGot: got,
-        linesTotal: total,
-        blocks: nB,
-        mode: this.mode.name,
-        modeLabel: this.mode.label,
-        instances: this.instances,
-        snrDb: this.snrDb,
-        instanceStats: this.instanceStats,
+        return {
+          name,
+          data,
+          compressed: body[1] === 0x5A,
+          fixedBytes: fixed,
+          linesGot: this.lines.size,
+          linesTotal: total,
+          blocks: nB,
+          mode: this.mode.name,
+          modeLabel: this.mode.label,
+          instances: this.instances,
+          snrDb: this.snrDb,
+          instanceStats: this.instanceStats,
+        };
       };
+
+      // Pass 1: Try decoding with candidate data + Reed-Solomon error repair
+      let result = tryDecodeMsg(true);
+      // Pass 2: If Pass 1 failed, fall back to pure erasure decoding
+      if (!result) {
+        result = tryDecodeMsg(false);
+      }
+
+      if (!result) {
+        const got = this.lines.size;
+        const cands = this.candidates.size;
+        throw new Error(`Signal unvollständig: ${got}/${total} fehlerfreie Scanlines (${cands} Teilsignale). Bitte Lautstärke anpassen oder näher ans Mikrofon halten.`);
+      }
+
+      return result;
     }
   }
 

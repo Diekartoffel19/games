@@ -1,0 +1,2691 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>HEXFRONT: Tactical Warfare — Strategie Kriegsspiel</title>
+<meta name="description" content="Kommandiere Panzerdivisionen, Artillerie, Kampfjets und Schlachtschiffe auf taktischen Hex-Karten. Erobere Städte, erforsche Technologien und besiege die feindliche Armee!">
+<meta name="keywords" content="strategie kriegsspiel, hex strategy game, panzer spiel, browsergame, rundenstrategie, advance wars browser">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#0b111e">
+
+<link rel="stylesheet" href="../../style.css">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script src="../../src/arcade-core.js"></script>
+
+<style>
+  :root {
+    --bg-dark: #090d16;
+    --panel-bg: rgba(15, 23, 42, 0.94);
+    --panel-border: rgba(148, 163, 184, 0.22);
+    --blue-team: #3b82f6;
+    --blue-glow: rgba(59, 130, 246, 0.45);
+    --red-team: #ef4444;
+    --red-glow: rgba(239, 68, 68, 0.45);
+    --gold: #f59e0b;
+    --steel: #94a3b8;
+    --green: #10b981;
+    --purple: #8b5cf6;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+  }
+
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-dark);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Top Command Bar */
+  .top-hud {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    background: linear-gradient(180deg, #0f172a 0%, #0b1120 100%);
+    border-bottom: 1px solid var(--panel-border);
+    z-index: 20;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .hud-left, .hud-center, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .nav-btn {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: var(--text-main);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+  }
+
+  .nav-btn:hover {
+    background: rgba(51, 65, 85, 0.95);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    padding: 5px 11px;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    font-weight: 700;
+  }
+
+  .stat-pill.gold { border-color: rgba(245, 158, 11, 0.45); color: #fbbf24; }
+  .stat-pill.income { border-color: rgba(16, 185, 129, 0.4); color: #34d399; }
+  .stat-pill.turn { border-color: rgba(59, 130, 246, 0.45); color: #93c5fd; }
+  .stat-pill.power { border-color: rgba(139, 92, 246, 0.5); color: #c4b5fd; }
+
+  .end-turn-btn {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    border: 1px solid #60a5fa;
+    color: #fff;
+    padding: 7px 16px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 0 14px rgba(37, 99, 235, 0.45);
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .end-turn-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    transform: scale(1.03);
+  }
+
+  .end-turn-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .cmd-power-btn {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    border: 1px solid #a78bfa;
+    color: #fff;
+    padding: 7px 13px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cmd-power-btn.ready {
+    animation: pulsePower 1.6s infinite;
+  }
+
+  .cmd-power-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #1e293b;
+    border-color: #475569;
+  }
+
+  @keyframes pulsePower {
+    0%, 100% { box-shadow: 0 0 8px rgba(139, 92, 246, 0.5); }
+    50% { box-shadow: 0 0 20px rgba(167, 139, 250, 0.95); }
+  }
+
+  /* Main Viewport */
+  .viewport {
+    position: relative;
+    flex: 1;
+    width: 100%;
+    overflow: hidden;
+    background: radial-gradient(circle at center, #0f172a 0%, #060911 100%);
+  }
+
+  #battleCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+  }
+
+  #battleCanvas:active {
+    cursor: grabbing;
+  }
+
+  /* Floating Tactical Panels */
+  .side-panel {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    min-width: 260px;
+    max-width: 340px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+    z-index: 15;
+    pointer-events: auto;
+  }
+
+  .panel-title {
+    font-size: 0.92rem;
+    font-weight: 800;
+    margin: 0 0 6px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #fff;
+  }
+
+  .panel-sub {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    line-height: 1.35;
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    font-size: 0.78rem;
+  }
+
+  .stat-box {
+    background: rgba(30, 41, 59, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 6px;
+    padding: 5px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .stat-box span:last-child {
+    font-weight: 800;
+    color: #e2e8f0;
+  }
+
+  /* Action / Unit Context Buttons */
+  .unit-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .action-btn {
+    flex: 1;
+    background: #1e293b;
+    border: 1px solid #3b82f6;
+    color: #eff6ff;
+    padding: 7px 10px;
+    border-radius: 7px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    background: #2563eb;
+  }
+
+  .action-btn.capture {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.18);
+  }
+  .action-btn.capture:hover:not(:disabled) {
+    background: #059669;
+  }
+
+  .action-btn.repair {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.16);
+  }
+  .action-btn.repair:hover:not(:disabled) {
+    background: #d97706;
+  }
+
+  /* Right Controls (Zoom, Fog, Tech, Help) */
+  .map-controls {
+    position: absolute;
+    bottom: 14px;
+    right: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 15;
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    transition: all 0.15s;
+  }
+
+  .icon-btn:hover {
+    border-color: #60a5fa;
+    background: #1e293b;
+    transform: translateY(-1px);
+  }
+
+  /* Battle Forecast Banner */
+  .combat-preview {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid #ef4444;
+    border-radius: 10px;
+    padding: 8px 16px;
+    display: none;
+    align-items: center;
+    gap: 14px;
+    z-index: 18;
+    box-shadow: 0 6px 24px rgba(239, 68, 68, 0.35);
+    pointer-events: none;
+  }
+
+  .combat-preview.visible {
+    display: flex;
+  }
+
+  .forecast-side {
+    text-align: center;
+    font-size: 0.82rem;
+  }
+
+  .forecast-dmg {
+    font-size: 1.1rem;
+    font-weight: 900;
+  }
+
+  /* Modals (Factory Shop, Tech Tree, Mission Select, Victory) */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(3, 7, 18, 0.78);
+    backdrop-filter: blur(5px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 16px;
+  }
+
+  .modal-backdrop.open {
+    display: flex;
+  }
+
+  .modal-card {
+    background: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 780px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    padding-bottom: 10px;
+  }
+
+  .modal-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .close-btn {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: #cbd5e1;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  .shop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+
+  .shop-item {
+    background: #1e293b;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+    transition: all 0.15s;
+  }
+
+  .shop-item:hover:not(.disabled) {
+    border-color: #60a5fa;
+    transform: translateY(-2px);
+    background: #243247;
+  }
+
+  .shop-item.disabled {
+    opacity: 0.5;
+  }
+
+  .shop-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .shop-icon {
+    font-size: 1.65rem;
+  }
+
+  .shop-cost {
+    background: rgba(245, 158, 11, 0.18);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #fbbf24;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+
+  .shop-name {
+    font-weight: 800;
+    font-size: 0.95rem;
+    margin: 2px 0;
+  }
+
+  .shop-desc {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    line-height: 1.3;
+  }
+
+  .shop-stats {
+    display: flex;
+    gap: 6px;
+    font-size: 0.73rem;
+    color: #cbd5e1;
+    flex-wrap: wrap;
+  }
+
+  .shop-stats span {
+    background: rgba(15, 23, 42, 0.65);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .buy-btn {
+    background: #2563eb;
+    border: none;
+    color: #fff;
+    padding: 8px;
+    border-radius: 7px;
+    font-weight: 800;
+    font-size: 0.82rem;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .buy-btn:disabled {
+    background: #334155;
+    color: #64748b;
+    cursor: not-allowed;
+  }
+
+  /* Commander & Mission Cards */
+  .cmd-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .select-card {
+    background: #1e293b;
+    border: 2px solid rgba(148, 163, 184, 0.2);
+    border-radius: 12px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .select-card:hover {
+    border-color: rgba(96, 165, 250, 0.6);
+  }
+
+  .select-card.selected {
+    border-color: #3b82f6;
+    background: rgba(37, 99, 235, 0.18);
+    box-shadow: 0 0 18px rgba(59, 130, 246, 0.3);
+  }
+
+  .select-card h3 {
+    margin: 0 0 4px 0;
+    font-size: 0.96rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .select-card p {
+    margin: 0;
+    font-size: 0.77rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+  }
+
+  /* Toast Banner */
+  .toast-banner {
+    position: absolute;
+    top: 62px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid #60a5fa;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: #fff;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.25s ease;
+    z-index: 30;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+  }
+
+  .toast-banner.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* Power balance bar */
+  .balance-wrap {
+    width: 110px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .balance-blue {
+    height: 100%;
+    background: #3b82f6;
+    width: 50%;
+    transition: width 0.3s ease;
+  }
+
+  @media (max-width: 680px) {
+    .side-panel {
+      left: 8px;
+      right: 58px;
+      bottom: 8px;
+      max-width: none;
+      min-width: 0;
+      padding: 10px;
+    }
+    .top-hud {
+      padding: 6px 8px;
+      gap: 6px;
+    }
+    .stat-pill {
+      padding: 4px 8px;
+      font-size: 0.76rem;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top HUD -->
+<header class="top-hud">
+  <div class="hud-left">
+    <a href="../../index.html" class="nav-btn">⬅️ Arcade</a>
+    <button class="nav-btn" onclick="openSetupModal()">🗺️ Mission</button>
+    <button class="nav-btn" onclick="openTechModal()">🔬 Tech-Labor <span id="techBadge" style="color:#38bdf8;">(0/5)</span></button>
+  </div>
+
+  <div class="hud-center">
+    <div class="stat-pill turn" id="turnIndicator">🟦 TAG 1 — DEIN ZUG</div>
+    <div class="stat-pill gold" title="Kriegskasse (Gold)">💰 <span id="goldDisplay">300</span></div>
+    <div class="stat-pill income" title="Einkommen pro Runde">📈 +<span id="incomeDisplay">120</span>/Tag</div>
+    <div class="stat-pill" title="Kräfteverhältnis (Blau vs Rot)">
+      ⚔️
+      <div class="balance-wrap"><div class="balance-blue" id="balanceBar"></div></div>
+    </div>
+  </div>
+
+  <div class="hud-right">
+    <button class="cmd-power-btn" id="cmdPowerBtn" onclick="triggerCommanderPower()" disabled>
+      ⚡ <span id="cmdPowerLabel">Spezial (0%)</span>
+    </button>
+    <button class="end-turn-btn" id="endTurnBtn" onclick="endPlayerTurn()">
+      ⏭️ Zug beenden
+    </button>
+  </div>
+</header>
+
+<!-- Main Tactical Map Viewport -->
+<div class="viewport" id="viewport">
+  <canvas id="battleCanvas"></canvas>
+
+  <!-- Combat Forecast Overlay -->
+  <div class="combat-preview" id="combatPreview">
+    <div class="forecast-side">
+      <div id="fcAttackerName" style="color:#60a5fa;font-weight:700;">Panzer</div>
+      <div class="forecast-dmg" id="fcAttackerDmg" style="color:#4ade80;">~65%</div>
+      <div style="font-size:0.7rem;color:#94a3b8;">Schaden</div>
+    </div>
+    <div style="font-size:1.2rem;font-weight:900;color:#f87171;">⚡ VS ⚡</div>
+    <div class="forecast-side">
+      <div id="fcDefenderName" style="color:#f87171;font-weight:700;">Infanterie</div>
+      <div class="forecast-dmg" id="fcCounterDmg" style="color:#fbbf24;">~15%</div>
+      <div style="font-size:0.7rem;color:#94a3b8;">Gegenwehr</div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-banner" id="toastBanner">Tag 1 — Kommandant bereit!</div>
+
+  <!-- Left Context Info Panel -->
+  <div class="side-panel" id="infoPanel">
+    <div class="panel-title">
+      <span id="infoTitle">🛰️ Gefechtsfeld-Scanner</span>
+      <span id="infoCoords" style="font-size:0.75rem;color:#64748b;">[Hex]</span>
+    </div>
+    <div class="panel-sub" id="infoDesc">Wähle eine eigene Einheit (Blau) oder eine Fabrik auf dem Hex-Feld aus.</div>
+    <div class="stat-grid" id="infoStats"></div>
+    <div class="unit-actions" id="unitActions"></div>
+  </div>
+
+  <!-- Map Controls -->
+  <div class="map-controls">
+    <button class="icon-btn" title="Einheit mit Aktion suchen (Leertaste)" onclick="cycleActiveUnit()">🎯</button>
+    <button class="icon-btn" title="Nebel des Krieges an/aus" id="fogBtn" onclick="toggleFog()">🌫️</button>
+    <button class="icon-btn" title="Hineinzoomen (+)" onclick="zoomMap(1.18)">➕</button>
+    <button class="icon-btn" title="Herauszoomen (-)" onclick="zoomMap(0.85)">➖</button>
+    <button class="icon-btn" title="Karte zentrieren" onclick="centerMap()">🧭</button>
+  </div>
+</div>
+
+<!-- Factory Production Modal -->
+<div class="modal-backdrop" id="factoryModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2 id="factoryModalTitle">🏭 Waffenfabrik — Einheit rekrutieren</h2>
+      <button class="close-btn" onclick="closeModal('factoryModal')">✕</button>
+    </div>
+    <p style="margin:0 0 12px 0;font-size:0.84rem;color:#94a3b8;">
+      Verfügbares Gold: <strong style="color:#fbbf24;" id="shopGoldText">300</strong> 💰 — Neue Einheiten sind im nächsten Zug einsatzbereit.
+    </p>
+    <div class="shop-grid" id="shopGrid"></div>
+  </div>
+</div>
+
+<!-- Tech Lab Modal -->
+<div class="modal-backdrop" id="techModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>🔬 Militärisches Forschungs-Labor</h2>
+      <button class="close-btn" onclick="closeModal('techModal')">✕</button>
+    </div>
+    <p style="margin:0 0 12px 0;font-size:0.84rem;color:#94a3b8;">
+      Investiere Gold in dauerhafte Doktrin-Upgrades für deine gesamte Armee.
+    </p>
+    <div class="shop-grid" id="techGrid"></div>
+  </div>
+</div>
+
+<!-- Mission & Commander Setup Modal -->
+<div class="modal-backdrop" id="setupModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>🎖️ HEXFRONT: Operations-Zentrale</h2>
+      <button class="close-btn" onclick="closeModal('setupModal')">✕</button>
+    </div>
+
+    <h3 style="margin:0 0 8px 0;font-size:0.92rem;color:#93c5fd;">1. Wähle deinen Kommandanten</h3>
+    <div class="cmd-grid" id="commanderSelectGrid"></div>
+
+    <h3 style="margin:12px 0 8px 0;font-size:0.92rem;color:#93c5fd;">2. Wähle das Kriegsschauplatz-Szenario</h3>
+    <div class="cmd-grid" id="scenarioSelectGrid"></div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:0.84rem;font-weight:700;color:#cbd5e1;">KI-Stärke:</label>
+        <select id="aiDifficultySelect" style="background:#1e293b;color:#fff;border:1px solid #475569;padding:6px 10px;border-radius:6px;font-weight:700;">
+          <option value="normal">Veteran (Standard)</option>
+          <option value="hard">Feldmarschall (Aggressiv)</option>
+          <option value="easy">Rekrut (Einsteiger)</option>
+        </select>
+      </div>
+      <button class="end-turn-btn" onclick="startSelectedCampaign()" style="padding:10px 22px;font-size:0.95rem;">
+        🚀 Operation starten
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Victory / Defeat Modal -->
+<div class="modal-backdrop" id="gameOverModal">
+  <div class="modal-card" style="max-width:480px;text-align:center;">
+    <div id="goEmoji" style="font-size:3.4rem;margin-bottom:6px;">🏆</div>
+    <h2 id="goTitle" style="margin:0 0 8px 0;font-size:1.5rem;">TOTALER SIEG!</h2>
+    <p id="goSummary" style="color:#94a3b8;font-size:0.9rem;margin-bottom:16px;"></p>
+    <div class="stat-grid" id="goStats" style="margin-bottom:18px;"></div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="nav-btn" onclick="openSetupModal();closeModal('gameOverModal')">🗺️ Neue Mission</button>
+      <button class="end-turn-btn" onclick="restartCurrentMission()">🔄 Nochmal spielen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// HEXFRONT: TACTICAL WARFARE — ENGINE & GAME LOGIC
+// ============================================================================
+
+const TEAM_NEUTRAL = 0;
+const TEAM_BLUE = 1; // Player
+const TEAM_RED = 2;  // Enemy AI
+
+// Terrain Catalog
+const TERRAIN = {
+  PLAIN:    { id: 'PLAIN',    name: 'Ebene',         icon: '🌾', def: 0,  moveCost: { foot: 1, tread: 1, air: 1, sea: 99 }, income: 0,  color: '#1e3a2f', border: '#274c3c' },
+  FOREST:   { id: 'FOREST',   name: 'Waldgebiet',    icon: '🌲', def: 25, moveCost: { foot: 1, tread: 2, air: 1, sea: 99 }, income: 0,  color: '#143326', border: '#1d4936' },
+  MOUNTAIN: { id: 'MOUNTAIN', name: 'Gebirge',       icon: '⛰️', def: 45, moveCost: { foot: 2, tread: 99, air: 1, sea: 99 }, income: 0,  color: '#334155', border: '#475569', visionBonus: 2 },
+  WATER:    { id: 'WATER',    name: 'Tiefsee',       icon: '🌊', def: 0,  moveCost: { foot: 99, tread: 99, air: 1, sea: 1 }, income: 0,  color: '#0c2744', border: '#133860' },
+  BRIDGE:   { id: 'BRIDGE',   name: 'Panzerbrücke',  icon: '🌉', def: 0,  moveCost: { foot: 1, tread: 1, air: 1, sea: 1 },  income: 0,  color: '#3b332b', border: '#574c41' },
+  CITY:     { id: 'CITY',     name: 'Versorgungsstadt', icon: '🏙️', def: 30, moveCost: { foot: 1, tread: 1, air: 1, sea: 99 }, income: 40, color: '#273449', border: '#384b68', capturable: true },
+  FACTORY:  { id: 'FACTORY',  name: 'Waffenfabrik',  icon: '🏭', def: 30, moveCost: { foot: 1, tread: 1, air: 1, sea: 99 }, income: 30, color: '#2d283e', border: '#463e5e', capturable: true, producer: 'land' },
+  AIRPORT:  { id: 'AIRPORT',  name: 'Luftwaffenbasis',icon: '🛫', def: 25, moveCost: { foot: 1, tread: 1, air: 1, sea: 99 }, income: 30, color: '#1f334d', border: '#315078', capturable: true, producer: 'air' },
+  PORT:     { id: 'PORT',     name: 'Kriegshafen',   icon: '⚓', def: 25, moveCost: { foot: 1, tread: 1, air: 1, sea: 1 },  income: 30, color: '#16364d', border: '#245578', capturable: true, producer: 'sea' },
+  OIL:      { id: 'OIL',      name: 'Öl-Raffinerie', icon: '🛢️', def: 15, moveCost: { foot: 1, tread: 1, air: 1, sea: 99 }, income: 75, color: '#31251a', border: '#523d29', capturable: true },
+  HQ:       { id: 'HQ',       name: 'Hauptquartier', icon: '🎖️', def: 50, moveCost: { foot: 1, tread: 1, air: 1, sea: 99 }, income: 80, color: '#2e3846', border: '#60a5fa', capturable: true }
+};
+
+// Unit Catalog
+const UNIT_TYPES = {
+  INFANTRY: {
+    id: 'INFANTRY', name: 'Infanterie', icon: '🪖', cost: 70,
+    hp: 100, atk: 32, rangeMin: 1, rangeMax: 1, move: 3, moveType: 'foot', vision: 3,
+    canCapture: true, facility: 'land',
+    desc: 'Erobert Städte, Fabriken & Hauptquartiere. Nutzt Deckung in Wäldern und Bergen optimal.',
+    bonusVs: { INFANTRY: 1.1, MECH: 1.0, ARTILLERY: 1.25 }
+  },
+  MECH: {
+    id: 'MECH', name: 'Panzerfaust-Trupp', icon: '🚀', cost: 130,
+    hp: 100, atk: 54, rangeMin: 1, rangeMax: 1, move: 2, moveType: 'foot', vision: 3,
+    canCapture: true, facility: 'land',
+    desc: 'Schwere Panzerabwehr-Infanterie. Überquert Gebirge und vernichtet feindliche Fahrzeuge.',
+    bonusVs: { TANK: 1.45, AA: 1.4, HEAVY_TANK: 1.25 }
+  },
+  TANK: {
+    id: 'TANK', name: 'Jagdpanzer', icon: '🚜', cost: 200,
+    hp: 100, atk: 65, rangeMin: 1, rangeMax: 1, move: 4, moveType: 'tread', vision: 3,
+    canCapture: false, blitz: true, facility: 'land',
+    desc: 'Schnelles gepanzertes Rückgrat. Blitz-Taktik: Kann nach einem vernichtenden Treffer noch 1 Feld vorrücken!',
+    bonusVs: { INFANTRY: 1.35, ARTILLERY: 1.4, AA: 1.25 }
+  },
+  ARTILLERY: {
+    id: 'ARTILLERY', name: 'Haubitze (Artillerie)', icon: '💥', cost: 240,
+    hp: 100, atk: 74, rangeMin: 2, rangeMax: 3, move: 3, moveType: 'tread', vision: 3,
+    canCapture: false, noMoveAndShoot: false, facility: 'land',
+    desc: 'Fernkampf-Geschütz (2–3 Hexfelder). Feuert ohne Gegenwehr aus der zweiten Reihe!',
+    bonusVs: { INFANTRY: 1.3, TANK: 1.25, HEAVY_TANK: 1.2, BATTLESHIP: 1.1 }
+  },
+  AA: {
+    id: 'AA', name: 'Flak-Panzer (SAM)', icon: '📡', cost: 210,
+    hp: 100, atk: 60, rangeMin: 1, rangeMax: 2, move: 4, moveType: 'tread', vision: 4,
+    canCapture: false, facility: 'land',
+    desc: 'Flugabwehr & Radar-Aufklärer (Reichweite 1–2). Holt Helikopter und Kampfjets vom Himmel!',
+    bonusVs: { HELI: 1.85, BOMBER: 1.75, INFANTRY: 1.25 }
+  },
+  HEAVY_TANK: {
+    id: 'HEAVY_TANK', name: 'Mammut-Panzer', icon: '🛡️', cost: 340,
+    hp: 120, atk: 90, rangeMin: 1, rangeMax: 1, move: 3, moveType: 'tread', vision: 3,
+    canCapture: false, blitz: true, facility: 'land',
+    desc: 'Schwer gepanzerte Durchbruchs-Festung mit Zwillingskanone. Dominiert jedes direkte Gefecht.',
+    bonusVs: { TANK: 1.4, INFANTRY: 1.4, ARTILLERY: 1.5 }
+  },
+  HELI: {
+    id: 'HELI', name: 'Kampfhubschrauber', icon: '🚁', cost: 270,
+    hp: 100, atk: 72, rangeMin: 1, rangeMax: 1, move: 5, moveType: 'air', vision: 4,
+    canCapture: false, facility: 'air',
+    desc: 'Fliegt ungehindert über Wasser, Wälder und Berge. Tödlich gegen Panzer und Artillerie.',
+    bonusVs: { TANK: 1.35, HEAVY_TANK: 1.25, ARTILLERY: 1.5 }
+  },
+  BOMBER: {
+    id: 'BOMBER', name: 'Stealth-Kampfjet', icon: '✈️', cost: 400,
+    hp: 100, atk: 98, rangeMin: 1, rangeMax: 1, move: 6, moveType: 'air', vision: 5,
+    canCapture: false, facility: 'air',
+    desc: 'Überschall-Luftschlag gegen jedes Boden- oder Seeziel. Nur durch Flak-Panzer verwundbar.',
+    bonusVs: { HEAVY_TANK: 1.4, BATTLESHIP: 1.45, TANK: 1.4 }
+  },
+  BATTLESHIP: {
+    id: 'BATTLESHIP', name: 'Schlachtschiff', icon: '🚢', cost: 380,
+    hp: 130, atk: 88, rangeMin: 2, rangeMax: 4, move: 4, moveType: 'sea', vision: 4,
+    canCapture: false, facility: 'sea',
+    desc: 'Schwimmende Artillerie-Festung (Reichweite 2–4). Bombardiert Küstenstädte und feindliche Flotten.',
+    bonusVs: { INFANTRY: 1.3, TANK: 1.3, BATTLESHIP: 1.2 }
+  }
+};
+
+// Commanders
+const COMMANDERS = [
+  {
+    id: 'stahl',
+    name: 'General Stahl',
+    emoji: '🦅',
+    title: 'Panzer-Doktrin',
+    passiveDesc: 'Gepanzerte Einheiten +20% Angriffskraft.',
+    powerName: 'Blitzkrieg-Offensive',
+    powerDesc: 'Alle eigenen Einheiten erhalten sofort +1 Bewegung, +25% Angriff & +15 HP Reparatur!',
+    cost: 100
+  },
+  {
+    id: 'vega',
+    name: 'Marschall Vega',
+    emoji: '☄️',
+    title: 'Feuersturm-Korps',
+    passiveDesc: 'Artillerie, Schiffe & Luftwaffe +25% Schaden.',
+    powerName: 'Orbitales Sperrfeuer',
+    powerDesc: 'Trifft die 3 stärksten feindlichen Einheiten auf der Karte mit je 40 Explosiv-Schaden!',
+    cost: 100
+  },
+  {
+    id: 'nova',
+    name: 'Kommandantin Nova',
+    emoji: '🛰️',
+    title: 'Spezialkräfte & Taktik',
+    passiveDesc: '+25% Einkommen aus Städten & Infanterie erobert schneller.',
+    powerName: 'EMP-Schockwelle & Elitedrop',
+    powerDesc: 'Legt feindliche Einheiten (-35% Angriff für 1 Runde) lahm, heilt eigene Truppen +20 HP & gibt +150 Gold!',
+    cost: 100
+  }
+];
+
+// Tech Tree
+const TECH_TREE = [
+  { id: 'armor',   name: 'Reaktiv-Panzerung', icon: '🛡️', cost: 220, desc: 'Alle Einheiten erleiden dauerhaft -20% Schaden im Gefecht.' },
+  { id: 'range',   name: 'Raketen-Treibsatz', icon: '🎯', cost: 260, desc: 'Artillerie, Flak & Schlachtschiffe erhalten +1 maximale Feuerreichweite.' },
+  { id: 'economy', name: 'Kriegs-Industrie',  icon: '⚙️', cost: 200, desc: 'Jede gehaltene Stadt, Fabrik und Raffinerie liefert +20 Gold pro Tag.' },
+  { id: 'radar',   name: 'Satelliten-Uplink', icon: '🛰️', cost: 240, desc: 'Entfernt den Nebel des Krieges dauerhaft und gewährt +15% Präzisions-Schaden.' },
+  { id: 'blitz',   name: 'Veteranen-Akademie',icon: '🎖️', cost: 280, desc: 'Alle neu produzierten Einheiten starten sofort als Elite-Veteran (★ +25% Kampfkraft).' }
+];
+
+// Scenarios
+const SCENARIOS = [
+  {
+    id: 'valley',
+    name: 'Operation Morgenröte',
+    emoji: '🌉',
+    size: [13, 9],
+    desc: 'Klassische Panzerschlacht um zwei strategische Flussbrücken und eine Öl-Raffinerie im Zentrum.'
+  },
+  {
+    id: 'archipelago',
+    name: 'Pazifik-Archipel',
+    emoji: '🏝️',
+    size: [14, 10],
+    desc: 'Kombinierter See-, Luft- und Landkrieg um ressourcenreiche Inseln, Kriegshäfen und Luftwaffenbasen.'
+  },
+  {
+    id: 'ironpass',
+    name: 'Festung Eisengrat',
+    emoji: '⛰️',
+    size: [13, 9],
+    desc: 'Hochgebirgs-Engpass: Nutze Artillerie-Stellungen, Panzerfaust-Trupps und Flankenwege durch dichte Wälder.'
+  },
+  {
+    id: 'random',
+    name: 'Zufalls-Front (Prozedural)',
+    emoji: '🎲',
+    size: [14, 10],
+    desc: 'Jedes Mal eine neue symmetrisch-faire Gefechtskarte mit Wäldern, Gebirgen, Ölfeldern und Basen.'
+  }
+];
+
+// ============================================================================
+// STATE VARIABLES
+// ============================================================================
+let canvas, ctx;
+let hexRadius = 38;
+let camera = { x: 80, y: 70, zoom: 1.0 };
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let dragMoved = false;
+
+let gameState = {
+  scenarioId: 'valley',
+  commanderId: 'stahl',
+  difficulty: 'normal',
+  cols: 13,
+  rows: 9,
+  turn: 1,
+  currentTeam: TEAM_BLUE,
+  gold: { [TEAM_BLUE]: 300, [TEAM_RED]: 300 },
+  power: { [TEAM_BLUE]: 35, [TEAM_RED]: 0 },
+  empDebuff: { [TEAM_BLUE]: false, [TEAM_RED]: false },
+  techs: {
+    [TEAM_BLUE]: new Set(),
+    [TEAM_RED]: new Set()
+  },
+  fogEnabled: true,
+  map: [],        // 2D [q][r] -> tile object
+  units: [],      // list of unit objects
+  particles: [],  // explosions, shells, floating texts
+  projectiles: [],
+  selectedUnit: null,
+  reachableHexes: new Map(), // key "q,r" -> cost
+  attackableHexes: new Set(),// key "q,r"
+  hoveredHex: null,
+  activeFactoryHex: null,
+  stats: { unitsKilled: 0, unitsLost: 0, citiesCaptured: 0 },
+  gameOver: false
+};
+
+// ============================================================================
+// CUSTOM MILITARY SYNTH AUDIO
+// ============================================================================
+const WarAudio = {
+  cannon() {
+    if (window.ArcadeCore && ArcadeCore.isMuted()) return;
+    if (window.ArcadeCore) ArcadeCore.explosion();
+  },
+  mgBurst() {
+    if (window.ArcadeCore && ArcadeCore.isMuted()) return;
+    const ac = window.ArcadeCore ? ArcadeCore.getAudioContext() : null;
+    if (!ac) return;
+    for (let i = 0; i < 4; i++) {
+      setTimeout(() => {
+        if (window.ArcadeCore) ArcadeCore.playTone(130 + Math.random() * 60, 0.045, 'sawtooth', 0.12);
+      }, i * 55);
+    }
+  },
+  capture() {
+    if (window.ArcadeCore) ArcadeCore.powerup();
+  },
+  select() {
+    if (window.ArcadeCore) ArcadeCore.playTone(520, 0.05, 'triangle', 0.08);
+  },
+  move() {
+    if (window.ArcadeCore) ArcadeCore.playTone(210, 0.06, 'sine', 0.09);
+  }
+};
+
+// ============================================================================
+// HEX MATH UTILITIES (Odd-Q Vertical / Flat-Top or Pointy-Top)
+// Let's use Pointy-Top Odd-R offset coordinates for clean horizontal battlefronts!
+// ============================================================================
+function hexToPixel(q, r) {
+  const size = hexRadius * camera.zoom;
+  const w = Math.sqrt(3) * size;
+  const h = 2 * size;
+  const x = camera.x + q * w + (r % 2 === 1 ? w / 2 : 0);
+  const y = camera.y + r * (h * 0.75);
+  return { x, y };
+}
+
+function pixelToHex(px, py) {
+  let best = null;
+  let minDist = Infinity;
+  const maxR = hexRadius * camera.zoom * 0.95;
+  for (let q = 0; q < gameState.cols; q++) {
+    for (let r = 0; r < gameState.rows; r++) {
+      const center = hexToPixel(q, r);
+      const dx = px - center.x;
+      const dy = py - center.y;
+      const d = Math.hypot(dx, dy);
+      if (d < minDist && d <= maxR) {
+        minDist = d;
+        best = { q, r };
+      }
+    }
+  }
+  return best;
+}
+
+function getNeighbors(q, r) {
+  const isOdd = (r % 2) === 1;
+  const dirs = isOdd
+    ? [[+1, 0], [0, -1], [+1, -1], [-1, 0], [0, +1], [+1, +1]]
+    : [[+1, 0], [-1, -1], [0, -1], [-1, 0], [-1, +1], [0, +1]];
+  const res = [];
+  for (const [dq, dr] of dirs) {
+    const nq = q + dq;
+    const nr = r + dr;
+    if (nq >= 0 && nq < gameState.cols && nr >= 0 && nr < gameState.rows) {
+      res.push({ q: nq, r: nr });
+    }
+  }
+  return res;
+}
+
+// Convert Odd-R to Cube coords for accurate hex distance
+function oddrToCube(q, r) {
+  const x = q - (r - (r & 1)) / 2;
+  const z = r;
+  const y = -x - z;
+  return { x, y, z };
+}
+
+function hexDistance(q1, r1, q2, r2) {
+  const a = oddrToCube(q1, r1);
+  const b = oddrToCube(q2, r2);
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
+}
+
+function hexKey(q, r) {
+  return `${q},${r}`;
+}
+
+function getTile(q, r) {
+  if (q < 0 || q >= gameState.cols || r < 0 || r >= gameState.rows) return null;
+  return gameState.map[q][r];
+}
+
+function getUnitAt(q, r) {
+  return gameState.units.find(u => u.q === q && u.r === r && u.hp > 0) || null;
+}
+
+// ============================================================================
+// MAP GENERATION & SCENARIOS
+// ============================================================================
+let unitIdCounter = 1;
+
+function createUnit(typeId, team, q, r, ready = true) {
+  const spec = UNIT_TYPES[typeId];
+  const isElite = gameState.techs[team] && gameState.techs[team].has('blitz');
+  const u = {
+    id: unitIdCounter++,
+    type: typeId,
+    team,
+    q,
+    r,
+    hp: spec.hp,
+    maxHp: spec.hp,
+    veteran: isElite ? 1 : 0,
+    moved: !ready,
+    attacked: !ready,
+    blitzUsed: false,
+    animX: null,
+    animY: null
+  };
+  gameState.units.push(u);
+  return u;
+}
+
+function setTile(q, r, typeId, owner = TEAM_NEUTRAL) {
+  if (q < 0 || q >= gameState.cols || r < 0 || r >= gameState.rows) return;
+  gameState.map[q][r] = {
+    q,
+    r,
+    type: typeId,
+    owner,
+    captureProgress: 0
+  };
+}
+
+function buildScenarioMap(scenarioId) {
+  const scen = SCENARIOS.find(s => s.id === scenarioId) || SCENARIOS[0];
+  gameState.cols = scen.size[0];
+  gameState.rows = scen.size[1];
+  gameState.map = [];
+  gameState.units = [];
+
+  for (let q = 0; q < gameState.cols; q++) {
+    gameState.map[q] = [];
+    for (let r = 0; r < gameState.rows; r++) {
+      setTile(q, r, 'PLAIN', TEAM_NEUTRAL);
+    }
+  }
+
+  const C = gameState.cols;
+  const R = gameState.rows;
+  const midQ = Math.floor(C / 2);
+  const midR = Math.floor(R / 2);
+
+  if (scenarioId === 'valley') {
+    // Vertical river through the middle with 2 bridges
+    for (let r = 0; r < R; r++) {
+      setTile(midQ, r, 'WATER');
+      if (r === 2 || r === R - 3) setTile(midQ, r, 'BRIDGE');
+    }
+    // Center island oil & cities
+    setTile(midQ, midR, 'OIL', TEAM_NEUTRAL);
+    setTile(midQ - 1, midR, 'BRIDGE');
+    setTile(midQ + 1, midR, 'BRIDGE');
+
+    // Forests & Mountains symmetrical
+    const feats = [
+      [2, 1, 'FOREST'], [3, 2, 'MOUNTAIN'], [4, 1, 'FOREST'],
+      [2, R - 2, 'FOREST'], [4, R - 3, 'MOUNTAIN'], [5, 4, 'FOREST'],
+      [3, 5, 'FOREST']
+    ];
+    for (const [q, r, t] of feats) {
+      setTile(q, r, t);
+      setTile(C - 1 - q, R - 1 - r, t);
+    }
+
+    // Bases & Economy
+    setTile(1, midR, 'HQ', TEAM_BLUE);
+    setTile(C - 2, midR, 'HQ', TEAM_RED);
+
+    setTile(1, midR - 2, 'FACTORY', TEAM_BLUE);
+    setTile(1, midR + 2, 'FACTORY', TEAM_BLUE);
+    setTile(2, midR, 'AIRPORT', TEAM_BLUE);
+
+    setTile(C - 2, midR - 2, 'FACTORY', TEAM_RED);
+    setTile(C - 2, midR + 2, 'FACTORY', TEAM_RED);
+    setTile(C - 3, midR, 'AIRPORT', TEAM_RED);
+
+    // Neutral front cities & factories
+    const structs = [
+      [3, 1, 'CITY'], [4, 3, 'CITY'], [4, R - 2, 'FACTORY'], [2, R - 1, 'OIL']
+    ];
+    for (const [q, r, t] of structs) {
+      setTile(q, r, t, TEAM_NEUTRAL);
+      setTile(C - 1 - q, R - 1 - r, t, TEAM_NEUTRAL);
+    }
+
+    // Starting Armies
+    createUnit('TANK', TEAM_BLUE, 2, midR - 1, true);
+    createUnit('INFANTRY', TEAM_BLUE, 2, midR + 1, true);
+    createUnit('ARTILLERY', TEAM_BLUE, 1, midR - 1, true);
+    createUnit('MECH', TEAM_BLUE, 3, midR, true);
+
+    createUnit('TANK', TEAM_RED, C - 3, midR + 1, true);
+    createUnit('INFANTRY', TEAM_RED, C - 3, midR - 1, true);
+    createUnit('ARTILLERY', TEAM_RED, C - 2, midR + 1, true);
+    createUnit('MECH', TEAM_RED, C - 4, midR, true);
+
+  } else if (scenarioId === 'archipelago') {
+    // Ocean base with islands
+    for (let q = 0; q < C; q++) {
+      for (let r = 0; r < R; r++) {
+        setTile(q, r, 'WATER');
+      }
+    }
+    // West & East Home Islands
+    for (let q = 0; q <= 3; q++) {
+      for (let r = 1; r < R - 1; r++) {
+        setTile(q, r, 'PLAIN');
+        setTile(C - 1 - q, r, 'PLAIN');
+      }
+    }
+    // Center Contest Islands
+    for (let q = 5; q <= C - 6; q++) {
+      for (let r = 2; r <= R - 3; r++) {
+        if ((q + r) % 3 !== 0) setTile(q, r, 'PLAIN');
+      }
+    }
+    setTile(midQ, midR, 'OIL', TEAM_NEUTRAL);
+    setTile(midQ - 1, 2, 'CITY', TEAM_NEUTRAL);
+    setTile(C - midQ, R - 3, 'CITY', TEAM_NEUTRAL);
+    setTile(midQ, 1, 'FACTORY', TEAM_NEUTRAL);
+    setTile(midQ, R - 2, 'FACTORY', TEAM_NEUTRAL);
+
+    // Bridges connecting islands
+    setTile(4, 3, 'BRIDGE');
+    setTile(4, R - 4, 'BRIDGE');
+    setTile(C - 5, 3, 'BRIDGE');
+    setTile(C - 5, R - 4, 'BRIDGE');
+
+    // Home structures
+    setTile(1, midR, 'HQ', TEAM_BLUE);
+    setTile(C - 2, midR, 'HQ', TEAM_RED);
+    setTile(2, midR - 2, 'FACTORY', TEAM_BLUE);
+    setTile(2, midR + 2, 'AIRPORT', TEAM_BLUE);
+    setTile(3, 1, 'PORT', TEAM_BLUE);
+    setTile(3, R - 2, 'PORT', TEAM_BLUE);
+
+    setTile(C - 3, midR - 2, 'AIRPORT', TEAM_RED);
+    setTile(C - 3, midR + 2, 'FACTORY', TEAM_RED);
+    setTile(C - 4, 1, 'PORT', TEAM_RED);
+    setTile(C - 4, R - 2, 'PORT', TEAM_RED);
+
+    createUnit('BATTLESHIP', TEAM_BLUE, 4, 1, true);
+    createUnit('HELI', TEAM_BLUE, 2, midR, true);
+    createUnit('TANK', TEAM_BLUE, 3, 3, true);
+    createUnit('INFANTRY', TEAM_BLUE, 3, R - 4, true);
+
+    createUnit('BATTLESHIP', TEAM_RED, C - 5, R - 2, true);
+    createUnit('HELI', TEAM_RED, C - 3, midR, true);
+    createUnit('TANK', TEAM_RED, C - 4, R - 4, true);
+    createUnit('INFANTRY', TEAM_RED, C - 4, 3, true);
+
+  } else if (scenarioId === 'ironpass') {
+    // Mountain ridges with 3 corridors
+    for (let r = 0; r < R; r++) {
+      if (r !== 1 && r !== midR && r !== R - 2) {
+        setTile(midQ - 1, r, 'MOUNTAIN');
+        setTile(midQ + 1, r, 'MOUNTAIN');
+      } else {
+        setTile(midQ, r, 'FOREST');
+      }
+    }
+    setTile(midQ, midR, 'OIL', TEAM_NEUTRAL);
+    setTile(midQ, 1, 'FACTORY', TEAM_NEUTRAL);
+    setTile(midQ, R - 2, 'FACTORY', TEAM_NEUTRAL);
+
+    setTile(1, midR, 'HQ', TEAM_BLUE);
+    setTile(C - 2, midR, 'HQ', TEAM_RED);
+    setTile(1, 1, 'FACTORY', TEAM_BLUE);
+    setTile(1, R - 2, 'FACTORY', TEAM_BLUE);
+    setTile(2, midR, 'FACTORY', TEAM_BLUE);
+
+    setTile(C - 2, 1, 'FACTORY', TEAM_RED);
+    setTile(C - 2, R - 2, 'FACTORY', TEAM_RED);
+    setTile(C - 3, midR, 'FACTORY', TEAM_RED);
+
+    setTile(3, 2, 'CITY', TEAM_BLUE);
+    setTile(3, R - 3, 'CITY', TEAM_BLUE);
+    setTile(C - 4, 2, 'CITY', TEAM_RED);
+    setTile(C - 4, R - 3, 'CITY', TEAM_RED);
+
+    createUnit('HEAVY_TANK', TEAM_BLUE, 3, midR, true);
+    createUnit('ARTILLERY', TEAM_BLUE, 2, midR - 1, true);
+    createUnit('MECH', TEAM_BLUE, 3, 1, true);
+    createUnit('INFANTRY', TEAM_BLUE, 3, R - 2, true);
+
+    createUnit('HEAVY_TANK', TEAM_RED, C - 4, midR, true);
+    createUnit('ARTILLERY', TEAM_RED, C - 3, midR + 1, true);
+    createUnit('MECH', TEAM_RED, C - 4, R - 2, true);
+    createUnit('INFANTRY', TEAM_RED, C - 4, 1, true);
+
+  } else {
+    // Procedural Symmetrical Map
+    for (let q = 0; q < midQ; q++) {
+      for (let r = 0; r < R; r++) {
+        const roll = Math.random();
+        let t = 'PLAIN';
+        if (roll < 0.18) t = 'FOREST';
+        else if (roll < 0.27) t = 'MOUNTAIN';
+        else if (roll < 0.33 && q > 2) t = 'WATER';
+        setTile(q, r, t);
+        setTile(C - 1 - q, R - 1 - r, t);
+      }
+    }
+    setTile(midQ, midR, 'OIL', TEAM_NEUTRAL);
+    setTile(midQ, 1, 'CITY', TEAM_NEUTRAL);
+    setTile(midQ, R - 2, 'CITY', TEAM_NEUTRAL);
+
+    // Ensure clear path along midR
+    for (let q = 1; q < C - 1; q++) {
+      if (getTile(q, midR).type === 'WATER' || getTile(q, midR).type === 'MOUNTAIN') {
+        setTile(q, midR, 'PLAIN');
+      }
+    }
+
+    setTile(1, midR, 'HQ', TEAM_BLUE);
+    setTile(C - 2, midR, 'HQ', TEAM_RED);
+    setTile(1, midR - 2, 'FACTORY', TEAM_BLUE);
+    setTile(1, midR + 2, 'FACTORY', TEAM_BLUE);
+    setTile(2, midR - 1, 'AIRPORT', TEAM_BLUE);
+
+    setTile(C - 2, midR + 2, 'FACTORY', TEAM_RED);
+    setTile(C - 2, midR - 2, 'FACTORY', TEAM_RED);
+    setTile(C - 3, midR + 1, 'AIRPORT', TEAM_RED);
+
+    const neutralSpots = [[3, 1, 'CITY'], [4, R - 2, 'FACTORY'], [5, 2, 'OIL'], [3, R - 3, 'CITY']];
+    for (const [q, r, t] of neutralSpots) {
+      setTile(q, r, t, TEAM_NEUTRAL);
+      setTile(C - 1 - q, R - 1 - r, t, TEAM_NEUTRAL);
+    }
+
+    createUnit('TANK', TEAM_BLUE, 2, midR, true);
+    createUnit('ARTILLERY', TEAM_BLUE, 1, midR - 1, true);
+    createUnit('INFANTRY', TEAM_BLUE, 2, midR + 1, true);
+    createUnit('MECH', TEAM_BLUE, 2, midR - 2, true);
+
+    createUnit('TANK', TEAM_RED, C - 3, midR, true);
+    createUnit('ARTILLERY', TEAM_RED, C - 2, midR + 1, true);
+    createUnit('INFANTRY', TEAM_RED, C - 3, midR - 1, true);
+    createUnit('MECH', TEAM_RED, C - 3, midR + 2, true);
+  }
+}
+
+// ============================================================================
+// VISION & FOG OF WAR
+// ============================================================================
+function getVisibleHexes(team) {
+  const vis = new Set();
+  if (!gameState.fogEnabled || (gameState.techs[team] && gameState.techs[team].has('radar'))) {
+    for (let q = 0; q < gameState.cols; q++) {
+      for (let r = 0; r < gameState.rows; r++) {
+        vis.add(hexKey(q, r));
+      }
+    }
+    return vis;
+  }
+
+  // Owned buildings grant vision 2
+  for (let q = 0; q < gameState.cols; q++) {
+    for (let r = 0; r < gameState.rows; r++) {
+      const tile = gameState.map[q][r];
+      if (tile.owner === team) {
+        for (let x = 0; x < gameState.cols; x++) {
+          for (let y = 0; y < gameState.rows; y++) {
+            if (hexDistance(q, r, x, y) <= 2) vis.add(hexKey(x, y));
+          }
+        }
+      }
+    }
+  }
+
+  // Units grant vision
+  for (const u of gameState.units) {
+    if (u.team !== team || u.hp <= 0) continue;
+    const spec = UNIT_TYPES[u.type];
+    const tile = getTile(u.q, u.r);
+    const bonus = (tile && TERRAIN[tile.type].visionBonus) ? TERRAIN[tile.type].visionBonus : 0;
+    const range = spec.vision + bonus;
+    for (let x = 0; x < gameState.cols; x++) {
+      for (let y = 0; y < gameState.rows; y++) {
+        if (hexDistance(u.q, u.r, x, y) <= range) vis.add(hexKey(x, y));
+      }
+    }
+  }
+  return vis;
+}
+
+// ============================================================================
+// MOVEMENT & ATTACK RANGE CALCULATION (Dijkstra)
+// ============================================================================
+function computeUnitRanges(unit) {
+  const reachable = new Map();
+  const attackable = new Set();
+  if (!unit) return { reachable, attackable };
+
+  const spec = UNIT_TYPES[unit.type];
+  const maxMove = unit.moved ? 0 : spec.move + (unit.tempMoveBonus || 0);
+
+  // Dijkstra for reachable tiles
+  const dist = new Map();
+  const startKey = hexKey(unit.q, unit.r);
+  dist.set(startKey, 0);
+  reachable.set(startKey, 0);
+
+  const queue = [{ q: unit.q, r: unit.r, cost: 0 }];
+  while (queue.length > 0) {
+    queue.sort((a, b) => a.cost - b.cost);
+    const cur = queue.shift();
+    if (cur.cost >= maxMove) continue;
+
+    for (const nb of getNeighbors(cur.q, cur.r)) {
+      const tile = getTile(nb.q, nb.r);
+      const tSpec = TERRAIN[tile.type];
+      const stepCost = tSpec.moveCost[spec.moveType] ?? 99;
+      if (stepCost >= 99) continue;
+
+      // Cannot pass through enemy units
+      const occ = getUnitAt(nb.q, nb.r);
+      if (occ && occ.team !== unit.team) continue;
+
+      const newCost = cur.cost + stepCost;
+      if (newCost <= maxMove) {
+        const k = hexKey(nb.q, nb.r);
+        if (!dist.has(k) || newCost < dist.get(k)) {
+          dist.set(k, newCost);
+          // Can only stop on empty hex (or own current hex)
+          if (!occ || occ.id === unit.id) {
+            reachable.set(k, newCost);
+          }
+          queue.push({ q: nb.q, r: nb.r, cost: newCost });
+        }
+      }
+    }
+  }
+
+  // Attack targets from CURRENT position (or any reachable if melee)
+  if (!unit.attacked) {
+    const minR = spec.rangeMin;
+    const maxR = getUnitMaxRange(unit);
+    const visible = getVisibleHexes(unit.team);
+
+    for (const enemy of gameState.units) {
+      if (enemy.team === unit.team || enemy.hp <= 0) continue;
+      if (!visible.has(hexKey(enemy.q, enemy.r))) continue;
+      const d = hexDistance(unit.q, unit.r, enemy.q, enemy.r);
+      if (d >= minR && d <= maxR) {
+        attackable.add(hexKey(enemy.q, enemy.r));
+      }
+    }
+  }
+
+  return { reachable, attackable };
+}
+
+function getUnitMaxRange(unit) {
+  const spec = UNIT_TYPES[unit.type];
+  let r = spec.rangeMax;
+  if ( r > 1 && gameState.techs[unit.team] && gameState.techs[unit.team].has('range')) {
+    r += 1;
+  }
+  return r;
+}
+
+// ============================================================================
+// COMBAT FORMULA & RESOLUTION
+// ============================================================================
+function calculateCombatDamage(attacker, defender) {
+  const aSpec = UNIT_TYPES[attacker.type];
+  const dSpec = UNIT_TYPES[defender.type];
+  const defTile = getTile(defender.q, defender.r);
+  const terrainDef = (dSpec.moveType === 'air') ? 0 : (TERRAIN[defTile.type].def || 0);
+
+  // Attacker HP scaling (50% to 100% effectiveness)
+  const hpFactor = 0.45 + 0.55 * (attacker.hp / attacker.maxHp);
+  const typeMult = (aSpec.bonusVs && aSpec.bonusVs[defender.type]) ? aSpec.bonusVs[defender.type] : 1.0;
+  const vetMult = 1 + (attacker.veteran || 0) * 0.15;
+
+  // Commander passives
+  let cmdMult = 1.0;
+  if (attacker.team === TEAM_BLUE) {
+    if (gameState.commanderId === 'stahl' && (aSpec.moveType === 'tread')) cmdMult += 0.2;
+    if (gameState.commanderId === 'vega' && (aSpec.rangeMax > 1 || aSpec.moveType === 'air')) cmdMult += 0.25;
+  }
+  if (attacker.tempAtkBonus) cmdMult += attacker.tempAtkBonus;
+  if (gameState.empDebuff[attacker.team]) cmdMult *= 0.65;
+
+  // Tech bonuses
+  if (gameState.techs[attacker.team] && gameState.techs[attacker.team].has('radar')) cmdMult += 0.15;
+  let armorReduction = 1.0;
+  if (gameState.techs[defender.team] && gameState.techs[defender.team].has('armor')) armorReduction = 0.8;
+
+  const raw = aSpec.atk * hpFactor * typeMult * vetMult * cmdMult;
+  const mitigated = raw * (1 - terrainDef / 100) * armorReduction;
+  return Math.max(8, Math.round(mitigated));
+}
+
+function predictCombat(attacker, defender) {
+  const dmgToDef = calculateCombatDamage(attacker, defender);
+  const defRemainingHp = Math.max(0, defender.hp - dmgToDef);
+  let counterDmg = 0;
+
+  const dist = hexDistance(attacker.q, attacker.r, defender.q, defender.r);
+  const dSpec = UNIT_TYPES[defender.type];
+  const defMaxRange = getUnitMaxRange(defender);
+
+  // Defender only counter-attacks if alive, in range (usually distance == 1), and not artillery at melee
+  if (defRemainingHp > 0 && dist === 1 && dSpec.rangeMin === 1 && defMaxRange >= 1) {
+    const fakeDef = { ...defender, hp: defRemainingHp };
+    counterDmg = Math.round(calculateCombatDamage(fakeDef, attacker) * 0.75);
+  }
+  return { dmgToDef, counterDmg };
+}
+
+function executeCombat(attacker, defender) {
+  const { dmgToDef, counterDmg } = predictCombat(attacker, defender);
+  const p1 = hexToPixel(attacker.q, attacker.r);
+  const p2 = hexToPixel(defender.q, defender.r);
+
+  // Audio
+  const aSpec = UNIT_TYPES[attacker.type];
+  if (aSpec.id === 'INFANTRY' || aSpec.id === 'AA') WarAudio.mgBurst();
+  else WarAudio.cannon();
+
+  // Spawn projectile & explosion particles
+  spawnProjectile(p1.x, p1.y, p2.x, p2.y, attacker.team === TEAM_BLUE ? '#60a5fa' : '#f87171');
+  spawnExplosion(p2.x, p2.y, '#fbbf24', 18);
+  spawnFloatingText(p2.x, p2.y - 18, `-${dmgToDef}`, '#ef4444');
+
+  defender.hp -= dmgToDef;
+  attacker.attacked = true;
+  attacker.moved = true;
+
+  // Gain Commander Power
+  addCommanderPower(attacker.team, Math.min(25, Math.round(dmgToDef * 0.35)));
+  addCommanderPower(defender.team, Math.min(20, Math.round(dmgToDef * 0.25)));
+
+  if (defender.hp <= 0) {
+    defender.hp = 0;
+    attacker.veteran = Math.min(3, (attacker.veteran || 0) + 1);
+    spawnExplosion(p2.x, p2.y, '#ef4444', 32);
+    spawnFloatingText(p2.x, p2.y - 36, `💥 VERNICHTET!`, '#fbbf24');
+
+    if (attacker.team === TEAM_BLUE) gameState.stats.unitsKilled++;
+    else gameState.stats.unitsLost++;
+
+    // Remove dead units
+    gameState.units = gameState.units.filter(u => u.hp > 0);
+
+    // Blitzkrieg mechanic for tanks!
+    if (aSpec.blitz && !attacker.blitzUsed) {
+      attacker.blitzUsed = true;
+      attacker.moved = false;
+      attacker.tempMoveBonus = -Math.max(0, aSpec.move - 1); // 1 step advance
+      if (attacker.team === TEAM_BLUE) {
+        showToast('⚡ BLITZ-DURCHBRUCH! Panzer kann noch 1 Feld vorrücken!');
+      }
+    }
+  } else if (counterDmg > 0) {
+    setTimeout(() => {
+      WarAudio.mgBurst();
+      spawnExplosion(p1.x, p1.y, '#f97316', 12);
+      spawnFloatingText(p1.x, p1.y - 18, `-${counterDmg}`, '#f97316');
+      attacker.hp -= counterDmg;
+      if (attacker.hp <= 0) {
+        attacker.hp = 0;
+        defender.veteran = Math.min(3, (defender.veteran || 0) + 1);
+        gameState.units = gameState.units.filter(u => u.hp > 0);
+        if (attacker.team === TEAM_BLUE) gameState.stats.unitsLost++;
+        else gameState.stats.unitsKilled++;
+      }
+      updateHUD();
+      checkVictoryConditions();
+    }, 240);
+  }
+
+  updateSelectionRanges();
+  updateHUD();
+  checkVictoryConditions();
+}
+
+// ============================================================================
+// CAPTURING & ECONOMY
+// ============================================================================
+function captureBuildingWithUnit(unit) {
+  const tile = getTile(unit.q, unit.r);
+  if (!tile || !TERRAIN[tile.type].capturable || tile.owner === unit.team) return;
+
+  let captureRate = Math.max(4, Math.ceil(unit.hp / 10));
+  if (unit.team === TEAM_BLUE && gameState.commanderId === 'nova') captureRate += 4;
+
+  tile.captureProgress = (tile.captureProgress || 0) + captureRate;
+  unit.moved = true;
+  unit.attacked = true;
+
+  const pos = hexToPixel(unit.q, unit.r);
+  if (tile.captureProgress >= 10) {
+    const prevOwner = tile.owner;
+    tile.owner = unit.team;
+    tile.captureProgress = 0;
+    WarAudio.capture();
+    spawnFloatingText(pos.x, pos.y - 24, `🚩 EROBERT!`, '#34d399');
+    if (unit.team === TEAM_BLUE) gameState.stats.citiesCaptured++;
+
+    if (tile.type === 'HQ' && prevOwner !== TEAM_NEUTRAL) {
+      endGame(unit.team, `Das feindliche Hauptquartier wurde im Sturm erobert!`);
+      return;
+    }
+  } else {
+    WarAudio.select();
+    spawnFloatingText(pos.x, pos.y - 20, `🚩 ${tile.captureProgress}/10`, '#60a5fa');
+  }
+
+  updateSelectionRanges();
+  updateInfoPanel();
+  updateHUD();
+  checkVictoryConditions();
+}
+
+function repairSelectedUnit(unit) {
+  if (!unit || unit.hp >= unit.maxHp || gameState.gold[unit.team] < 40) return;
+  gameState.gold[unit.team] -= 40;
+  const heal = Math.min(35, unit.maxHp - unit.hp);
+  unit.hp += heal;
+  unit.moved = true;
+  unit.attacked = true;
+  const pos = hexToPixel(unit.q, unit.r);
+  WarAudio.capture();
+  spawnFloatingText(pos.x, pos.y - 20, `+${heal} HP 🔧`, '#34d399');
+  updateSelectionRanges();
+  updateInfoPanel();
+  updateHUD();
+}
+
+function calculateTeamIncome(team) {
+  let total = 50; // Base HQ command budget
+  const hasEcoTech = gameState.techs[team] && gameState.techs[team].has('economy');
+  for (let q = 0; q < gameState.cols; q++) {
+    for (let r = 0; r < gameState.rows; r++) {
+      const tile = gameState.map[q][r];
+      if (tile.owner === team) {
+        let inc = TERRAIN[tile.type].income || 0;
+        if (hasEcoTech && inc > 0) inc += 20;
+        if (team === TEAM_BLUE && gameState.commanderId === 'nova' && inc > 0) {
+          inc = Math.round(inc * 1.25);
+        }
+        total += inc;
+      }
+    }
+  }
+  return total;
+}
+
+function addCommanderPower(team, amount) {
+  gameState.power[team] = Math.min(100, (gameState.power[team] || 0) + amount);
+}
+
+// ============================================================================
+// COMMANDER SPECIAL ABILITIES
+// ============================================================================
+function triggerCommanderPower() {
+  if (gameState.currentTeam !== TEAM_BLUE || gameState.power[TEAM_BLUE] < 100) return;
+  gameState.power[TEAM_BLUE] = 0;
+  WarAudio.capture();
+
+  if (gameState.commanderId === 'stahl') {
+    for (const u of gameState.units) {
+      if (u.team === TEAM_BLUE) {
+        u.tempMoveBonus = 1;
+        u.tempAtkBonus = 0.25;
+        u.hp = Math.min(u.maxHp, u.hp + 15);
+        const p = hexToPixel(u.q, u.r);
+        spawnFloatingText(p.x, p.y - 20, `⚡ BLITZ +15HP`, '#60a5fa');
+      }
+    }
+    showToast('🦅 BLITZKRIEG-OFFENSIVE AKTIVIERT! (+1 Bewegung & +25% Feuerkraft)');
+  } else if (gameState.commanderId === 'vega') {
+    const enemies = gameState.units.filter(u => u.team === TEAM_RED).sort((a, b) => b.hp - a.hp).slice(0, 3);
+    for (const e of enemies) {
+      e.hp = Math.max(10, e.hp - 40);
+      const p = hexToPixel(e.q, e.r);
+      spawnExplosion(p.x, p.y, '#ef4444', 28);
+      spawnFloatingText(p.x, p.y - 22, `☄️ -40 HP`, '#ef4444');
+    }
+    WarAudio.cannon();
+    showToast('☄️ ORBITALES SPERRFEUER! Feindliche Hauptziele schwer getroffen!');
+  } else if (gameState.commanderId === 'nova') {
+    gameState.empDebuff[TEAM_RED] = true;
+    gameState.gold[TEAM_BLUE] += 150;
+    for (const u of gameState.units) {
+      if (u.team === TEAM_BLUE) {
+        u.hp = Math.min(u.maxHp, u.hp + 20);
+        const p = hexToPixel(u.q, u.r);
+        spawnFloatingText(p.x, p.y - 20, `+20 HP 🛰️`, '#34d399');
+      }
+    }
+    showToast('🛰️ EMP-SCHOCKWELLE! Feind geschwächt, +20 HP Reparatur & +150 Gold!');
+  }
+
+  if (gameState.selectedUnit) updateSelectionRanges();
+  updateHUD();
+}
+
+// ============================================================================
+// TURN MANAGEMENT & AI ENGINE
+// ============================================================================
+function endPlayerTurn() {
+  if (gameState.currentTeam !== TEAM_BLUE || gameState.gameOver) return;
+  gameState.selectedUnit = null;
+  gameState.reachableHexes.clear();
+  gameState.attackableHexes.clear();
+  gameState.combatPreview = null;
+  document.getElementById('combatPreview').classList.remove('visible');
+
+  // Clear blue temporary bonuses
+  for (const u of gameState.units) {
+    if (u.team === TEAM_BLUE) {
+      u.tempMoveBonus = 0;
+      u.tempAtkBonus = 0;
+      u.blitzUsed = false;
+    }
+  }
+  gameState.empDebuff[TEAM_BLUE] = false;
+
+  // Start AI Turn
+  gameState.currentTeam = TEAM_RED;
+  const aiInc = calculateTeamIncome(TEAM_RED);
+  const diffMult = gameState.difficulty === 'hard' ? 1.25 : (gameState.difficulty === 'easy' ? 0.8 : 1.0);
+  gameState.gold[TEAM_RED] += Math.round(aiInc * diffMult);
+
+  prepareTeamUnitsForTurn(TEAM_RED);
+  updateHUD();
+  showToast('🟥 Feindlicher Kommandant zieht...');
+
+  setTimeout(() => runAITurn(), 450);
+}
+
+function prepareTeamUnitsForTurn(team) {
+  for (const u of gameState.units) {
+    if (u.team === team) {
+      u.moved = false;
+      u.attacked = false;
+      u.blitzUsed = false;
+      u.tempMoveBonus = 0;
+
+      // Passive healing on friendly cities/HQ (+15 HP)
+      const tile = getTile(u.q, u.r);
+      if (tile && tile.owner === team && TERRAIN[tile.type].capturable && u.hp < u.maxHp) {
+        u.hp = Math.min(u.maxHp, u.hp + 15);
+      }
+      // Reset capture progress if infantry left tile
+    }
+  }
+  // Reset capture progress on tiles without an enemy unit standing on them
+  for (let q = 0; q < gameState.cols; q++) {
+    for (let r = 0; r < gameState.rows; r++) {
+      const t = gameState.map[q][r];
+      if (t.captureProgress > 0) {
+        const occ = getUnitAt(q, r);
+        if (!occ || occ.team === t.owner || !UNIT_TYPES[occ.type].canCapture) {
+          t.captureProgress = 0;
+        }
+      }
+    }
+  }
+}
+
+async function runAITurn() {
+  if (gameState.gameOver) return;
+
+  const sleep = ms => new Promise(res => setTimeout(res, ms));
+  const aiUnits = [...gameState.units.filter(u => u.team === TEAM_RED && u.hp > 0)];
+
+  for (const unit of aiUnits) {
+    if (gameState.gameOver || unit.hp <= 0) continue;
+    const spec = UNIT_TYPES[unit.type];
+
+    // 1. If standing on neutral/blue capturable tile and can capture -> capture it!
+    const curTile = getTile(unit.q, unit.r);
+    if (spec.canCapture && TERRAIN[curTile.type].capturable && curTile.owner !== TEAM_RED) {
+      captureBuildingWithUnit(unit);
+      await sleep(220);
+      continue;
+    }
+
+    // 2. Check if already in range of a good attack (especially artillery)
+    const { reachable, attackable } = computeUnitRanges(unit);
+    if (spec.rangeMin > 1 && attackable.size > 0) {
+      const targetKey = [...attackable][0];
+      const [tq, tr] = targetKey.split(',').map(Number);
+      const target = getUnitAt(tq, tr);
+      if (target) {
+        executeCombat(unit, target);
+        await sleep(320);
+        continue;
+      }
+    }
+
+    // 3. Evaluate all reachable hexes to find best move + action
+    let bestTile = { q: unit.q, r: unit.r };
+    let bestScore = -9999;
+    let bestTarget = null;
+
+    for (const [k] of reachable) {
+      const [mq, mr] = k.split(',').map(Number);
+      const tile = getTile(mq, mr);
+      let score = (TERRAIN[tile.type].def || 0) * 0.3;
+
+      // Capture value
+      if (spec.canCapture && TERRAIN[tile.type].capturable && tile.owner !== TEAM_RED) {
+        score += (tile.type === 'HQ') ? 220 : 95;
+      }
+
+      // Check attacks from (mq, mr) if unit can move & shoot
+      for (const blueU of gameState.units) {
+        if (blueU.team !== TEAM_BLUE || blueU.hp <= 0) continue;
+        const d = hexDistance(mq, mr, blueU.q, blueU.r);
+        if (d >= spec.rangeMin && d <= getUnitMaxRange(unit)) {
+          const fakeAttacker = { ...unit, q: mq, r: mr };
+          const { dmgToDef, counterDmg } = predictCombat(fakeAttacker, blueU);
+          const killBonus = (dmgToDef >= blueU.hp) ? 70 : 0;
+          const tradeScore = dmgToDef * 1.4 - counterDmg * 0.9 + killBonus;
+          if (score + tradeScore > bestScore) {
+            bestScore = score + tradeScore;
+            bestTile = { q: mq, r: mr };
+            bestTarget = blueU;
+          }
+        }
+      }
+
+      // Distance toward high-priority objective (Blue HQ or uncaptured cities)
+      let minObjDist = 999;
+      for (let x = 0; x < gameState.cols; x++) {
+        for (let y = 0; y < gameState.rows; y++) {
+          const t = gameState.map[x][y];
+          if (spec.canCapture && TERRAIN[t.type].capturable && t.owner !== TEAM_RED) {
+            const d = hexDistance(mq, mr, x, y);
+            if (d < minObjDist) minObjDist = d;
+          } else if (!spec.canCapture && t.type === 'HQ' && t.owner === TEAM_BLUE) {
+            const d = hexDistance(mq, mr, x, y);
+            if (d < minObjDist) minObjDist = d;
+          }
+        }
+      }
+      // Also consider distance to nearest Blue unit
+      for (const blueU of gameState.units) {
+        if (blueU.team === TEAM_BLUE) {
+          const d = hexDistance(mq, mr, blueU.q, blueU.r);
+          if (d < minObjDist) minObjDist = d;
+        }
+      }
+
+      const navScore = score - minObjDist * 8;
+      if (!bestTarget && navScore > bestScore) {
+        bestScore = navScore;
+        bestTile = { q: mq, r: mr };
+      }
+    }
+
+    // Move AI unit
+    if (bestTile.q !== unit.q || bestTile.r !== unit.r) {
+      unit.q = bestTile.q;
+      unit.r = bestTile.r;
+      unit.moved = true;
+      WarAudio.move();
+      await sleep(180);
+    }
+
+    // Capture or Attack
+    const destTile = getTile(unit.q, unit.r);
+    if (spec.canCapture && TERRAIN[destTile.type].capturable && destTile.owner !== TEAM_RED) {
+      captureBuildingWithUnit(unit);
+      await sleep(200);
+    } else if (bestTarget && bestTarget.hp > 0) {
+      executeCombat(unit, bestTarget);
+      await sleep(320);
+    }
+  }
+
+  // AI Production at Red Factories / Airports / Ports
+  if (!gameState.gameOver) {
+    aiProduceUnits();
+    await sleep(250);
+  }
+
+  if (gameState.gameOver) return;
+
+  // Start Player Turn
+  gameState.empDebuff[TEAM_RED] = false;
+  gameState.turn++;
+  gameState.currentTeam = TEAM_BLUE;
+  gameState.gold[TEAM_BLUE] += calculateTeamIncome(TEAM_BLUE);
+  prepareTeamUnitsForTurn(TEAM_BLUE);
+  updateHUD();
+  showToast(`🟦 TAG ${gameState.turn} — Dein Kommando!`);
+}
+
+function aiProduceUnits() {
+  // AI buys tech occasionally
+  if (gameState.turn >= 4 && gameState.gold[TEAM_RED] >= 480 && !gameState.techs[TEAM_RED].has('armor')) {
+    gameState.gold[TEAM_RED] -= 220;
+    gameState.techs[TEAM_RED].add('armor');
+  }
+
+  const redInfCount = gameState.units.filter(u => u.team === TEAM_RED && UNIT_TYPES[u.type].canCapture).length;
+  const blueAirCount = gameState.units.filter(u => u.team === TEAM_BLUE && UNIT_TYPES[u.type].moveType === 'air').length;
+
+  for (let q = 0; q < gameState.cols; q++) {
+    for (let r = 0; r < gameState.rows; r++) {
+      const tile = gameState.map[q][r];
+      const tSpec = TERRAIN[tile.type];
+      if (tile.owner !== TEAM_RED || !tSpec.producer) continue;
+      if (getUnitAt(q, r)) continue;
+
+      const budget = gameState.gold[TEAM_RED];
+      let choice = null;
+
+      if (tSpec.producer === 'land') {
+        if (redInfCount < 2 && budget >= 70) choice = 'INFANTRY';
+        else if (blueAirCount > 0 && budget >= 210 && Math.random() < 0.5) choice = 'AA';
+        else if (budget >= 340 && Math.random() < 0.45) choice = 'HEAVY_TANK';
+        else if (budget >= 240 && Math.random() < 0.4) choice = 'ARTILLERY';
+        else if (budget >= 200) choice = 'TANK';
+        else if (budget >= 130) choice = 'MECH';
+        else if (budget >= 70 && redInfCount < 4) choice = 'INFANTRY';
+      } else if (tSpec.producer === 'air') {
+        if (budget >= 400 && Math.random() < 0.4) choice = 'BOMBER';
+        else if (budget >= 270) choice = 'HELI';
+      } else if (tSpec.producer === 'sea') {
+        if (budget >= 380) choice = 'BATTLESHIP';
+      }
+
+      if (choice && UNIT_TYPES[choice].cost <= gameState.gold[TEAM_RED]) {
+        gameState.gold[TEAM_RED] -= UNIT_TYPES[choice].cost;
+        createUnit(choice, TEAM_RED, q, r, false);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// VICTORY CHECKS
+// ============================================================================
+function checkVictoryConditions() {
+  if (gameState.gameOver) return;
+
+  const blueUnits = gameState.units.filter(u => u.team === TEAM_BLUE && u.hp > 0).length;
+  const redUnits = gameState.units.filter(u => u.team === TEAM_RED && u.hp > 0).length;
+
+  let blueFactories = 0, redFactories = 0;
+  for (let q = 0; q < gameState.cols; q++) {
+    for (let r = 0; r < gameState.rows; r++) {
+      const t = gameState.map[q][r];
+      if (TERRAIN[t.type].producer) {
+        if (t.owner === TEAM_BLUE) blueFactories++;
+        if (t.owner === TEAM_RED) redFactories++;
+      }
+    }
+  }
+
+  if (redUnits === 0 && (redFactories === 0 || gameState.gold[TEAM_RED] < 70)) {
+    endGame(TEAM_BLUE, 'Alle feindlichen Streitkräfte wurden vollständig aufgerieben!');
+  } else if (blueUnits === 0 && (blueFactories === 0 || gameState.gold[TEAM_BLUE] < 70)) {
+    endGame(TEAM_RED, 'Deine Armee wurde vernichtet und keine Reserven sind verfügbar.');
+  }
+}
+
+function endGame(winnerTeam, reason) {
+  gameState.gameOver = true;
+  const isWin = winnerTeam === TEAM_BLUE;
+
+  // Calculate Command Score
+  const turnBonus = Math.max(100, 1200 - gameState.turn * 45);
+  const killScore = gameState.stats.unitsKilled * 150;
+  const capScore = gameState.stats.citiesCaptured * 100;
+  const totalScore = isWin ? (turnBonus + killScore + capScore) : Math.round((killScore + capScore) * 0.4);
+
+  if (isWin && window.ArcadeCore) {
+    const prev = ArcadeCore.getScore('hexfront') || 0;
+    if (totalScore > prev) ArcadeCore.saveScore('hexfront', totalScore);
+    ArcadeCore.powerup();
+  } else if (!isWin && window.ArcadeCore) {
+    ArcadeCore.gameOver();
+  }
+
+  document.getElementById('goEmoji').textContent = isWin ? '🎖️' : '💀';
+  document.getElementById('goTitle').textContent = isWin ? 'OPERATION ERFOLGREICH!' : 'NIEDERLAGE AN DER FRONT';
+  document.getElementById('goTitle').style.color = isWin ? '#4ade80' : '#f87171';
+  document.getElementById('goSummary').textContent = reason;
+  document.getElementById('goStats').innerHTML = `
+    <div class="stat-box"><span>Kampftage:</span><span>${gameState.turn}</span></div>
+    <div class="stat-box"><span>Vernichtet:</span><span>${gameState.stats.unitsKilled}</span></div>
+    <div class="stat-box"><span>Verluste:</span><span>${gameState.stats.unitsLost}</span></div>
+    <div class="stat-box"><span>Kommando-Punkte:</span><span style="color:#fbbf24;">${totalScore}</span></div>
+  `;
+  document.getElementById('gameOverModal').classList.add('open');
+}
+
+// ============================================================================
+// UI & INTERACTION HANDLERS
+// ============================================================================
+function selectHex(q, r) {
+  if (gameState.currentTeam !== TEAM_BLUE || gameState.gameOver) return;
+
+  const key = hexKey(q, r);
+  const clickedUnit = getUnitAt(q, r);
+  const clickedTile = getTile(q, r);
+  const sel = gameState.selectedUnit;
+
+  // 1. If a friendly unit is already selected and player clicks an attackable enemy -> ATTACK!
+  if (sel && gameState.attackableHexes.has(key) && clickedUnit && clickedUnit.team === TEAM_RED) {
+    executeCombat(sel, clickedUnit);
+    return;
+  }
+
+  // 2. If a friendly unit is selected and player clicks a reachable empty hex -> MOVE!
+  if (sel && gameState.reachableHexes.has(key) && (!clickedUnit || clickedUnit.id === sel.id)) {
+    if (sel.q !== q || sel.r !== r) {
+      sel.q = q;
+      sel.r = r;
+      sel.moved = true;
+      WarAudio.move();
+      updateSelectionRanges();
+      updateInfoPanel(clickedTile, sel);
+      return;
+    }
+  }
+
+  // 3. Select own unit
+  if (clickedUnit && clickedUnit.team === TEAM_BLUE) {
+    gameState.selectedUnit = clickedUnit;
+    WarAudio.select();
+    updateSelectionRanges();
+    updateInfoPanel(clickedTile, clickedUnit);
+    return;
+  }
+
+  // 4. Click owned vacant Production Building (Factory / Airport / Port) -> Open Shop!
+  if (!clickedUnit && clickedTile && clickedTile.owner === TEAM_BLUE && TERRAIN[clickedTile.type].producer) {
+    gameState.selectedUnit = null;
+    gameState.reachableHexes.clear();
+    gameState.attackableHexes.clear();
+    openFactoryModal(clickedTile);
+    updateInfoPanel(clickedTile, null);
+    return;
+  }
+
+  // 5. Inspect enemy unit or terrain
+  gameState.selectedUnit = null;
+  gameState.reachableHexes.clear();
+  gameState.attackableHexes.clear();
+  updateInfoPanel(clickedTile, clickedUnit);
+}
+
+function updateSelectionRanges() {
+  const sel = gameState.selectedUnit;
+  if (!sel || sel.hp <= 0) {
+    gameState.selectedUnit = null;
+    gameState.reachableHexes.clear();
+    gameState.attackableHexes.clear();
+    return;
+  }
+  const { reachable, attackable } = computeUnitRanges(sel);
+  gameState.reachableHexes = reachable;
+  gameState.attackableHexes = attackable;
+  updateInfoPanel(getTile(sel.q, sel.r), sel);
+}
+
+function updateInfoPanel(tile, unit) {
+  if (!tile && gameState.selectedUnit) {
+    unit = gameState.selectedUnit;
+    tile = getTile(unit.q, unit.r);
+  }
+  if (!tile) return;
+
+  const tSpec = TERRAIN[tile.type];
+  const ownerBadge = tile.owner === TEAM_BLUE ? '🟦 Blau' : (tile.owner === TEAM_RED ? '🟥 Rot' : '⬜ Neutral');
+  const actionsEl = document.getElementById('unitActions');
+  actionsEl.innerHTML = '';
+
+  if (unit) {
+    const uSpec = UNIT_TYPES[unit.type];
+    const stars = '★'.repeat(unit.veteran || 0);
+    document.getElementById('infoTitle').innerHTML = `${uSpec.icon} ${uSpec.name} <span style="color:#fbbf24;">${stars}</span>`;
+    document.getElementById('infoCoords').textContent = `[${tile.q},${tile.r}] ${tSpec.name}`;
+    document.getElementById('infoDesc').textContent = uSpec.desc;
+
+    document.getElementById('infoStats').innerHTML = `
+      <div class="stat-box"><span>❤️ Struktur:</span><span>${unit.hp}/${unit.maxHp}</span></div>
+      <div class="stat-box"><span>⚔️ Feuerkraft:</span><span>${uSpec.atk}</span></div>
+      <div class="stat-box"><span>🎯 Reichweite:</span><span>${uSpec.rangeMin}–${getUnitMaxRange(unit)}</span></div>
+      <div class="stat-box"><span>🛡️ Deckung:</span><span>+${uSpec.moveType === 'air' ? 0 : tSpec.def}%</span></div>
+    `;
+
+    if (unit.team === TEAM_BLUE && gameState.currentTeam === TEAM_BLUE) {
+      // Capture button
+      if (uSpec.canCapture && tSpec.capturable && tile.owner !== TEAM_BLUE && !unit.attacked) {
+        const btn = document.createElement('button');
+        btn.className = 'action-btn capture';
+        btn.innerHTML = `🚩 Erobern (${tile.captureProgress || 0}/10)`;
+        btn.onclick = () => captureBuildingWithUnit(unit);
+        actionsEl.appendChild(btn);
+      }
+      // Field Repair button
+      if (unit.hp < unit.maxHp && !unit.attacked && gameState.gold[TEAM_BLUE] >= 40) {
+        const rBtn = document.createElement('button');
+        rBtn.className = 'action-btn repair';
+        rBtn.innerHTML = `🔧 Feld-Reparatur (40💰)`;
+        rBtn.onclick = () => repairSelectedUnit(unit);
+        actionsEl.appendChild(rBtn);
+      }
+    }
+  } else {
+    document.getElementById('infoTitle').textContent = `${tSpec.icon} ${tSpec.name}`;
+    document.getElementById('infoCoords').textContent = `[${tile.q},${tile.r}] ${ownerBadge}`;
+    document.getElementById('infoDesc').textContent = tSpec.capturable
+      ? `Strategischer Stützpunkt (+${tSpec.income} Gold/Tag). Kann durch Infanterie erobert werden.`
+      : `Natürliches Gelände. Gewährt Bodentruppen +${tSpec.def}% Verteidigungsdeckung.`;
+
+    document.getElementById('infoStats').innerHTML = `
+      <div class="stat-box"><span>🛡️ Deckung:</span><span>+${tSpec.def}%</span></div>
+      <div class="stat-box"><span>💰 Ertrag:</span><span>+${tSpec.income}/Tag</span></div>
+    `;
+
+    if (tile.owner === TEAM_BLUE && tSpec.producer && gameState.currentTeam === TEAM_BLUE) {
+      const pBtn = document.createElement('button');
+      pBtn.className = 'action-btn';
+      pBtn.innerHTML = `🏭 Einheit produzieren`;
+      pBtn.onclick = () => openFactoryModal(tile);
+      actionsEl.appendChild(pBtn);
+    }
+  }
+}
+
+function updateHUD() {
+  const isBlue = gameState.currentTeam === TEAM_BLUE;
+  const turnEl = document.getElementById('turnIndicator');
+  turnEl.textContent = isBlue ? `🟦 TAG ${gameState.turn} — DEIN ZUG` : `🟥 TAG ${gameState.turn} — FEIND ZIEHT`;
+  turnEl.style.borderColor = isBlue ? '#3b82f6' : '#ef4444';
+  turnEl.style.color = isBlue ? '#93c5fd' : '#fca5a5';
+
+  document.getElementById('goldDisplay').textContent = gameState.gold[TEAM_BLUE];
+  document.getElementById('incomeDisplay').textContent = calculateTeamIncome(TEAM_BLUE);
+  document.getElementById('endTurnBtn').disabled = !isBlue;
+
+  // Power bar
+  const pwr = gameState.power[TEAM_BLUE] || 0;
+  const cmd = COMMANDERS.find(c => c.id === gameState.commanderId) || COMMANDERS[0];
+  const pwrBtn = document.getElementById('cmdPowerBtn');
+  document.getElementById('cmdPowerLabel').textContent = `${cmd.powerName.split(' ')[0]} (${pwr}%)`;
+  pwrBtn.disabled = !(isBlue && pwr >= 100);
+  pwrBtn.classList.toggle('ready', isBlue && pwr >= 100);
+
+  // Army strength ratio
+  const blueStr = gameState.units.filter(u => u.team === TEAM_BLUE).reduce((s, u) => s + UNIT_TYPES[u.type].cost * (u.hp / u.maxHp), 100);
+  const redStr = gameState.units.filter(u => u.team === TEAM_RED).reduce((s, u) => s + UNIT_TYPES[u.type].cost * (u.hp / u.maxHp), 100);
+  const pct = Math.round((blueStr / (blueStr + redStr)) * 100);
+  document.getElementById('balanceBar').style.width = `${pct}%`;
+
+  document.getElementById('techBadge').textContent = `(${gameState.techs[TEAM_BLUE].size}/${TECH_TREE.length})`;
+}
+
+// ============================================================================
+// MODALS: FACTORY SHOP, TECH LAB, MISSION SETUP
+// ============================================================================
+function openFactoryModal(tile) {
+  gameState.activeFactoryHex = { q: tile.q, r: tile.r };
+  const tSpec = TERRAIN[tile.type];
+  const facType = tSpec.producer; // 'land' | 'air' | 'sea'
+
+  document.getElementById('factoryModalTitle').textContent = `${tSpec.icon} ${tSpec.name} — Rekrutierung`;
+  document.getElementById('shopGoldText').textContent = gameState.gold[TEAM_BLUE];
+
+  const grid = document.getElementById('shopGrid');
+  const available = Object.values(UNIT_TYPES).filter(u => u.facility === facType);
+
+  grid.innerHTML = available.map(u => {
+    const canAfford = gameState.gold[TEAM_BLUE] >= u.cost;
+    return `
+      <div class="shop-item ${canAfford ? '' : 'disabled'}">
+        <div>
+          <div class="shop-top">
+            <span class="shop-icon">${u.icon}</span>
+            <span class="shop-cost">💰 ${u.cost}</span>
+          </div>
+          <div class="shop-name">${u.name}</div>
+          <div class="shop-desc">${u.desc}</div>
+        </div>
+        <div>
+          <div class="shop-stats" style="margin-bottom:8px;">
+            <span>⚔️ ${u.atk}</span>
+            <span>❤️ ${u.hp}</span>
+            <span>🛞 Bew: ${u.move}</span>
+            <span>🎯 Rw: ${u.rangeMin}-${u.rangeMax}</span>
+          </div>
+          <button class="buy-btn" ${canAfford ? '' : 'disabled'} onclick="buyUnit('${u.id}')">
+            ${canAfford ? 'Rekrutieren' : 'Zu wenig Gold'}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('factoryModal').classList.add('open');
+}
+
+function buyUnit(typeId) {
+  const spot = gameState.activeFactoryHex;
+  if (!spot) return;
+  const spec = UNIT_TYPES[typeId];
+  if (gameState.gold[TEAM_BLUE] < spec.cost || getUnitAt(spot.q, spot.r)) return;
+
+  gameState.gold[TEAM_BLUE] -= spec.cost;
+  const u = createUnit(typeId, TEAM_BLUE, spot.q, spot.r, false);
+  WarAudio.capture();
+  closeModal('factoryModal');
+  updateHUD();
+  updateInfoPanel(getTile(spot.q, spot.r), u);
+  showToast(`${spec.icon} ${spec.name} in Dienst gestellt!`);
+}
+
+function openTechModal() {
+  const grid = document.getElementById('techGrid');
+  grid.innerHTML = TECH_TREE.map(t => {
+    const owned = gameState.techs[TEAM_BLUE].has(t.id);
+    const canAfford = !owned && gameState.gold[TEAM_BLUE] >= t.cost && gameState.currentTeam === TEAM_BLUE;
+    return `
+      <div class="shop-item ${owned || canAfford ? '' : 'disabled'}">
+        <div>
+          <div class="shop-top">
+            <span class="shop-icon">${t.icon}</span>
+            <span class="shop-cost">${owned ? '✅ AKTIV' : '💰 ' + t.cost}</span>
+          </div>
+          <div class="shop-name">${t.name}</div>
+          <div class="shop-desc">${t.desc}</div>
+        </div>
+        <button class="buy-btn" ${canAfford ? '' : 'disabled'} onclick="buyTech('${t.id}')">
+          ${owned ? 'Erforscht' : (canAfford ? 'Erforschen' : 'Zu wenig Gold')}
+        </button>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('techModal').classList.add('open');
+}
+
+function buyTech(techId) {
+  const tech = TECH_TREE.find(t => t.id === techId);
+  if (!tech || gameState.techs[TEAM_BLUE].has(techId) || gameState.gold[TEAM_BLUE] < tech.cost) return;
+  gameState.gold[TEAM_BLUE] -= tech.cost;
+  gameState.techs[TEAM_BLUE].add(techId);
+  WarAudio.capture();
+  openTechModal();
+  updateHUD();
+  showToast(`🔬 Technologie erforscht: ${tech.name}!`);
+}
+
+function openSetupModal() {
+  const cmdGrid = document.getElementById('commanderSelectGrid');
+  cmdGrid.innerHTML = COMMANDERS.map(c => `
+    <div class="select-card ${gameState.commanderId === c.id ? 'selected' : ''}" onclick="selectCommander('${c.id}')">
+      <h3>${c.emoji} ${c.name}</h3>
+      <div style="font-size:0.74rem;color:#60a5fa;font-weight:700;margin-bottom:4px;">${c.title}</div>
+      <p><strong>Passiv:</strong> ${c.passiveDesc}</p>
+      <p style="margin-top:4px;color:#c4b5fd;"><strong>Spezial:</strong> ${c.powerDesc}</p>
+    </div>
+  `).join('');
+
+  const scenGrid = document.getElementById('scenarioSelectGrid');
+  scenGrid.innerHTML = SCENARIOS.map(s => `
+    <div class="select-card ${gameState.scenarioId === s.id ? 'selected' : ''}" onclick="selectScenario('${s.id}')">
+      <h3>${s.emoji} ${s.name}</h3>
+      <p>${s.desc}</p>
+    </div>
+  `).join('');
+
+  document.getElementById('setupModal').classList.add('open');
+}
+
+function selectCommander(id) {
+  gameState.commanderId = id;
+  WarAudio.select();
+  openSetupModal();
+}
+
+function selectScenario(id) {
+  gameState.scenarioId = id;
+  WarAudio.select();
+  openSetupModal();
+}
+
+function startSelectedCampaign() {
+  gameState.difficulty = document.getElementById('aiDifficultySelect').value;
+  closeModal('setupModal');
+  restartCurrentMission();
+}
+
+function restartCurrentMission() {
+  closeModal('gameOverModal');
+  gameState.turn = 1;
+  gameState.currentTeam = TEAM_BLUE;
+  gameState.gold = { [TEAM_BLUE]: 300, [TEAM_RED]: 300 };
+  gameState.power = { [TEAM_BLUE]: 35, [TEAM_RED]: 0 };
+  gameState.empDebuff = { [TEAM_BLUE]: false, [TEAM_RED]: false };
+  gameState.techs = { [TEAM_BLUE]: new Set(), [TEAM_RED]: new Set() };
+  gameState.selectedUnit = null;
+  gameState.reachableHexes.clear();
+  gameState.attackableHexes.clear();
+  gameState.stats = { unitsKilled: 0, unitsLost: 0, citiesCaptured: 0 };
+  gameState.gameOver = false;
+
+  buildScenarioMap(gameState.scenarioId);
+  centerMap();
+  updateHUD();
+  showToast(`🎖️ Operation gestartet! Kommandant ${COMMANDERS.find(c => c.id === gameState.commanderId).name} hat das Kommando.`);
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// ============================================================================
+// QOL CONTROLS (Cycle Unit, Zoom, Center, Fog, Toast)
+// ============================================================================
+function cycleActiveUnit() {
+  if (gameState.currentTeam !== TEAM_BLUE) return;
+  const readyUnits = gameState.units.filter(u => u.team === TEAM_BLUE && (!u.moved || !u.attacked));
+  if (readyUnits.length === 0) {
+    showToast('Alle Einheiten haben in diesem Zug bereits gehandelt.');
+    return;
+  }
+  const curIdx = gameState.selectedUnit ? readyUnits.findIndex(u => u.id === gameState.selectedUnit.id) : -1;
+  const next = readyUnits[(curIdx + 1) % readyUnits.length];
+  gameState.selectedUnit = next;
+  WarAudio.select();
+  updateSelectionRanges();
+}
+
+function toggleFog() {
+  gameState.fogEnabled = !gameState.fogEnabled;
+  document.getElementById('fogBtn').style.opacity = gameState.fogEnabled ? '1' : '0.45';
+  showToast(gameState.fogEnabled ? '🌫️ Nebel des Krieges: AKTIV' : '☀️ Nebel des Krieges: AUS');
+}
+
+function zoomMap(factor) {
+  camera.zoom = Math.max(0.55, Math.min(1.65, camera.zoom * factor));
+}
+
+function centerMap() {
+  if (!canvas) return;
+  const w = Math.sqrt(3) * hexRadius;
+  const h = 1.5 * hexRadius;
+  const mapW = gameState.cols * w;
+  const mapH = gameState.rows * h;
+
+  const fitZoom = Math.min(
+    (canvas.width - 80) / mapW,
+    (canvas.height - 140) / mapH,
+    1.15
+  );
+  camera.zoom = Math.max(0.6, fitZoom);
+
+  const actualW = gameState.cols * Math.sqrt(3) * hexRadius * camera.zoom;
+  const actualH = gameState.rows * 1.5 * hexRadius * camera.zoom;
+  camera.x = (canvas.width - actualW) / 2 + 25;
+  camera.y = (canvas.height - actualH) / 2 + 15;
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toastBanner');
+  el.textContent = msg;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ============================================================================
+// VISUAL PARTICLES & CANVAS RENDERING
+// ============================================================================
+function spawnExplosion(x, y, color, count = 16) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 4.5;
+    gameState.particles.push({
+      type: 'spark',
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      radius: 2.5 + Math.random() * 4,
+      color,
+      alpha: 1,
+      decay: 0.025 + Math.random() * 0.02
+    });
+  }
+}
+
+function spawnProjectile(x1, y1, x2, y2, color) {
+  gameState.projectiles.push({
+    x: x1, y: y1, tx: x2, ty: y2,
+    progress: 0, color
+  });
+}
+
+function spawnFloatingText(x, y, text, color) {
+  gameState.particles.push({
+    type: 'text',
+    x, y,
+    vy: -0.9,
+    text,
+    color,
+    alpha: 1,
+    decay: 0.018
+  });
+}
+
+function drawHexagonPath(ctx, cx, cy, radius) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 180) * (60 * i - 30);
+    const vx = cx + radius * Math.cos(angle);
+    const vy = cy + radius * Math.sin(angle);
+    if (i === 0) ctx.moveTo(vx, vy);
+    else ctx.lineTo(vx, vy);
+  }
+  ctx.closePath();
+}
+
+function renderLoop() {
+  if (!ctx || !canvas) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const size = hexRadius * camera.zoom;
+  const visibleSet = getVisibleHexes(TEAM_BLUE);
+
+  // 1. Draw Hex Tiles
+  for (let q = 0; q < gameState.cols; q++) {
+    for (let r = 0; r < gameState.rows; r++) {
+      const tile = gameState.map[q][r];
+      const tSpec = TERRAIN[tile.type];
+      const { x, y } = hexToPixel(q, r);
+      const key = hexKey(q, r);
+      const isVis = visibleSet.has(key);
+
+      drawHexagonPath(ctx, x, y, size - 1);
+
+      // Fill color based on terrain & owner
+      let fill = tSpec.color;
+      if (tile.owner === TEAM_BLUE) fill = '#17366e';
+      else if (tile.owner === TEAM_RED) fill = '#5c1922';
+      ctx.fillStyle = fill;
+      ctx.fill();
+
+      // Border
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = tSpec.border;
+      if (tile.owner === TEAM_BLUE) ctx.strokeStyle = '#3b82f6';
+      else if (tile.owner === TEAM_RED) ctx.strokeStyle = '#ef4444';
+      ctx.stroke();
+
+      // Reachable Move Overlay
+      if (gameState.reachableHexes.has(key)) {
+        drawHexagonPath(ctx, x, y, size - 3);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.28)';
+        ctx.fill();
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Attackable Overlay
+      if (gameState.attackableHexes.has(key)) {
+        drawHexagonPath(ctx, x, y, size - 3);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.34)';
+        ctx.fill();
+        ctx.strokeStyle = '#f87171';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+
+      // Hover Highlight
+      if (gameState.hoveredHex && gameState.hoveredHex.q === q && gameState.hoveredHex.r === r) {
+        drawHexagonPath(ctx, x, y, size - 2);
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Terrain Icon (subtle in background if unit is on top, prominent otherwise)
+      const hasUnit = getUnitAt(q, r) && isVis;
+      if (tile.type !== 'PLAIN') {
+        ctx.font = `${Math.round(size * (hasUnit ? 0.42 : 0.62))}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.globalAlpha = hasUnit ? 0.45 : 0.92;
+        ctx.fillText(tSpec.icon, x, hasUnit ? y - size * 0.42 : y);
+        ctx.globalAlpha = 1.0;
+      }
+
+      // Capture progress bar on building
+      if (tile.captureProgress > 0) {
+        const bw = size * 0.9;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(x - bw / 2, y + size * 0.45, bw, 5);
+        ctx.fillStyle = '#10b981';
+        ctx.fillRect(x - bw / 2, y + size * 0.45, bw * (tile.captureProgress / 10), 5);
+      }
+
+      // Fog of War shroud
+      if (!isVis) {
+        drawHexagonPath(ctx, x, y, size);
+        ctx.fillStyle = 'rgba(6, 10, 19, 0.62)';
+        ctx.fill();
+      }
+    }
+  }
+
+  // 2. Draw Units
+  for (const u of gameState.units) {
+    if (u.hp <= 0) continue;
+    const key = hexKey(u.q, u.r);
+    if (!visibleSet.has(key)) continue;
+
+    const { x, y } = hexToPixel(u.q, u.r);
+    const spec = UNIT_TYPES[u.type];
+    const isBlue = u.team === TEAM_BLUE;
+    const isExhausted = isBlue && u.moved && u.attacked && gameState.currentTeam === TEAM_BLUE;
+
+    // Selected pulse ring
+    if (gameState.selectedUnit && gameState.selectedUnit.id === u.id) {
+      ctx.beginPath();
+      ctx.arc(x, y, size * 0.62, 0, Math.PI * 2);
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // Team badge circle
+    ctx.beginPath();
+    ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = isBlue
+      ? (isExhausted ? '#1e3a5f' : '#2563eb')
+      : '#dc2626';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = isExhausted ? '#64748b' : '#ffffff';
+    ctx.stroke();
+
+    // Unit Icon
+    ctx.font = `${Math.round(size * 0.58)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = isExhausted ? 0.55 : 1.0;
+    ctx.fillText(spec.icon, x, y - 1);
+    ctx.globalAlpha = 1.0;
+
+    // Veteran Stars
+    if (u.veteran > 0) {
+      ctx.font = `bold ${Math.round(size * 0.28)}px sans-serif`;
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText('★'.repeat(u.veteran), x, y - size * 0.52);
+    }
+
+    // HP Bar & Badge
+    const barW = size * 0.85;
+    const barH = Math.max(4, size * 0.13);
+    const barY = y + size * 0.36;
+    const hpRatio = Math.max(0, u.hp / u.maxHp);
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillRect(x - barW / 2, barY, barW, barH);
+    ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : (hpRatio > 0.25 ? '#f59e0b' : '#ef4444');
+    ctx.fillRect(x - barW / 2, barY, barW * hpRatio, barH);
+  }
+
+  // 3. Projectiles
+  for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+    const p = gameState.projectiles[i];
+    p.progress += 0.14;
+    if (p.progress >= 1) {
+      gameState.projectiles.splice(i, 1);
+      continue;
+    }
+    const cx = p.x + (p.tx - p.x) * p.progress;
+    const cy = p.y + (p.ty - p.y) * p.progress;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+  }
+
+  // 4. Particles & Floating Damage Numbers
+  for (let i = gameState.particles.length - 1; i >= 0; i--) {
+    const pt = gameState.particles[i];
+    pt.alpha -= pt.decay;
+    if (pt.alpha <= 0) {
+      gameState.particles.splice(i, 1);
+      continue;
+    }
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, pt.alpha);
+    if (pt.type === 'spark') {
+      pt.x += pt.vx;
+      pt.y += pt.vy;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.radius, 0, Math.PI * 2);
+      ctx.fillStyle = pt.color;
+      ctx.fill();
+    } else if (pt.type === 'text') {
+      pt.y += pt.vy;
+      ctx.font = '900 15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(pt.text, pt.x, pt.y);
+      ctx.fillStyle = pt.color;
+      ctx.fillText(pt.text, pt.x, pt.y);
+    }
+    ctx.restore();
+  }
+
+  requestAnimationFrame(renderLoop);
+}
+
+// ============================================================================
+// INPUT LISTENERS (Mouse, Touch, Keyboard)
+// ============================================================================
+function setupInputEvents() {
+  canvas = document.getElementById('battleCanvas');
+  ctx = canvas.getContext('2d');
+
+  const resize = () => {
+    const vp = document.getElementById('viewport');
+    canvas.width = vp.clientWidth;
+    canvas.height = vp.clientHeight;
+  };
+  window.addEventListener('resize', () => {
+    resize();
+    centerMap();
+  });
+  resize();
+
+  canvas.addEventListener('pointerdown', e => {
+    isDragging = true;
+    dragMoved = false;
+    dragStart = { x: e.clientX - camera.x, y: e.clientY - camera.y, rawX: e.clientX, rawY: e.clientY };
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (isDragging) {
+      const dist = Math.hypot(e.clientX - dragStart.rawX, e.clientY - dragStart.rawY);
+      if (dist > 6) {
+        dragMoved = true;
+        camera.x = e.clientX - dragStart.x;
+        camera.y = e.clientY - dragStart.y;
+      }
+    }
+
+    const hex = pixelToHex(mx, my);
+    gameState.hoveredHex = hex;
+
+    // Show Combat Forecast if hovering attackable enemy
+    const previewEl = document.getElementById('combatPreview');
+    if (hex && gameState.selectedUnit && gameState.attackableHexes.has(hexKey(hex.q, hex.r))) {
+      const defender = getUnitAt(hex.q, hex.r);
+      if (defender && defender.team === TEAM_RED) {
+        const { dmgToDef, counterDmg } = predictCombat(gameState.selectedUnit, defender);
+        document.getElementById('fcAttackerName').textContent = UNIT_TYPES[gameState.selectedUnit.type].name;
+        document.getElementById('fcAttackerDmg').textContent = `-${dmgToDef} HP`;
+        document.getElementById('fcDefenderName').textContent = UNIT_TYPES[defender.type].name;
+        document.getElementById('fcCounterDmg').textContent = counterDmg > 0 ? `-${counterDmg} HP` : 'Keine';
+        previewEl.classList.add('visible');
+      } else {
+        previewEl.classList.remove('visible');
+      }
+    } else {
+      previewEl.classList.remove('visible');
+    }
+  });
+
+  window.addEventListener('pointerup', e => {
+    if (!isDragging) return;
+    isDragging = false;
+    if (!dragMoved && e.target === canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const hex = pixelToHex(e.clientX - rect.left, e.clientY - rect.top);
+      if (hex) selectHex(hex.q, hex.r);
+    }
+  });
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoomMap(e.deltaY < 0 ? 1.1 : 0.9);
+  }, { passive: false });
+
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      cycleActiveUnit();
+    } else if (e.code === 'KeyE') {
+      endPlayerTurn();
+    }
+  });
+}
+
+// ============================================================================
+// INIT
+// ============================================================================
+window.addEventListener('DOMContentLoaded', () => {
+  setupInputEvents();
+  restartCurrentMission();
+  requestAnimationFrame(renderLoop);
+});
+</script>
+</body>
+</html>

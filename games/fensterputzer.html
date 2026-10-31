@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Window Cleaner 9000 — Skyscraper on the Brink</title>
+  <meta name="description" content="Clean the filthy windows of a 200m skyscraper from a swaying rope gondola! Keep the ropes balanced, shoo away sabotaging pigeons and uncover absurd office scenes.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+  <script src="../src/arcade-core.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #0c192c;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none; -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    .hud-top {
+      position: fixed;
+      top: 12px; left: 12px; right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 20;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .hud-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+    }
+    .btn-hud {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      backdrop-filter: blur(8px);
+    }
+    .btn-hud:hover { background: rgba(30, 41, 59, 0.95); }
+
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 8px 14px;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+      flex-wrap: wrap;
+    }
+    .stat-box { display: flex; flex-direction: column; min-width: 65px; }
+    .stat-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; font-weight: 700; }
+    .stat-val { font-size: 1.05rem; font-weight: 800; color: #f8fafc; font-variant-numeric: tabular-nums; }
+    .stat-val.cyan { color: #38bdf8; }
+    .stat-val.gold { color: #fbbf24; }
+    .stat-val.green { color: #4ade80; }
+    .stat-val.red { color: #fb7185; }
+
+    /* Winch Controls Bottom Bar */
+    .winch-bar {
+      position: fixed;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      padding: 8px 14px;
+      border-radius: 16px;
+      z-index: 25;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      flex-wrap: wrap;
+      justify-content: center;
+      width: max-content;
+      max-width: 96vw;
+    }
+    .winch-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .winch-lbl {
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin-right: 2px;
+    }
+    .btn-winch {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 0.82rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .btn-winch:active { background: #38bdf8; color: #0f172a; }
+    .btn-winch.spray {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      border-color: #38bdf8;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 11, 20, 0.84);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+    }
+    .modal-backdrop[hidden] { display: none; }
+    .modal-card {
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 20px;
+      max-width: 520px;
+      width: 100%;
+      padding: 26px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+      text-align: center;
+    }
+    .modal-card h1 {
+      margin: 0 0 8px;
+      font-size: 1.8rem;
+      font-weight: 900;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .modal-sub {
+      color: #94a3b8;
+      font-size: 0.94rem;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #0ea5e9, #4f46e5);
+      color: #ffffff;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);
+      width: 100%;
+    }
+    .btn-primary:hover { transform: translateY(-1px); }
+  </style>
+</head>
+<body>
+
+  <div class="hud-top">
+    <div class="hud-left">
+      <a href="../index.html" class="btn-hud">← Hub</a>
+      <button id="muteBtn" class="btn-hud" type="button">🔊 Sound</button>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat-box">
+        <span class="stat-label">Floor</span>
+        <span class="stat-val cyan" id="hudFloor">Floor 1 (10m)</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Cleanliness</span>
+        <span class="stat-val green" id="hudClean">0%</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Rope Health</span>
+        <span class="stat-val red" id="hudRope">100%</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Tips</span>
+        <span class="stat-val gold" id="hudScore">0 €</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Best</span>
+        <span class="stat-val gold" id="hudBest">0 €</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="winch-bar">
+    <div class="winch-group">
+      <span class="winch-lbl">Left Rope:</span>
+      <button class="btn-winch" id="btnLUp" title="Key Q">▲ Q</button>
+      <button class="btn-winch" id="btnLDown" title="Key A">▼ A</button>
+    </div>
+    <div class="winch-group">
+      <button class="btn-winch spray" id="btnSpray" title="Spacebar">🔫 Water Horn (Spacebar)</button>
+    </div>
+    <div class="winch-group">
+      <span class="winch-lbl">Right Rope:</span>
+      <button class="btn-winch" id="btnRUp" title="Key E">▲ E</button>
+      <button class="btn-winch" id="btnRDown" title="Key D">▼ D</button>
+    </div>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="modal-backdrop" id="modal">
+    <div class="modal-card">
+      <div style="font-size:3rem; margin-bottom:4px;" id="modalEmoji">🪟🧼</div>
+      <h1 id="modalTitle">Fensterputzer 9000</h1>
+      <p class="modal-sub" id="modalDesc">
+        Wipe the grimy skyscraper windows spotless with your <b>mouse / touch</b>!
+        Keep your gondola level with the <b>left rope (Q/A)</b> and <b>right rope (E/D)</b>, or you'll tip into the abyss!
+        Shoo away pecking pigeons with the <b>water gun (SPACEBAR)</b>!
+      </p>
+      <button class="btn-primary" id="startBtn">🧼 Start your shift on the skyscraper!</button>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const GAME_KEY = 'fensterputzer';
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const muteBtn = document.getElementById('muteBtn');
+    function updateMuteUi() {
+      const m = window.ArcadeCore && ArcadeCore.isMuted();
+      muteBtn.textContent = m ? '🔇 Muted' : '🔊 Sound';
+    }
+    muteBtn.addEventListener('click', () => {
+      if (window.ArcadeCore) ArcadeCore.toggleMute();
+      updateMuteUi();
+    });
+    updateMuteUi();
+
+    let bestScore = Number(window.ArcadeCore ? ArcadeCore.getScore(GAME_KEY) : localStorage.getItem('fp_best')) || 0;
+
+    // Funny Office Scenes behind the windows
+    const OFFICE_SCENES = [
+      { emoji: '🩰🕺', title: 'The CEO is secretly dancing in a tutu!', bonus: 120 },
+      { emoji: '🖨️🔥', title: 'Intern fights a burning printer!', bonus: 150 },
+      { emoji: '🐱🐾', title: 'Office cat is chasing your squeegee!', bonus: 130 },
+      { emoji: '👽🛸', title: 'Secret alien meeting in the boardroom!', bonus: 200 },
+      { emoji: '😴⌨️', title: 'Senior developer asleep on the keyboard!', bonus: 110 },
+      { emoji: '🍕🎉', title: 'Secret pizza party during work hours!', bonus: 140 },
+      { emoji: '🦖💼', title: 'T-Rex in a suit gives the quarterly presentation!', bonus: 180 }
+    ];
+
+    // Controls
+    const keys = { q: false, a: false, e: false, d: false, w: false, s: false };
+    window.addEventListener('keydown', (ev) => {
+      const k = ev.code;
+      if (k === 'KeyQ') keys.q = true;
+      if (k === 'KeyA') keys.a = true;
+      if (k === 'KeyE') keys.e = true;
+      if (k === 'KeyD') keys.d = true;
+      if (k === 'KeyW' || k === 'ArrowUp') keys.w = true;
+      if (k === 'KeyS' || k === 'ArrowDown') keys.s = true;
+      if (k === 'Space') {
+        ev.preventDefault();
+        fireWaterBlaster();
+      }
+    });
+    window.addEventListener('keyup', (ev) => {
+      const k = ev.code;
+      if (k === 'KeyQ') keys.q = false;
+      if (k === 'KeyA') keys.a = false;
+      if (k === 'KeyE') keys.e = false;
+      if (k === 'KeyD') keys.d = false;
+      if (k === 'KeyW' || k === 'ArrowUp') keys.w = false;
+      if (k === 'KeyS' || k === 'ArrowDown') keys.s = false;
+    });
+
+    function bindHold(id, prop) {
+      const el = document.getElementById(id);
+      el.addEventListener('pointerdown', () => keys[prop] = true);
+      el.addEventListener('pointerup', () => keys[prop] = false);
+      el.addEventListener('pointerleave', () => keys[prop] = false);
+    }
+    bindHold('btnLUp', 'q');
+    bindHold('btnLDown', 'a');
+    bindHold('btnRUp', 'e');
+    bindHold('btnRDown', 'd');
+    document.getElementById('btnSpray').addEventListener('click', fireWaterBlaster);
+
+    // Squeegee pointer tracking
+    const pointer = { x: width / 2, y: height / 2, active: false };
+    canvas.addEventListener('pointerdown', (e) => {
+      pointer.active = true;
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+      scrubAt(pointer.x, pointer.y);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+      if (state === 'PLAYING') {
+        scrubAt(pointer.x, pointer.y);
+      }
+    });
+    window.addEventListener('pointerup', () => { pointer.active = false; });
+
+    // Game State
+    let state = 'MENU';
+    let floor = 1;
+    let score = 0;
+    let ropeHp = 100;
+    let windForce = 0;
+    let windTimer = 0;
+    let swingX = 0;
+    let swingVx = 0;
+
+    // Gondola state
+    const gondola = {
+      leftY: 0,
+      rightY: 0,
+      width: 280,
+      bucketX: 0, // relative to center (-120..120)
+      bucketVx: 0
+    };
+
+    // Current window dirt spots
+    let dirtSpots = [];
+    let currentScene = OFFICE_SCENES[0];
+    let pigeons = [];
+    let fallingHazards = [];
+    let droplets = [];
+    let floatingTexts = [];
+    let squeakCooldown = 0;
+    let floorTransition = 0;
+
+    function setupFloor(floorNum) {
+      currentScene = OFFICE_SCENES[(floorNum - 1) % OFFICE_SCENES.length];
+      dirtSpots = [];
+      const winW = Math.min(340, width * 0.68);
+      const winH = Math.min(250, height * 0.42);
+      const cx = width / 2;
+      const cy = height * 0.43;
+
+      const count = 26 + Math.min(24, floorNum * 3);
+      for (let i = 0; i < count; i++) {
+        dirtSpots.push({
+          rx: (Math.random() - 0.5) * (winW - 44),
+          ry: (Math.random() - 0.5) * (winH - 44),
+          radius: 22 + Math.random() * 18,
+          cleaned: false,
+          kind: Math.random() < 0.25 ? 'poop' : 'mud'
+        });
+      }
+
+      // Target gondola Y near window
+      gondola.leftY = cy + 65 + (Math.random() - 0.5) * 40;
+      gondola.rightY = cy + 65 + (Math.random() - 0.5) * 40;
+      gondola.bucketX = 0;
+      gondola.bucketVx = 0;
+    }
+
+    function getCleanPercent() {
+      if (!dirtSpots.length) return 100;
+      const cleanedCount = dirtSpots.filter(d => d.cleaned).length;
+      return Math.min(100, Math.round((cleanedCount / dirtSpots.length) * 100));
+    }
+
+    function scrubAt(px, py) {
+      if (state !== 'PLAYING' || floorTransition > 0) return;
+      const avgY = (gondola.leftY + gondola.rightY) * 0.5;
+      const gx = width / 2 + swingX;
+
+      // Squeegee reach check around gondola position
+      if (Math.abs(py - (avgY - 45)) > 155 || Math.abs(px - gx) > 210) return;
+
+      const winCx = width / 2;
+      const winCy = height * 0.43;
+      let cleanedAny = false;
+
+      for (const spot of dirtSpots) {
+        if (spot.cleaned) continue;
+        const sx = winCx + spot.rx;
+        const sy = winCy + spot.ry;
+        if (Math.hypot(px - sx, py - sy) < spot.radius + 26) {
+          spot.cleaned = true;
+          cleanedAny = true;
+          score += 5;
+          for (let i = 0; i < 4; i++) {
+            droplets.push({
+              x: sx, y: sy,
+              vx: (Math.random() - 0.5) * 140,
+              vy: -40 - Math.random() * 100,
+              color: '#38bdf8',
+              size: 3 + Math.random() * 3,
+              life: 0.45
+            });
+          }
+        }
+      }
+
+      if (cleanedAny) {
+        if (squeakCooldown <= 0) {
+          if (window.ArcadeCore) ArcadeCore.pop(1.3 + Math.random() * 0.4);
+          squeakCooldown = 0.09;
+        }
+        if (getCleanPercent() >= 95) {
+          completeFloor();
+        }
+      }
+    }
+
+    function completeFloor() {
+      floorTransition = 1.3;
+      const bonus = currentScene.bonus + floor * 25;
+      score += bonus;
+      if (window.ArcadeCore) ArcadeCore.powerup();
+      floatingTexts.push({
+        x: width / 2,
+        y: height * 0.36,
+        text: `✨ SPOTLESS! +${bonus} € tip!`,
+        color: '#4ade80',
+        size: 24,
+        life: 1.3
+      });
+    }
+
+    function fireWaterBlaster() {
+      if (state !== 'PLAYING') return;
+      const gx = width / 2 + swingX;
+      const gy = (gondola.leftY + gondola.rightY) * 0.5 - 30;
+      if (window.ArcadeCore) ArcadeCore.jump();
+
+      // Water stream particles upwards toward the ropes
+      for (let i = 0; i < 24; i++) {
+        droplets.push({
+          x: gx + (Math.random() - 0.5) * 160,
+          y: gy,
+          vx: (Math.random() - 0.5) * 200,
+          vy: -360 - Math.random() * 240,
+          color: '#38bdf8',
+          size: 4 + Math.random() * 3,
+          life: 0.55
+        });
+      }
+
+      if (pigeons.length > 0) {
+        const count = pigeons.length;
+        pigeons = [];
+        const pts = count * 40;
+        score += pts;
+        floatingTexts.push({
+          x: gx,
+          y: gy - 90,
+          text: `🐦 ${count}× PIGEON SHOOED! +${pts} €`,
+          color: '#38bdf8',
+          size: 20,
+          life: 1.1
+        });
+      } else {
+        // Also splashes random dirt spots clean!
+        const uncleaned = dirtSpots.filter(d => !d.cleaned);
+        for (let i = 0; i < Math.min(3, uncleaned.length); i++) {
+          uncleaned[i].cleaned = true;
+        }
+        if (getCleanPercent() >= 95 && floorTransition <= 0) {
+          completeFloor();
+        }
+      }
+    }
+
+    function resetGame() {
+      floor = 1;
+      score = 0;
+      ropeHp = 100;
+      swingX = 0;
+      swingVx = 0;
+      windForce = 0;
+      windTimer = 3.0;
+      pigeons = [];
+      fallingHazards = [];
+      droplets = [];
+      floatingTexts = [];
+      floorTransition = 0;
+      setupFloor(1);
+      updateHud();
+    }
+
+    function triggerGameOver(reason) {
+      state = 'MENU';
+      if (window.ArcadeCore) ArcadeCore.gameOver();
+      if (score > bestScore) {
+        bestScore = score;
+        if (window.ArcadeCore) ArcadeCore.saveScore(GAME_KEY, bestScore);
+        try { localStorage.setItem('fp_best', String(bestScore)); } catch (e) {}
+      }
+      updateHud();
+
+      document.getElementById('modalEmoji').textContent = '🪂💥';
+      document.getElementById('modalTitle').textContent = reason;
+      document.getElementById('modalDesc').innerHTML =
+        `Floor reached: <b>Floor ${floor} (${floor * 10}m high)</b><br>` +
+        `Tips earned: <b>${score} €</b> (Best: <b>${bestScore} €</b>)`;
+      document.getElementById('startBtn').textContent = '🧼 Rappel down again!';
+      document.getElementById('modal').hidden = false;
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      document.getElementById('modal').hidden = true;
+      resetGame();
+      state = 'PLAYING';
+    });
+
+    function updateHud() {
+      document.getElementById('hudFloor').textContent = `Floor ${floor} (${floor * 10}m)`;
+      document.getElementById('hudClean').textContent = `${getCleanPercent()}%`;
+      document.getElementById('hudRope').textContent = `${Math.max(0, Math.ceil(ropeHp))}%`;
+      document.getElementById('hudScore').textContent = `${score} €`;
+      document.getElementById('hudBest').textContent = `${bestScore} €`;
+    }
+
+    let lastTime = performance.now();
+    function update(now) {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (squeakCooldown > 0) squeakCooldown -= dt;
+
+      if (state === 'PLAYING') {
+        if (floorTransition > 0) {
+          floorTransition -= dt;
+          gondola.leftY -= 110 * dt;
+          gondola.rightY -= 110 * dt;
+          if (floorTransition <= 0) {
+            floor++;
+            setupFloor(floor);
+          }
+        } else {
+          // Winch Controls
+          const winchSpeed = 135;
+          if (keys.q || keys.w) gondola.leftY -= winchSpeed * dt;
+          if (keys.a || keys.s) gondola.leftY += winchSpeed * dt;
+          if (keys.e || keys.w) gondola.rightY -= winchSpeed * dt;
+          if (keys.d || keys.s) gondola.rightY += winchSpeed * dt;
+
+          // Keep gondola within screen bounds
+          const minY = height * 0.24;
+          const maxY = height * 0.78;
+          gondola.leftY = Math.max(minY, Math.min(maxY, gondola.leftY));
+          gondola.rightY = Math.max(minY, Math.min(maxY, gondola.rightY));
+
+          // Random wind drift on ropes + pendulum swing
+          windTimer -= dt;
+          if (windTimer <= 0) {
+            windTimer = 2.5 + Math.random() * 2.5;
+            windForce = (Math.random() - 0.5) * (160 + floor * 18);
+            // Wind also slightly unbalances one rope
+            gondola.rightY += (Math.random() - 0.5) * 28;
+          }
+
+          swingVx += (windForce - swingX * 3.5) * dt;
+          swingVx *= Math.pow(0.25, dt);
+          swingX += swingVx * dt;
+
+          // Gondola Tilt Angle
+          const dy = gondola.rightY - gondola.leftY;
+          const tiltAngle = Math.atan2(dy, gondola.width);
+
+          // Bucket slides down the tilted scaffold!
+          gondola.bucketVx += Math.sin(tiltAngle) * 520 * dt;
+          gondola.bucketVx *= Math.pow(0.18, dt);
+          gondola.bucketX += gondola.bucketVx * dt;
+
+          // If tilt is too extreme and bucket falls off the edge -> Game Over!
+          if (Math.abs(gondola.bucketX) > gondola.width * 0.52) {
+            triggerGameOver('Gondola tipped over! You plunged down along with your water bucket!');
+            return;
+          }
+
+          // Spawn Pigeons on ropes
+          if (Math.random() < (0.004 + floor * 0.0008) && pigeons.length < 3) {
+            pigeons.push({
+              side: Math.random() < 0.5 ? -1 : 1,
+              y: 90 + Math.random() * 110,
+              peckPhase: 0
+            });
+            if (window.ArcadeCore) ArcadeCore.playTone(520, 0.1, 'triangle', 0.1);
+          }
+
+          // Pigeons damage rope & pull side down
+          for (const p of pigeons) {
+            p.peckPhase += dt * 10;
+            ropeHp -= 5.2 * dt;
+            if (p.side < 0) gondola.leftY += 16 * dt;
+            else gondola.rightY += 16 * dt;
+          }
+
+          if (ropeHp <= 0) {
+            ropeHp = 0;
+            triggerGameOver('Rope snapped from pigeon sabotage!');
+            return;
+          }
+
+          // Spawn falling office items occasionally
+          if (Math.random() < (0.003 + floor * 0.0005)) {
+            const gx = width / 2 + (Math.random() - 0.5) * 240;
+            fallingHazards.push({
+              x: gx,
+              y: -30,
+              vy: 180 + floor * 15,
+              emoji: Math.random() < 0.5 ? '☕' : '📁'
+            });
+          }
+
+          const avgY = (gondola.leftY + gondola.rightY) * 0.5;
+          const gx = width / 2 + swingX;
+          for (let i = fallingHazards.length - 1; i >= 0; i--) {
+            const h = fallingHazards[i];
+            h.y += h.vy * dt;
+            if (Math.abs(h.x - gx) < 95 && Math.abs(h.y - avgY) < 28) {
+              ropeHp -= 14;
+              gondola.leftY += (Math.random() < 0.5 ? 24 : -24);
+              if (window.ArcadeCore) ArcadeCore.hit();
+              floatingTexts.push({
+                x: h.x, y: h.y,
+                text: '💥 HEADSHOT! -14% Rope',
+                color: '#fb7185',
+                size: 18,
+                life: 1.0
+              });
+              fallingHazards.splice(i, 1);
+              continue;
+            }
+            if (h.y > height + 50) fallingHazards.splice(i, 1);
+          }
+        }
+        updateHud();
+      }
+
+      // Update droplets
+      for (let i = droplets.length - 1; i >= 0; i--) {
+        const d = droplets[i];
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        d.vy += 500 * dt;
+        d.life -= dt;
+        if (d.life <= 0) droplets.splice(i, 1);
+      }
+
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.y -= 45 * dt;
+        ft.life -= dt;
+        if (ft.life <= 0) floatingTexts.splice(i, 1);
+      }
+
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function draw() {
+      // Sky gradient
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+      skyGrad.addColorStop(0, '#091526');
+      skyGrad.addColorStop(1, '#1e3a5f');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // Skyscraper Building Facade
+      const bldW = Math.min(460, width * 0.86);
+      const bldX = (width - bldW) / 2;
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(bldX, 0, bldW, height);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(bldX, -10, bldW, height + 20);
+
+      // Window Frame
+      const winW = Math.min(340, width * 0.68);
+      const winH = Math.min(250, height * 0.42);
+      const winX = width / 2 - winW / 2;
+      const winY = height * 0.43 - winH / 2;
+
+      // Inside Office Room (warm light)
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(winX, winY, winW, winH);
+
+      // Office Scene Revealed Inside
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const bob = Math.sin(performance.now() * 0.006) * 8;
+      ctx.font = '58px sans-serif';
+      ctx.fillText(currentScene.emoji, width / 2, height * 0.41 + bob);
+      ctx.font = '800 13px system-ui, sans-serif';
+      ctx.fillStyle = '#78350f';
+      ctx.fillText(currentScene.title, width / 2, height * 0.43 + winH * 0.34);
+      ctx.restore();
+
+      // Glass Reflection Tint
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+      ctx.fillRect(winX, winY, winW, winH);
+
+      // Draw Dirt Spots on the Window
+      for (const spot of dirtSpots) {
+        if (spot.cleaned) continue;
+        ctx.save();
+        ctx.translate(width / 2 + spot.rx, height * 0.43 + spot.ry);
+        ctx.fillStyle = spot.kind === 'poop' ? 'rgba(241, 245, 249, 0.92)' : 'rgba(92, 64, 51, 0.88)';
+        ctx.beginPath();
+        ctx.arc(0, 0, spot.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Window Mullions / Borders
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(winX, winY, winW, winH);
+
+      // Gondola Ropes & Platform
+      const gx = width / 2 + swingX;
+      const leftAnchorX = gx - gondola.width / 2;
+      const rightAnchorX = gx + gondola.width / 2;
+
+      ctx.strokeStyle = ropeHp < 35 ? '#fb7185' : '#cbd5e1';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(leftAnchorX, 0);
+      ctx.lineTo(leftAnchorX, gondola.leftY);
+      ctx.moveTo(rightAnchorX, 0);
+      ctx.lineTo(rightAnchorX, gondola.rightY);
+      ctx.stroke();
+
+      // Pigeons on Ropes
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const p of pigeons) {
+        const px = p.side < 0 ? leftAnchorX : rightAnchorX;
+        const peckX = Math.sin(p.peckPhase) * 5;
+        ctx.font = '28px sans-serif';
+        ctx.fillText('🐦', px + peckX, p.y);
+        ctx.font = '800 11px sans-serif';
+        ctx.fillStyle = '#fb7185';
+        ctx.fillText('PECK! PECK!', px + 36, p.y - 10);
+      }
+
+      // Suspended Gondola Platform
+      const avgY = (gondola.leftY + gondola.rightY) * 0.5;
+      const tilt = Math.atan2(gondola.rightY - gondola.leftY, gondola.width);
+
+      ctx.save();
+      ctx.translate(gx, avgY);
+      ctx.rotate(tilt);
+
+      // Guardrail
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-gondola.width / 2, -36, gondola.width, 36);
+
+      // Platform Plank
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(-gondola.width / 2 - 6, -4, gondola.width + 12, 12);
+
+      // Sliding Water Bucket & Cleaner Character
+      ctx.font = '34px sans-serif';
+      ctx.fillText('🧑‍🔧', gondola.bucketX * 0.5, -22);
+      ctx.font = '26px sans-serif';
+      ctx.fillText('🪣', gondola.bucketX, -16);
+
+      // Tilt Warning Indicator
+      if (Math.abs(gondola.bucketX) > gondola.width * 0.3) {
+        ctx.font = '900 13px system-ui, sans-serif';
+        ctx.fillStyle = '#fb7185';
+        ctx.fillText('⚠️ TILTING! BALANCE THE ROPES!', 0, 26);
+      }
+      ctx.restore();
+
+      // Falling Hazards
+      for (const h of fallingHazards) {
+        ctx.font = '28px sans-serif';
+        ctx.fillText(h.emoji, h.x, h.y);
+      }
+
+      // Water Droplets
+      for (const d of droplets) {
+        ctx.fillStyle = d.color;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Squeegee Cursor
+      if (state === 'PLAYING') {
+        ctx.save();
+        ctx.translate(pointer.x, pointer.y);
+        ctx.fillStyle = '#0ea5e9';
+        ctx.fillRect(-26, -5, 52, 10);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(-26, -8, 52, 3);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(-4, 5, 8, 20);
+        ctx.restore();
+      }
+
+      // Floating Texts
+      for (const ft of floatingTexts) {
+        ctx.save();
+        ctx.font = `900 ${ft.size}px system-ui, sans-serif`;
+        ctx.fillStyle = '#000';
+        ctx.fillText(ft.text, ft.x + 2, ft.y + 2);
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      }
+    }
+
+    resetGame();
+    requestAnimationFrame(update);
+  })();
+  </script>
+</body>
+</html>

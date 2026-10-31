@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Boot- & Wellen-Simulator — Ozean-Physik & Schiffs-Labor</title>
+<meta name="description" content="Simuliere Boote auf offenem Meer: Zeichne eigene Wellen, steuere Wellenhöhe und Wind, teste verschiedene Schiffe auf Seetauglichkeit und gib Vollgas!">
+<meta name="theme-color" content="#071b2c">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../../src/arcade-core.js"></script>
+<style>
+  :root {
+    --bg-dark: #071523;
+    --panel-bg: rgba(9, 26, 43, 0.88);
+    --panel-border: rgba(64, 169, 255, 0.25);
+    --panel-glow: rgba(0, 180, 255, 0.15);
+    --accent: #00d2ff;
+    --accent-hover: #3ad9ff;
+    --accent-gold: #ffb830;
+    --accent-red: #ff4d4f;
+    --accent-green: #2ecc71;
+    --text-main: #f0f8ff;
+    --text-dim: #8baec6;
+    --font: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg-dark); color: var(--text-main); font-family: var(--font);
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+
+  canvas#simCanvas {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    display: block; cursor: crosshair; touch-action: none;
+  }
+
+  /* Header & Back */
+  .top-bar {
+    position: fixed; top: 12px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    pointer-events: none; z-index: 50;
+  }
+  .back-btn {
+    pointer-events: auto;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 999px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    color: var(--text-main); text-decoration: none; font-size: 0.9rem; font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4); backdrop-filter: blur(10px);
+    transition: all 0.2s;
+  }
+  .back-btn:hover {
+    background: rgba(18, 48, 76, 0.95); border-color: var(--accent);
+    color: var(--accent); transform: translateY(-1px);
+  }
+
+  .title-badge {
+    pointer-events: auto;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 999px; padding: 7px 18px;
+    display: flex; align-items: center; gap: 10px;
+    backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    font-size: 0.92rem; font-weight: 700; letter-spacing: 0.5px;
+  }
+  .title-badge span.pill {
+    background: linear-gradient(135deg, #00d2ff, #0077ff);
+    color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 0.72rem; text-transform: uppercase;
+  }
+
+  .top-actions {
+    pointer-events: auto;
+    display: flex; gap: 8px;
+  }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    color: var(--text-main); font-size: 1.05rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px); transition: all 0.2s;
+  }
+  .icon-btn:hover { background: rgba(20, 55, 88, 0.9); border-color: var(--accent); transform: scale(1.05); }
+  .icon-btn.active { background: var(--accent); color: #051421; border-color: var(--accent); font-weight: bold; }
+
+  /* Telemetry HUD */
+  #telemetryCard {
+    position: fixed; top: 62px; left: 12px; z-index: 40;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 12px; padding: 10px 14px; min-width: 210px;
+    backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    font-size: 0.82rem;
+  }
+  #telemetryCard h3 {
+    font-size: 0.95rem; font-weight: 700; color: var(--accent);
+    margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .hud-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin: 4px 0; color: var(--text-dim);
+  }
+  .hud-row b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+  .status-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+  }
+  .status-good { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); }
+  .status-warn { background: rgba(243, 156, 18, 0.2); color: #f39c12; border: 1px solid rgba(243, 156, 18, 0.4); }
+  .status-danger { background: rgba(231, 76, 60, 0.25); color: #ff5252; border: 1px solid rgba(231, 76, 60, 0.5); }
+  .flood-bar {
+    width: 100%; height: 6px; border-radius: 3px;
+    background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 4px;
+  }
+  .flood-fill {
+    height: 100%; width: 0%; background: linear-gradient(90deg, #3498db, #e74c3c);
+    transition: width 0.2s;
+  }
+
+  /* Ship Picker bar */
+  #shipPicker {
+    position: fixed; top: 62px; right: 12px; z-index: 40;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 14px; padding: 8px 10px; max-width: 320px;
+    backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  #shipPicker .picker-title {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-dim); margin-bottom: 6px; font-weight: 700;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .ship-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  }
+  .ship-btn {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 6px 4px; color: var(--text-main);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    cursor: pointer; transition: all 0.15s; font-size: 0.7rem; font-family: inherit;
+  }
+  .ship-btn span.emoji { font-size: 1.3rem; }
+  .ship-btn:hover { background: rgba(0,210,255,0.15); border-color: var(--accent); }
+  .ship-btn.active {
+    background: linear-gradient(135deg, rgba(0,210,255,0.3), rgba(0,119,255,0.3));
+    border-color: var(--accent); box-shadow: 0 0 12px rgba(0,210,255,0.3);
+    font-weight: 700; color: #fff;
+  }
+
+  /* Bottom Controls Deck */
+  #controlDock {
+    position: fixed; bottom: 12px; left: 12px; right: 12px; z-index: 40;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 16px; padding: 10px 14px; backdrop-filter: blur(14px);
+    box-shadow: 0 10px 32px rgba(0,0,0,0.5);
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
+  }
+
+  .dock-section {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .dock-label {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-dim); font-weight: 700; margin-right: 2px;
+  }
+
+  /* Sliders */
+  .slider-group {
+    display: flex; align-items: center; gap: 8px; font-size: 0.8rem;
+    background: rgba(255,255,255,0.04); padding: 5px 10px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .slider-group label { color: var(--text-dim); font-size: 0.75rem; white-space: nowrap; }
+  .slider-group input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 85px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.15);
+    outline: none; accent-color: var(--accent); cursor: pointer;
+  }
+  .slider-group output { min-width: 38px; text-align: right; color: var(--accent); font-weight: 700; font-size: 0.78rem; }
+
+  /* Buttons */
+  .btn {
+    font-family: inherit; font-size: 0.82rem; font-weight: 600;
+    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.06); color: var(--text-main);
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: all 0.15s; white-space: nowrap; touch-action: manipulation;
+  }
+  .btn:hover { background: rgba(0,210,255,0.15); border-color: var(--accent); transform: translateY(-1px); }
+  .btn.active {
+    background: var(--accent); color: #051421; border-color: var(--accent);
+    font-weight: 800; box-shadow: 0 0 12px rgba(0,210,255,0.4);
+  }
+  .btn.warn:hover { background: rgba(255,77,79,0.2); border-color: var(--accent-red); color: #ff7875; }
+  .btn.gold { border-color: rgba(255,184,48,0.4); }
+  .btn.gold:hover { background: rgba(255,184,48,0.2); border-color: var(--accent-gold); color: #ffd666; }
+
+  /* Throttle Lever & Steering */
+  .helm-box {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .helm-btn {
+    width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.06); color: var(--text-main);
+    font-size: 0.95rem; font-weight: bold; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .helm-btn:active { background: var(--accent); color: #000; }
+  .throttle-val { font-size: 0.78rem; font-weight: 700; color: var(--accent); min-width: 42px; text-align: center; }
+
+  /* Draw Wave Hint Banner */
+  #drawBanner {
+    position: fixed; top: 110px; left: 50%; transform: translateX(-50%);
+    background: rgba(0, 210, 255, 0.9); color: #051421; font-weight: 700;
+    padding: 6px 18px; border-radius: 999px; font-size: 0.85rem;
+    box-shadow: 0 4px 20px rgba(0,210,255,0.5); z-index: 35;
+    pointer-events: none; opacity: 0; transition: opacity 0.25s, transform 0.25s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #drawBanner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Toast Notification */
+  #toast {
+    position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+    background: rgba(13, 37, 63, 0.95); border: 1px solid var(--accent);
+    color: var(--text-main); font-weight: 600; padding: 7px 18px; border-radius: 999px;
+    font-size: 0.84rem; z-index: 100; pointer-events: none;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.25s;
+  }
+  #toast.show { opacity: 1; }
+
+  /* Help Modal */
+  #helpModal {
+    position: fixed; inset: 0; background: rgba(3, 10, 18, 0.8);
+    backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center;
+    z-index: 100; padding: 16px;
+  }
+  #helpModal.open { display: flex; }
+  .modal-card {
+    background: #091c30; border: 1px solid var(--panel-border);
+    border-radius: 16px; max-width: 480px; width: 100%; padding: 22px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6); position: relative;
+  }
+  .modal-card h2 { font-size: 1.25rem; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .modal-card p { font-size: 0.88rem; line-height: 1.5; color: var(--text-dim); margin-bottom: 10px; }
+  .modal-card ul { margin: 8px 0 16px 20px; font-size: 0.85rem; color: var(--text-main); line-height: 1.6; }
+  .modal-close {
+    width: 100%; padding: 9px; border-radius: 8px; border: 0;
+    background: var(--accent); color: #04121f; font-weight: 700;
+    font-size: 0.95rem; cursor: pointer; transition: all 0.15s;
+  }
+  .modal-close:hover { background: var(--accent-hover); }
+
+  /* Responsive styles */
+  @media (max-width: 768px) {
+    #telemetryCard { top: 58px; left: 8px; min-width: 170px; padding: 8px 10px; font-size: 0.74rem; }
+    #shipPicker { top: auto; bottom: 120px; right: 8px; left: 8px; max-width: none; }
+    #controlDock { bottom: 8px; left: 8px; right: 8px; padding: 8px; gap: 8px; }
+    .slider-group input[type="range"] { width: 65px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="simCanvas"></canvas>
+
+<!-- Top bar -->
+<div class="top-bar">
+  <a href="../../index.html" class="back-btn">← Spiele</a>
+  
+  <div class="title-badge">
+    <span>🚢 Boot- & Wellen-Simulator</span>
+    <span class="pill">Physik-Labor</span>
+  </div>
+
+  <div class="top-actions">
+    <button class="icon-btn" id="btnHelp" title="Hilfe & Anleitung" onclick="toggleHelp()">❓</button>
+    <button class="icon-btn" id="btnMute" title="Sound ein/aus" onclick="toggleSound()">🔊</button>
+  </div>
+</div>
+
+<!-- Telemetry HUD -->
+<div id="telemetryCard">
+  <h3>
+    <span id="hudShipName">Rennboot</span>
+    <span class="status-pill status-good" id="hudStatus">Stabil</span>
+  </h3>
+  <div class="hud-row"><span>Geschwindigkeit:</span><b id="hudSpeed">0.0 kn</b></div>
+  <div class="hud-row"><span>Neigung (Pitch):</span><b id="hudAngle">0.0°</b></div>
+  <div class="hud-row"><span>Tiefgang / Tiefe:</span><b id="hudDraft">0.0 m</b></div>
+  <div class="hud-row"><span>Auftriebskraft:</span><b id="hudBuoyancy">100%</b></div>
+  <div class="hud-row" style="margin-top:6px;"><span>Wassereinbruch:</span><b id="hudFlood">0%</b></div>
+  <div class="flood-bar"><div class="flood-fill" id="hudFloodBar"></div></div>
+</div>
+
+<!-- Ship selector -->
+<div id="shipPicker">
+  <div class="picker-title">
+    <span>Schiff wählen</span>
+    <span id="shipCount">8 Modelle</span>
+  </div>
+  <div class="ship-grid" id="shipGrid">
+    <!-- Populated dynamically via JS -->
+  </div>
+</div>
+
+<!-- Hint for Draw Waves -->
+<div id="drawBanner">
+  <span>✏️ Klicke oder ziehe im Wasser, um eigene Wellen zu zeichnen!</span>
+</div>
+
+<!-- Bottom Control Dock -->
+<div id="controlDock">
+  <!-- Steuerung & Tempo -->
+  <div class="dock-section">
+    <span class="dock-label">Schiff</span>
+    <div class="helm-box">
+      <button class="helm-btn" id="btnRudderLeft" title="Nach links wenden (A / Pfeil links)">◀</button>
+      <div class="throttle-val" id="throttleDisplay">0%</div>
+      <button class="helm-btn" id="btnRudderRight" title="Nach rechts wenden (D / Pfeil rechts)">▶</button>
+    </div>
+    <div class="slider-group">
+      <label for="throttleSlider">Gas:</label>
+      <input type="range" id="throttleSlider" min="-100" max="100" value="0" step="5" oninput="updateThrottle(this.value)">
+      <output id="throttleOut">0%</output>
+    </div>
+    <button class="btn gold" onclick="honkHorn()" title="Schiffshorn tuten!">📯 Horn</button>
+    <button class="btn gold" id="btnSubmarineDive" style="display:none;" onclick="toggleSubmarineDive()" title="U-Boot Tauchtanks steuern">🟡 Abtauchen</button>
+    <button class="btn warn" onclick="resetBoat()" title="Boot aufrichten und trockenlegen">⚓ Reset</button>
+  </div>
+
+  <!-- Wellen- & Ozean-Regler -->
+  <div class="dock-section">
+    <span class="dock-label">Ozean</span>
+    <div class="slider-group">
+      <label for="waveHeightSlider">Wellen:</label>
+      <input type="range" id="waveHeightSlider" min="0" max="120" value="35" oninput="updateWaveHeight(this.value)">
+      <output id="waveHeightOut">3.5m</output>
+    </div>
+    <div class="slider-group">
+      <label for="windSlider">Wind:</label>
+      <input type="range" id="windSlider" min="-100" max="100" value="15" oninput="updateWind(this.value)">
+      <output id="windOut">+15</output>
+    </div>
+    <div class="slider-group">
+      <label for="timeSpeedSlider">Tempo:</label>
+      <input type="range" id="timeSpeedSlider" min="0" max="3" value="1" step="0.2" oninput="updateTimeSpeed(this.value)">
+      <output id="timeSpeedOut">1.0x</output>
+    </div>
+  </div>
+
+  <!-- Aktionen & Wellen-Generatoren -->
+  <div class="dock-section">
+    <span class="dock-label">Generator</span>
+    <button class="btn" id="btnDrawWave" onclick="toggleDrawWaveMode()">✏️ Welle malen</button>
+    <button class="btn" onclick="spawnRogueWave()">🌊 Monsterwelle</button>
+    <button class="btn" onclick="triggerStorm()">⛈️ Sturm</button>
+    <button class="btn" onclick="triggerCalm()">⛵ Ruhige See</button>
+    <button class="btn" onclick="spawnWhirlpool()">🌪️ Strudel</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Help Modal -->
+<div id="helpModal" onclick="if(event.target===this) toggleHelp()">
+  <div class="modal-card">
+    <h2>🚢 Boot- & Wellen-Simulator</h2>
+    <p>Willkommen im interaktiven hydrodynamischen Physik-Labor! Teste, wie seetauglich verschiedene Schiffe bei stürmischem Seegang sind.</p>
+    <ul>
+      <li><b>✏️ Wellen zeichnen:</b> Aktiviere den Modus oder ziehe einfach mit Maus/Finger durchs Wasser, um Wasserberge und Täler aufzuschichten.</li>
+      <li><b>🎮 Steuerung:</b> <b>W / S</b> für Gas (Vorwärts / Rückwärts), <b>A / D</b> zum Rudern. Oder nutze die Schieberegler unten.</li>
+      <li><b>🌊 Ozean-Werkzeuge:</b> Verändere Wellenhöhe, Windstärke und Zeitlupe/Zeitraffer live mit den Slidern.</li>
+      <li><b>🚢 8 verschiedene Schiffe:</b> Vom leichten Rennboot über Containerfrachter, U-Boot mit Tauchtank, Segelschiff bis zur unzerstörbaren Badeente!</li>
+      <li><b>⚠️ Seetüchtigkeit:</b> Hohe Brecher können Schiffe volllaufen lassen, kentern oder gar auf den Meeresgrund versenken!</li>
+    </ul>
+    <button class="modal-close" onclick="toggleHelp()">Alles klar, Leinen los!</button>
+  </div>
+</div>
+
+<script>
+/**
+ * Ozean- & Boots-Physik Simulation
+ * Reales 1D-Flachwasser Wellen-Gitter (Wave Equation) + Überlagerung trochoidaler Wellen
+ * Auftrieb nach Archimedes (Volumenscheiben) + metazentrische Stabilität & Kenterphysik
+ */
+
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+let W = window.innerWidth;
+let H = window.innerHeight;
+let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+function resizeCanvas() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  initWaterGrid();
+}
+window.addEventListener('resize', resizeCanvas);
+
+// --- Sound Synthesizer (Web Audio) ---
+let audioCtx = null;
+let soundEnabled = true;
+
+function initAudio() {
+  if (!audioCtx) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) audioCtx = new AudioCtx();
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+window.addEventListener('pointerdown', initAudio, { once: true });
+window.addEventListener('keydown', initAudio, { once: true });
+
+function playTone(freq, dur, type = 'sine', gainVal = 0.1) {
+  if (!soundEnabled || !audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    g.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    osc.connect(g);
+    g.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur);
+  } catch (e) {}
+}
+
+function playSplashSound(vol = 0.2) {
+  if (!soundEnabled || !audioCtx) return;
+  try {
+    const bufferSize = audioCtx.sampleRate * 0.25;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(600, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.25);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(Math.min(vol, 0.4), audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start();
+  } catch (e) {}
+}
+
+function playHornSound() {
+  if (!soundEnabled || !audioCtx) return;
+  try {
+    [155, 196].forEach(f => {
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+      g.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      g.gain.linearRampToValueAtTime(0.18, audioCtx.currentTime + 0.6);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2);
+      osc.connect(g);
+      g.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 1.2);
+    });
+  } catch (e) {}
+}
+
+function playThunderSound() {
+  if (!soundEnabled || !audioCtx) return;
+  try {
+    const dur = 1.4;
+    const bufferSize = audioCtx.sampleRate * dur;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.45));
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(280, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + dur);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start();
+  } catch (e) {}
+}
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  document.getElementById('btnMute').textContent = soundEnabled ? '🔊' : '🔇';
+  showToast(soundEnabled ? 'Ton: AN' : 'Ton: AUS');
+}
+
+// --- Environment & Wave Parameters ---
+let simTime = 0;
+let timeSpeed = 1.0;
+let baseWaterLevel = 0; // Calculated dynamically in resize
+
+let waveAmplitude = 35; // px (0 to 120)
+let waveFreq = 0.007;
+let windSpeed = 15;     // -100 to 100 km/h
+let currentFlow = 0;
+let stormIntensity = 0; // 0 to 1
+let lightningFlash = 0;
+
+// Dynamic interactive 1D heightfield grid
+const NUM_NODES = 260;
+let nodeSpacing = 10;
+let waterHeight = new Float32Array(NUM_NODES);
+let waterVel = new Float32Array(NUM_NODES);
+
+function initWaterGrid() {
+  baseWaterLevel = H * 0.62;
+  nodeSpacing = Math.ceil(W / (NUM_NODES - 1));
+  for (let i = 0; i < NUM_NODES; i++) {
+    waterHeight[i] = 0;
+    waterVel[i] = 0;
+  }
+}
+
+// Particle System (Splashes, Rain, Bubbles, Exhaust Smoke)
+const particles = [];
+function addSplash(x, y, count = 12, vx = 0, vy = -4, color = 'rgba(210, 240, 255, 0.8)') {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: x + (Math.random() - 0.5) * 16,
+      y: y + (Math.random() - 0.5) * 6,
+      vx: vx + (Math.random() - 0.5) * 6,
+      vy: vy + (Math.random() - 0.5) * 6 - Math.random() * 3,
+      size: 2 + Math.random() * 3.5,
+      alpha: 0.9,
+      decay: 0.02 + Math.random() * 0.03,
+      color: color,
+      gravity: 0.28
+    });
+  }
+  if (count > 8) playSplashSound(Math.min(count * 0.02, 0.35));
+}
+
+function addSmoke(x, y, vx, vy) {
+  particles.push({
+    x: x, y: y,
+    vx: vx + (Math.random() - 0.5) * 0.8 + (windSpeed * 0.03),
+    vy: vy - 1.2 - Math.random() * 0.8,
+    size: 4 + Math.random() * 5,
+    alpha: 0.55,
+    decay: 0.015,
+    color: 'rgba(200, 215, 230, 0.5)',
+    gravity: -0.04
+  });
+}
+
+function addBubble(x, y) {
+  particles.push({
+    x: x + (Math.random() - 0.5) * 10,
+    y: y,
+    vx: (Math.random() - 0.5) * 1,
+    vy: -1.5 - Math.random() * 2,
+    size: 2 + Math.random() * 3,
+    alpha: 0.7,
+    decay: 0.012,
+    color: 'rgba(160, 230, 255, 0.6)',
+    gravity: -0.05
+  });
+}
+
+// Rain
+const rainDrops = [];
+for (let i = 0; i < 180; i++) {
+  rainDrops.push({
+    x: Math.random() * 2000 - 500,
+    y: Math.random() * 1000,
+    len: 12 + Math.random() * 16,
+    speed: 16 + Math.random() * 8
+  });
+}
+
+// --- Wave Equation Physics ---
+function updateWaveGrid(dt) {
+  const c2 = 180.0; // wave speed squared
+  const damping = 0.978;
+  const spread = 0.26;
+
+  // Tension & propagation passes
+  for (let step = 0; step < 2; step++) {
+    for (let i = 1; i < NUM_NODES - 1; i++) {
+      const force = (waterHeight[i - 1] + waterHeight[i + 1] - 2 * waterHeight[i]) * spread;
+      waterVel[i] += force;
+      waterVel[i] *= damping;
+      waterHeight[i] += waterVel[i];
+    }
+  }
+
+  // Boundary condition (absorbing edges)
+  waterVel[0] *= 0.8;
+  waterVel[NUM_NODES - 1] *= 0.8;
+}
+
+// Get total water surface elevation at horizontal coordinate x
+function getWaterY(x) {
+  // 1. Primary Gerstner & trochoidal swells
+  const t = simTime;
+  const windDir = windSpeed >= 0 ? 1 : -1;
+  const windFac = Math.abs(windSpeed) / 50;
+
+  const w1 = Math.sin(x * waveFreq - t * 2.2 * windDir) * waveAmplitude;
+  const w2 = Math.sin(x * waveFreq * 2.3 + t * 1.5 * windDir + 1.2) * (waveAmplitude * 0.35);
+  const w3 = Math.cos(x * waveFreq * 0.45 - t * 1.1 * windDir + 2.5) * (waveAmplitude * 0.4);
+  const chop = Math.sin(x * 0.04 - t * 4) * (waveAmplitude > 20 ? 4 : 1) * windFac;
+
+  // 2. Interpolate dynamic 1D heightfield
+  const nodeIndex = (x / nodeSpacing);
+  const i0 = Math.max(0, Math.min(NUM_NODES - 2, Math.floor(nodeIndex)));
+  const frac = nodeIndex - i0;
+  const dynamicH = waterHeight[i0] * (1 - frac) + waterHeight[i0 + 1] * frac;
+
+  return baseWaterLevel + w1 + w2 + w3 + chop + dynamicH;
+}
+
+// Water normal / slope at x
+function getWaterSlope(x) {
+  const eps = 4;
+  const y1 = getWaterY(x - eps);
+  const y2 = getWaterY(x + eps);
+  return (y2 - y1) / (2 * eps);
+}
+
+// Perturb dynamic water grid at screen point x
+function disturbWater(x, amount, radius = 40) {
+  const centerNode = Math.floor(x / nodeSpacing);
+  const nodeRadius = Math.ceil(radius / nodeSpacing);
+
+  for (let i = centerNode - nodeRadius; i <= centerNode + nodeRadius; i++) {
+    if (i >= 0 && i < NUM_NODES) {
+      const dist = Math.abs(i - centerNode) * nodeSpacing;
+      if (dist < radius) {
+        const falloff = 0.5 * (1 + Math.cos((Math.PI * dist) / radius));
+        waterHeight[i] += amount * falloff;
+        waterVel[i] += amount * 0.3 * falloff;
+      }
+    }
+  }
+}
+
+// --- Ship Definitions ---
+const SHIP_TYPES = [
+  {
+    id: 'speedboat',
+    name: 'Rennboot Barracuda',
+    emoji: '🚤',
+    length: 64,
+    height: 22,
+    mass: 1.2,
+    buoyancyFactor: 1.6,
+    maxThrust: 380,
+    rudderSpeed: 2.8,
+    draft: 8,
+    sinkThreshold: 120, // freeboard capacity
+    isSubmarine: false,
+    color: '#ff2d55',
+    accent: '#ffffff',
+    draw: drawSpeedboat
+  },
+  {
+    id: 'cargo',
+    name: 'Containerfrachter Titan',
+    emoji: '🚢',
+    length: 150,
+    height: 48,
+    mass: 9.5,
+    buoyancyFactor: 1.05,
+    maxThrust: 180,
+    rudderSpeed: 0.9,
+    draft: 22,
+    sinkThreshold: 240,
+    isSubmarine: false,
+    color: '#2c3e50',
+    accent: '#e67e22',
+    draw: drawCargoShip
+  },
+  {
+    id: 'sailboat',
+    name: 'Segelyacht Windseeker',
+    emoji: '⛵',
+    length: 78,
+    height: 68,
+    mass: 2.2,
+    buoyancyFactor: 1.35,
+    maxThrust: 140, // engine + sail
+    rudderSpeed: 2.0,
+    draft: 24, // deep keel
+    sinkThreshold: 130,
+    isSubmarine: false,
+    color: '#ffffff',
+    accent: '#2980b9',
+    draw: drawSailboat
+  },
+  {
+    id: 'ducky',
+    name: 'Riesen-Badeente',
+    emoji: '🦆',
+    length: 52,
+    height: 46,
+    mass: 0.7,
+    buoyancyFactor: 2.6,
+    maxThrust: 160,
+    rudderSpeed: 3.5,
+    draft: 12,
+    sinkThreshold: 999, // Unsinkable funny meme duck
+    isSubmarine: false,
+    color: '#f1c40f',
+    accent: '#e67e22',
+    draw: drawDucky
+  },
+  {
+    id: 'trawler',
+    name: 'Fischerkutter Nordstern',
+    emoji: '🛥️',
+    length: 84,
+    height: 38,
+    mass: 3.8,
+    buoyancyFactor: 1.25,
+    maxThrust: 220,
+    rudderSpeed: 1.6,
+    draft: 15,
+    sinkThreshold: 160,
+    isSubmarine: false,
+    color: '#34495e',
+    accent: '#3498db',
+    draw: drawTrawler
+  },
+  {
+    id: 'viking',
+    name: 'Wikinger Drakkar',
+    emoji: '🛶',
+    length: 90,
+    height: 44,
+    mass: 2.4,
+    buoyancyFactor: 1.15,
+    maxThrust: 190,
+    rudderSpeed: 1.8,
+    draft: 10,
+    sinkThreshold: 85, // open hull - vulnerable to swamping!
+    isSubmarine: false,
+    color: '#8b5a2b',
+    accent: '#c0392b',
+    draw: drawViking
+  },
+  {
+    id: 'battleship',
+    name: 'Kreuzer Imperator',
+    emoji: '⚓',
+    length: 165,
+    height: 42,
+    mass: 12.0,
+    buoyancyFactor: 1.1,
+    maxThrust: 260,
+    rudderSpeed: 1.1,
+    draft: 20,
+    sinkThreshold: 290,
+    isSubmarine: false,
+    color: '#7f8c8d',
+    accent: '#95a5a6',
+    draw: drawBattleship
+  },
+  {
+    id: 'submarine',
+    name: 'U-Boot Nautilus',
+    emoji: '🟡',
+    length: 110,
+    height: 32,
+    mass: 5.5,
+    buoyancyFactor: 1.05,
+    maxThrust: 210,
+    rudderSpeed: 1.5,
+    draft: 16,
+    sinkThreshold: 9999, // Can dive underwater on purpose!
+    isSubmarine: true,
+    color: '#273c75',
+    accent: '#fbc531',
+    draw: drawSubmarine
+  }
+];
+
+// Active Ship instance
+class Boat {
+  constructor(spec) {
+    this.spec = spec;
+    this.x = W * 0.45;
+    this.y = baseWaterLevel;
+    this.vx = 0;
+    this.vy = 0;
+    this.angle = 0;       // pitch angle (radians)
+    this.angularVel = 0;  // rad/s
+    this.throttle = 0;    // -1 to 1
+    this.rudder = 0;      // -1 to 1
+    this.waterIngress = 0; // accumulated flood (kg)
+    this.isCapsized = false;
+    this.isSunk = false;
+    this.submergeTarget = 0; // for submarine ballast
+    this.ballast = 0;        // 0 = surfaced, 1 = deep dive
+    this.sprayTimer = 0;
+  }
+
+  reset() {
+    this.x = W * 0.45;
+    this.y = baseWaterLevel - 20;
+    this.vx = 0;
+    this.vy = 0;
+    this.angle = 0;
+    this.angularVel = 0;
+    this.waterIngress = 0;
+    this.isCapsized = false;
+    this.isSunk = false;
+    this.submergeTarget = 0;
+    this.ballast = 0;
+    this.throttle = 0;
+    const subBtn = document.getElementById('btnSubmarineDive');
+    if (subBtn) subBtn.textContent = '🟡 Abtauchen';
+    document.getElementById('throttleSlider').value = 0;
+    updateThrottle(0);
+  }
+
+  update(dt) {
+    // Substep so stiff buoyancy stays stable at high time speed
+    const steps = Math.ceil(dt / (1 / 120));
+    for (let s = 0; s < steps; s++) this.step(dt / steps);
+  }
+
+  step(dt) {
+    const f = dt * 60; // frame-rate independent damping exponent
+    // Effective mass with flooded water
+    const totalMass = this.spec.mass + (this.waterIngress * 0.05);
+
+    // Sample hull slices for buoyant force and torque
+    const halfL = this.spec.length * 0.5;
+    const slices = 16;
+    const sliceWidth = this.spec.length / slices;
+    let totalBuoyancy = 0;
+    let torque = 0;
+    let submergedSlices = 0;
+    const sliceWeight = (this.spec.mass * 9.81 * 4.2) / slices;
+
+    const cosA = Math.cos(this.angle);
+    const sinA = Math.sin(this.angle);
+
+    for (let i = 0; i < slices; i++) {
+      // Offset along hull from center
+      const lx = -halfL + (i + 0.5) * sliceWidth;
+      // World position of this hull slice bottom
+      const wx = this.x + (lx * cosA) - (this.spec.draft * sinA * 0.5);
+      const wy = this.y + (lx * sinA) + (this.spec.draft * cosA * 0.5);
+
+      const waterY = getWaterY(wx);
+      // Depth capped at hull height: fully submerged slice gives max buoyancy
+      const submergedDepth = Math.min(wy - waterY, this.spec.height);
+
+      if (submergedDepth > 0) {
+        submergedSlices++;
+        // Archimedes force per slice
+        // Scaled so a dry hull floats at draft / buoyancyFactor depth
+        let bForce = (submergedDepth / this.spec.draft) * sliceWeight * this.spec.buoyancyFactor;
+
+        // Submarine ballast tuning
+        if (this.spec.isSubmarine) {
+          bForce *= (1.0 - this.ballast * 0.98);
+        }
+        // Sunk hull has lost its buoyancy
+        if (this.isSunk) bForce *= 0.02;
+
+        // Add buoyant upward force
+        totalBuoyancy += bForce;
+
+        // Righting torque from buoyant center vs center of gravity
+        const leverArm = lx * cosA;
+        torque -= bForce * leverArm * 0.0019;
+
+        // Water drag on submerged hull
+        const relVx = this.vx - (windSpeed * 0.08);
+        this.vx -= relVx * 0.003 * dt;
+        this.angularVel -= this.angularVel * 0.02 * dt;
+
+        // Wave overtopping / ingress
+        const deckY = wy - (this.spec.height * cosA);
+        if (waterY < deckY && !this.spec.isSubmarine && this.spec.sinkThreshold < 900) {
+          const overDepth = deckY - waterY;
+          this.waterIngress += overDepth * dt * (this.spec.id === 'viking' ? 1.8 : 0.8);
+          if (Math.random() < 0.2) {
+            addBubble(wx, wy);
+          }
+        }
+      }
+    }
+
+    // Bilge pumps: automatically pump out water if not overwhelmed
+    if (this.waterIngress > 0) {
+      const pumpRate = this.spec.id === 'cargo' ? 12 : 6;
+      this.waterIngress = Math.max(0, this.waterIngress - pumpRate * dt);
+    }
+
+    // Check capsizing (> 75 degrees roll/pitch)
+    const absDeg = Math.abs(this.angle * (180 / Math.PI));
+    if (absDeg > 75 && !this.spec.isSubmarine) {
+      this.isCapsized = true;
+      this.waterIngress += 40 * dt;
+    }
+
+    // Check sunk
+    if (this.waterIngress > this.spec.sinkThreshold && !this.spec.isSubmarine) {
+      this.isSunk = true;
+    }
+
+    // Submarine ballast dive / surface adjustment
+    if (this.spec.isSubmarine) {
+      this.ballast += (this.submergeTarget - this.ballast) * (1 - Math.pow(0.97, f));
+    }
+
+    // Gravity force
+    const gravity = totalMass * 9.81 * 4.2;
+
+    // Net vertical acceleration (screen y points down: gravity +, buoyancy -)
+    const netFvertical = gravity - totalBuoyancy;
+    this.vy += (netFvertical / totalMass) * dt;
+
+    // Water damping
+    this.vy *= Math.pow(0.96, f);
+    this.vx *= Math.pow(0.985, f);
+    this.angularVel *= Math.pow(0.94, f);
+
+    // Self-righting torque (metacentric keel restoring force)
+    const rightingMoment = -Math.sin(this.angle) * (this.spec.id === 'sailboat' ? 65 : 28);
+    torque += rightingMoment;
+
+    // Apply torque
+    this.angularVel += (torque / (totalMass * 18)) * dt;
+
+    // Propulsion / Throttle thrust along boat heading
+    const thrustMagnitude = this.throttle * this.spec.maxThrust * 0.03;
+    const fx = Math.cos(this.angle) * thrustMagnitude;
+    const fy = Math.sin(this.angle) * thrustMagnitude * 0.5;
+
+    this.vx += (fx / totalMass) * dt;
+    this.vy += (fy / totalMass) * dt;
+
+    // Rudder turn steering (scales with forward speed)
+    if (Math.abs(this.rudder) > 0.01) {
+      const steerPower = (Math.abs(this.vx) + 1.5) * this.spec.rudderSpeed * 0.015;
+      this.angularVel += this.rudder * steerPower * dt;
+    }
+
+    // Integrate motion
+    this.x += this.vx * dt * 40;
+    this.y += this.vy * dt * 40;
+    this.angle += this.angularVel * dt;
+
+    // Ocean boundary wrapping / soft rebound
+    if (this.x < 40) { this.x = 40; this.vx = Math.abs(this.vx) * 0.5; }
+    if (this.x > W - 40) { this.x = W - 40; this.vx = -Math.abs(this.vx) * 0.5; }
+
+    // Seabed bottom collision
+    const seaFloor = H - 25;
+    if (this.y > seaFloor) {
+      this.y = seaFloor;
+      this.vy = 0;
+      this.vx *= 0.8;
+      this.angularVel *= 0.8;
+    }
+
+    // Wake and propeller spray (scaled to substep length)
+    if (Math.abs(this.throttle) > 0.1 && submergedSlices > 2 && Math.random() < f) {
+      const sternX = this.x - Math.cos(this.angle) * halfL;
+      const sternY = this.y - Math.sin(this.angle) * halfL;
+      if (Math.random() < 0.6) {
+        addSplash(sternX, sternY, 3, -this.vx * 0.8, -1.5, 'rgba(255,255,255,0.7)');
+      }
+      if (this.spec.id !== 'ducky' && this.spec.id !== 'sailboat' && Math.random() < 0.25) {
+        addSmoke(this.x, this.y - this.spec.height * 0.6, -this.vx * 0.2, -1);
+      }
+    }
+
+    // Bow wave spray when slamming into waves
+    const bowX = this.x + Math.cos(this.angle) * halfL;
+    const bowY = this.y + Math.sin(this.angle) * halfL;
+    const bowWaterY = getWaterY(bowX);
+    if (bowY > bowWaterY + 6 && Math.abs(this.vx) > 1.2 && Math.random() < f) {
+      addSplash(bowX, bowWaterY, Math.floor(Math.abs(this.vx) * 2), this.vx * 0.4, -3);
+    }
+  }
+
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    // Call individual ship custom vector draw
+    this.spec.draw(ctx, this);
+
+    ctx.restore();
+  }
+}
+
+let activeBoat = new Boat(SHIP_TYPES[0]);
+
+// --- Drawing Ships (Vector Art) ---
+function drawSpeedboat(ctx, b) {
+  const L = b.spec.length;
+  // Hull
+  ctx.beginPath();
+  ctx.moveTo(L * 0.5, 4);
+  ctx.lineTo(-L * 0.45, 8);
+  ctx.lineTo(-L * 0.48, -4);
+  ctx.lineTo(L * 0.35, -7);
+  ctx.closePath();
+  ctx.fillStyle = '#ff2d55';
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Windshield & Cockpit
+  ctx.beginPath();
+  ctx.moveTo(-L * 0.1, -7);
+  ctx.lineTo(L * 0.15, -7);
+  ctx.lineTo(L * 0.05, -16);
+  ctx.lineTo(-L * 0.12, -14);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(0, 210, 255, 0.7)';
+  ctx.fill();
+  ctx.strokeStyle = '#00d2ff';
+  ctx.stroke();
+
+  // Racing stripe
+  ctx.beginPath();
+  ctx.moveTo(-L * 0.4, 1);
+  ctx.lineTo(L * 0.4, 0);
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Outboard Motor
+  ctx.fillStyle = '#111';
+  ctx.fillRect(-L * 0.52, -2, 6, 12);
+}
+
+function drawCargoShip(ctx, b) {
+  const L = b.spec.length;
+  // Deep hull
+  ctx.beginPath();
+  ctx.moveTo(L * 0.52, -10);
+  ctx.lineTo(L * 0.48, 14);
+  ctx.lineTo(-L * 0.48, 14);
+  ctx.lineTo(-L * 0.5, -10);
+  ctx.closePath();
+  ctx.fillStyle = '#1e272e';
+  ctx.fill();
+  ctx.strokeStyle = '#e74c3c';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Red waterline stripe
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(-L * 0.48, 5, L * 0.96, 6);
+
+  // Deck Bridge Tower at Stern
+  ctx.fillStyle = '#ecf0f1';
+  ctx.fillRect(-L * 0.42, -32, 28, 22);
+  ctx.fillStyle = '#3498db';
+  ctx.fillRect(-L * 0.38, -28, 20, 6); // windows
+  ctx.fillStyle = '#e74c3c';
+  ctx.fillRect(-L * 0.32, -40, 8, 10); // Funnel
+
+  // Stacks of Cargo Containers
+  const colors = ['#e67e22', '#2980b9', '#27ae60', '#f39c12', '#8e44ad'];
+  for (let c = 0; c < 5; c++) {
+    const cx = -L * 0.15 + c * 18;
+    // Row 1
+    ctx.fillStyle = colors[c % colors.length];
+    ctx.fillRect(cx, -18, 16, 8);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(cx, -18, 16, 8);
+    // Row 2 (if not sinking)
+    if (!b.isCapsized) {
+      ctx.fillStyle = colors[(c + 2) % colors.length];
+      ctx.fillRect(cx, -26, 16, 8);
+      ctx.strokeRect(cx, -26, 16, 8);
+    }
+  }
+}
+
+function drawSailboat(ctx, b) {
+  const L = b.spec.length;
+  // Sleek hull
+  ctx.beginPath();
+  ctx.moveTo(L * 0.5, -4);
+  ctx.lineTo(L * 0.35, 10);
+  ctx.lineTo(-L * 0.45, 8);
+  ctx.lineTo(-L * 0.48, -4);
+  ctx.closePath();
+  ctx.fillStyle = '#f5f6fa';
+  ctx.fill();
+  ctx.strokeStyle = '#2f3640';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Heavy Deep Keel with Lead Bulb
+  ctx.beginPath();
+  ctx.moveTo(-L * 0.05, 10);
+  ctx.lineTo(L * 0.05, 10);
+  ctx.lineTo(L * 0.02, 28);
+  ctx.lineTo(-L * 0.08, 28);
+  ctx.closePath();
+  ctx.fillStyle = '#718093';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-L * 0.03, 28, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#2f3640';
+  ctx.fill();
+
+  // Tall Mast
+  ctx.strokeStyle = '#4b6584';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -4);
+  ctx.lineTo(0, -58);
+  ctx.stroke();
+
+  // Billowing Main Sail (curve reacts to wind)
+  const sailBulge = windSpeed * 0.15;
+  ctx.beginPath();
+  ctx.moveTo(0, -56);
+  ctx.quadraticCurveTo(-L * 0.25 - sailBulge, -30, -L * 0.4, -8);
+  ctx.lineTo(0, -8);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0, 150, 255, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Jib (front sail)
+  ctx.beginPath();
+  ctx.moveTo(0, -52);
+  ctx.quadraticCurveTo(L * 0.25 + sailBulge * 0.5, -25, L * 0.42, -6);
+  ctx.lineTo(0, -6);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(230, 245, 255, 0.85)';
+  ctx.fill();
+}
+
+function drawDucky(ctx, b) {
+  const L = b.spec.length;
+  // Ducky body
+  ctx.beginPath();
+  ctx.ellipse(0, 4, L * 0.45, 16, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#f1c40f';
+  ctx.fill();
+  ctx.strokeStyle = '#f39c12';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Ducky head
+  ctx.beginPath();
+  ctx.arc(L * 0.22, -14, 14, 0, Math.PI * 2);
+  ctx.fillStyle = '#f1c40f';
+  ctx.fill();
+  ctx.stroke();
+
+  // Eye
+  ctx.beginPath();
+  ctx.arc(L * 0.26, -16, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(L * 0.27, -17, 1, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+
+  // Orange Beak
+  ctx.beginPath();
+  ctx.moveTo(L * 0.32, -14);
+  ctx.lineTo(L * 0.52, -11);
+  ctx.lineTo(L * 0.32, -7);
+  ctx.closePath();
+  ctx.fillStyle = '#e67e22';
+  ctx.fill();
+
+  // Wing
+  ctx.beginPath();
+  ctx.ellipse(-L * 0.08, 0, 12, 7, -0.2, 0, Math.PI * 2);
+  ctx.fillStyle = '#f39c12';
+  ctx.fill();
+}
+
+function drawTrawler(ctx, b) {
+  const L = b.spec.length;
+  // Hull
+  ctx.beginPath();
+  ctx.moveTo(L * 0.5, -6);
+  ctx.lineTo(L * 0.35, 12);
+  ctx.lineTo(-L * 0.45, 10);
+  ctx.lineTo(-L * 0.48, -4);
+  ctx.closePath();
+  ctx.fillStyle = '#2c3e50';
+  ctx.fill();
+  ctx.strokeStyle = '#3498db';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Cabin
+  ctx.fillStyle = '#ecf0f1';
+  ctx.fillRect(-L * 0.15, -24, 26, 18);
+  ctx.fillStyle = '#3498db';
+  ctx.fillRect(-L * 0.05, -20, 12, 6); // windshield
+
+  // Mast & Rigging / Radar
+  ctx.strokeStyle = '#7f8c8d';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(L * 0.1, -6);
+  ctx.lineTo(L * 0.1, -36);
+  ctx.lineTo(-L * 0.35, -6);
+  ctx.stroke();
+
+  // Trawl net winch
+  ctx.fillStyle = '#e74c3c';
+  ctx.fillRect(-L * 0.35, -10, 8, 8);
+}
+
+function drawViking(ctx, b) {
+  const L = b.spec.length;
+  // Longship wooden hull with curved prow and stern
+  ctx.beginPath();
+  ctx.moveTo(L * 0.55, -22); // dragon head
+  ctx.quadraticCurveTo(L * 0.48, -5, L * 0.4, 8);
+  ctx.lineTo(-L * 0.4, 8);
+  ctx.quadraticCurveTo(-L * 0.48, -5, -L * 0.52, -20); // tail
+  ctx.quadraticCurveTo(-L * 0.42, 2, -L * 0.35, 3);
+  ctx.lineTo(L * 0.35, 3);
+  ctx.closePath();
+  ctx.fillStyle = '#8b5a2b';
+  ctx.fill();
+  ctx.strokeStyle = '#5c3a1e';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Viking Shields along gunwale
+  const shieldColors = ['#c0392b', '#f1c40f', '#2980b9'];
+  for (let i = 0; i < 6; i++) {
+    const sx = -L * 0.28 + i * 11;
+    ctx.beginPath();
+    ctx.arc(sx, 0, 5, 0, Math.PI * 2);
+    ctx.fillStyle = shieldColors[i % 3];
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Mast & Striped Square Sail
+  ctx.strokeStyle = '#5c3a1e';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(0, 3);
+  ctx.lineTo(0, -40);
+  ctx.stroke();
+
+  // Sail
+  ctx.fillStyle = '#e74c3c';
+  ctx.fillRect(-18, -38, 36, 26);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-6, -38, 12, 26);
+}
+
+function drawBattleship(ctx, b) {
+  const L = b.spec.length;
+  // Armored Gunmetal Hull
+  ctx.beginPath();
+  ctx.moveTo(L * 0.52, -8);
+  ctx.lineTo(L * 0.42, 16);
+  ctx.lineTo(-L * 0.45, 14);
+  ctx.lineTo(-L * 0.5, -8);
+  ctx.closePath();
+  ctx.fillStyle = '#57606f';
+  ctx.fill();
+  ctx.strokeStyle = '#2f3542';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Superstructure
+  ctx.fillStyle = '#747d8c';
+  ctx.fillRect(-L * 0.2, -26, 42, 18);
+  ctx.fillStyle = '#2ed573';
+  ctx.fillRect(-L * 0.05, -34, 12, 8); // bridge tower
+
+  // Twin Gun Turrets (Bow and Stern)
+  [L * 0.24, -L * 0.32].forEach((tx, idx) => {
+    ctx.fillStyle = '#2f3542';
+    ctx.beginPath();
+    ctx.arc(tx, -11, 8, 0, Math.PI * 2);
+    ctx.fill();
+    // Gun barrels
+    ctx.strokeStyle = '#1e272e';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(tx, -11);
+    ctx.lineTo(tx + (idx === 0 ? 18 : -18), -15);
+    ctx.stroke();
+  });
+}
+
+function drawSubmarine(ctx, b) {
+  const L = b.spec.length;
+  // Teardrop Hull
+  ctx.beginPath();
+  ctx.ellipse(0, 0, L * 0.48, 13, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#1e272e';
+  ctx.fill();
+  ctx.strokeStyle = '#fbc531';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Conning Tower (Sail)
+  ctx.fillStyle = '#2f3542';
+  ctx.fillRect(-L * 0.08, -22, 16, 12);
+  // Periscope
+  ctx.strokeStyle = '#f5f6fa';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-L * 0.02, -22);
+  ctx.lineTo(-L * 0.02, -30);
+  ctx.lineTo(L * 0.04, -30);
+  ctx.stroke();
+
+  // Propeller at stern
+  ctx.fillStyle = '#fbc531';
+  ctx.fillRect(-L * 0.5, -6, 4, 12);
+
+  // Ballast flood indicator LED
+  ctx.beginPath();
+  ctx.arc(0, 0, 4, 0, Math.PI * 2);
+  ctx.fillStyle = b.ballast > 0.5 ? '#e74c3c' : '#2ecc71';
+  ctx.fill();
+}
+
+// --- Render Sky & Ocean Background ---
+function drawSky() {
+  const grad = ctx.createLinearGradient(0, 0, 0, baseWaterLevel + 100);
+  if (stormIntensity > 0.4) {
+    // Storm sky
+    grad.addColorStop(0, '#0f172a');
+    grad.addColorStop(0.6, '#1e293b');
+    grad.addColorStop(1, '#334155');
+  } else {
+    // Sunset / Dusk Ocean Sky
+    grad.addColorStop(0, '#0a192f');
+    grad.addColorStop(0.4, '#1b2a4a');
+    grad.addColorStop(0.7, '#243b60');
+    grad.addColorStop(1, '#3b537d');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Lightning Flash
+  if (lightningFlash > 0) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${lightningFlash * 0.75})`;
+    ctx.fillRect(0, 0, W, H);
+    lightningFlash = Math.max(0, lightningFlash - 0.08);
+  }
+
+  // Distant clouds
+  ctx.fillStyle = stormIntensity > 0.4 ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.06)';
+  for (let c = 0; c < 5; c++) {
+    const cx = ((simTime * 15 + c * 320) % (W + 400)) - 200;
+    const cy = 40 + (c % 3) * 35;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 55, 0, Math.PI * 2);
+    ctx.arc(cx + 45, cy - 12, 45, 0, Math.PI * 2);
+    ctx.arc(cx + 90, cy, 50, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Rain in storm mode
+  if (stormIntensity > 0.2) {
+    ctx.strokeStyle = 'rgba(200, 230, 255, 0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let r of rainDrops) {
+      r.y += r.speed * (1 + stormIntensity * 0.5);
+      r.x += windSpeed * 0.15;
+      if (r.y > baseWaterLevel) {
+        if (Math.random() < 0.2) disturbWater(r.x, 0.4, 15);
+        r.y = -20;
+        r.x = Math.random() * (W + 400) - 200;
+      }
+      ctx.moveTo(r.x, r.y);
+      ctx.lineTo(r.x + windSpeed * 0.2, r.y + r.len);
+    }
+    ctx.stroke();
+  }
+}
+
+// Render Water Mesh with Depth Gradient, Caustics, and Crest Highlights
+function drawWater() {
+  // Step 1: Deep water fill
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  const step = 4;
+  for (let x = 0; x <= W; x += step) {
+    const y = getWaterY(x);
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W, H);
+  ctx.closePath();
+
+  const waterGrad = ctx.createLinearGradient(0, baseWaterLevel - 50, 0, H);
+  if (stormIntensity > 0.4) {
+    waterGrad.addColorStop(0, 'rgba(15, 42, 68, 0.94)');
+    waterGrad.addColorStop(0.3, '#0b233a');
+    waterGrad.addColorStop(1, '#05121d');
+  } else {
+    waterGrad.addColorStop(0, 'rgba(0, 150, 215, 0.88)');
+    waterGrad.addColorStop(0.2, '#006699');
+    waterGrad.addColorStop(0.6, '#003d5c');
+    waterGrad.addColorStop(1, '#001a29');
+  }
+  ctx.fillStyle = waterGrad;
+  ctx.fill();
+
+  // Step 2: Surface highlight & foam crests
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += step) {
+    const y = getWaterY(x);
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = stormIntensity > 0.4 ? 'rgba(170, 220, 245, 0.75)' : 'rgba(0, 230, 255, 0.85)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Foam on steep wave crests
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  for (let x = 10; x < W - 10; x += 16) {
+    const y = getWaterY(x);
+    const slope = Math.abs(getWaterSlope(x));
+    if (y < baseWaterLevel - 15 || slope > 0.35) {
+      ctx.beginPath();
+      ctx.arc(x, y - 1, 2 + slope * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Seabed details
+  ctx.fillStyle = '#0a1622';
+  ctx.fillRect(0, H - 20, W, 20);
+  ctx.strokeStyle = 'rgba(64, 169, 255, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, H - 20);
+  ctx.lineTo(W, H - 20);
+  ctx.stroke();
+}
+
+function updateAndDrawParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += p.gravity;
+    p.alpha -= p.decay;
+
+    if (p.alpha <= 0 || p.y > H) {
+      particles.splice(i, 1);
+      continue;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, p.alpha);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// --- Main Simulation Loop ---
+let lastTime = performance.now();
+
+function loop(currentTime) {
+  const rawDt = Math.min((currentTime - lastTime) / 1000, 0.05);
+  lastTime = currentTime;
+  const dt = rawDt * timeSpeed;
+
+  if (dt > 0) {
+    simTime += dt;
+    updateWaveGrid(dt);
+    activeBoat.update(dt);
+  }
+
+  // Draw Scene
+  ctx.clearRect(0, 0, W, H);
+  drawSky();
+  activeBoat.draw();
+  drawWater();
+  updateAndDrawParticles(dt);
+
+  updateTelemetryHUD();
+
+  requestAnimationFrame(loop);
+}
+
+// --- Telemetry & HUD Update ---
+function updateTelemetryHUD() {
+  const b = activeBoat;
+  document.getElementById('hudShipName').textContent = b.spec.name;
+
+  const speedKnots = Math.abs(b.vx * 7.5).toFixed(1);
+  document.getElementById('hudSpeed').textContent = `${speedKnots} kn`;
+
+  const deg = (b.angle * (180 / Math.PI)).toFixed(1);
+  document.getElementById('hudAngle').textContent = `${deg}°`;
+
+  const draftM = Math.max(0, (b.y - baseWaterLevel) * 0.1).toFixed(1);
+  document.getElementById('hudDraft').textContent = `${draftM} m`;
+
+  const buoyancyPct = Math.min(150, Math.max(0, 100 - (b.waterIngress * 0.4))).toFixed(0);
+  document.getElementById('hudBuoyancy').textContent = `${buoyancyPct}%`;
+
+  const floodPct = Math.min(100, (b.waterIngress / (b.spec.sinkThreshold || 100)) * 100).toFixed(0);
+  document.getElementById('hudFlood').textContent = `${floodPct}%`;
+  document.getElementById('hudFloodBar').style.width = `${floodPct}%`;
+
+  // Status Badge
+  const statusBadge = document.getElementById('hudStatus');
+  if (b.isSunk) {
+    statusBadge.textContent = 'GESUNKEN';
+    statusBadge.className = 'status-pill status-danger';
+  } else if (b.isCapsized) {
+    statusBadge.textContent = 'GEKENTERT';
+    statusBadge.className = 'status-pill status-danger';
+  } else if (b.waterIngress > 30) {
+    statusBadge.textContent = 'LECK / FLUT';
+    statusBadge.className = 'status-pill status-warn';
+  } else if (Math.abs(deg) > 20) {
+    statusBadge.textContent = 'KRÄNGUNG';
+    statusBadge.className = 'status-pill status-warn';
+  } else {
+    statusBadge.textContent = 'STABIL';
+    statusBadge.className = 'status-pill status-good';
+  }
+}
+
+// --- Ship Selection UI ---
+function initShipGrid() {
+  const grid = document.getElementById('shipGrid');
+  grid.innerHTML = SHIP_TYPES.map((ship, idx) => `
+    <button class="ship-btn ${idx === 0 ? 'active' : ''}" onclick="selectShip('${ship.id}')" id="shipBtn_${ship.id}">
+      <span class="emoji">${ship.emoji}</span>
+      <span>${ship.name.split(' ')[0]}</span>
+    </button>
+  `).join('');
+}
+
+function selectShip(shipId) {
+  const found = SHIP_TYPES.find(s => s.id === shipId);
+  if (!found) return;
+
+  activeBoat = new Boat(found);
+
+  // Update UI active button
+  document.querySelectorAll('.ship-btn').forEach(btn => btn.classList.remove('active'));
+  const btn = document.getElementById(`shipBtn_${shipId}`);
+  if (btn) btn.classList.add('active');
+
+  const subBtn = document.getElementById('btnSubmarineDive');
+  if (subBtn) {
+    subBtn.style.display = found.isSubmarine ? 'inline-flex' : 'none';
+    subBtn.textContent = '🟡 Abtauchen';
+  }
+
+  showToast(`Schiff gewechselt: ${found.name}`);
+  playTone(320, 0.12, 'triangle', 0.15);
+}
+
+function toggleSubmarineDive() {
+  if (!activeBoat.spec.isSubmarine) return;
+  activeBoat.submergeTarget = activeBoat.submergeTarget > 0.5 ? 0 : 1;
+  const isDiving = activeBoat.submergeTarget > 0.5;
+  const btn = document.getElementById('btnSubmarineDive');
+  if (btn) btn.textContent = isDiving ? '🟢 Auftauchen' : '🟡 Abtauchen';
+  showToast(isDiving ? 'Tauchtanks GEFLUTET: U-Boot taucht ab!' : 'Tanks AUSGEBLASEN: U-Boot taucht auf!');
+  playTone(isDiving ? 160 : 380, 0.2, 'sine', 0.15);
+}
+
+// --- Interactive Wave Drawing & Touch Events ---
+let isDrawingWave = false;
+let drawWaveMode = false;
+let lastPointerX = 0;
+let lastPointerY = 0;
+
+function toggleDrawWaveMode() {
+  drawWaveMode = !drawWaveMode;
+  const btn = document.getElementById('btnDrawWave');
+  const banner = document.getElementById('drawBanner');
+  if (drawWaveMode) {
+    btn.classList.add('active');
+    banner.classList.add('show');
+    showToast('Wellen-Zeichenmodus AKTIV: Ziehe im Wasser!');
+  } else {
+    btn.classList.remove('active');
+    banner.classList.remove('show');
+    showToast('Wellen-Zeichenmodus AUS');
+  }
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  initAudio();
+  isDrawingWave = true;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+  handlePointerWave(e.clientX, e.clientY, 0);
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (!isDrawingWave) return;
+  const dy = e.clientY - lastPointerY;
+  handlePointerWave(e.clientX, e.clientY, dy);
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+});
+
+window.addEventListener('pointerup', () => { isDrawingWave = false; });
+window.addEventListener('pointercancel', () => { isDrawingWave = false; });
+
+function handlePointerWave(px, py, dy) {
+  // If in draw mode, or clicking near the water surface, displace water
+  const waterY = getWaterY(px);
+  const distFromSurface = Math.abs(py - waterY);
+
+  if (drawWaveMode || distFromSurface < 160) {
+    const waveDisplacement = -dy * 1.4;
+    const amount = Math.max(-80, Math.min(80, waveDisplacement !== 0 ? waveDisplacement : -25));
+    disturbWater(px, amount, 60);
+
+    if (Math.abs(amount) > 10 && Math.random() < 0.3) {
+      addSplash(px, waterY, 5, (Math.random() - 0.5) * 4, -2.5);
+    }
+  }
+}
+
+// --- Controls & Parameter Handlers ---
+function updateThrottle(val) {
+  const num = parseInt(val, 10);
+  activeBoat.throttle = num / 100;
+  document.getElementById('throttleOut').textContent = `${num}%`;
+  document.getElementById('throttleDisplay').textContent = `${num}%`;
+  if (Math.abs(num) > 0) playTone(90 + Math.abs(num) * 1.8, 0.08, 'sawtooth', 0.05);
+}
+
+function updateWaveHeight(val) {
+  waveAmplitude = parseFloat(val);
+  document.getElementById('waveHeightOut').textContent = `${(waveAmplitude * 0.1).toFixed(1)}m`;
+}
+
+function updateWind(val) {
+  windSpeed = parseFloat(val);
+  document.getElementById('windOut').textContent = (windSpeed >= 0 ? '+' : '') + windSpeed;
+}
+
+function updateTimeSpeed(val) {
+  timeSpeed = parseFloat(val);
+  document.getElementById('timeSpeedOut').textContent = `${timeSpeed.toFixed(1)}x`;
+}
+
+function resetBoat() {
+  activeBoat.reset();
+  showToast('Schiff geborgen & repariert!');
+  playTone(440, 0.15, 'sine', 0.15);
+}
+
+function honkHorn() {
+  playHornSound();
+  showToast('📯 TÖÖÖT!');
+  // Ripple shockwave around boat
+  disturbWater(activeBoat.x, -20, 90);
+  addSplash(activeBoat.x, getWaterY(activeBoat.x), 8, 0, -3);
+}
+
+// --- Presets & Generators ---
+function spawnRogueWave() {
+  showToast('🌊 MONSTERWELLE NÄHERT SICH!');
+  playSplashSound(0.5);
+  // Spawn a moving solitary wave crest on the left edge
+  disturbWater(W * 0.08, -110, 140);
+  disturbWater(W * 0.15, 80, 110);
+}
+
+function triggerStorm() {
+  stormIntensity = 1.0;
+  waveAmplitude = 95;
+  document.getElementById('waveHeightSlider').value = 95;
+  updateWaveHeight(95);
+
+  windSpeed = 65;
+  document.getElementById('windSlider').value = 65;
+  updateWind(65);
+
+  lightningFlash = 1.0;
+  playThunderSound();
+  showToast('⛈️ SCHWERER ORKAN ENTBRANNT!');
+}
+
+function triggerCalm() {
+  stormIntensity = 0.0;
+  waveAmplitude = 12;
+  document.getElementById('waveHeightSlider').value = 12;
+  updateWaveHeight(12);
+
+  windSpeed = 5;
+  document.getElementById('windSlider').value = 5;
+  updateWind(5);
+
+  // Smooth out all dynamic ripples
+  for (let i = 0; i < NUM_NODES; i++) {
+    waterHeight[i] = 0;
+    waterVel[i] = 0;
+  }
+  showToast('⛵ Ruhige See eingestellt');
+  playTone(523, 0.25, 'sine', 0.12);
+}
+
+function spawnWhirlpool() {
+  showToast('🌪️ STRUDEL AKTIV!');
+  const cx = W * 0.55;
+  for (let i = 0; i < 30; i++) {
+    setTimeout(() => {
+      disturbWater(cx + Math.sin(i * 0.4) * 40, 45, 90);
+      addBubble(cx, baseWaterLevel + 40);
+    }, i * 35);
+  }
+}
+
+// --- Keyboard Steer & Gas Handling ---
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+    e.preventDefault();
+  }
+  keys[e.code] = true;
+
+  if (e.code === 'KeyW' || e.code === 'ArrowUp') {
+    const cur = parseInt(document.getElementById('throttleSlider').value, 10);
+    const next = Math.min(100, cur + 20);
+    document.getElementById('throttleSlider').value = next;
+    updateThrottle(next);
+  }
+  if (e.code === 'KeyS' || e.code === 'ArrowDown') {
+    const cur = parseInt(document.getElementById('throttleSlider').value, 10);
+    const next = Math.max(-100, cur - 20);
+    document.getElementById('throttleSlider').value = next;
+    updateThrottle(next);
+  }
+  if (e.code === 'KeyR') resetBoat();
+  if (e.code === 'KeyH') honkHorn();
+  if (e.code === 'KeyM') spawnRogueWave();
+});
+
+window.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+// Rudder button pointers
+const btnRudderLeft = document.getElementById('btnRudderLeft');
+const btnRudderRight = document.getElementById('btnRudderRight');
+
+btnRudderLeft.addEventListener('pointerdown', () => { activeBoat.rudder = -1; });
+btnRudderLeft.addEventListener('pointerup', () => { activeBoat.rudder = 0; });
+btnRudderLeft.addEventListener('pointerleave', () => { activeBoat.rudder = 0; });
+
+btnRudderRight.addEventListener('pointerdown', () => { activeBoat.rudder = 1; });
+btnRudderRight.addEventListener('pointerup', () => { activeBoat.rudder = 0; });
+btnRudderRight.addEventListener('pointerleave', () => { activeBoat.rudder = 0; });
+
+// Continuous rudder check in loop
+setInterval(() => {
+  if (keys['KeyA'] || keys['ArrowLeft']) activeBoat.rudder = -1;
+  else if (keys['KeyD'] || keys['ArrowRight']) activeBoat.rudder = 1;
+  else if (!btnRudderLeft.matches(':active') && !btnRudderRight.matches(':active')) {
+    activeBoat.rudder = 0;
+  }
+}, 30);
+
+// --- Submarine Ballast Controls ---
+// If user selects submarine, toggle diving
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyB' && activeBoat.spec.isSubmarine) {
+    activeBoat.submergeTarget = activeBoat.submergeTarget > 0.5 ? 0 : 1;
+    showToast(activeBoat.submergeTarget > 0.5 ? 'Tauchtanks GEFLUTET: U-Boot taucht ab!' : 'Tanks AUSGEBLASEN: U-Boot taucht auf!');
+  }
+});
+
+// --- Toast & Help Modal ---
+let toastTimer = null;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
+}
+
+function toggleHelp() {
+  const modal = document.getElementById('helpModal');
+  modal.classList.toggle('open');
+}
+
+// --- Initialization ---
+initWaterGrid();
+initShipGrid();
+resizeCanvas();
+activeBoat.reset(); // place boat on real water level
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

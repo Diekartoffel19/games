@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Mega Obby 3D — Sky Parkour Adventure</title>
+<meta name="description" content="Mega 3D Obby Platformer: 15 abwechslungsreiche Stages, Regenbogen-Plattformen, Laser-Schranken, Trampolin-Sprünge, verschwindende Blöcke, Speed-Röhren und Zieldestination!">
+<meta name="keywords" content="obby 3d, roblox obby browser, parkour game 3d, platformer, webgl obstacle course">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Mega Obby 3D — Sky Parkour Adventure">
+<meta property="og:description" content="15 actiongeladene 3D-Parkour Stages mit feiner Physik, Checkpoints & Web Audio Sounds!">
+
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+
+<link rel="stylesheet" href="../../style.css">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script src="../../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 0; overflow: hidden;
+    background: #0284c7; color: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+
+  #canvas-container {
+    position: fixed; inset: 0; width: 100vw; height: 100vh;
+    overflow: hidden; background: #0284c7;
+  }
+  #canvas-container canvas {
+    display: block; width: 100%; height: 100%; margin: 0; border-radius: 0;
+  }
+
+  /* HUD Top Bar */
+  .hud {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; align-items: center; z-index: 20;
+    pointer-events: none; max-width: 95vw; flex-wrap: wrap; justify-content: center;
+  }
+  .hud-badge {
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1.5px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-weight: 800; font-size: 0.9rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+  }
+  .hud-badge.stage {
+    background: linear-gradient(135deg, #0284c7, #4f46e5);
+    border-color: #38bdf8;
+    color: #fff;
+  }
+
+  /* Instructions / Controls Hint */
+  .controls-hint {
+    position: fixed; bottom: 20px; left: 20px; z-index: 20;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 14px;
+    padding: 10px 16px;
+    font-size: 0.8rem;
+    color: #e2e8f0;
+    pointer-events: none;
+    line-height: 1.55;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+  }
+  .controls-hint kbd {
+    background: rgba(255,255,255,0.25);
+    padding: 2px 6px; border-radius: 5px;
+    font-family: inherit; font-weight: 800; color: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+
+  /* Checkpoint Notification Banner */
+  .cp-banner {
+    position: fixed; top: 75px; left: 50%; transform: translateX(-50%) scale(0.8);
+    background: linear-gradient(135deg, #10b981, #047857);
+    color: #fff; font-weight: 900; font-size: 1.15rem;
+    padding: 10px 24px; border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.5);
+    border: 2px solid #6ee7b7;
+    opacity: 0; pointer-events: none;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+    z-index: 30;
+  }
+  .cp-banner.show {
+    opacity: 1; transform: translateX(-50%) scale(1);
+  }
+
+  /* Mobile Touch Controls */
+  .touch-ui {
+    position: fixed; inset: 0; pointer-events: none; z-index: 25;
+    display: none;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    .touch-ui { display: block; }
+    .controls-hint { display: none; }
+  }
+  .joystick-zone {
+    position: absolute; bottom: 24px; left: 24px;
+    width: 140px; height: 140px;
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    pointer-events: auto;
+    touch-action: none;
+  }
+  .joystick-knob {
+    position: absolute; top: 50%; left: 50%;
+    width: 54px; height: 54px; margin: -27px 0 0 -27px;
+    background: radial-gradient(circle, #38bdf8, #0284c7);
+    border: 2px solid #fff; border-radius: 50%;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+  .jump-btn {
+    position: absolute; bottom: 36px; right: 28px;
+    width: 82px; height: 82px;
+    background: radial-gradient(circle, #f59e0b, #d97706);
+    border: 3px solid #fff;
+    border-radius: 50%;
+    font-size: 1.15rem; font-weight: 900; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(217, 119, 6, 0.45);
+    pointer-events: auto;
+    user-select: none;
+  }
+  .jump-btn:active {
+    transform: scale(0.92);
+  }
+
+  /* Victory Overlay */
+  .win-modal {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(14px);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .win-modal.active {
+    opacity: 1; pointer-events: auto;
+  }
+  .win-card {
+    background: #1e293b; border: 3px solid #38bdf8;
+    padding: 36px 40px; border-radius: 26px;
+    text-align: center; max-width: 460px; width: 90%;
+    box-shadow: 0 25px 60px rgba(56, 189, 248, 0.4);
+    transform: scale(0.9); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .win-modal.active .win-card {
+    transform: scale(1);
+  }
+  .win-card h2 {
+    font-size: 2.3rem; margin: 0 0 10px 0;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .restart-btn {
+    background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    color: #fff; border: none; padding: 14px 30px;
+    border-radius: 14px; font-weight: 800; font-size: 1.1rem;
+    cursor: pointer; margin-top: 20px;
+    box-shadow: 0 8px 22px rgba(14, 165, 233, 0.4);
+    transition: transform 0.2s;
+  }
+  .restart-btn:hover { transform: scale(1.05); }
+
+  /* Reset checkpoint button */
+  .respawn-hud-btn {
+    position: fixed; top: 16px; right: 16px; z-index: 20;
+    background: rgba(239, 68, 68, 0.9);
+    color: #fff; border: 2px solid rgba(255,255,255,0.4);
+    padding: 8px 14px; border-radius: 12px;
+    font-weight: 800; font-size: 0.85rem;
+    cursor: pointer; backdrop-filter: blur(8px);
+    transition: transform 0.15s, background 0.15s;
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+  }
+  .respawn-hud-btn:hover { background: #dc2626; transform: scale(1.05); }
+</style>
+</head>
+<body>
+
+<a href="../../index.html" class="back">← Arcade</a>
+
+<button class="respawn-hud-btn" id="respawnBtn" title="Zurück zum Checkpoint (Taste R)">🔄 Respawn (R)</button>
+
+<div class="hud">
+  <div class="hud-badge stage" id="stageBadge">🏁 Stage 1 / 15</div>
+  <div class="hud-badge" id="deathBadge">💀 Tode: 0</div>
+  <div class="hud-badge" id="timeBadge">⏱️ 00:00</div>
+</div>
+
+<div class="cp-banner" id="cpBanner">✨ CHECKPOINT ERREICHT! ✨</div>
+
+<div class="controls-hint">
+  <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / Pfeile: Bewegen</div>
+  <div><kbd>LEERTASTE</kbd>: Springen</div>
+  <div><kbd>Rechte / Linke Maus</kbd>: Kamera drehen</div>
+  <div><kbd>Mausrad</kbd>: Zoom Kamera</div>
+  <div><kbd>R</kbd>: Checkpoint-Respawn</div>
+</div>
+
+<div class="touch-ui">
+  <div class="joystick-zone" id="joystickZone">
+    <div class="joystick-knob" id="joystickKnob"></div>
+  </div>
+  <div class="jump-btn" id="jumpBtn">JUMP</div>
+</div>
+
+<div class="win-modal" id="winModal">
+  <div class="win-card">
+    <h2>🏆 OBBY CHAMPION!</h2>
+    <p>Herzlichen Glückwunsch! Du hast alle 15 Stages des Sky Parkours gemeistert!</p>
+    <div style="margin: 20px 0; font-size: 1.15rem; line-height: 1.8;">
+      <div>Endzeit: <strong id="winTime" style="color: #38bdf8;">00:00</strong></div>
+      <div>Tode: <strong id="winDeaths" style="color: #f87171;">0</strong></div>
+      <div id="winScore" style="color: #fbbf24; font-weight: 800; font-size: 1.25rem; margin-top: 6px;">Score: 9500</div>
+    </div>
+    <button class="restart-btn" onclick="restartEntireGame()">Erneut spielen 🔁</button>
+  </div>
+</div>
+
+<div id="canvas-container"></div>
+
+<script>
+// --- AUDIO SYNTHESIZER ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(type) {
+  if (window.ArcadeCore && ArcadeCore.isMuted()) return;
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  if (type === 'jump') {
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(260, now);
+    osc.frequency.exponentialRampToValueAtTime(540, now + 0.14);
+    gain.gain.setValueAtTime(0.28, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    osc.start(now);
+    osc.stop(now + 0.14);
+  } else if (type === 'pad') {
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(320, now);
+    osc.frequency.exponentialRampToValueAtTime(960, now + 0.28);
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    osc.start(now);
+    osc.stop(now + 0.28);
+  } else if (type === 'checkpoint') {
+    const notes = [523.25, 659.25, 783.99, 1046.50];
+    notes.forEach((freq, idx) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, now + idx * 0.08);
+      g.connect(audioCtx.destination);
+      o.connect(g);
+      g.gain.setValueAtTime(0.25, now + idx * 0.08);
+      g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.35);
+      o.start(now + idx * 0.08);
+      o.stop(now + idx * 0.08 + 0.35);
+    });
+  } else if (type === 'death') {
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.linearRampToValueAtTime(50, now + 0.26);
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+    osc.start(now);
+    osc.stop(now + 0.26);
+  } else if (type === 'win') {
+    const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+    notes.forEach((freq, i) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(freq, now + i * 0.12);
+      g.connect(audioCtx.destination);
+      o.connect(g);
+      g.gain.setValueAtTime(0.3, now + i * 0.12);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.7);
+      o.start(now + i * 0.12);
+      o.stop(now + i * 0.12 + 0.7);
+    });
+  }
+}
+
+// --- THREE.JS SCENE SETUP ---
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x38bdf8);
+scene.fog = new THREE.FogExp2(0x38bdf8, 0.0035);
+
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1200);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+// Lighting
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 0.85);
+scene.add(hemiLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+dirLight.position.set(60, 120, 60);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+dirLight.shadow.camera.near = 10;
+dirLight.shadow.camera.far = 400;
+const d = 120;
+dirLight.shadow.camera.left = -d;
+dirLight.shadow.camera.right = d;
+dirLight.shadow.camera.top = d;
+dirLight.shadow.camera.bottom = -d;
+scene.add(dirLight);
+
+// Sky Floating Clouds
+const cloudGroup = new THREE.Group();
+const cloudGeo = new THREE.DodecahedronGeometry(9, 1);
+const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.82 });
+for (let i = 0; i < 50; i++) {
+  const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+  cloud.position.set(
+    (Math.random() - 0.5) * 500,
+    15 + Math.random() * 45,
+    -100 - Math.random() * 700
+  );
+  const s = 1.2 + Math.random() * 3.0;
+  cloud.scale.set(s * 1.8, s * 0.6, s);
+  cloudGroup.add(cloud);
+}
+scene.add(cloudGroup);
+
+// --- PLAYER AVATAR ---
+const playerGroup = new THREE.Group();
+scene.add(playerGroup);
+
+const skinMat = new THREE.MeshLambertMaterial({ color: 0xfcd34d });
+const shirtMat = new THREE.MeshLambertMaterial({ color: 0x0284c7 });
+const pantsMat = new THREE.MeshLambertMaterial({ color: 0x1e3a8a });
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+
+// Head
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), skinMat);
+head.position.y = 2.2;
+head.castShadow = true;
+playerGroup.add(head);
+
+// Eyes
+const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.05), eyeMat);
+eyeL.position.set(-0.2, 2.25, 0.41);
+playerGroup.add(eyeL);
+const eyeR = eyeL.clone();
+eyeR.position.x = 0.2;
+playerGroup.add(eyeR);
+
+// Torso
+const torso = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 0.6), shirtMat);
+torso.position.y = 1.2;
+torso.castShadow = true;
+playerGroup.add(torso);
+
+// Arms
+const armGeo = new THREE.BoxGeometry(0.4, 1.1, 0.4);
+const armL = new THREE.Mesh(armGeo, skinMat);
+armL.position.set(-0.85, 1.15, 0);
+armL.castShadow = true;
+playerGroup.add(armL);
+
+const armR = new THREE.Mesh(armGeo, skinMat);
+armR.position.set(0.85, 1.15, 0);
+armR.castShadow = true;
+playerGroup.add(armR);
+
+// Legs
+const legGeo = new THREE.BoxGeometry(0.48, 1.1, 0.48);
+const legL = new THREE.Mesh(legGeo, pantsMat);
+legL.position.set(-0.32, 0.45, 0);
+legL.castShadow = true;
+playerGroup.add(legL);
+
+const legR = new THREE.Mesh(legGeo, pantsMat);
+legR.position.set(0.32, 0.45, 0);
+legR.castShadow = true;
+playerGroup.add(legR);
+
+// Player Physics State
+const player = {
+  pos: new THREE.Vector3(0, 4, 0),
+  vel: new THREE.Vector3(),
+  radius: 0.55,
+  height: 2.6,
+  onGround: false,
+  coyoteTime: 0,
+  invulnerableTime: 0,
+  boostTimer: 0
+};
+playerGroup.position.copy(player.pos);
+
+// --- CAMERA ORBIT STATE ---
+let camYaw = 0;
+let camPitch = 0.35;
+let camDistance = 8.5;
+let isDragging = false;
+let prevMouseX = 0;
+let prevMouseY = 0;
+
+window.addEventListener('mousedown', (e) => {
+  if (e.target.closest('button') || e.target.closest('.back') || e.target.closest('.win-modal')) return;
+  isDragging = true;
+  prevMouseX = e.clientX;
+  prevMouseY = e.clientY;
+});
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - prevMouseX;
+  const dy = e.clientY - prevMouseY;
+  prevMouseX = e.clientX;
+  prevMouseY = e.clientY;
+  camYaw -= dx * 0.0055;
+  camPitch = Math.max(0.05, Math.min(Math.PI / 2.2, camPitch + dy * 0.0055));
+});
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('wheel', (e) => {
+  camDistance = Math.max(4.5, Math.min(18, camDistance + e.deltaY * 0.01));
+});
+
+// Touch Orbit on right screen area
+window.addEventListener('touchstart', (e) => {
+  for (let i = 0; i < e.touches.length; i++) {
+    const t = e.touches[i];
+    if (t.clientX > window.innerWidth * 0.35 && !t.target.closest('#jumpBtn') && !t.target.closest('button')) {
+      isDragging = true;
+      prevMouseX = t.clientX;
+      prevMouseY = t.clientY;
+    }
+  }
+}, { passive: false });
+window.addEventListener('touchmove', (e) => {
+  if (!isDragging) return;
+  for (let i = 0; i < e.touches.length; i++) {
+    const t = e.touches[i];
+    if (t.clientX > window.innerWidth * 0.35 && !t.target.closest('#jumpBtn')) {
+      const dx = t.clientX - prevMouseX;
+      const dy = t.clientY - prevMouseY;
+      prevMouseX = t.clientX;
+      prevMouseY = t.clientY;
+      camYaw -= dx * 0.0075;
+      camPitch = Math.max(0.05, Math.min(Math.PI / 2.2, camPitch + dy * 0.0075));
+    }
+  }
+}, { passive: false });
+window.addEventListener('touchend', () => isDragging = false);
+
+// Keyboard
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  keys[e.code] = true;
+  if (e.code === 'KeyR') respawnPlayer();
+});
+window.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+// Joystick Logic
+const joystickZone = document.getElementById('joystickZone');
+const joystickKnob = document.getElementById('joystickKnob');
+let joyActive = false;
+let joyVector = { x: 0, y: 0 };
+
+joystickZone.addEventListener('touchstart', (e) => {
+  joyActive = true;
+  updateJoystick(e.touches[0]);
+}, { passive: false });
+joystickZone.addEventListener('touchmove', (e) => {
+  if (!joyActive) return;
+  updateJoystick(e.touches[0]);
+}, { passive: false });
+joystickZone.addEventListener('touchend', () => {
+  joyActive = false;
+  joyVector = { x: 0, y: 0 };
+  joystickKnob.style.transform = 'translate(0px, 0px)';
+});
+
+function updateJoystick(touch) {
+  const rect = joystickZone.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  let dx = touch.clientX - centerX;
+  let dy = touch.clientY - centerY;
+  const dist = Math.hypot(dx, dy);
+  const maxR = 45;
+  if (dist > maxR) {
+    dx = (dx / dist) * maxR;
+    dy = (dy / dist) * maxR;
+  }
+  joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+  joyVector.x = dx / maxR;
+  joyVector.y = dy / maxR;
+}
+
+const jumpBtn = document.getElementById('jumpBtn');
+let touchJump = false;
+jumpBtn.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  touchJump = true;
+});
+jumpBtn.addEventListener('touchend', () => {
+  touchJump = false;
+});
+document.getElementById('respawnBtn').addEventListener('click', respawnPlayer);
+
+// --- PLATFORMS & STAGE ARCHITECTURE ---
+const platforms = [];
+const checkpoints = [];
+let currentStageIndex = 0;
+let deathCount = 0;
+let gameStartTime = Date.now();
+let gameTimerInterval = null;
+
+function addPlatform(x, y, z, w, h, d, color, type = 'solid', extra = {}) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  let mat;
+  if (type === 'lava') {
+    mat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+  } else if (type === 'checkpoint') {
+    mat = new THREE.MeshLambertMaterial({ color: 0x10b981 });
+  } else if (type === 'pad') {
+    mat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
+  } else if (type === 'disappear') {
+    mat = new THREE.MeshLambertMaterial({ color: 0xa855f7, transparent: true, opacity: 0.92 });
+  } else {
+    mat = new THREE.MeshLambertMaterial({ color: color });
+  }
+
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  const platObj = {
+    mesh,
+    w, h, d,
+    type,
+    origPos: new THREE.Vector3(x, y, z),
+    extra: { ...extra }
+  };
+  platforms.push(platObj);
+  return platObj;
+}
+
+function addCheckpoint(x, y, z, label) {
+  const stageNum = checkpoints.length + 1;
+  const flagGroup = new THREE.Group();
+
+  // Cylinder base pad
+  const padGeo = new THREE.CylinderGeometry(2.4, 2.4, 0.4, 24);
+  const padMat = new THREE.MeshLambertMaterial({ color: 0x10b981 });
+  const padMesh = new THREE.Mesh(padGeo, padMat);
+  padMesh.position.set(x, y + 0.2, z);
+  flagGroup.add(padMesh);
+
+  // Mast
+  const poleGeo = new THREE.CylinderGeometry(0.1, 0.1, 4.2, 12);
+  const poleMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const poleMesh = new THREE.Mesh(poleGeo, poleMat);
+  poleMesh.position.set(x + 1.6, y + 2.1, z);
+  flagGroup.add(poleMesh);
+
+  // Flag cloth
+  const flagGeo = new THREE.BoxGeometry(1.4, 0.9, 0.05);
+  const flagMat = new THREE.MeshLambertMaterial({ color: 0x10b981 });
+  const flagMesh = new THREE.Mesh(flagGeo, flagMat);
+  flagMesh.position.set(x + 2.3, y + 3.4, z);
+  flagGroup.add(flagMesh);
+
+  scene.add(flagGroup);
+
+  const cpData = {
+    index: stageNum - 1,
+    label,
+    spawnPos: new THREE.Vector3(x, y + 1.2, z),
+    flagMesh,
+    triggerPos: new THREE.Vector3(x, y + 0.5, z),
+    radius: 3.5,
+    reached: false
+  };
+  checkpoints.push(cpData);
+}
+
+// 15 COMPREHENSIVE & FULLY PLAYABLE STAGES
+function buildMegaObby() {
+  // STAGE 1: Welcome & Rainbow Steps
+  addCheckpoint(0, 0, 0, "Stage 1: Der Aufstieg");
+  addPlatform(0, -0.6, 0, 8, 1.2, 8, 0x3b82f6);
+
+  const rainbow = [0xef4444, 0xf97316, 0xeab308, 0x22c55e, 0x06b6d4, 0x6366f1, 0xa855f7];
+  for (let i = 0; i < 7; i++) {
+    addPlatform(0, (i + 1) * 0.7, -7 - i * 5.2, 4.2, 1, 3.8, rainbow[i]);
+  }
+
+  // STAGE 2: Lava Hurdle Island
+  const s2Z = -46;
+  addCheckpoint(0, 5.6, s2Z, "Stage 2: Lava-Hürden");
+  addPlatform(0, 5.0, s2Z, 8, 1.2, 8, 0x10b981);
+
+  for (let i = 0; i < 5; i++) {
+    const pZ = s2Z - 7 - i * 6.2;
+    // Step platform
+    addPlatform(0, 5.6, pZ, 5.5, 1, 4.2, 0x38bdf8);
+    // Low lava hurdle on top (can easily jump over)
+    addPlatform(0, 6.4, pZ, 5.5, 0.4, 0.5, 0xef4444, 'lava');
+  }
+
+  // STAGE 3: Alternating Floating Blocks
+  const s3Z = s2Z - 42;
+  addCheckpoint(0, 5.6, s3Z, "Stage 3: Schwebende Inseln");
+  addPlatform(0, 5.0, s3Z, 8, 1.2, 8, 0x10b981);
+
+  for (let i = 0; i < 6; i++) {
+    const xOff = (i % 2 === 0 ? -2.2 : 2.2);
+    addPlatform(xOff, 5.8 + i * 0.3, s3Z - 7 - i * 5.5, 3.6, 1, 3.6, 0x14b8a6);
+  }
+
+  // STAGE 4: Jump-Pad Mega Booster
+  const s4Z = s3Z - 44;
+  addCheckpoint(0, 7.6, s4Z, "Stage 4: Super-Trampolin");
+  addPlatform(0, 7.0, s4Z, 8, 1.2, 8, 0x10b981);
+
+  // Jump pad
+  addPlatform(0, 7.8, s4Z - 6.5, 4.2, 0.4, 4.2, 0xf59e0b, 'pad', { boostY: 21, boostZ: -28 });
+  // Generous landing base (well within trajectory range)
+  addPlatform(0, 8.5, s4Z - 32, 12, 1.4, 12, 0x0284c7);
+
+  // STAGE 5: Moving Cloud Platforms
+  const s5Z = s4Z - 46;
+  addCheckpoint(0, 8.5, s5Z, "Stage 5: Schwebende Wolken");
+  addPlatform(0, 7.9, s5Z, 8, 1.2, 8, 0x10b981);
+
+  for (let i = 0; i < 4; i++) {
+    addPlatform(0, 8.7, s5Z - 7 - i * 6.0, 4.5, 1, 4.0, 0x93c5fd, 'solid', {
+      isMoving: true, moveRange: 3.2, moveSpeed: 1.3 + i * 0.25, phase: i * 1.5
+    });
+  }
+
+  // STAGE 6: Disappearing Magic Tiles
+  const s6Z = s5Z - 38;
+  addCheckpoint(0, 10.2, s6Z, "Stage 6: Geister-Pfade");
+  addPlatform(0, 9.6, s6Z, 8, 1.2, 8, 0x10b981);
+
+  for (let i = 0; i < 6; i++) {
+    addPlatform(
+      (i % 2 === 0 ? -1.8 : 1.8),
+      10.4,
+      s6Z - 6.5 - i * 5.2,
+      3.6, 1, 3.6,
+      0xa855f7,
+      'disappear',
+      { triggered: false, timer: 0, active: true }
+    );
+  }
+
+  // STAGE 7: Rotating Windmill Lasers
+  const s7Z = s6Z - 42;
+  addCheckpoint(0, 10.4, s7Z, "Stage 7: Laser-Mühle");
+  addPlatform(0, 9.8, s7Z, 8, 1.2, 8, 0x10b981);
+
+  // Big central circular/octagonal island
+  addPlatform(0, 10.0, s7Z - 15, 14, 1, 14, 0x475569);
+  // Central pivot cylinder base
+  addPlatform(0, 10.8, s7Z - 15, 1.6, 0.6, 1.6, 0x334155);
+  // Rotor bar (Length 10.5 so edges stay safe! Height 0.45, resting right on the platform floor)
+  addPlatform(0, 10.75, s7Z - 15, 10.5, 0.45, 0.6, 0xef4444, 'lava', { isRotor: true, rotSpeed: 0.018 });
+
+  // STAGE 8: Balance Beam Challenge
+  const s8Z = s7Z - 34;
+  addCheckpoint(0, 10.2, s8Z, "Stage 8: Balance-Balken");
+  addPlatform(0, 9.6, s8Z, 8, 1.2, 8, 0x10b981);
+
+  // Long safe beam
+  addPlatform(0, 10.2, s8Z - 16, 1.6, 0.8, 22, 0xfacc15);
+  // Small hopping hurdles
+  for (let i = 0; i < 3; i++) {
+    addPlatform(0, 10.85, s8Z - 9 - i * 6, 1.6, 0.35, 0.4, 0xef4444, 'lava');
+  }
+
+  // STAGE 9: Neon Donut Rings (Hoops)
+  const s9Z = s8Z - 34;
+  addCheckpoint(0, 10.2, s9Z, "Stage 9: Cyber-Ringe");
+  addPlatform(0, 9.6, s9Z, 8, 1.2, 8, 0x10b981);
+
+  for (let i = 0; i < 5; i++) {
+    const ringZ = s9Z - 6.5 - i * 5.6;
+    addPlatform(0, 10.5, ringZ, 4.2, 0.8, 4.0, 0x06b6d4);
+    // Ring arch decoration
+    addPlatform(-2.1, 12.0, ringZ, 0.5, 2.5, 0.5, 0xec4899);
+    addPlatform(2.1, 12.0, ringZ, 0.5, 2.5, 0.5, 0xec4899);
+    addPlatform(0, 13.2, ringZ, 4.6, 0.5, 0.5, 0xec4899);
+  }
+
+  // STAGE 10: The Twin Lava Spinners
+  const s10Z = s9Z - 38;
+  addCheckpoint(0, 10.5, s10Z, "Stage 10: Zwillings-Rotoren");
+  addPlatform(0, 9.9, s10Z, 8, 1.2, 8, 0x10b981);
+
+  addPlatform(-3.5, 10.5, s10Z - 12, 8, 1, 8, 0x64748b);
+  addPlatform(-3.5, 11.25, s10Z - 12, 6.0, 0.45, 0.6, 0xef4444, 'lava', { isRotor: true, rotSpeed: 0.024 });
+
+  addPlatform(3.5, 10.5, s10Z - 23, 8, 1, 8, 0x64748b);
+  addPlatform(3.5, 11.25, s10Z - 23, 6.0, 0.45, 0.6, 0xef4444, 'lava', { isRotor: true, rotSpeed: -0.024 });
+
+  // STAGE 11: Ascending Spiral Staircase
+  const s11Z = s10Z - 36;
+  addCheckpoint(0, 10.5, s11Z, "Stage 11: Wendeltreppe");
+  addPlatform(0, 9.9, s11Z, 8, 1.2, 8, 0x10b981);
+
+  // 10 wide, beautifully ascending stairs curving directly towards Stage 12 base
+  for (let i = 0; i < 9; i++) {
+    const angle = i * 0.42;
+    const rad = 3.6;
+    const sx = Math.sin(angle) * rad;
+    const sz = s11Z - 6.5 - (i * 3.4);
+    const sy = 10.6 + i * 0.65;
+    addPlatform(sx, sy, sz, 4.0, 0.8, 3.8, rainbow[i % 7]);
+  }
+
+  // STAGE 12: Super-Booster Highway
+  const s12Z = s11Z - 42;
+  addCheckpoint(0, 16.5, s12Z, "Stage 12: Sky-Highway");
+  addPlatform(0, 15.9, s12Z, 8, 1.2, 8, 0x10b981);
+
+  addPlatform(0, 17.2, s12Z - 5.5, 4.2, 0.4, 4.2, 0xf59e0b, 'pad', { boostY: 21, boostZ: -28 });
+  addPlatform(0, 18.0, s12Z - 32, 10, 1.2, 10, 0x38bdf8);
+  addPlatform(0, 18.8, s12Z - 37, 4.2, 0.4, 4.2, 0xf59e0b, 'pad', { boostY: 21, boostZ: -28 });
+  addPlatform(0, 19.5, s12Z - 64, 11, 1.2, 11, 0x0284c7);
+
+  // STAGE 13: The Lava Matrix (Checkerboard)
+  const s13Z = s12Z - 74;
+  addCheckpoint(0, 22.5, s13Z, "Stage 13: Schachbrett");
+  addPlatform(0, 21.9, s13Z, 8, 1.2, 8, 0x10b981);
+
+  for (let row = 0; row < 5; row++) {
+    for (let col = -1; col <= 1; col++) {
+      const isLava = ((row + col + 10) % 2 === 0);
+      const px = col * 3.5;
+      const pz = s13Z - 7 - row * 4.6;
+      addPlatform(px, 22.5, pz, 3.2, 0.8, 3.2, isLava ? 0xef4444 : 0x22c55e, isLava ? 'lava' : 'solid');
+    }
+  }
+
+  // STAGE 14: Precision Leap of Faith
+  const s14Z = s13Z - 36;
+  addCheckpoint(0, 22.5, s14Z, "Stage 14: Meistersprung");
+  addPlatform(0, 21.9, s14Z, 8, 1.2, 8, 0x10b981);
+
+  for (let i = 0; i < 5; i++) {
+    addPlatform(
+      (i % 2 === 0 ? -2.0 : 2.0),
+      22.8 + i * 0.4,
+      s14Z - 7 - i * 6.0,
+      3.2, 0.8, 3.2,
+      0xf59e0b
+    );
+  }
+
+  // STAGE 15: The Grand Golden Citadel (Finish Line)
+  const s15Z = s14Z - 44;
+  addCheckpoint(0, 25.5, s15Z, "Stage 15: Sieger-Olymp");
+  const finishIsland = addPlatform(0, 24.5, s15Z, 16, 2, 16, 0xf59e0b);
+
+  // Grand Golden Torus Trophy
+  const trophyGeo = new THREE.TorusKnotGeometry(2.4, 0.65, 80, 16);
+  const trophyMat = new THREE.MeshStandardMaterial({
+    color: 0xffd700, metalness: 0.9, roughness: 0.15,
+    emissive: 0xffb700, emissiveIntensity: 0.35
+  });
+  const trophy = new THREE.Mesh(trophyGeo, trophyMat);
+  trophy.position.set(0, 29.5, s15Z);
+  trophy.castShadow = true;
+  scene.add(trophy);
+  finishIsland.extra.trophy = trophy;
+  finishIsland.extra.isGoal = true;
+
+  // Floating fireworks/gems around trophy
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2;
+    const gemGeo = new THREE.OctahedronGeometry(0.8, 0);
+    const gemMat = new THREE.MeshLambertMaterial({ color: rainbow[i] });
+    const gem = new THREE.Mesh(gemGeo, gemMat);
+    gem.position.set(Math.cos(ang) * 5.0, 28.5, s15Z + Math.sin(ang) * 5.0);
+    scene.add(gem);
+  }
+}
+
+// Timer
+function startTimer() {
+  if (gameTimerInterval) clearInterval(gameTimerInterval);
+  gameStartTime = Date.now();
+  gameTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    document.getElementById('timeBadge').textContent = `⏱️ ${m}:${s}`;
+  }, 1000);
+}
+
+function respawnPlayer() {
+  const currentCP = checkpoints[currentStageIndex] || checkpoints[0];
+  player.pos.copy(currentCP.spawnPos);
+  player.vel.set(0, 0, 0);
+  player.onGround = false;
+  player.invulnerableTime = 0.5; // Short grace window on spawn
+  playerGroup.position.copy(player.pos);
+  deathCount++;
+  document.getElementById('deathBadge').textContent = `💀 Tode: ${deathCount}`;
+  playSound('death');
+}
+
+function showCheckpointBanner(text) {
+  const banner = document.getElementById('cpBanner');
+  banner.textContent = text;
+  banner.classList.add('show');
+  setTimeout(() => banner.classList.remove('show'), 2200);
+}
+
+// --- CORE PHYSICS LOOP ---
+const gravity = -32;
+const moveSpeed = 13.5;
+const jumpSpeed = 16.0;
+let prevTime = performance.now();
+let animWalkCycle = 0;
+let sceneTime = 0;
+
+function updatePhysics(dt) {
+  sceneTime += dt;
+  if (player.invulnerableTime > 0) player.invulnerableTime -= dt;
+
+  // Input
+  let inputX = 0;
+  let inputZ = 0;
+
+  if (keys['KeyW'] || keys['ArrowUp']) inputZ -= 1;
+  if (keys['KeyS'] || keys['ArrowDown']) inputZ += 1;
+  if (keys['KeyA'] || keys['ArrowLeft']) inputX -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) inputX += 1;
+
+  if (joyActive) {
+    inputX = joyVector.x;
+    inputZ = joyVector.y;
+  }
+
+  const inputLen = Math.hypot(inputX, inputZ);
+  let wishDir = new THREE.Vector3();
+  if (inputLen > 0.05) {
+    const normX = inputX / (inputLen > 1 ? inputLen : 1);
+    const normZ = inputZ / (inputLen > 1 ? inputLen : 1);
+
+    // Rotate by camera yaw
+    wishDir.x = normX * Math.cos(camYaw) + normZ * Math.sin(camYaw);
+    wishDir.z = -normX * Math.sin(camYaw) + normZ * Math.cos(camYaw);
+  }
+
+  // Smooth Acceleration (respect boost timer so trampolines work smoothly)
+  if (player.boostTimer > 0) {
+    player.boostTimer -= dt;
+    // Allow slight lateral steering, but do NOT dampen forward boost velocity
+    if (Math.abs(wishDir.x) > 0.1) {
+      player.vel.x += (wishDir.x * moveSpeed - player.vel.x) * Math.min(1, 15 * dt);
+    }
+  } else {
+    const accel = player.onGround ? 60 : 30;
+    player.vel.x += (wishDir.x * moveSpeed - player.vel.x) * Math.min(1, accel * dt);
+    player.vel.z += (wishDir.z * moveSpeed - player.vel.z) * Math.min(1, accel * dt);
+  }
+
+  // Jump & Coyote time
+  const wantsJump = keys['Space'] || touchJump;
+  if (player.onGround) {
+    player.coyoteTime = 0.14;
+  } else {
+    player.coyoteTime = Math.max(0, player.coyoteTime - dt);
+  }
+
+  if (wantsJump && (player.onGround || player.coyoteTime > 0)) {
+    player.vel.y = jumpSpeed;
+    player.onGround = false;
+    player.coyoteTime = 0;
+    playSound('jump');
+  }
+
+  // Gravity
+  player.vel.y += gravity * dt;
+
+  // Move
+  const newPos = player.pos.clone().addScaledVector(player.vel, dt);
+
+  // Platform Handling
+  let grounded = false;
+
+  for (let i = 0; i < platforms.length; i++) {
+    const p = platforms[i];
+
+    // Moving platforms
+    if (p.extra && p.extra.isMoving) {
+      const offset = Math.sin(sceneTime * p.extra.moveSpeed + (p.extra.phase || 0)) * p.extra.moveRange;
+      p.mesh.position.x = p.origPos.x + offset;
+    }
+
+    // Rotor platforms
+    if (p.extra && p.extra.isRotor) {
+      p.mesh.rotation.y += p.extra.rotSpeed;
+    }
+
+    // Disappearing platforms
+    if (p.type === 'disappear' && p.extra.triggered) {
+      p.extra.timer += dt;
+      if (p.extra.timer > 0.5) {
+        p.mesh.material.opacity = Math.max(0, 1 - (p.extra.timer - 0.5) * 3);
+      }
+      if (p.extra.timer > 1.1) {
+        p.extra.active = false;
+        p.mesh.visible = false;
+      }
+      if (p.extra.timer > 3.2) {
+        p.extra.triggered = false;
+        p.extra.timer = 0;
+        p.extra.active = true;
+        p.mesh.visible = true;
+        p.mesh.material.opacity = 0.92;
+      }
+      if (!p.extra.active) continue;
+    }
+
+    // Goal Trigger
+    if (p.extra && p.extra.isGoal) {
+      if (p.extra.trophy) {
+        p.extra.trophy.rotation.y += 0.02;
+        p.extra.trophy.rotation.x = Math.sin(sceneTime * 2.0) * 0.15;
+      }
+      if (newPos.distanceTo(p.mesh.position) < 6.0 && !window.hasWon) {
+        winGame();
+      }
+    }
+
+    // Exact Collision for Rotating Lava Obstacles (OBB - Oriented Bounding Box)
+    if (p.extra && p.extra.isRotor) {
+      // 1. Vertical Check: Player must actually overlap the rotor's vertical slab
+      const rotorMinY = p.mesh.position.y - p.h / 2;
+      const rotorMaxY = p.mesh.position.y + p.h / 2;
+      const playerFeetY = newPos.y;
+      const playerHeadY = newPos.y + player.height;
+
+      // Only collide if player's vertical span actually overlaps the rotor's thin vertical band
+      if (playerFeetY < rotorMaxY && playerHeadY > rotorMinY) {
+        // 2. Horizontal Check: Exact rotated local coordinates
+        const relX = newPos.x - p.mesh.position.x;
+        const relZ = newPos.z - p.mesh.position.z;
+        const rotAngle = p.mesh.rotation.y;
+
+        const localX = relX * Math.cos(-rotAngle) - relZ * Math.sin(-rotAngle);
+        const localZ = relX * Math.sin(-rotAngle) + relZ * Math.cos(-rotAngle);
+
+        const halfW = p.w / 2;
+        const halfD = p.d / 2;
+
+        // Find closest point on rotor rectangle in local space
+        const closestX = Math.max(-halfW, Math.min(halfW, localX));
+        const closestZ = Math.max(-halfD, Math.min(halfD, localZ));
+
+        // Distance from player center to closest point on rotor box
+        const distX = localX - closestX;
+        const distZ = localZ - closestZ;
+        const distSq = distX * distX + distZ * distZ;
+
+        // Player collision radius
+        const colRadius = player.radius * 0.75;
+
+        if (distSq < colRadius * colRadius) {
+          if (player.invulnerableTime <= 0) {
+            respawnPlayer();
+            return;
+          }
+        }
+      }
+      continue; // Skip standard axis-aligned AABB check for rotors
+    }
+
+    // Precise AABB Collision for non-rotating platforms
+    const minX = p.mesh.position.x - p.w / 2;
+    const maxX = p.mesh.position.x + p.w / 2;
+    const minY = p.mesh.position.y - p.h / 2;
+    const maxY = p.mesh.position.y + p.h / 2;
+    const minZ = p.mesh.position.z - p.d / 2;
+    const maxZ = p.mesh.position.z + p.d / 2;
+
+    const insideX = newPos.x >= minX - player.radius && newPos.x <= maxX + player.radius;
+    const insideZ = newPos.z >= minZ - player.radius && newPos.z <= maxZ + player.radius;
+
+    if (insideX && insideZ) {
+      // Top Landing (Ground Detection with generous tolerance)
+      const feetPrev = player.pos.y;
+      const feetNext = newPos.y;
+      const topSurface = maxY;
+
+      if (feetPrev >= topSurface - 0.4 && feetNext <= topSurface + 0.35 && player.vel.y <= 0.5) {
+        if (p.type === 'lava' && player.invulnerableTime <= 0) {
+          respawnPlayer();
+          return;
+        }
+
+        if (p.type === 'pad') {
+          player.vel.y = p.extra.boostY || 20;
+          player.vel.z = p.extra.boostZ || -28;
+          player.boostTimer = 1.4;
+          player.onGround = false;
+          playSound('pad');
+          return;
+        }
+
+        if (p.type === 'disappear' && !p.extra.triggered) {
+          p.extra.triggered = true;
+        }
+
+        newPos.y = topSurface;
+        player.vel.y = 0;
+        grounded = true;
+
+        // If riding a moving platform, carry player along
+        if (p.extra && p.extra.isMoving) {
+          const deltaX = Math.cos(sceneTime * p.extra.moveSpeed + (p.extra.phase || 0)) * p.extra.moveRange * p.extra.moveSpeed * dt;
+          newPos.x += deltaX;
+        }
+      } else if (newPos.y < maxY - 0.05 && newPos.y + player.height > minY + 0.1) {
+        // Player is hitting the block from the SIDE
+        if (p.type === 'lava' && player.invulnerableTime <= 0) {
+          respawnPlayer();
+          return;
+        }
+
+        // Solid wall obstacle: calculate smallest penetration depth and push out
+        const penLeft = (newPos.x + player.radius) - minX;
+        const penRight = maxX - (newPos.x - player.radius);
+        const penFront = (newPos.z + player.radius) - minZ;
+        const penBack = maxZ - (newPos.z - player.radius);
+
+        const minPen = Math.min(penLeft, penRight, penFront, penBack);
+
+        if (minPen === penLeft) {
+          newPos.x = minX - player.radius - 0.01;
+          player.vel.x = Math.min(0, player.vel.x);
+        } else if (minPen === penRight) {
+          newPos.x = maxX + player.radius + 0.01;
+          player.vel.x = Math.max(0, player.vel.x);
+        } else if (minPen === penFront) {
+          newPos.z = minZ - player.radius - 0.01;
+          player.vel.z = Math.min(0, player.vel.z);
+        } else if (minPen === penBack) {
+          newPos.z = maxZ + player.radius + 0.01;
+          player.vel.z = Math.max(0, player.vel.z);
+        }
+      }
+    }
+  }
+
+  player.onGround = grounded;
+  player.pos.copy(newPos);
+
+  // Abyss Kill
+  if (player.pos.y < -25) {
+    respawnPlayer();
+    return;
+  }
+
+  // Check Checkpoints
+  for (let i = 0; i < checkpoints.length; i++) {
+    const cp = checkpoints[i];
+    if (player.pos.distanceTo(cp.triggerPos) < cp.radius) {
+      if (i > currentStageIndex) {
+        currentStageIndex = i;
+        document.getElementById('stageBadge').textContent = `🏁 Stage ${i + 1} / ${checkpoints.length}`;
+        showCheckpointBanner(`✨ CHECKPOINT: ${cp.label}! ✨`);
+        playSound('checkpoint');
+        cp.flagMesh.material.color.setHex(0xfacc15); // Turn gold
+      }
+    }
+  }
+
+  // Mesh Position
+  playerGroup.position.copy(player.pos);
+
+  // Walk Cycle Animation
+  if (wishDir.lengthSq() > 0.01) {
+    const targetAngle = Math.atan2(wishDir.x, wishDir.z);
+    playerGroup.rotation.y = targetAngle;
+    animWalkCycle += dt * 14;
+    armL.rotation.x = Math.sin(animWalkCycle) * 0.7;
+    armR.rotation.x = -Math.sin(animWalkCycle) * 0.7;
+    legL.rotation.x = -Math.sin(animWalkCycle) * 0.7;
+    legR.rotation.x = Math.sin(animWalkCycle) * 0.7;
+  } else {
+    armL.rotation.x *= 0.8;
+    armR.rotation.x *= 0.8;
+    legL.rotation.x *= 0.8;
+    legR.rotation.x *= 0.8;
+  }
+
+  if (!player.onGround) {
+    armL.rotation.x = -1.2;
+    armR.rotation.x = -1.2;
+    legL.rotation.x = 0.4;
+    legR.rotation.y = -0.4;
+  }
+}
+
+function updateCamera() {
+  const target = player.pos.clone().add(new THREE.Vector3(0, 1.4, 0));
+  const cx = target.x + camDistance * Math.sin(camYaw) * Math.cos(camPitch);
+  const cy = target.y + camDistance * Math.sin(camPitch);
+  const cz = target.z + camDistance * Math.cos(camYaw) * Math.cos(camPitch);
+
+  camera.position.set(cx, cy, cz);
+  camera.lookAt(target);
+
+  cloudGroup.rotation.y += 0.0003;
+}
+
+function winGame() {
+  window.hasWon = true;
+  clearInterval(gameTimerInterval);
+  playSound('win');
+
+  const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+  const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  const score = Math.max(100, 15000 - elapsed * 25 - deathCount * 120);
+
+  document.getElementById('winTime').textContent = `${m}:${s}`;
+  document.getElementById('winDeaths').textContent = deathCount;
+  document.getElementById('winScore').textContent = `Highscore: ${score} Punkte`;
+  document.getElementById('winModal').classList.add('active');
+
+  if (window.ArcadeCore) {
+    ArcadeCore.saveScore('obby', score);
+  }
+}
+
+function restartEntireGame() {
+  window.hasWon = false;
+  document.getElementById('winModal').classList.remove('active');
+  currentStageIndex = 0;
+  deathCount = 0;
+  document.getElementById('deathBadge').textContent = `💀 Tode: 0`;
+  document.getElementById('stageBadge').textContent = `🏁 Stage 1 / ${checkpoints.length}`;
+  startTimer();
+  respawnPlayer();
+}
+
+// --- INIT & RUN ---
+buildMegaObby();
+startTimer();
+respawnPlayer();
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.08, (now - prevTime) / 1000);
+  prevTime = now;
+
+  updatePhysics(dt);
+  updateCamera();
+
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+
+// Resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

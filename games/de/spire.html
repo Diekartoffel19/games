@@ -1,0 +1,2205 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Spire of Cards — Roguelike Deckbuilder</title>
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../../src/arcade-core.js"></script>
+<style>
+  :root {
+    --bg-dark: #0a0b10;
+    --panel-bg: #141622;
+    --panel-border: #282c42;
+    --accent: #e11d48;
+    --accent-glow: rgba(225, 29, 72, 0.4);
+    --gold: #f59e0b;
+    --energy: #ef4444;
+    --block: #3b82f6;
+    --poison: #10b981;
+    --text: #f1f5f9;
+    --text-dim: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  body {
+    background: var(--bg-dark);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: #0f111a;
+    border-bottom: 2px solid var(--panel-border);
+    padding: 10px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .header-badge {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--panel-border);
+    padding: 4px 10px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .back-btn {
+    color: #e5e7eb;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid var(--panel-border);
+    padding: 5px 12px;
+    border-radius: 999px;
+    transition: all 0.2s;
+  }
+  .back-btn:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* Relics Bar */
+  .relics-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    overflow-x: auto;
+    max-width: 400px;
+    padding: 2px;
+  }
+  .relic-icon {
+    font-size: 20px;
+    cursor: help;
+    background: #1b1e2e;
+    border: 1px solid #373c59;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  /* Main Container Views */
+  #mainApp {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    max-width: 1080px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 12px;
+  }
+  .view-panel {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+  }
+  .view-panel.active {
+    display: flex;
+  }
+
+  /* START / HERO SELECT */
+  .hero-select-container {
+    text-align: center;
+    padding: 30px 10px;
+  }
+  .hero-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+  }
+  .hero-choice-card {
+    background: var(--panel-bg);
+    border: 2px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 22px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .hero-choice-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+    box-shadow: 0 10px 30px rgba(225, 29, 72, 0.2);
+  }
+  .hero-card-icon { font-size: 44px; margin-bottom: 12px; }
+  .hero-card-title { font-size: 20px; font-weight: 800; color: #fff; }
+  .hero-card-hp { color: #10b981; font-weight: 700; margin: 4px 0 8px; font-size: 14px; }
+  .hero-card-desc { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+  /* MAP VIEW */
+  .map-wrapper {
+    background: #0d0f17;
+    border: 2px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .map-header {
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .map-act-title { font-size: 22px; font-weight: 800; color: #fff; }
+  .map-act-sub { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+  .map-floors-list {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 16px;
+    width: 100%;
+    max-width: 440px;
+    margin: 10px 0;
+  }
+  .map-floor-row {
+    display: flex;
+    justify-content: space-around;
+    position: relative;
+    padding: 8px 0;
+  }
+  .map-node {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: #171926;
+    border: 2px solid #2e334d;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    cursor: default;
+    position: relative;
+    transition: all 0.2s;
+  }
+  .map-node.available {
+    cursor: pointer;
+    border-color: var(--gold);
+    background: #25232d;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+    animation: nodePulse 1.5s infinite;
+  }
+  .map-node.available:hover {
+    transform: scale(1.15);
+  }
+  .map-node.cleared {
+    opacity: 0.4;
+    border-color: #444;
+  }
+  .map-node-label {
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  @keyframes nodePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+
+  /* COMBAT VIEW */
+  .combat-arena {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 480px;
+  }
+  .combat-stage {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 30px 20px 20px;
+    position: relative;
+  }
+  /* Hero Combatant */
+  .combatant {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    width: 180px;
+  }
+  .intent-box {
+    position: absolute;
+    top: -36px;
+    background: rgba(15, 17, 26, 0.9);
+    border: 1px solid var(--panel-border);
+    padding: 3px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  }
+  .combatant-avatar {
+    font-size: 64px;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
+    transition: transform 0.15s;
+  }
+  .combatant.hurt .combatant-avatar {
+    animation: hurtShake 0.3s;
+    filter: drop-shadow(0 0 10px #ef4444);
+  }
+  @keyframes hurtShake {
+    0%, 100% { transform: translate(0, 0); }
+    20% { transform: translate(-8px, 4px); }
+    40% { transform: translate(8px, -4px); }
+    60% { transform: translate(-4px, 2px); }
+  }
+  .combatant-name {
+    font-size: 15px;
+    font-weight: 700;
+    margin-top: 8px;
+    color: #fff;
+  }
+  .combatant-hp-bar {
+    width: 140px;
+    height: 16px;
+    background: #11131c;
+    border: 1px solid #333852;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    margin-top: 6px;
+  }
+  .combatant-hp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #dc2626, #ef4444);
+    transition: width 0.2s ease-out;
+  }
+  .combatant-hp-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    text-shadow: 0 1px 2px #000;
+  }
+  .combatant-block {
+    position: absolute;
+    bottom: -22px;
+    background: #1e3a8a;
+    border: 1px solid var(--block);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 999px;
+    display: none;
+    align-items: center;
+    gap: 4px;
+  }
+  .combatant-block.active {
+    display: flex;
+  }
+  .status-icons {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    min-height: 20px;
+  }
+  .status-badge {
+    background: rgba(0,0,0,0.6);
+    border: 1px solid #444;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  /* Combat Center Status Log */
+  .combat-log {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--gold);
+    pointer-events: none;
+    text-shadow: 0 2px 6px #000;
+  }
+
+  /* Hand & Energy Controls */
+  .combat-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+  }
+  .energy-orb {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #f87171, #dc2626, #7f1d1d);
+    border: 3px solid #fecaca;
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 2px 4px #000;
+  }
+  .turn-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border: none;
+    color: #000;
+    font-weight: 800;
+    font-size: 14px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+    transition: all 0.2s;
+  }
+  .turn-btn:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
+  }
+
+  /* Cards in Hand */
+  .hand-container {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 4px 20px;
+    min-height: 185px;
+    overflow-x: auto;
+  }
+  .battle-card {
+    width: 125px;
+    height: 175px;
+    background: #1e2235;
+    border: 2px solid #3b4263;
+    border-radius: 10px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+  .battle-card:hover {
+    transform: translateY(-20px) scale(1.08);
+    border-color: #fff;
+    box-shadow: 0 14px 30px rgba(0,0,0,0.8);
+    z-index: 20;
+  }
+  .battle-card.attack { border-color: #ef4444; background: linear-gradient(180deg, #2a151b, #19141d); }
+  .battle-card.skill { border-color: #3b82f6; background: linear-gradient(180deg, #132238, #121622); }
+  .battle-card.power { border-color: #10b981; background: linear-gradient(180deg, #122822, #101918); }
+  .battle-card.upgraded { box-shadow: inset 0 0 8px rgba(251, 191, 36, 0.5); }
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .card-cost {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #ef4444;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #fff;
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 800;
+    text-align: right;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 85px;
+  }
+  .battle-card.upgraded .card-title {
+    color: var(--gold);
+  }
+  .card-art {
+    font-size: 32px;
+    text-align: center;
+    margin: 4px 0;
+  }
+  .card-body-text {
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.35;
+    text-align: center;
+  }
+  .card-type-tag {
+    font-size: 8px;
+    font-weight: 800;
+    color: #999;
+    text-transform: uppercase;
+    text-align: center;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 3px;
+  }
+
+  /* MODALS & OVERLAYS */
+  .modal-box {
+    background: var(--panel-bg);
+    border: 2px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 24px;
+    max-width: 600px;
+    width: 100%;
+    margin: auto;
+    text-align: center;
+  }
+  .modal-title { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+  .modal-sub { font-size: 14px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.5; }
+
+  /* CAMPFIRE VIEW */
+  .campfire-scene {
+    text-align: center;
+    padding: 30px 10px;
+  }
+  .campfire-options {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin: 30px 0;
+  }
+  .camp-opt-btn {
+    background: #1c2033;
+    border: 2px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    cursor: pointer;
+    width: 200px;
+    transition: all 0.2s;
+  }
+  .camp-opt-btn:hover {
+    border-color: var(--gold);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(245, 158, 11, 0.25);
+  }
+  .camp-opt-icon { font-size: 40px; margin-bottom: 8px; }
+  .camp-opt-name { font-size: 17px; font-weight: 800; color: #fff; }
+  .camp-opt-desc { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+  /* SHOP VIEW */
+  .shop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+  }
+  .shop-item {
+    background: #171926;
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .shop-item:hover {
+    border-color: var(--gold);
+    transform: translateY(-2px);
+  }
+  .shop-price {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--gold);
+    margin-top: 6px;
+  }
+
+  /* DECK OVERVIEW MODAL */
+  #deckOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #deckOverlay.active { display: flex; }
+  .deck-modal-content {
+    background: #12141e;
+    border: 2px solid var(--panel-border);
+    border-radius: 14px;
+    max-width: 800px;
+    width: 100%;
+    max-height: 85vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+  .deck-cards-scroll {
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    padding: 14px 0;
+  }
+
+  /* REWARD VIEW */
+  .reward-choices-row {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+  }
+
+  .btn-base {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .btn-base:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-sec {
+    background: #252a3d;
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+  }
+  .btn-sec:hover { background: #323852; }
+
+  @media (max-width: 600px) {
+    .hand-container { gap: 4px; padding-bottom: 12px; }
+    .battle-card { width: 95px; height: 145px; padding: 6px; }
+    .card-title { font-size: 9px; max-width: 60px; }
+    .card-art { font-size: 24px; }
+    .card-body-text { font-size: 8px; }
+    .combatant { width: 130px; }
+    .combatant-avatar { font-size: 46px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="../../index.html" class="back-btn">‹ Arcade</a>
+    <div class="header-badge" id="heroBadge">🛡️ Eisen-Krieger</div>
+    <div class="header-badge" style="color: #ef4444;">❤️ <span id="hdrHp">80/80</span></div>
+    <div class="header-badge" style="color: var(--gold);">🪙 <span id="hdrGold">99</span></div>
+    <button class="back-btn" id="viewDeckBtn">Deck (<span id="hdrDeckCount">10</span>)</button>
+  </div>
+  <div class="relics-bar" id="relicsBar"></div>
+</header>
+
+<div id="mainApp">
+
+  <!-- VIEW: HERO SELECTION -->
+  <div id="viewHeroSelect" class="view-panel active hero-select-container">
+    <div style="font-size: 48px; margin-bottom: 8px;">🗼</div>
+    <h1 style="font-size: 32px; font-weight: 900; color: #fff;">SPIRE OF CARDS</h1>
+    <p style="color: var(--text-dim); margin-top: 6px; font-size: 15px;">Wähle deinen Helden, meistere 3 Akte und erklimme die Turmspitze!</p>
+
+    <div class="hero-cards-grid">
+      <div class="hero-choice-card" onclick="chooseHero('ironclad')">
+        <div class="hero-card-icon">🛡️</div>
+        <div class="hero-card-title">Der Eisen-Krieger</div>
+        <div class="hero-card-hp">80 Max HP</div>
+        <div class="hero-card-desc">Meister der wuchtigen Hiebe und eisernen Rüstung. Start-Relikt heilt 6 HP nach jedem Sieg!</div>
+      </div>
+      <div class="hero-choice-card" onclick="chooseHero('silent')">
+        <div class="hero-card-icon">🗡️</div>
+        <div class="hero-card-title">Die Schatten-Schurkin</div>
+        <div class="hero-card-hp">70 Max HP</div>
+        <div class="hero-card-desc">Agil und tödlich. Vergiftet Feinde und spielt verheerende Dolchstöße mit hoher Kartenziehung.</div>
+      </div>
+      <div class="hero-choice-card" onclick="chooseHero('mage')">
+        <div class="hero-card-icon">🔮</div>
+        <div class="hero-card-title">Der Astral-Zauberer</div>
+        <div class="hero-card-hp">65 Max HP</div>
+        <div class="hero-card-desc">Beschwört mächtige Blitz- und Frost-Sphären. Wandelt reine Mana-Energie in Schilde und Zerstörung.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW: MAP -->
+  <div id="viewMap" class="view-panel">
+    <div class="map-wrapper">
+      <div class="map-header">
+        <div class="map-act-title" id="mapActTitle">Akt 1: Der Flüsternde Wald</div>
+        <div class="map-act-sub">Wähle deinen nächsten Pfad auf dem Weg zum Boss</div>
+      </div>
+      <div class="map-floors-list" id="mapFloorsContainer"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: COMBAT -->
+  <div id="viewCombat" class="view-panel">
+    <div class="combat-arena">
+      <div class="combat-stage">
+        <!-- PLAYER -->
+        <div class="combatant" id="playerCombatant">
+          <div class="combatant-avatar" id="playerAvatar">🛡️</div>
+          <div class="combatant-name" id="playerName">Eisen-Krieger</div>
+          <div class="combatant-hp-bar">
+            <div class="combatant-hp-fill" id="playerHpFill" style="width: 100%;"></div>
+            <div class="combatant-hp-text" id="playerHpText">80 / 80</div>
+          </div>
+          <div class="combatant-block" id="playerBlockBadge">🛡️ <span id="playerBlockText">0</span></div>
+          <div class="status-icons" id="playerStatuses"></div>
+        </div>
+
+        <!-- CENTER LOG -->
+        <div class="combat-log" id="combatLog"></div>
+
+        <!-- ENEMY -->
+        <div class="combatant" id="enemyCombatant">
+          <div class="intent-box" id="enemyIntent">⚔️ 6</div>
+          <div class="combatant-avatar" id="enemyAvatar">👺</div>
+          <div class="combatant-name" id="enemyName">Wald-Kobold</div>
+          <div class="combatant-hp-bar">
+            <div class="combatant-hp-fill" id="enemyHpFill" style="width: 100%;"></div>
+            <div class="combatant-hp-text" id="enemyHpText">28 / 28</div>
+          </div>
+          <div class="combatant-block" id="enemyBlockBadge">🛡️ <span id="enemyBlockText">0</span></div>
+          <div class="status-icons" id="enemyStatuses"></div>
+        </div>
+      </div>
+
+      <!-- CONTROLS & ENERGY -->
+      <div class="combat-controls">
+        <div class="energy-orb" id="energyOrb">3/3</div>
+        <div style="font-size: 13px; color: var(--text-dim); text-align: center;">
+          Klicke eine Karte zum Ausspielen
+        </div>
+        <button class="turn-btn" id="endTurnBtn" onclick="endPlayerTurn()">Zug beenden ⌛</button>
+      </div>
+
+      <!-- HAND CARDS -->
+      <div class="hand-container" id="handContainer"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: CARD REWARD -->
+  <div id="viewReward" class="view-panel">
+    <div class="modal-box">
+      <div style="font-size: 40px; margin-bottom: 8px;">🎁</div>
+      <div class="modal-title">SIEG! WÄHLE EINE KARTE</div>
+      <div class="modal-sub">Erweitere dein Deck um eine neue Kampffähigkeit:</div>
+      <div class="reward-choices-row" id="rewardCardsRow"></div>
+      <button class="btn-base btn-sec" onclick="skipReward()">Belohnung überspringen</button>
+    </div>
+  </div>
+
+  <!-- VIEW: CAMPFIRE -->
+  <div id="viewCampfire" class="view-panel campfire-scene">
+    <div style="font-size: 54px; margin-bottom: 8px;">🔥</div>
+    <div class="modal-title">LAGERFEUER</div>
+    <div class="modal-sub">Die Flammen wärmen deine Glieder. Was möchtest du tun?</div>
+    <div class="campfire-options">
+      <div class="camp-opt-btn" onclick="campfireRest()">
+        <div class="camp-opt-icon">💤</div>
+        <div class="camp-opt-name">Ausruhen</div>
+        <div class="camp-opt-desc">Heile 30% deiner maximalen Lebenspunkte.</div>
+      </div>
+      <div class="camp-opt-btn" onclick="campfireSmith()">
+        <div class="camp-opt-icon">🔨</div>
+        <div class="camp-opt-name">Schmieden</div>
+        <div class="camp-opt-desc">Werte eine beliebige Karte in deinem Deck dauerhaft auf.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW: SHOP -->
+  <div id="viewShop" class="view-panel">
+    <div class="modal-box" style="max-width: 750px;">
+      <div style="font-size: 40px;">🪙🧝</div>
+      <div class="modal-title">DER WANDERNDER HÄNDLER</div>
+      <div class="modal-sub">Willkommen, Abenteurer! Meine Waren sind frisch aus alten Grüften.</div>
+      <div class="shop-grid" id="shopGrid"></div>
+      <button class="btn-base" onclick="leaveShop()">Händler verlassen</button>
+    </div>
+  </div>
+
+  <!-- VIEW: EVENT / MYSTERY -->
+  <div id="viewEvent" class="view-panel">
+    <div class="modal-box">
+      <div style="font-size: 44px; margin-bottom: 8px;" id="eventIcon">❓</div>
+      <div class="modal-title" id="eventTitle">Verlorener Altar</div>
+      <div class="modal-sub" id="eventDesc">Vor dir steht eine unheimliche Statue aus dunklem Obsidian.</div>
+      <div id="eventOptions" style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: GAME OVER / VICTORY -->
+  <div id="viewGameOver" class="view-panel">
+    <div class="modal-box">
+      <div style="font-size: 54px;" id="endEmoji">💀</div>
+      <div class="modal-title" id="endTitle">DU BIST GEFALLEN</div>
+      <div class="modal-sub" id="endSubtitle">Der Turm hat deinen Geist gebrochen.</div>
+      <div style="margin: 20px 0; font-size: 15px;">
+        Erreichte Etage: <b id="statFloors" style="color: var(--gold);">Etage 1</b>
+      </div>
+      <button class="btn-base" onclick="restartSpire()">Neuer Versuch</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- DECK OVERVIEW OVERLAY -->
+<div id="deckOverlay">
+  <div class="deck-modal-content">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 12px;">
+      <div style="font-size: 18px; font-weight: 800;">DEIN KARTENDECK (<span id="deckCountModal">0</span>)</div>
+      <button class="btn-base btn-sec" onclick="closeDeckModal()">Schließen ✕</button>
+    </div>
+    <div class="deck-cards-scroll" id="deckCardsScroll"></div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   SPIRE OF CARDS — Roguelike Deckbuilder
+   ========================================================= */
+
+const Sfx = {
+  card() { if (window.ArcadeCore) ArcadeCore.sounds.playTone(400, 0.06, 'sine', 0.12); },
+  attack() { if (window.ArcadeCore) ArcadeCore.sounds.hit(); },
+  block() { if (window.ArcadeCore) ArcadeCore.sounds.playTone(280, 0.1, 'triangle', 0.18); },
+  coin() { if (window.ArcadeCore) ArcadeCore.sounds.coin(); },
+  win() { if (window.ArcadeCore) ArcadeCore.sounds.powerup(); },
+  lose() { if (window.ArcadeCore) ArcadeCore.sounds.gameOver(); }
+};
+
+// HERO DATA
+const HERO_CLASSES = {
+  ironclad: {
+    name: 'Der Eisen-Krieger',
+    avatar: '🛡️',
+    hp: 80,
+    relic: { id: 'blood', name: 'Brennendes Blut', icon: '🩸', desc: 'Heile 6 HP am Ende jedes Kampfes.' },
+    starterDeck: [
+      'strike', 'strike', 'strike', 'strike', 'strike',
+      'defend', 'defend', 'defend', 'defend',
+      'bash'
+    ]
+  },
+  silent: {
+    name: 'Die Schatten-Schurkin',
+    avatar: '🗡️',
+    hp: 70,
+    relic: { id: 'snake_ring', name: 'Ring der Schlange', icon: '🐍', desc: 'Ziehe zu Beginn des Kampfes 2 zusätzliche Karten.' },
+    starterDeck: [
+      'strike', 'strike', 'strike', 'strike',
+      'defend', 'defend', 'defend', 'defend', 'defend',
+      'neutralize', 'poison_dart'
+    ]
+  },
+  mage: {
+    name: 'Der Astral-Zauberer',
+    avatar: '🔮',
+    hp: 65,
+    relic: { id: 'cracked_core', name: 'Astral-Kern', icon: '💎', desc: 'Starte jeden Kampf mit 1 Blitz-Sphäre (6 Passive Dmg).' },
+    starterDeck: [
+      'strike', 'strike', 'strike', 'strike',
+      'defend', 'defend', 'defend', 'defend',
+      'arcane_bolt', 'ice_barrier'
+    ]
+  }
+};
+
+// CARDS DATABASE
+const CARDS_DB = {
+  // Neutral / Shared Basics
+  strike: {
+    name: 'Schlag',
+    cost: 1,
+    type: 'attack',
+    art: '⚔️',
+    desc: 'Füge 6 Schaden zu.',
+    descUp: 'Füge 9 Schaden zu.',
+    damage: 6,
+    damageUp: 9
+  },
+  defend: {
+    name: 'Verteidigung',
+    cost: 1,
+    type: 'skill',
+    art: '🛡️',
+    desc: 'Erhalte 5 Block.',
+    descUp: 'Erhalte 8 Block.',
+    block: 5,
+    blockUp: 8
+  },
+
+  // Ironclad
+  bash: {
+    name: 'Schmetterhieb',
+    cost: 2,
+    type: 'attack',
+    art: '🔨',
+    desc: 'Füge 8 Schaden zu. Wende 2 Verwundbar an.',
+    descUp: 'Füge 12 Schaden zu. Wende 3 Verwundbar an.',
+    damage: 8,
+    damageUp: 12,
+    vuln: 2,
+    vulnUp: 3
+  },
+  cleave: {
+    name: 'Wirbelklinge',
+    cost: 1,
+    type: 'attack',
+    art: '🌪️',
+    desc: 'Füge 8 Schaden zu.',
+    descUp: 'Füge 12 Schaden zu.',
+    damage: 8,
+    damageUp: 12
+  },
+  iron_wave: {
+    name: 'Eisenwelle',
+    cost: 1,
+    type: 'attack',
+    art: '🌊',
+    desc: 'Füge 5 Schaden zu. Erhalte 5 Block.',
+    descUp: 'Füge 8 Schaden zu. Erhalte 8 Block.',
+    damage: 5,
+    damageUp: 8,
+    block: 5,
+    blockUp: 8
+  },
+  inflame: {
+    name: 'Entfachen',
+    cost: 1,
+    type: 'power',
+    art: '🔥',
+    desc: '+2 Stärke für den gesamten Kampf.',
+    descUp: '+3 Stärke für den gesamten Kampf.',
+    str: 2,
+    strUp: 3
+  },
+  heavy_blade: {
+    name: 'Großschwert',
+    cost: 2,
+    type: 'attack',
+    art: '🗡️',
+    desc: 'Füge 14 Schaden zu (+Stärke x3).',
+    descUp: 'Füge 18 Schaden zu (+Stärke x5).',
+    damage: 14,
+    damageUp: 18,
+    strScale: 3,
+    strScaleUp: 5
+  },
+
+  // Silent
+  neutralize: {
+    name: 'Neutralisieren',
+    cost: 0,
+    type: 'attack',
+    art: '💨',
+    desc: 'Füge 3 Schaden zu. Wende 1 Schwach an.',
+    descUp: 'Füge 4 Schaden zu. Wende 2 Schwach an.',
+    damage: 3,
+    damageUp: 4,
+    weak: 1,
+    weakUp: 2
+  },
+  poison_dart: {
+    name: 'Giftpfeil',
+    cost: 1,
+    type: 'skill',
+    art: '🧪',
+    desc: 'Wende 4 Gift an.',
+    descUp: 'Wende 7 Gift an.',
+    poison: 4,
+    poisonUp: 7
+  },
+  blade_dance: {
+    name: 'Klingentanz',
+    cost: 1,
+    type: 'attack',
+    art: '🪶',
+    desc: 'Füge 3x 4 Schaden zu.',
+    descUp: 'Füge 4x 4 Schaden zu.',
+    multiDmg: 4,
+    hits: 3,
+    hitsUp: 4
+  },
+  noxious_fumes: {
+    name: 'Giftwolke',
+    cost: 1,
+    type: 'power',
+    art: '☣️',
+    desc: 'Wende zu Beginn jedes Zuges 2 Gift an.',
+    descUp: 'Wende zu Beginn jedes Zuges 3 Gift an.',
+    fumes: 2,
+    fumesUp: 3
+  },
+  blur: {
+    name: 'Schleier',
+    cost: 1,
+    type: 'skill',
+    art: '🌫️',
+    desc: 'Erhalte 8 Block. Block verfällt nächsten Zug nicht.',
+    descUp: 'Erhalte 11 Block. Block verfällt nächsten Zug nicht.',
+    block: 8,
+    blockUp: 11
+  },
+
+  // Mage
+  arcane_bolt: {
+    name: 'Arkangewitter',
+    cost: 1,
+    type: 'attack',
+    art: '⚡',
+    desc: 'Füge 9 Schaden zu.',
+    descUp: 'Füge 13 Schaden zu.',
+    damage: 9,
+    damageUp: 13
+  },
+  ice_barrier: {
+    name: 'Eisbarriere',
+    cost: 1,
+    type: 'skill',
+    art: '❄️',
+    desc: 'Erhalte 7 Block & 1 Geschicklichkeit.',
+    descUp: 'Erhalte 10 Block & 2 Geschicklichkeit.',
+    block: 7,
+    blockUp: 10,
+    dex: 1,
+    dexUp: 2
+  },
+  overcharge: {
+    name: 'Überladung',
+    cost: 0,
+    type: 'skill',
+    art: '🔋',
+    desc: 'Erhalte 2 Energie. Ziehe 1 Karte.',
+    descUp: 'Erhalte 2 Energie. Ziehe 2 Karten.',
+    energyGain: 2,
+    draw: 1,
+    drawUp: 2
+  },
+  meteor: {
+    name: 'Meteoritenschlag',
+    cost: 3,
+    type: 'attack',
+    art: '☄️',
+    desc: 'Füge 24 Schaden zu.',
+    descUp: 'Füge 32 Schaden zu.',
+    damage: 24,
+    damageUp: 32
+  },
+  // Additional Ironclad
+  body_slam: {
+    name: 'Körperstoß',
+    cost: 1,
+    type: 'attack',
+    art: '🛡️💥',
+    desc: 'Füge Schaden in Höhe deines aktuellen Blocks zu.',
+    descUp: '0 Kosten: Füge Schaden in Höhe deines Blocks zu.',
+    bodySlam: true
+  },
+  battle_trance: {
+    name: 'Kampftrance',
+    cost: 0,
+    type: 'skill',
+    art: '🧘‍♂️',
+    desc: 'Ziehe 3 Karten.',
+    descUp: 'Ziehe 4 Karten.',
+    draw: 3,
+    drawUp: 4
+  },
+  entrench: {
+    name: 'Verschanzen',
+    cost: 1,
+    type: 'skill',
+    art: '🏰',
+    desc: 'Verdopple deinen aktuellen Block.',
+    descUp: '0 Kosten: Verdopple deinen aktuellen Block.',
+    doubleBlock: true
+  },
+  reaper: {
+    name: 'Seelenernte',
+    cost: 2,
+    type: 'attack',
+    art: '🩸⚔️',
+    desc: 'Füge 8 Schaden zu und heile um 6 HP.',
+    descUp: 'Füge 12 Schaden zu und heile um 10 HP.',
+    damage: 8,
+    damageUp: 12,
+    heal: 6,
+    healUp: 10
+  },
+
+  // Additional Silent
+  backflip: {
+    name: 'Rückwärtssalto',
+    cost: 1,
+    type: 'skill',
+    art: '🤸',
+    desc: 'Erhalte 6 Block. Ziehe 2 Karten.',
+    descUp: 'Erhalte 9 Block. Ziehe 2 Karten.',
+    block: 6,
+    blockUp: 9,
+    draw: 2,
+    drawUp: 2
+  },
+  catalyst: {
+    name: 'Katalysator',
+    cost: 1,
+    type: 'skill',
+    art: '🧪⚡',
+    desc: 'Verdopple das Gift des Ziels.',
+    descUp: 'Verdreifache das Gift des Ziels.',
+    catalyst: true
+  },
+  bouncing_flask: {
+    name: 'Springende Phiole',
+    cost: 2,
+    type: 'skill',
+    art: '⚗️',
+    desc: 'Wende 3x 3 Gift an.',
+    descUp: 'Wende 4x 3 Gift an.',
+    poisonHits: 3,
+    poisonHitsUp: 4,
+    poisonPerHit: 3
+  },
+  cloak_and_dagger: {
+    name: 'Mantel & Dolch',
+    cost: 1,
+    type: 'attack',
+    art: '🧥🗡️',
+    desc: 'Erhalte 6 Block. Füge 5 Schaden zu.',
+    descUp: 'Erhalte 9 Block. Füge 8 Schaden zu.',
+    block: 6,
+    blockUp: 9,
+    damage: 5,
+    damageUp: 8
+  },
+
+  // Additional Mage
+  blizzard: {
+    name: 'Schneesturm',
+    cost: 1,
+    type: 'attack',
+    art: '🌨️',
+    desc: 'Füge 10 Schaden zu & erhalte 8 Block.',
+    descUp: 'Füge 14 Schaden zu & erhalte 11 Block.',
+    damage: 10,
+    damageUp: 14,
+    block: 8,
+    blockUp: 11
+  },
+  storm: {
+    name: 'Gewitterzorn',
+    cost: 2,
+    type: 'attack',
+    art: '🌩️',
+    desc: 'Füge 18 Schaden zu. Wende 2 Verwundbar an.',
+    descUp: 'Füge 24 Schaden zu. Wende 3 Verwundbar an.',
+    damage: 18,
+    damageUp: 24,
+    vuln: 2,
+    vulnUp: 3
+  },
+  hyperbeam: {
+    name: 'Hyperstrahl',
+    cost: 2,
+    type: 'attack',
+    art: '💥',
+    desc: 'Füge gewaltige 28 Schaden zu.',
+    descUp: 'Füge gewaltige 36 Schaden zu.',
+    damage: 28,
+    damageUp: 36
+  },
+  bandage: {
+    name: 'Notfall-Verband',
+    cost: 1,
+    type: 'skill',
+    art: '🩹',
+    desc: 'Heile 7 HP im Kampf.',
+    descUp: 'Heile 11 HP im Kampf.',
+    heal: 7,
+    healUp: 11
+  },
+};
+
+// RELICS DB
+const RELICS_DB = {
+  anchor: { name: 'Anker', icon: '⚓', desc: 'Starte jeden Kampf mit 10 Block.' },
+  vajra: { name: 'Vajra', icon: '🔱', desc: 'Starte jeden Kampf mit +1 Stärke.' },
+  meat: { name: 'Gebratenes Fleisch', icon: '🍖', desc: 'Heile 12 HP, wenn du einen Kampf mit unter 50% HP beendest.' },
+  golden_idol: { name: 'Goldenes Idol', icon: '🗿', desc: 'Erhalte 25% mehr Gold aus Kämpfen.' },
+  odd_mushroom: { name: 'Seltsamer Pilz', icon: '🍄', desc: 'Verwundbar erhöht deinen Schaden um 75% statt 50%.' }
+};
+
+// ACTS & ENEMIES
+const ACTS = [
+  {
+    name: 'Akt 1: Der Flüsternde Wald',
+    boss: { name: 'Der Wald-Warlord', avatar: '👹', hp: 90, pattern: 'boss1' },
+    elites: [
+      { name: 'Moos-Golem', avatar: '🗿', hp: 60, pattern: 'golem' },
+      { name: 'Schatten-Hexe', avatar: '🧙‍♀️', hp: 52, pattern: 'witch' }
+    ],
+    regulars: [
+      { name: 'Kobold-Späher', avatar: '👺', hp: 26, pattern: 'scout' },
+      { name: 'Dornen-Ranke', avatar: '🥀', hp: 32, pattern: 'plant' },
+      { name: 'Kultist des Waldes', avatar: '🦹', hp: 35, pattern: 'cultist' }
+    ]
+  },
+  {
+    name: 'Akt 2: Die Versunkenen Ruinen',
+    boss: { name: 'Der Arch-Lich', avatar: '👑💀', hp: 140, pattern: 'boss2' },
+    elites: [
+      { name: 'Gargoyle-Wächter', avatar: '🦇', hp: 85, pattern: 'gargoyle' },
+      { name: 'Kristall-Automaton', avatar: '🤖', hp: 95, pattern: 'automaton' }
+    ],
+    regulars: [
+      { name: 'Ruinen-Ghul', avatar: '🧟', hp: 44, pattern: 'scout' },
+      { name: 'Schleim-Amalgam', avatar: '🫧', hp: 50, pattern: 'plant' },
+      { name: 'Schatten-Priester', avatar: '🔮', hp: 48, pattern: 'cultist' }
+    ]
+  },
+  {
+    name: 'Akt 3: Die Turmspitze',
+    boss: { name: 'Chronos der Zeitfürst', avatar: '⏳👁️', hp: 220, pattern: 'boss3' },
+    elites: [
+      { name: 'Astral-Drache', avatar: '🐉', hp: 125, pattern: 'dragon' }
+    ],
+    regulars: [
+      { name: 'Zeit-Späher', avatar: '🪐', hp: 60, pattern: 'scout' },
+      { name: 'Himmels-Schlächter', avatar: '⚔️', hp: 68, pattern: 'cultist' }
+    ]
+  }
+];
+
+// GAME RUN STATE
+let runState = {
+  hero: null,
+  maxHp: 80,
+  hp: 80,
+  gold: 99,
+  deck: [], // list of card objects: { id: 'strike', upgraded: false }
+  relics: [],
+  actIndex: 0,
+  currentFloor: 0,
+  map: []
+};
+
+// COMBAT STATE
+let combat = {
+  enemy: null,
+  turn: 1,
+  energy: 3,
+  maxEnergy: 3,
+  playerBlock: 0,
+  enemyBlock: 0,
+  drawPile: [],
+  hand: [],
+  discardPile: [],
+  playerStrength: 0,
+  playerDexterity: 0,
+  playerVulnerable: 0,
+  playerWeak: 0,
+  enemyStrength: 0,
+  enemyVulnerable: 0,
+  enemyWeak: 0,
+  enemyPoison: 0,
+  fumes: 0,
+  blurActive: false
+};
+
+// SWITCH VIEWS
+function showView(viewId) {
+  document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById(viewId);
+  if (target) target.classList.add('active');
+  updateHeaderUI();
+}
+
+function updateHeaderUI() {
+  if (!runState.hero) return;
+  document.getElementById('heroBadge').textContent = `${runState.hero.avatar} ${runState.hero.name}`;
+  document.getElementById('hdrHp').textContent = `${runState.hp}/${runState.maxHp}`;
+  document.getElementById('hdrGold').textContent = runState.gold;
+  document.getElementById('hdrDeckCount').textContent = runState.deck.length;
+
+  const relicsBar = document.getElementById('relicsBar');
+  relicsBar.innerHTML = '';
+  runState.relics.forEach(r => {
+    const el = document.createElement('div');
+    el.className = 'relic-icon';
+    el.textContent = r.icon;
+    el.title = `${r.name}: ${r.desc}`;
+    relicsBar.appendChild(el);
+  });
+}
+
+// 1. HERO SELECTION
+function chooseHero(heroKey) {
+  const h = HERO_CLASSES[heroKey];
+  runState.hero = h;
+  runState.maxHp = h.hp;
+  runState.hp = h.hp;
+  runState.gold = 99;
+  runState.relics = [h.relic];
+  runState.actIndex = 0;
+  runState.currentFloor = 0;
+
+  // Build starter deck
+  runState.deck = h.starterDeck.map(id => ({ id, upgraded: false }));
+
+  generateActMap();
+  showView('viewMap');
+}
+
+// 2. PROCEDURAL MAP GENERATION
+function generateActMap() {
+  const currentAct = ACTS[runState.actIndex];
+  document.getElementById('mapActTitle').textContent = currentAct.name;
+
+  // 6 floors + Boss floor
+  // Floor types: combat, event, elite, shop, campfire, boss
+  const floorTypes = [
+    ['combat', 'combat'],
+    ['event', 'combat'],
+    ['combat', 'shop'],
+    ['elite', 'event'],
+    ['campfire'],
+    ['combat', 'elite'],
+    ['campfire'],
+    ['boss']
+  ];
+
+  runState.map = floorTypes.map((types, floorIdx) => {
+    return types.map(type => ({
+      floor: floorIdx,
+      type: type,
+      cleared: false
+    }));
+  });
+
+  renderMap();
+}
+
+function renderMap() {
+  const container = document.getElementById('mapFloorsContainer');
+  container.innerHTML = '';
+
+  runState.map.forEach((nodes, floorIdx) => {
+    const row = document.createElement('div');
+    row.className = 'map-floor-row';
+
+    nodes.forEach(node => {
+      const nodeEl = document.createElement('div');
+      const isAvailable = (floorIdx === runState.currentFloor);
+      const isCleared = (floorIdx < runState.currentFloor);
+
+      nodeEl.className = 'map-node' + (isAvailable ? ' available' : '') + (isCleared ? ' cleared' : '');
+
+      let icon = '⚔️';
+      let label = 'Kampf';
+      if (node.type === 'elite') { icon = '💀'; label = 'Elite'; }
+      else if (node.type === 'shop') { icon = '🪙'; label = 'Händler'; }
+      else if (node.type === 'campfire') { icon = '🔥'; label = 'Lager'; }
+      else if (node.type === 'event') { icon = '❓'; label = 'Ereignis'; }
+      else if (node.type === 'boss') { icon = '👑'; label = 'BOSS'; }
+
+      nodeEl.innerHTML = `${icon}<span class="map-node-label">${label}</span>`;
+
+      if (isAvailable) {
+        nodeEl.onclick = () => enterNode(node);
+      }
+
+      row.appendChild(nodeEl);
+    });
+
+    container.appendChild(row);
+  });
+}
+
+function enterNode(node) {
+  runState.currentFloor++;
+  try {
+    const curScore = (runState.actIndex * 10) + runState.currentFloor;
+    const best = Number(localStorage.getItem('spire_cards_best') || 0);
+    if (curScore > best) {
+      localStorage.setItem('spire_cards_best', curScore);
+      if (window.ArcadeCore) ArcadeCore.saveScore('spire', curScore);
+    }
+  } catch (e) {}
+  if (node.type === 'combat') {
+    startCombat(false);
+  } else if (node.type === 'elite') {
+    startCombat(true);
+  } else if (node.type === 'boss') {
+    startBossCombat();
+  } else if (node.type === 'campfire') {
+    showView('viewCampfire');
+  } else if (node.type === 'shop') {
+    openShop();
+  } else if (node.type === 'event') {
+    openEvent();
+  }
+}
+
+// 3. COMBAT ENGINE
+function startCombat(isElite) {
+  const act = ACTS[runState.actIndex];
+  const pool = isElite ? act.elites : act.regulars;
+  const proto = pool[Math.floor(Math.random() * pool.length)];
+
+  combat.enemy = {
+    name: proto.name,
+    avatar: proto.avatar,
+    maxHp: proto.hp,
+    hp: proto.hp,
+    pattern: proto.pattern,
+    isElite: isElite,
+    isBoss: false,
+    intent: null
+  };
+
+  initCombat();
+}
+
+function startBossCombat() {
+  const act = ACTS[runState.actIndex];
+  const proto = act.boss;
+
+  combat.enemy = {
+    name: proto.name,
+    avatar: proto.avatar,
+    maxHp: proto.hp,
+    hp: proto.hp,
+    pattern: proto.pattern,
+    isElite: true,
+    isBoss: true,
+    intent: null
+  };
+
+  initCombat();
+}
+
+function initCombat() {
+  combat.turn = 1;
+  combat.playerBlock = 0;
+  combat.enemyBlock = 0;
+  combat.playerStrength = 0;
+  combat.playerDexterity = 0;
+  combat.playerVulnerable = 0;
+  combat.playerWeak = 0;
+  combat.enemyStrength = 0;
+  combat.enemyVulnerable = 0;
+  combat.enemyWeak = 0;
+  combat.enemyPoison = 0;
+  combat.fumes = 0;
+  combat.blurActive = false;
+
+  // Apply Relics start effects
+  if (hasRelic('anchor')) combat.playerBlock = 10;
+  if (hasRelic('vajra')) combat.playerStrength = 1;
+
+  // Mage cracked core
+  if (hasRelic('cracked_core')) {
+    combat.enemy.hp -= 6;
+  }
+
+  // Draw pile setup (copy runState.deck and shuffle)
+  combat.drawPile = [...runState.deck].sort(() => 0.5 - Math.random());
+  combat.hand = [];
+  combat.discardPile = [];
+
+  document.getElementById('playerName').textContent = runState.hero.name;
+  document.getElementById('playerAvatar').textContent = runState.hero.avatar;
+  document.getElementById('enemyName').textContent = combat.enemy.name;
+  document.getElementById('enemyAvatar').textContent = combat.enemy.avatar;
+
+  showView('viewCombat');
+
+  startPlayerTurn();
+}
+
+function hasRelic(id) {
+  return runState.relics.some(r => r.id === id);
+}
+
+function startPlayerTurn() {
+  const endBtn = document.getElementById('endTurnBtn');
+  if (endBtn) endBtn.disabled = false;
+
+  combat.energy = combat.maxEnergy;
+
+  // Clear player block unless blur is active
+  if (!combat.blurActive) combat.playerBlock = 0;
+  combat.blurActive = false;
+
+  // Fumes apply before poison ticks
+  if (combat.fumes > 0) {
+    combat.enemyPoison += combat.fumes;
+    showCombatLog(`Giftwolke hüllt Feind ein! (+${combat.fumes} Gift) ☣️`);
+  }
+
+  // Enemy poison ticks at start of round
+  if (combat.enemyPoison > 0) {
+    combat.enemy.hp -= combat.enemyPoison;
+    showCombatLog(`${combat.enemy.name} erleidet ${combat.enemyPoison} Giftschaden! 🧪`);
+    combat.enemyPoison--;
+    if (combat.enemy.hp <= 0) {
+      endCombat(true);
+      return;
+    }
+  }
+
+  // Draw cards (5 normally, +2 on turn 1 if snake_ring)
+  let cardsToDraw = 5;
+  if (combat.turn === 1 && hasRelic('snake_ring')) cardsToDraw += 2;
+
+  drawCards(cardsToDraw);
+
+  // Plan enemy intent for this turn
+  planEnemyIntent();
+
+  updateCombatUI();
+}
+
+function drawCards(n) {
+  for (let i = 0; i < n; i++) {
+    if (combat.drawPile.length === 0) {
+      if (combat.discardPile.length === 0) break;
+      combat.drawPile = [...combat.discardPile].sort(() => 0.5 - Math.random());
+      combat.discardPile = [];
+    }
+    const c = combat.drawPile.pop();
+    combat.hand.push(c);
+  }
+}
+
+function planEnemyIntent() {
+  const p = combat.enemy.pattern;
+  let dmg = 0;
+  let icon = '⚔️';
+
+  if (p === 'scout') {
+    dmg = (combat.turn % 2 === 1) ? 7 : 11;
+  } else if (p === 'plant') {
+    dmg = 8;
+  } else if (p === 'cultist') {
+    dmg = 6 + (combat.turn * 3); // scales!
+  } else if (p === 'golem') {
+    dmg = (combat.turn % 2 === 1) ? 14 : 0;
+    if (dmg === 0) icon = '🛡️ Block';
+  } else if (p === 'boss1') {
+    const cycle = combat.turn % 3;
+    if (cycle === 1) dmg = 10;
+    else if (cycle === 2) dmg = 16;
+    else { dmg = 0; icon = '💪 Wut'; }
+  } else if (p === 'boss2') {
+    dmg = (combat.turn % 2 === 1) ? 15 : 22;
+  } else if (p === 'boss3') {
+    dmg = 12 + Math.floor(combat.turn * 2.5);
+  } else if (p === 'witch') {
+    const cycle = combat.turn % 3;
+    if (cycle === 1) { dmg = 9; }
+    else if (cycle === 2) { dmg = 12; icon = '🧪 Fluch'; }
+    else { dmg = 0; icon = '🛡️ Schatten'; }
+  } else if (p === 'gargoyle') {
+    const cycle = combat.turn % 2;
+    if (cycle === 1) { dmg = 15; }
+    else { dmg = 0; icon = '🗿 Steinhaut'; }
+  } else if (p === 'automaton') {
+    const cycle = combat.turn % 3;
+    if (cycle === 1) { dmg = 11; }
+    else if (cycle === 2) { dmg = 0; icon = '⚡ Überladen'; }
+    else { dmg = 22; icon = '💥 Hyperstrahl'; }
+  } else if (p === 'dragon') {
+    const cycle = combat.turn % 3;
+    if (cycle === 1) { dmg = 17; icon = '🔥 Atem'; }
+    else if (cycle === 2) { dmg = 14; }
+    else { dmg = 24; icon = '☄️ Flammen'; }
+  } else {
+    dmg = 10;
+  }
+
+  combat.enemy.intent = { dmg, icon };
+}
+
+function updateCombatUI() {
+  // Player HP & Block
+  const pPct = Math.max(0, (runState.hp / runState.maxHp) * 100);
+  document.getElementById('playerHpFill').style.width = pPct + '%';
+  document.getElementById('playerHpText').textContent = `${runState.hp} / ${runState.maxHp}`;
+  const pBlock = document.getElementById('playerBlockBadge');
+  if (combat.playerBlock > 0) {
+    pBlock.classList.add('active');
+    document.getElementById('playerBlockText').textContent = combat.playerBlock;
+  } else {
+    pBlock.classList.remove('active');
+  }
+
+  // Enemy HP & Block
+  const ePct = Math.max(0, (combat.enemy.hp / combat.enemy.maxHp) * 100);
+  document.getElementById('enemyHpFill').style.width = ePct + '%';
+  document.getElementById('enemyHpText').textContent = `${combat.enemy.hp} / ${combat.enemy.maxHp}`;
+  const eBlock = document.getElementById('enemyBlockBadge');
+  if (combat.enemyBlock > 0) {
+    eBlock.classList.add('active');
+    document.getElementById('enemyBlockText').textContent = combat.enemyBlock;
+  } else {
+    eBlock.classList.remove('active');
+  }
+
+  // Intent
+  const intentEl = document.getElementById('enemyIntent');
+  if (combat.enemy.intent.dmg > 0) {
+    let finalDmg = combat.enemy.intent.dmg + combat.enemyStrength;
+    if (combat.enemyWeak > 0) finalDmg = Math.round(finalDmg * 0.75);
+    intentEl.innerHTML = `⚔️ ${finalDmg}`;
+  } else {
+    intentEl.innerHTML = combat.enemy.intent.icon;
+  }
+
+  // Statuses
+  const pStat = document.getElementById('playerStatuses');
+  pStat.innerHTML = '';
+  if (combat.playerStrength !== 0) pStat.innerHTML += `<div class="status-badge" style="color:#ef4444;">⚔️ +${combat.playerStrength}</div>`;
+  if (combat.playerDexterity !== 0) pStat.innerHTML += `<div class="status-badge" style="color:#3b82f6;">🛡️ +${combat.playerDexterity}</div>`;
+  if (combat.fumes > 0) pStat.innerHTML += `<div class="status-badge" style="color:#10b981;">☣️ +${combat.fumes}/Zug</div>`;
+  if (combat.playerVulnerable > 0) pStat.innerHTML += `<div class="status-badge" style="color:#f59e0b;">💔 ${combat.playerVulnerable}</div>`;
+
+  const eStat = document.getElementById('enemyStatuses');
+  eStat.innerHTML = '';
+  if (combat.enemyPoison > 0) eStat.innerHTML += `<div class="status-badge" style="color:#10b981;">🧪 ${combat.enemyPoison}</div>`;
+  if (combat.enemyVulnerable > 0) eStat.innerHTML += `<div class="status-badge" style="color:#f59e0b;">💔 ${combat.enemyVulnerable}</div>`;
+  if (combat.enemyWeak > 0) eStat.innerHTML += `<div class="status-badge" style="color:#94a3b8;">🕸️ ${combat.enemyWeak}</div>`;
+
+  // Energy Orb
+  document.getElementById('energyOrb').textContent = `${combat.energy}/${combat.maxEnergy}`;
+
+  // Render Hand
+  renderHand();
+  updateHeaderUI();
+}
+
+function renderHand() {
+  const container = document.getElementById('handContainer');
+  container.innerHTML = '';
+
+  combat.hand.forEach((c, idx) => {
+    const def = CARDS_DB[c.id];
+    const cardEl = document.createElement('div');
+    cardEl.className = `battle-card ${def.type} ${c.upgraded ? 'upgraded' : ''}`;
+
+    const titleText = def.name + (c.upgraded ? '+' : '');
+    const descText = c.upgraded ? (def.descUp || def.desc) : def.desc;
+
+    cardEl.innerHTML = `
+      <div class="card-top">
+        <div class="card-cost">${def.cost}</div>
+        <div class="card-title">${titleText}</div>
+      </div>
+      <div class="card-art">${def.art}</div>
+      <div class="card-body-text">${descText}</div>
+      <div class="card-type-tag">${def.type}</div>
+    `;
+
+    cardEl.onclick = () => playCard(idx);
+    container.appendChild(cardEl);
+  });
+}
+
+function playCard(index) {
+  const c = combat.hand[index];
+  const def = CARDS_DB[c.id];
+
+  if (combat.energy < def.cost) {
+    showCombatLog('Nicht genug Energie! ⚡');
+    return;
+  }
+
+  combat.energy -= def.cost;
+  Sfx.card();
+
+  // Attack effects
+  if (def.type === 'attack') {
+    let base = c.upgraded ? (def.damageUp || def.damage) : def.damage;
+    if (def.hits) {
+      const hits = c.upgraded ? (def.hitsUp || def.hits) : def.hits;
+      for (let h = 0; h < hits; h++) {
+        dealDamageToEnemy(def.multiDmg + combat.playerStrength);
+      }
+    } else {
+      let dmg = base + combat.playerStrength;
+      if (def.strScale) {
+        const scale = c.upgraded ? def.strScaleUp : def.strScale;
+        dmg += combat.playerStrength * (scale - 1);
+      }
+      dealDamageToEnemy(dmg);
+    }
+
+    if (def.vuln) combat.enemyVulnerable += (c.upgraded ? def.vulnUp : def.vuln);
+    if (def.weak) combat.enemyWeak += (c.upgraded ? def.weakUp : def.weak);
+  }
+
+  // Body slam damage based on block
+  if (def.bodySlam) {
+    dealDamageToEnemy(combat.playerBlock + combat.playerStrength);
+  }
+
+  // Double block
+  if (def.doubleBlock) {
+    combat.playerBlock *= 2;
+    Sfx.block();
+    showCombatLog(`Block verdoppelt auf ${combat.playerBlock}! 🛡️`);
+  }
+
+  // Healing cards
+  if (def.heal) {
+    const h = c.upgraded ? (def.healUp || def.heal) : def.heal;
+    runState.hp = Math.min(runState.maxHp, runState.hp + h);
+    Sfx.win();
+    showCombatLog(`+${h} HP geheilt! 💖`);
+  }
+
+  // Catalyst: double or triple enemy poison
+  if (def.catalyst) {
+    const mult = c.upgraded ? 3 : 2;
+    combat.enemyPoison *= mult;
+    Sfx.card();
+    showCombatLog(`Gift multipliziert! Jetzt ${combat.enemyPoison} Gift! 🧪⚡`);
+  }
+
+  // Multi poison hits
+  if (def.poisonHits) {
+    const hits = c.upgraded ? (def.poisonHitsUp || def.poisonHits) : def.poisonHits;
+    const added = hits * def.poisonPerHit;
+    combat.enemyPoison += added;
+    showCombatLog(`${combat.enemy.name} mit ${added} Gift getroffen! ⚗️`);
+  }
+
+  // Noxious fumes power
+  if (def.fumes) {
+    const f = c.upgraded ? (def.fumesUp || def.fumes) : def.fumes;
+    combat.fumes = (combat.fumes || 0) + f;
+    showCombatLog(`Giftwolke aktiv! (+${f} Gift/Runde) ☣️`);
+  }
+
+  // Skill / Block effects
+  if (def.block) {
+    const blk = (c.upgraded ? def.blockUp : def.block) + combat.playerDexterity;
+    combat.playerBlock += blk;
+    Sfx.block();
+    showCombatLog(`+${blk} Block aufgebaut! 🛡️`);
+  }
+
+  // Poison effects
+  if (def.poison) {
+    const p = c.upgraded ? def.poisonUp : def.poison;
+    combat.enemyPoison += p;
+    showCombatLog(`${combat.enemy.name} mit ${p} Gift infiziert! 🧪`);
+  }
+
+  // Power / Buff effects
+  if (def.str) combat.playerStrength += (c.upgraded ? def.strUp : def.str);
+  if (def.dex) combat.playerDexterity += (c.upgraded ? def.dexUp : def.dex);
+  if (def.energyGain) combat.energy += def.energyGain;
+  if (def.draw) drawCards(c.upgraded ? def.drawUp : def.draw);
+  if (c.id === 'blur') combat.blurActive = true;
+
+  // Move played card to discard
+  combat.discardPile.push(combat.hand.splice(index, 1)[0]);
+
+  // Check victory
+  if (combat.enemy.hp <= 0) {
+    endCombat(true);
+    return;
+  }
+
+  updateCombatUI();
+}
+
+function dealDamageToEnemy(dmg) {
+  let final = dmg;
+  if (combat.enemyVulnerable > 0) {
+    final = Math.round(final * (hasRelic('odd_mushroom') ? 1.75 : 1.5));
+  }
+  if (combat.playerWeak > 0) {
+    final = Math.round(final * 0.75);
+  }
+
+  Sfx.attack();
+  document.getElementById('enemyCombatant').classList.add('hurt');
+  setTimeout(() => document.getElementById('enemyCombatant').classList.remove('hurt'), 300);
+
+  // Block absorbs first
+  if (combat.enemyBlock > 0) {
+    if (final <= combat.enemyBlock) {
+      combat.enemyBlock -= final;
+      final = 0;
+    } else {
+      final -= combat.enemyBlock;
+      combat.enemyBlock = 0;
+    }
+  }
+
+  combat.enemy.hp = Math.max(0, combat.enemy.hp - final);
+}
+
+function endPlayerTurn() {
+  const endBtn = document.getElementById('endTurnBtn');
+  if (endBtn) endBtn.disabled = true;
+  // Discard remaining hand
+  while (combat.hand.length > 0) {
+    combat.discardPile.push(combat.hand.pop());
+  }
+  updateCombatUI();
+
+  // Enemy Turn
+  setTimeout(executeEnemyTurn, 500);
+}
+
+function executeEnemyTurn() {
+  combat.enemyBlock = 0; // reset enemy block
+
+  let incoming = combat.enemy.intent.dmg + combat.enemyStrength;
+  if (combat.enemyWeak > 0) incoming = Math.round(incoming * 0.75);
+  if (combat.playerVulnerable > 0) incoming = Math.round(incoming * 1.5);
+
+  if (incoming > 0) {
+    Sfx.attack();
+    document.getElementById('playerCombatant').classList.add('hurt');
+    setTimeout(() => document.getElementById('playerCombatant').classList.remove('hurt'), 300);
+
+    let dmg = incoming;
+    if (combat.playerBlock > 0) {
+      if (dmg <= combat.playerBlock) {
+        combat.playerBlock -= dmg;
+        dmg = 0;
+      } else {
+        dmg -= combat.playerBlock;
+        combat.playerBlock = 0;
+      }
+    }
+    runState.hp = Math.max(0, runState.hp - dmg);
+  } else if (combat.enemy.intent.icon.includes('Block')) {
+    combat.enemyBlock += 12;
+    Sfx.block();
+    showCombatLog(`${combat.enemy.name} nimmt Verteidigungshaltung ein! 🛡️`);
+  } else if (combat.enemy.intent.icon.includes('Wut')) {
+    combat.enemyStrength += 3;
+    showCombatLog(`${combat.enemy.name} gerät in Raserei! (+3 Stärke) 🔥`);
+  } else if (combat.enemy.intent.icon.includes('Steinhaut') || combat.enemy.intent.icon.includes('Schatten')) {
+    combat.enemyBlock += 16;
+    Sfx.block();
+    showCombatLog(`${combat.enemy.name} baut 16 Block auf! 🛡️`);
+  } else if (combat.enemy.intent.icon.includes('Fluch')) {
+    combat.playerVulnerable += 2;
+    combat.playerWeak += 2;
+    showCombatLog(`${combat.enemy.name} belegt dich mit Verwundbar & Schwäche! 🧪`);
+  } else if (combat.enemy.intent.icon.includes('Überladen')) {
+    combat.enemyStrength += 4;
+    showCombatLog(`${combat.enemy.name} lädt Generatoren auf! (+4 Stärke) ⚡`);
+  }
+
+  // Decrement status turns
+  if (combat.playerVulnerable > 0) combat.playerVulnerable--;
+  if (combat.playerWeak > 0) combat.playerWeak--;
+  if (combat.enemyVulnerable > 0) combat.enemyVulnerable--;
+  if (combat.enemyWeak > 0) combat.enemyWeak--;
+
+  combat.turn++;
+
+  if (runState.hp <= 0) {
+    endCombat(false);
+  } else {
+    startPlayerTurn();
+  }
+}
+
+function showCombatLog(msg) {
+  const el = document.getElementById('combatLog');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  setTimeout(() => el.style.opacity = '0', 1600);
+}
+
+// 4. COMBAT REWARD & RESOLUTION
+function endCombat(won) {
+  if (!won) {
+    Sfx.lose();
+    document.getElementById('endEmoji').textContent = '💀';
+    document.getElementById('endTitle').textContent = 'DU BIST GEFALLEN';
+    document.getElementById('endSubtitle').textContent = `Besiegt von ${combat.enemy.name} in Akt ${runState.actIndex + 1}.`;
+    document.getElementById('statFloors').textContent = `Etage ${runState.currentFloor}`;
+    showView('viewGameOver');
+    return;
+  }
+
+  Sfx.win();
+
+  // Relic: Blood healing
+  if (hasRelic('blood')) {
+    runState.hp = Math.min(runState.maxHp, runState.hp + 6);
+  }
+  // Relic: Meat healing under 50%
+  if (hasRelic('meat') && runState.hp < runState.maxHp * 0.5) {
+    runState.hp = Math.min(runState.maxHp, runState.hp + 12);
+  }
+
+  // Gold reward
+  let goldGain = combat.enemy.isBoss ? 80 : (combat.enemy.isElite ? 45 : 20);
+  if (hasRelic('golden_idol')) goldGain = Math.round(goldGain * 1.25);
+  runState.gold += goldGain;
+
+  // Boss Victory -> Advance Act or Beat Game!
+  if (combat.enemy.isBoss) {
+    if (runState.actIndex >= ACTS.length - 1) {
+      // VICTORY!
+      document.getElementById('endEmoji').textContent = '🏆👑';
+      document.getElementById('endTitle').textContent = 'TURM BEZWUNGEN!';
+      document.getElementById('endSubtitle').textContent = 'Du hast Chronos gestürzt und die Turmspitze erklommen!';
+      document.getElementById('statFloors').textContent = 'Etage 24 (Alle 3 Akte bezwungen!)';
+      try {
+        localStorage.setItem('spire_cards_best', 30);
+        if (window.ArcadeCore) ArcadeCore.saveScore('spire', 30);
+      } catch (e) {}
+      showView('viewGameOver');
+      return;
+    } else {
+      runState.actIndex++;
+      runState.currentFloor = 0;
+      generateActMap();
+    }
+  }
+
+  // Elite Relic Drop
+  if (combat.enemy.isElite) {
+    const unownedRelics = Object.keys(RELICS_DB).filter(rId => !hasRelic(rId));
+    if (unownedRelics.length > 0) {
+      const pick = unownedRelics[Math.floor(Math.random() * unownedRelics.length)];
+      runState.relics.push({ id: pick, ...RELICS_DB[pick] });
+    }
+  }
+
+  // Card drafting screen
+  openCardDrafting();
+}
+
+function openCardDrafting() {
+  const row = document.getElementById('rewardCardsRow');
+  row.innerHTML = '';
+
+  const pool = Object.keys(CARDS_DB).filter(k => k !== 'strike' && k !== 'defend');
+  const choices = pool.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+  choices.forEach(cId => {
+    const def = CARDS_DB[cId];
+    const cardEl = document.createElement('div');
+    cardEl.className = `battle-card ${def.type}`;
+    cardEl.style.cursor = 'pointer';
+
+    cardEl.innerHTML = `
+      <div class="card-top">
+        <div class="card-cost">${def.cost}</div>
+        <div class="card-title">${def.name}</div>
+      </div>
+      <div class="card-art">${def.art}</div>
+      <div class="card-body-text">${def.desc}</div>
+      <div class="card-type-tag">${def.type}</div>
+    `;
+
+    cardEl.onclick = () => {
+      runState.deck.push({ id: cId, upgraded: false });
+      Sfx.coin();
+      showView('viewMap');
+      renderMap();
+    };
+
+    row.appendChild(cardEl);
+  });
+
+  showView('viewReward');
+}
+
+function skipReward() {
+  showView('viewMap');
+  renderMap();
+}
+
+// 5. CAMPFIRE
+function campfireRest() {
+  const healAmt = Math.round(runState.maxHp * 0.3);
+  runState.hp = Math.min(runState.maxHp, runState.hp + healAmt);
+  Sfx.coin();
+  showView('viewMap');
+  renderMap();
+}
+
+function campfireSmith() {
+  // Open deck to pick a card to upgrade
+  openUpgradePicker();
+}
+
+function openUpgradePicker() {
+  openDeckModal(true);
+}
+
+// 6. SHOP
+function openShop() {
+  const grid = document.getElementById('shopGrid');
+  grid.innerHTML = '';
+
+  // 3 random cards for sale (shuffled!)
+  const cardPool = Object.keys(CARDS_DB).filter(k => k !== 'strike' && k !== 'defend').sort(() => 0.5 - Math.random()).slice(0, 3);
+  cardPool.forEach(cId => {
+    const def = CARDS_DB[cId];
+    const cost = 45;
+    const itemEl = document.createElement('div');
+    itemEl.className = 'shop-item';
+    itemEl.innerHTML = `
+      <div style="font-size:24px;">${def.art}</div>
+      <div style="font-weight:700; font-size:12px;">${def.name}</div>
+      <div class="shop-price">🪙 ${cost}</div>
+    `;
+    itemEl.onclick = () => {
+      if (runState.gold >= cost) {
+        runState.gold -= cost;
+        runState.deck.push({ id: cId, upgraded: false });
+        itemEl.style.display = 'none';
+        Sfx.coin();
+        updateHeaderUI();
+      }
+    };
+    grid.appendChild(itemEl);
+  });
+
+  // Relic for sale
+  const unownedRelics = Object.keys(RELICS_DB).filter(rId => !hasRelic(rId));
+  if (unownedRelics.length > 0) {
+    const rId = unownedRelics[Math.floor(Math.random() * unownedRelics.length)];
+    const rDef = RELICS_DB[rId];
+    const rCost = 120;
+    const rEl = document.createElement('div');
+    rEl.className = 'shop-item';
+    rEl.innerHTML = `
+      <div style="font-size:24px;">${rDef.icon}</div>
+      <div style="font-weight:700; font-size:12px;">${rDef.name}</div>
+      <div class="shop-price">🪙 ${rCost}</div>
+    `;
+    rEl.title = rDef.desc;
+    rEl.onclick = () => {
+      if (runState.gold >= rCost) {
+        runState.gold -= rCost;
+        runState.relics.push({ id: rId, ...rDef });
+        rEl.style.display = 'none';
+        Sfx.win();
+        updateHeaderUI();
+      }
+    };
+    grid.appendChild(rEl);
+  }
+
+  // Card Purge Service
+  const purgeCost = 75;
+  const purgeEl = document.createElement('div');
+  purgeEl.className = 'shop-item';
+  purgeEl.innerHTML = `
+    <div style="font-size:24px;">🗑️</div>
+    <div style="font-weight:700; font-size:12px;">Karte verbrennen</div>
+    <div class="shop-price">🪙 ${purgeCost}</div>
+  `;
+  purgeEl.onclick = () => {
+    if (runState.gold >= purgeCost) {
+      runState.gold -= purgeCost;
+      openDeckModal(false, true); // purge mode
+      purgeEl.style.display = 'none';
+      Sfx.coin();
+      updateHeaderUI();
+    }
+  };
+  grid.appendChild(purgeEl);
+
+  showView('viewShop');
+}
+
+function leaveShop() {
+  showView('viewMap');
+  renderMap();
+}
+
+// 7. EVENTS
+function openEvent() {
+  const events = [
+    {
+      title: 'Der Altar des Lebensbluts',
+      desc: 'Ein glühender Altar pulsiert in der Kammer. Du spürst eine mächtige Kraft.',
+      options: [
+        {
+          text: 'Opfere 12 HP für 120 Gold 🪙',
+          action: () => {
+            runState.hp = Math.max(1, runState.hp - 12);
+            runState.gold += 120;
+            leaveEvent();
+          }
+        },
+        {
+          text: 'Verneige dich und meditiere (+8 Max HP)',
+          action: () => {
+            runState.maxHp += 8;
+            runState.hp += 8;
+            leaveEvent();
+          }
+        },
+        {
+          text: 'Einfach weitergehen',
+          action: () => leaveEvent()
+        }
+      ]
+    },
+    {
+      title: 'Die Geister-Schmiede',
+      desc: 'Ein uralter Geisterschmied bietet an, deine Waffe im ätherischen Feuer zu hämmern.',
+      options: [
+        {
+          text: 'Zahle 40 Gold um eine Karte aufzuwerten 🔨',
+          action: () => {
+            if (runState.gold >= 40) {
+              runState.gold -= 40;
+              openUpgradePicker();
+            } else {
+              leaveEvent();
+            }
+          }
+        },
+        {
+          text: 'Ablehnen und weiterziehen',
+          action: () => leaveEvent()
+        }
+      ]
+    }
+  ];
+
+  const ev = events[Math.floor(Math.random() * events.length)];
+  document.getElementById('eventTitle').textContent = ev.title;
+  document.getElementById('eventDesc').textContent = ev.desc;
+
+  const optContainer = document.getElementById('eventOptions');
+  optContainer.innerHTML = '';
+  ev.options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'btn-base';
+    btn.textContent = opt.text;
+    btn.onclick = opt.action;
+    optContainer.appendChild(btn);
+  });
+
+  showView('viewEvent');
+}
+
+function leaveEvent() {
+  showView('viewMap');
+  renderMap();
+}
+
+// 8. DECK MODAL / UPGRADE & PURGE PICKER
+const deckOverlay = document.getElementById('deckOverlay');
+
+document.getElementById('viewDeckBtn').onclick = () => openDeckModal(false);
+
+function openDeckModal(isUpgradeMode = false, isPurgeMode = false) {
+  const list = document.getElementById('deckCardsScroll');
+  list.innerHTML = '';
+  document.getElementById('deckCountModal').textContent = runState.deck.length;
+
+  runState.deck.forEach((c, idx) => {
+    const def = CARDS_DB[c.id];
+    const cardEl = document.createElement('div');
+    cardEl.className = `battle-card ${def.type} ${c.upgraded ? 'upgraded' : ''}`;
+
+    const titleText = def.name + (c.upgraded ? '+' : '');
+    const descText = c.upgraded ? (def.descUp || def.desc) : def.desc;
+
+    cardEl.innerHTML = `
+      <div class="card-top">
+        <div class="card-cost">${def.cost}</div>
+        <div class="card-title">${titleText}</div>
+      </div>
+      <div class="card-art">${def.art}</div>
+      <div class="card-body-text">${descText}</div>
+      <div class="card-type-tag">${def.type}</div>
+    `;
+
+    if (isUpgradeMode && !c.upgraded) {
+      cardEl.style.cursor = 'pointer';
+      cardEl.onclick = () => {
+        c.upgraded = true;
+        closeDeckModal();
+        Sfx.win();
+        showView('viewMap');
+        renderMap();
+      };
+    } else if (isPurgeMode) {
+      cardEl.style.cursor = 'pointer';
+      cardEl.onclick = () => {
+        runState.deck.splice(idx, 1);
+        closeDeckModal();
+        Sfx.coin();
+      };
+    }
+
+    list.appendChild(cardEl);
+  });
+
+  deckOverlay.classList.add('active');
+}
+
+function closeDeckModal() {
+  deckOverlay.classList.remove('active');
+  updateHeaderUI();
+}
+
+function restartSpire() {
+  showView('viewHeroSelect');
+}
+</script>
+</body>
+</html>

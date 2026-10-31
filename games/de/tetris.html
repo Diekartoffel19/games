@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Tetris Deluxe Online — Klassischer Block-Stapler mit 7-Bag & Hold</title>
+<meta name="description" content="Klassischer Tetris-Blockstapler mit 7-Bag-Randomizer, Next-Queue-Vorschau, Hold-Slot (C/Shift), Lock-Delay und Line-Clear-Effekten!">
+<meta name="keywords" content="tetris kostenlos online, retro block stapler, tetrominos spielen, 7 bag tetris">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tetris Deluxe Online — Klassischer Block-Stapler mit 7-Bag & Hold">
+<meta property="og:description" content="Klassischer Tetris-Blockstapler mit 7-Bag-Randomizer, Next-Queue-Vorschau, Hold-Slot (C/Shift), Lock-Delay und Line-Clear-Effekten!">
+<meta property="og:locale" content="de_DE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Tetris Deluxe Online — Klassischer Block-Stapler mit 7-Bag & Hold">
+<meta name="twitter:description" content="Klassischer Tetris-Blockstapler mit 7-Bag-Randomizer, Next-Queue-Vorschau, Hold-Slot (C/Shift), Lock-Delay und Line-Clear-Effekten!">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "Tetris Deluxe Online — Klassischer Block-Stapler mit 7-Bag & Hold",
+  "description": "Klassischer Tetris-Blockstapler mit 7-Bag-Randomizer, Next-Queue-Vorschau, Hold-Slot (C/Shift), Lock-Delay und Line-Clear-Effekten!",
+  "inLanguage": "de",
+  "applicationCategory": "Game",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  }
+}
+</script><link rel="stylesheet" href="../../style.css">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../../src/arcade-core.js"></script>
+<style>
+  body { touch-action: manipulation; }
+  .tetris-wrap { display: flex; justify-content: center; align-items: flex-start; gap: 14px; margin: 10px auto; max-width: 95vw; }
+  .tetris-side { display: flex; flex-direction: column; gap: 12px; width: 100px; }
+  .panel-box { background: #1e1b4b; border: 1px solid #4338ca; border-radius: 10px; padding: 10px 8px; text-align: center; }
+  .panel-box h3 { margin: 0 0 6px; font-size: 0.8rem; color: #a5b4fc; text-transform: uppercase; letter-spacing: 1px; }
+  .panel-canvas { width: 84px; height: 70px; display: block; margin: 0 auto; }
+  #c { touch-action: none; max-height: 62vh; width: auto; max-width: 100%; aspect-ratio: 1/2; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+  .hold-btn { background: #4f46e5; border: 1px solid #818cf8; color: #fff; padding: 6px 10px; border-radius: 8px; font-weight: bold; font-size: 0.8rem; cursor: pointer; margin-top: 4px; }
+  .hold-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← Arcade</a>
+<h1>🧱 Tetris Deluxe</h1>
+<p class="info">Punkte: <b id="score">0</b> · Rekord: <b id="best">0</b> · Reihen: <b id="lines">0</b> · Level: <b id="level">1</b></p>
+
+<div class="tetris-wrap">
+  <!-- Left Side: Hold -->
+  <div class="tetris-side">
+    <div class="panel-box">
+      <h3>Hold [C]</h3>
+      <canvas id="holdCanvas" class="panel-canvas" width="84" height="70"></canvas>
+      <button class="hold-btn" id="holdBtn" onclick="holdCurrentPiece()">Tauschen</button>
+    </div>
+  </div>
+
+  <!-- Center: Main Board -->
+  <canvas id="c" width="300" height="600"></canvas>
+
+  <!-- Right Side: Next Queue -->
+  <div class="tetris-side">
+    <div class="panel-box">
+      <h3>Nächste</h3>
+      <canvas id="next1" class="panel-canvas" width="84" height="64"></canvas>
+      <canvas id="next2" class="panel-canvas" width="84" height="64" style="margin-top:6px;"></canvas>
+      <canvas id="next3" class="panel-canvas" width="84" height="64" style="margin-top:6px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="touch-controls">
+  <button class="touch-btn" onclick="act('left')" aria-label="Links">◀</button>
+  <button class="touch-btn" onclick="act('rot')" aria-label="Drehen">⟳</button>
+  <button class="touch-btn" onclick="act('down')" aria-label="Runter">▼</button>
+  <button class="touch-btn" onclick="act('drop')" aria-label="Sofort fallen">⏬</button>
+  <button class="touch-btn" onclick="act('right')" aria-label="Rechts">▶</button>
+</div>
+<p class="info">← → Bewegen · ↑ / W Drehen · ↓ Schneller · Leertaste Abwurf · C / Shift Hold · P Pause</p>
+
+<script>
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const holdC = document.getElementById("holdCanvas"), holdCtx = holdC.getContext("2d");
+const nextCanvases = [
+  document.getElementById("next1").getContext("2d"),
+  document.getElementById("next2").getContext("2d"),
+  document.getElementById("next3").getContext("2d")
+];
+
+const COLS = 10, ROWS = 20, S = 30;
+const SHAPES = {
+  I: [[1,1,1,1]],
+  O: [[1,1],[1,1]],
+  T: [[0,1,0],[1,1,1]],
+  S: [[0,1,1],[1,1,0]],
+  Z: [[1,1,0],[0,1,1]],
+  J: [[1,0,0],[1,1,1]],
+  L: [[0,0,1],[1,1,1]]
+};
+const COLORS = {
+  I: "#22d3ee",
+  O: "#facc15",
+  T: "#a855f7",
+  S: "#22c55e",
+  Z: "#ef4444",
+  J: "#3b82f6",
+  L: "#f97316"
+};
+
+let board, piece, bag = [], nextQueue = [], heldPiece = null, canHold = true;
+let score = 0, best = +localStorage.tetrisBest || 0, lines = 0, level = 1;
+let dropMs = 800, lastTime = 0, acc = 0, over = false, paused = false;
+let lockDelayTimer = 0, clearingRows = null; // for line flash animation
+
+function playSnd(type) {
+  if (!window.ArcadeCore) return;
+  if (type === 'move') ArcadeCore.sounds.playTone(280, 0.03, 'sine', 0.08);
+  else if (type === 'rotate') ArcadeCore.sounds.playTone(420, 0.04, 'triangle', 0.1);
+  else if (type === 'drop') ArcadeCore.sounds.playTone(180, 0.08, 'sawtooth', 0.15);
+  else if (type === 'clear') ArcadeCore.sounds.coin();
+  else if (type === 'tetris') ArcadeCore.sounds.powerup();
+  else if (type === 'hold') ArcadeCore.sounds.playTone(500, 0.06, 'triangle', 0.12);
+  else if (type === 'over') ArcadeCore.sounds.gameOver();
+}
+
+// 7-Bag Randomizer
+function getNextFromBag() {
+  if (bag.length === 0) {
+    bag = Object.keys(SHAPES);
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+  }
+  return bag.pop();
+}
+
+function initQueue() {
+  bag = [];
+  nextQueue = [getNextFromBag(), getNextFromBag(), getNextFromBag(), getNextFromBag()];
+}
+
+function spawn() {
+  canHold = true;
+  document.getElementById("holdBtn").disabled = false;
+  lockDelayTimer = 0;
+
+  const k = nextQueue.shift();
+  nextQueue.push(getNextFromBag());
+
+  const m = SHAPES[k].map(r => [...r]);
+  piece = { k, m, x: (COLS - m[0].length) >> 1, y: 0 };
+
+  if (collide(piece.m, piece.x, piece.y)) {
+    over = true;
+    playSnd('over');
+  }
+  drawPanels();
+}
+
+function holdCurrentPiece() {
+  if (!canHold || over || paused || clearingRows) return;
+  playSnd('hold');
+  canHold = false;
+  document.getElementById("holdBtn").disabled = true;
+
+  const currentKey = piece.k;
+  if (!heldPiece) {
+    heldPiece = currentKey;
+    spawn();
+  } else {
+    const temp = heldPiece;
+    heldPiece = currentKey;
+    const m = SHAPES[temp].map(r => [...r]);
+    piece = { k: temp, m, x: (COLS - m[0].length) >> 1, y: 0 };
+    lockDelayTimer = 0;
+  }
+  drawPanels();
+}
+
+function reset() {
+  board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  score = 0;
+  lines = 0;
+  level = 1;
+  over = false;
+  paused = false;
+  acc = 0;
+  heldPiece = null;
+  clearingRows = null;
+  initQueue();
+  spawn();
+  updateHud();
+}
+
+function collide(m, x, y) {
+  return m.some((r, i) => r.some((v, j) => v && (
+    x + j < 0 || x + j >= COLS || y + i >= ROWS || (y + i >= 0 && board[y + i][x + j])
+  )));
+}
+
+function rotate() {
+  if (clearingRows) return;
+  const m = piece.m[0].map((_, j) => piece.m.map(r => r[j]).reverse());
+  for (const dx of [0, -1, 1, -2, 2]) {
+    if (!collide(m, piece.x + dx, piece.y)) {
+      piece.m = m;
+      piece.x += dx;
+      lockDelayTimer = 0; // reset lock delay on successful rotation
+      playSnd('rotate');
+      return;
+    }
+  }
+}
+
+function lock() {
+  playSnd('drop');
+  piece.m.forEach((r, i) => r.forEach((v, j) => {
+    if (v && piece.y + i >= 0) board[piece.y + i][piece.x + j] = piece.k;
+  }));
+
+  // Identify cleared lines
+  const fullRows = [];
+  board.forEach((r, idx) => {
+    if (r.every(v => v !== null)) fullRows.push(idx);
+  });
+
+  if (fullRows.length > 0) {
+    clearingRows = { rows: fullRows, timer: 180 }; // 180ms flash
+    if (fullRows.length >= 4) playSnd('tetris');
+    else playSnd('clear');
+  } else {
+    spawn();
+  }
+}
+
+function finishClearLines() {
+  const cleared = clearingRows.rows.length;
+  board = board.filter((r, idx) => !clearingRows.rows.includes(idx));
+  while (board.length < ROWS) board.unshift(Array(COLS).fill(null));
+
+  score += [0, 100, 300, 500, 800][cleared] * level;
+  lines += cleared;
+  level = 1 + Math.floor(lines / 10);
+  clearingRows = null;
+  updateHud();
+  spawn();
+}
+
+function drop() {
+  if (clearingRows) return;
+  if (!collide(piece.m, piece.x, piece.y + 1)) {
+    piece.y++;
+    lockDelayTimer = 0;
+  } else {
+    lock();
+  }
+}
+
+function updateHud() {
+  if (score > best) {
+    best = score;
+    localStorage.tetrisBest = best;
+    if (window.ArcadeCore) ArcadeCore.saveScore('tetris', best);
+  }
+  document.getElementById("score").textContent = score;
+  document.getElementById("best").textContent = best;
+  document.getElementById("lines").textContent = lines;
+  document.getElementById("level").textContent = level;
+  dropMs = Math.max(80, 800 - (level - 1) * 70);
+}
+
+function act(a) {
+  if (over) { reset(); return; }
+  if (paused) { paused = false; return; }
+  if (clearingRows) return;
+
+  if (a === "left" && !collide(piece.m, piece.x - 1, piece.y)) {
+    piece.x--;
+    lockDelayTimer = 0;
+    playSnd('move');
+  }
+  if (a === "right" && !collide(piece.m, piece.x + 1, piece.y)) {
+    piece.x++;
+    lockDelayTimer = 0;
+    playSnd('move');
+  }
+  if (a === "down") {
+    drop();
+    score++;
+    updateHud();
+  }
+  if (a === "rot") rotate();
+  if (a === "drop") {
+    let dropDist = 0;
+    while (!collide(piece.m, piece.x, piece.y + 1)) {
+      piece.y++;
+      dropDist++;
+    }
+    score += dropDist * 2;
+    lock();
+    updateHud();
+  }
+}
+
+// Side panels preview rendering
+function drawMiniPiece(ctxTarget, key, width, height) {
+  ctxTarget.clearRect(0, 0, width, height);
+  if (!key) return;
+  const m = SHAPES[key];
+  const size = 15;
+  const offX = (width - m[0].length * size) / 2;
+  const offY = (height - m.length * size) / 2;
+
+  ctxTarget.fillStyle = COLORS[key];
+  ctxTarget.shadowColor = COLORS[key];
+  ctxTarget.shadowBlur = 6;
+  m.forEach((row, r) => row.forEach((v, c) => {
+    if (v) ctxTarget.fillRect(offX + c * size + 1, offY + r * size + 1, size - 2, size - 2);
+  }));
+  ctxTarget.shadowBlur = 0;
+}
+
+function drawPanels() {
+  drawMiniPiece(holdCtx, heldPiece, 84, 70);
+  nextCanvases.forEach((nCtx, idx) => {
+    drawMiniPiece(nCtx, nextQueue[idx], 84, 64);
+  });
+}
+
+c.addEventListener("pointerdown", () => {
+  if (over) reset();
+  else if (paused) paused = false;
+});
+
+addEventListener("keydown", e => {
+  if (e.repeat && ["Space", "ArrowUp", "KeyW", "KeyP", "KeyC", "ShiftLeft", "ShiftRight", "Enter"].includes(e.code)) return;
+  if (over) {
+    if (e.code === "Space" || e.code === "Enter") reset();
+    return;
+  }
+  if (e.code === "KeyP") { paused = !paused; return; }
+  if (e.code === "KeyC" || e.code === "ShiftLeft" || e.code === "ShiftRight") {
+    e.preventDefault();
+    holdCurrentPiece();
+    return;
+  }
+  if (paused) return;
+
+  const k = e.code;
+  if (["ArrowLeft","ArrowRight","ArrowDown","ArrowUp","Space"].includes(k)) e.preventDefault();
+  if (k === "ArrowLeft" || k === "KeyA") act("left");
+  if (k === "ArrowRight" || k === "KeyD") act("right");
+  if (k === "ArrowDown" || k === "KeyS") act("down");
+  if (k === "ArrowUp" || k === "KeyW") act("rot");
+  if (k === "Space") act("drop");
+});
+
+function cell(x, y, color, alpha = 1) {
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.fillRect(x * S + 1, y * S + 1, S - 2, S - 2);
+  ctx.globalAlpha = 1;
+}
+
+function draw() {
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  // Grid
+  ctx.strokeStyle = "rgba(79, 70, 229, 0.15)";
+  for (let x = 0; x <= COLS; x++) { ctx.beginPath(); ctx.moveTo(x*S, 0); ctx.lineTo(x*S, ROWS*S); ctx.stroke(); }
+  for (let y = 0; y <= ROWS; y++) { ctx.beginPath(); ctx.moveTo(0, y*S); ctx.lineTo(COLS*S, y*S); ctx.stroke(); }
+
+  // Board
+  board.forEach((r, y) => {
+    const isFlashing = clearingRows && clearingRows.rows.includes(y);
+    r.forEach((v, x) => {
+      if (isFlashing) cell(x, y, "#fff");
+      else if (v) cell(x, y, COLORS[v]);
+    });
+  });
+
+  if (!clearingRows && piece) {
+    // Ghost piece
+    let gy = piece.y;
+    while (!collide(piece.m, piece.x, gy + 1)) gy++;
+    piece.m.forEach((r, i) => r.forEach((v, j) => {
+      if (v) {
+        cell(piece.x + j, gy + i, COLORS[piece.k], 0.22);
+        cell(piece.x + j, piece.y + i, COLORS[piece.k]);
+      }
+    }));
+  }
+
+  // Overlay
+  if (over || paused) {
+    ctx.fillStyle = "rgba(0,0,0,.75)";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.font = "bold 32px sans-serif";
+    ctx.fillText(over ? "Game Over" : "Pausiert", c.width / 2, c.height / 2 - 10);
+    ctx.font = "16px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText(over ? "Leertaste / Tippen für Neustart" : "P oder Tippen für Weiter", c.width / 2, c.height / 2 + 25);
+  }
+}
+
+function loop(t) {
+  const dt = t - (lastTime || t);
+  lastTime = t;
+
+  if (!over && !paused) {
+    if (clearingRows) {
+      clearingRows.timer -= dt;
+      if (clearingRows.timer <= 0) finishClearLines();
+    } else {
+      acc += dt;
+      // Lock delay: if on ground, allow 500ms before locking
+      if (collide(piece.m, piece.x, piece.y + 1)) {
+        lockDelayTimer += dt;
+        if (lockDelayTimer >= 500) {
+          lock();
+          acc = 0;
+        }
+      } else {
+        lockDelayTimer = 0;
+        if (acc >= dropMs) {
+          drop();
+          acc = 0;
+        }
+      }
+    }
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+
+reset();
+requestAnimationFrame(t => { lastTime = t; loop(t); });
+</script>
+</body>
+</html>

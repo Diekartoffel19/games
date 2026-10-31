@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Echo-Dunkel — Sieh mit den Ohren</title>
+<meta name="description" content="Ein Labyrinth in völliger Dunkelheit. Sende Sonar-Pings, finde den Ausgang und lass dich nicht vom Lauscher hören!">
+<meta name="theme-color" content="#05070d">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../../src/arcade-core.js"></script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#05070d; color:#bff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas { position:fixed; inset:0; width:100%; height:100%; touch-action:none; }
+#hud { position:fixed; top:8px; left:125px; right:14px; display:flex; justify-content:space-between; align-items:center; pointer-events:none; font-weight:900; font-size:clamp(16px,4.5vw,24px); text-shadow:0 0 10px #0ff8; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#bff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(10,20,32,.85); border:1px solid rgba(44,221,255,.35); padding:6px 14px; border-radius:20px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); display:inline-flex; align-items:center; gap:4px; min-height:36px; transition:background .15s, transform .15s; touch-action:manipulation; }
+.back:hover, .back:active { background:rgba(44,221,255,.25); transform:translateY(-1px); color:#fff; }
+#msg { position:fixed; left:0; right:0; top:48px; text-align:center; font-weight:800; font-size:clamp(14px,4vw,22px); color:#8ff; pointer-events:none; opacity:.9; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000c; z-index:5; }
+.overlay.hide { display:none; }
+.card { background:#0a1420; border:2px solid #2cd; color:#cff; border-radius:16px; padding:20px 26px; max-width:440px; text-align:center; box-shadow:0 0 30px #0cf5; }
+.card h1 { margin:0 0 6px; font-size:30px; color:#5ef; }
+.card p { margin:8px 0; line-height:1.4; }
+button { font:inherit; font-weight:800; font-size:20px; color:#012; background:linear-gradient(#6ff,#2bd); border:0; border-radius:12px; padding:12px 28px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #087; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #087; }
+</style>
+</head>
+<body>
+<a href="../../index.html" class="back">← Arcade</a>
+<canvas id="c"></canvas>
+<div id="hud"><div id="lvl">Ebene 1</div><div id="best">Rekord: 0</div></div>
+<div id="msg"></div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🦇 Echo-Dunkel</h1>
+  <p>Du siehst <b>nichts</b>. Sende einen Sonar-Ping und die Wände leuchten kurz auf. Finde den <b style="color:#6f6">Ausgang</b>.</p>
+  <p>Aber jeder Ping ist laut: der <b style="color:#f66">Lauscher</b> kommt zu der Stelle, wo du gepingt hast. Und wer nah dran ist, hört deine Schritte.</p>
+  <p><b>Bewegen:</b> WASD / Pfeile / Finger ziehen<br><b>Ping:</b> Leertaste / Antippen</p>
+  <button id="go">Ins Dunkle</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1>💀 Erwischt</h1>
+  <p id="overtxt"></p>
+  <button id="again">Nochmal</button>
+</div></div>
+<script>
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+let W, H, dpr;
+function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); layout(); }
+let best = Number(ArcadeCore.getScore("echodunkel")) || 0;
+$("best").textContent = "Rekord: " + best;
+function snd(n, ...a) { try { const s = ArcadeCore.sounds; if (s[n]) s[n](...a); } catch (e) {} }
+
+let state = "menu", level = 1, N, G, wall, lit, exitP, pl, mons, rings, pingCd, exitLit, msgT, hold = null, holdStart = null, stepT, T, ox, oy;
+const PING_CD = 1.1, REACH = 11;
+function layout() { if (!N) return; T = Math.floor(Math.min(W / N, (H - 70) / N)); ox = Math.floor((W - T * N) / 2); oy = Math.floor((H - T * N) / 2 + 20); }
+addEventListener("resize", resize);
+
+function genMaze(n) {
+  N = 2 * n + 1;
+  wall = Array.from({ length: N }, () => Array(N).fill(1));
+  const stack = [[1, 1]]; wall[1][1] = 0;
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const opts = [[2, 0], [-2, 0], [0, 2], [0, -2]].filter(([dx, dy]) => { const nx = x + dx, ny = y + dy; return nx > 0 && ny > 0 && nx < N - 1 && ny < N - 1 && wall[ny][nx]; });
+    if (!opts.length) { stack.pop(); continue; }
+    const [dx, dy] = opts[Math.floor(Math.random() * opts.length)];
+    wall[y + dy / 2][x + dx / 2] = 0; wall[y + dy][x + dx] = 0; stack.push([x + dx, y + dy]);
+  }
+  for (let i = 0; i < n * 1.5; i++) {
+    const x = 1 + Math.floor(Math.random() * (N - 2)), y = 1 + Math.floor(Math.random() * (N - 2));
+    if (wall[y][x] && ((x % 2) !== (y % 2))) wall[y][x] = 0;
+  }
+}
+function bfs(sx, sy, tx, ty) {
+  const prev = new Map(), q = [[sx, sy]]; prev.set(sy * N + sx, -1);
+  for (let i = 0; i < q.length; i++) {
+    const [x, y] = q[i];
+    if (x === tx && y === ty) break;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (wall[ny][nx] || prev.has(ny * N + nx)) continue;
+      prev.set(ny * N + nx, y * N + x); q.push([nx, ny]);
+    }
+  }
+  if (!prev.has(ty * N + tx)) return null;
+  let c = ty * N + tx, p;
+  while ((p = prev.get(c)) !== -1 && prev.get(p) !== -1) c = p;
+  return [c % N, Math.floor(c / N)];
+}
+function newLevel() {
+  genMaze(Math.min(3 + level, 11));
+  layout();
+  lit = Array.from({ length: N }, () => Array(N).fill(0));
+  exitP = { x: N - 2, y: N - 2 };
+  pl = { x: 1, y: 1, px: 1, py: 1 };
+  rings = []; pingCd = 0; exitLit = 0; stepT = 0; msgT = 0;
+  mons = [];
+  const count = level >= 4 ? 2 : 1;
+  for (let i = 0; i < count; i++) {
+    let x, y;
+    do { x = 1 + Math.floor(Math.random() * (N - 2)); y = 1 + Math.floor(Math.random() * (N - 2)); } while (wall[y][x] || Math.abs(x - 1) + Math.abs(y - 1) < N * 0.7 || (x === exitP.x && y === exitP.y));
+    mons.push({ x, y, px: x, py: y, tx: null, ty: null, t: Math.random(), vis: 0 });
+  }
+  $("lvl").textContent = "Ebene " + level;
+  say(level === 1 ? "Leertaste / Tippen = Ping" : "Ebene " + level + (count > 1 ? " – zwei Lauscher!" : ""));
+}
+function say(s) { $("msg").textContent = s; msgT = 3.5; }
+
+function los(x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy), steps = Math.ceil(len * 4);
+  for (let i = 1; i < steps; i++) {
+    const x = Math.floor(x0 + dx * i / steps + 0.5), y = Math.floor(y0 + dy * i / steps + 0.5);
+    if (wall[y][x] && !(x === Math.round(x1) && y === Math.round(y1))) return false;
+  }
+  return true;
+}
+function ping() {
+  if (pingCd > 0 || state !== "play") return;
+  pingCd = PING_CD; snd("playTone", 880, 0.25, "sine", 0.12);
+  const ring = { x: pl.x, y: pl.y, r: 0, hits: [], mons: [], ex: null };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const d = Math.hypot(x - pl.x, y - pl.y);
+    if (d > REACH || d < 0.5) continue;
+    if (wall[y][x] && los(pl.x, pl.y, x, y)) ring.hits.push([x, y, d]);
+  }
+  const ed = Math.hypot(exitP.x - pl.x, exitP.y - pl.y);
+  if (ed <= REACH && los(pl.x, pl.y, exitP.x, exitP.y)) ring.ex = ed;
+  for (const m of mons) {
+    const d = Math.hypot(m.x - pl.x, m.y - pl.y);
+    if (d <= REACH && los(pl.x, pl.y, m.x, m.y)) ring.mons.push([m, d]);
+    m.tx = pl.x; m.ty = pl.y;
+  }
+  rings.push(ring);
+}
+function tryMove(dx, dy) {
+  const nx = pl.x + dx, ny = pl.y + dy;
+  if (wall[ny][nx]) { lit[ny][nx] = Math.max(lit[ny][nx], 0.5); snd("playTone", 120, 0.06, "square", 0.05); return; }
+  pl.x = nx; pl.y = ny;
+  if (nx === exitP.x && ny === exitP.y) { level++; if (level - 1 > best) { best = level - 1; try { ArcadeCore.saveScore("echodunkel", best); } catch (e) {} $("best").textContent = "Rekord: " + best; } snd("coin"); newLevel(); }
+}
+function dirNow() {
+  if (hold) return hold;
+  const k = keys;
+  if (k.ArrowLeft || k.a) return [-1, 0]; if (k.ArrowRight || k.d) return [1, 0];
+  if (k.ArrowUp || k.w) return [0, -1]; if (k.ArrowDown || k.s) return [0, 1];
+  return null;
+}
+function monStep(m) {
+  const dp = Math.abs(m.x - pl.x) + Math.abs(m.y - pl.y);
+  if (dp <= 3 && los(m.x, m.y, pl.x, pl.y)) { m.tx = pl.x; m.ty = pl.y; }
+  let next = null;
+  if (m.tx !== null && (m.tx !== m.x || m.ty !== m.y)) next = bfs(m.x, m.y, m.tx, m.ty);
+  else {
+    m.tx = null;
+    const o = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => !wall[m.y + dy][m.x + dx]);
+    const [dx, dy] = o[Math.floor(Math.random() * o.length)]; next = [m.x + dx, m.y + dy];
+  }
+  if (next) { m.x = next[0]; m.y = next[1]; }
+}
+let last = 0;
+function loop(t) {
+  const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t;
+  if (state === "play") update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+function update(dt) {
+  pingCd = Math.max(0, pingCd - dt);
+  if (msgT > 0 && (msgT -= dt) <= 0) $("msg").textContent = "";
+  stepT -= dt;
+  const d = dirNow();
+  if (d && stepT <= 0) { tryMove(d[0], d[1]); stepT = 0.13; }
+  pl.px += (pl.x - pl.px) * Math.min(1, dt * 18); pl.py += (pl.y - pl.py) * Math.min(1, dt * 18);
+  for (const r of rings) {
+    r.r += dt * 10;
+    for (const h of r.hits) if (!h.done && r.r >= h[2]) { h.done = true; lit[h[1]][h[0]] = 1; }
+    if (r.ex !== null && !r.exDone && r.r >= r.ex) { r.exDone = true; exitLit = 1; }
+    for (const mm of r.mons) if (!mm.done && r.r >= mm[1]) { mm.done = true; mm[0].vis = 1; }
+  }
+  rings = rings.filter(r => r.r < REACH + 1);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (lit[y][x] > 0) lit[y][x] = Math.max(0, lit[y][x] - dt * 0.45);
+  exitLit = Math.max(0, exitLit - dt * 0.3);
+  const spd = Math.max(0.26, 0.5 - level * 0.02);
+  for (const m of mons) {
+    m.t -= dt; m.vis = Math.max(0, m.vis - dt * 0.6);
+    if (m.t <= 0) { monStep(m); m.t = m.tx !== null ? spd : spd * 1.8; }
+    m.px += (m.x - m.px) * Math.min(1, dt * 10); m.py += (m.y - m.py) * Math.min(1, dt * 10);
+    if (m.x === pl.x && m.y === pl.y) die();
+  }
+}
+function die() {
+  state = "over"; snd("gameOver");
+  $("overtxt").textContent = "Der Lauscher hat dich gehört. Du hast " + (level - 1) + " Ebene" + (level - 1 === 1 ? "" : "n") + " geschafft.";
+  $("over").classList.remove("hide");
+}
+function draw() {
+  ctx.fillStyle = "#05070d"; ctx.fillRect(0, 0, W, H);
+  if (!N || state === "menu") return;
+  ctx.fillStyle = "#0b1522"; ctx.fillRect(ox - 2, oy - 2, T * N + 4, T * N + 4);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    if (!wall[y][x]) continue;
+    const near = Math.hypot(x - pl.px, y - pl.py) < 1.6 ? 0.22 : 0;
+    const a = Math.max(lit[y][x], near);
+    if (a <= 0.01) continue;
+    ctx.fillStyle = `rgba(80,225,255,${a})`; ctx.fillRect(ox + x * T, oy + y * T, T, T);
+  }
+  for (const r of rings) {
+    ctx.strokeStyle = `rgba(120,240,255,${Math.max(0, 0.55 - r.r / REACH * 0.5)})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ox + (r.x + .5) * T, oy + (r.y + .5) * T, r.r * T, 0, 7); ctx.stroke();
+  }
+  if (exitLit > 0) { ctx.fillStyle = `rgba(90,255,120,${exitLit})`; ctx.fillRect(ox + exitP.x * T + 3, oy + exitP.y * T + 3, T - 6, T - 6); }
+  ctx.font = Math.floor(T * 0.9) + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const m of mons) {
+    const near = Math.hypot(m.x - pl.x, m.y - pl.y) < 2.3;
+    const a = Math.max(m.vis, near ? 0.9 : 0);
+    if (a <= 0.02) continue;
+    ctx.globalAlpha = Math.min(1, a); ctx.fillText(near ? "👹" : "👁️", ox + (m.px + .5) * T, oy + (m.py + .5) * T + 1); ctx.globalAlpha = 1;
+  }
+  const gx = ox + (pl.px + .5) * T, gy = oy + (pl.py + .5) * T;
+  const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, T * 1.6); gr.addColorStop(0, "rgba(150,240,255,.28)"); gr.addColorStop(1, "rgba(150,240,255,0)");
+  ctx.fillStyle = gr; ctx.fillRect(gx - T * 2, gy - T * 2, T * 4, T * 4);
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(gx, gy, T * 0.28, 0, 7); ctx.fill();
+  const bw = Math.min(180, W * 0.4), bx = (W - bw) / 2, by = H - 22;
+  ctx.fillStyle = "#123"; ctx.fillRect(bx, by, bw, 6); ctx.fillStyle = pingCd > 0 ? "#2a7" : "#6ff"; ctx.fillRect(bx, by, bw * (1 - pingCd / PING_CD), 6);
+}
+const keys = {};
+addEventListener("keydown", e => {
+  if (e.key === " ") { e.preventDefault(); ping(); return; }
+  keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = true;
+  if (e.key.startsWith("Arrow")) e.preventDefault();
+});
+addEventListener("keyup", e => keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false);
+let downAt = 0, moved = false;
+cv.addEventListener("pointerdown", e => { holdStart = [e.clientX, e.clientY]; downAt = performance.now(); moved = false; hold = null; });
+cv.addEventListener("pointermove", e => {
+  if (!holdStart) return;
+  const dx = e.clientX - holdStart[0], dy = e.clientY - holdStart[1];
+  if (Math.hypot(dx, dy) > 24) { moved = true; hold = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)]; }
+});
+function release() { if (holdStart && !moved && performance.now() - downAt < 300) ping(); holdStart = null; hold = null; }
+cv.addEventListener("pointerup", release); cv.addEventListener("pointercancel", release);
+function start() { level = 1; newLevel(); state = "play"; $("menu").classList.add("hide"); $("over").classList.add("hide"); }
+$("go").onclick = start; $("again").onclick = start;
+resize(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

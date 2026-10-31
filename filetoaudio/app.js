@@ -583,7 +583,8 @@
     sendGain = c.createGain();
     applyVol();
     srcNode.connect(sendGain);
-    scopeStart(sendGain, true, enc.mode);
+    sendGain.connect(c.destination);
+    scopeStart(sendGain, false, enc.mode);
 
     const t0 = c.currentTime + 0.05;
     srcNode.start(t0);
@@ -671,8 +672,11 @@
   const WORKLET_CODE = `
     class R extends AudioWorkletProcessor {
       process(inputs) {
-        const c = inputs[0][0];
-        if (c) this.port.postMessage(c.slice(0));
+        const inp = inputs[0];
+        if (inp && inp.length > 0) {
+          const c = inp[0];
+          if (c && c.length > 0) this.port.postMessage(c.slice(0));
+        }
         return true;
       }
     }
@@ -748,17 +752,25 @@
       }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: 1,
-          ...(inSelect.value ? { deviceId: { exact: inSelect.value } } : {}),
+          echoCancellation: { ideal: false },
+          noiseSuppression: { ideal: false },
+          autoGainControl: { ideal: false },
+          channelCount: { ideal: 1 },
+          ...(inSelect.value ? { deviceId: { ideal: inSelect.value } } : {}),
         },
       });
 
       refreshDevices();
       const c = getCtx();
+      await c.resume(); // Ensure AudioContext is active
+
       const micSrc = c.createMediaStreamSource(stream);
+      // High-pass filter cuts off DC offset, 50/60 Hz mains hum and microphone table thumps
+      const hpFilter = c.createBiquadFilter();
+      hpFilter.type = 'highpass';
+      hpFilter.frequency.value = 150;
+      micSrc.connect(hpFilter);
+
       let workletNode = null;
       let scriptNode = null;
       let silentSink = null;
@@ -777,7 +789,7 @@
         await loadWorklet(c);
         workletNode = new AudioWorkletNode(c, 'rec');
         workletNode.port.onmessage = (e) => handleAudioData(e.data);
-        micSrc.connect(workletNode);
+        hpFilter.connect(workletNode);
         silentSink = c.createGain();
         silentSink.gain.value = 0;
         workletNode.connect(silentSink);
@@ -785,12 +797,12 @@
       } catch (workletErr) {
         scriptNode = c.createScriptProcessor(2048, 1, 1);
         scriptNode.onaudioprocess = (e) => handleAudioData(e.inputBuffer.getChannelData(0));
-        micSrc.connect(scriptNode);
+        hpFilter.connect(scriptNode);
         scriptNode.connect(c.destination);
       }
 
       const curMode = Modem.resolveMode(modeSelect.value, 1024, getSelectedInstances());
-      scopeStart(micSrc, false, curMode);
+      scopeStart(hpFilter, false, curMode);
 
       const t0 = performance.now();
       const timer = setInterval(() => {
@@ -819,7 +831,7 @@
         }
       }, 150);
 
-      rec = { stream, micSrc, workletNode, scriptNode, silentSink, timer, rx };
+      rec = { stream, micSrc, hpFilter, workletNode, scriptNode, silentSink, timer, rx };
       $('rec').disabled = true;
       $('recStop').disabled = false;
     } catch (err) {
@@ -843,6 +855,9 @@
     }
     if (r.silentSink) {
       try { r.silentSink.disconnect(); } catch (e) { /* ignore */ }
+    }
+    if (r.hpFilter) {
+      try { r.hpFilter.disconnect(); } catch (e) { /* ignore */ }
     }
     try { r.micSrc.disconnect(); } catch (e) { /* ignore */ }
     r.stream.getTracks().forEach((t) => t.stop());

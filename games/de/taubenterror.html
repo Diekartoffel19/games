@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Tauben-Terror — Die Stadt gehört dir</title>
+<meta name="description" content="Flieg als Taube über die Fußgängerzone und bombardiere Passanten: Anzugträger, Eisverkäufer, Touristen. Aber Vorsicht vor der Polizei!">
+<meta name="theme-color" content="#5fb7ff">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../../src/arcade-core.js"></script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#5fb7ff; color:#fff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas { position:fixed; inset:0; width:100%; height:100%; touch-action:none; }
+#hud { position:fixed; top:8px; left:125px; right:14px; display:flex; justify-content:space-between; align-items:center; pointer-events:none; text-shadow:0 2px 0 #0007; font-weight:900; font-size:clamp(16px,4.5vw,26px); }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(37,64,92,.75); border:1px solid rgba(255,255,255,.3); padding:6px 14px; border-radius:20px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); display:inline-flex; align-items:center; gap:4px; min-height:36px; transition:background .15s, transform .15s; touch-action:manipulation; }
+.back:hover, .back:active { background:rgba(42,98,194,.9); transform:translateY(-1px); color:#fff; }
+#msg { position:fixed; left:0; right:0; top:56px; text-align:center; font-weight:900; font-size:clamp(16px,4.5vw,26px); color:#fff6a0; pointer-events:none; text-shadow:0 2px 0 #000a; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000a; z-index:5; }
+.overlay.hide { display:none; }
+.card { background:#fffbe8; color:#25405c; border-radius:18px; padding:20px 26px; max-width:430px; text-align:center; box-shadow:0 8px 0 #0005; }
+.card h1 { margin:0 0 6px; font-size:30px; }
+.card p { margin:8px 0; line-height:1.4; }
+button { font:inherit; font-weight:800; font-size:20px; color:#fff; background:linear-gradient(#5b9cf5,#2a62c2); border:0; border-radius:12px; padding:12px 28px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #173a7a; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #173a7a; }
+</style>
+</head>
+<body>
+<a href="../../index.html" class="back">← Arcade</a>
+<canvas id="c"></canvas>
+<div id="hud"><div id="score">💩 0</div><div id="time">60</div><div id="best">Rekord: 0</div></div>
+<div id="msg"></div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🕊️ Tauben-Terror</h1>
+  <p>Du bist eine <b>gemeine Stadttaube</b> mit zu viel Verdauung. 60 Sekunden, ein Ziel: Chaos.</p>
+  <p><b>Bewegen:</b> Maus / Finger / ←→ · <b>Kacken:</b> Klick / Tippen / Leertaste<br>Nachladen dauert kurz — ziele auf die Laufrichtung!</p>
+  <p>🧑‍💼 Anzug +10 · 🍦 Eis-Tourist +25 · 👰 Braut +50 · 🤡 Clown +30<br>👮 Polizist: <b>−40 und Sirene!</b></p>
+  <button id="go">Los, kacken!</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle">Feierabend!</h1>
+  <p id="otext"></p>
+  <button id="again">Nochmal</button>
+</div></div>
+<script>
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+let W, H, dpr, groundY;
+function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); groundY = H * 0.88; }
+addEventListener("resize", resize); resize();
+const $ = id => document.getElementById(id);
+const PEOPLE = [
+  { e: "🧑‍💼", pts: 10, w: 5, line: ["Mein Anzug!", "Iiih!"] },
+  { e: "🍦", pts: 25, w: 3, line: ["Mein EIS!", "Eis weg!"], eis: true },
+  { e: "👰", pts: 50, w: 1, line: ["MEIN HOCHZEITSKLEID!", "Neeein!"] },
+  { e: "🤡", pts: 30, w: 1.5, line: ["Honk honk... ey!", "Clown-Schock!"] },
+  { e: "🧓", pts: 15, w: 3, line: ["Früher gab's das nicht!", "Frechheit!"] },
+  { e: "👮", pts: -40, w: 1.6, line: ["Halt! Polizei!"], cop: true }
+];
+let best = Number(ArcadeCore.getScore("taubenterror")) || 0;
+let state = "menu", bird, bombs, folks, splats, parts, texts, score, tleft, reload, spawnT, msgT, siren, wind, windT, keys = {}, tx = null, cloud = [];
+
+function reset() {
+  bird = { x: W / 2, y: H * 0.18, flap: 0, dir: 1 };
+  bombs = []; folks = []; splats = []; parts = []; texts = [];
+  score = 0; tleft = 60; reload = 0; spawnT = 0; siren = 0; wind = 0; windT = 3;
+  cloud = Array.from({ length: 6 }, () => ({ x: Math.random() * W, y: 30 + Math.random() * H * 0.3, s: 40 + Math.random() * 60 }));
+  tx = null; hud();
+}
+function hud() { $("score").textContent = "💩 " + score; $("time").textContent = Math.ceil(tleft); $("best").textContent = "Rekord: " + best; }
+function say(m) { $("msg").textContent = m; clearTimeout(msgT); msgT = setTimeout(() => $("msg").textContent = "", 1300); }
+function pick() { let r = Math.random() * PEOPLE.reduce((a, p) => a + p.w, 0); for (const p of PEOPLE) if ((r -= p.w) <= 0) return p; return PEOPLE[0]; }
+function spawnFolk() {
+  const p = pick(), dir = Math.random() < 0.5 ? 1 : -1, sp = (50 + Math.random() * 90) * (p.cop ? 1.3 : 1);
+  folks.push({ ...p, x: dir > 0 ? -50 : W + 50, vx: dir * sp, size: Math.max(44, H * 0.075), hit: 0, bob: Math.random() * 6 });
+}
+function drop() {
+  if (state !== "play" || reload > 0) return;
+  reload = 0.55;
+  bombs.push({ x: bird.x, y: bird.y + 18, vy: 60, vx: wind * 0.4 });
+  ArcadeCore.sounds.playTone && ArcadeCore.sounds.playTone(700, 0.12, "triangle", 0.1);
+}
+function end() {
+  state = "over";
+  if (score > best) { best = score; try { ArcadeCore.saveScore("taubenterror", best); } catch (e) {} }
+  hud();
+  $("otitle").textContent = score > 0 && score >= best ? "Neuer Rekord! 🏆" : "Feierabend!";
+  $("otext").textContent = score + " Punkte. Die Stadt ist ziemlich eklig geworden. Rekord: " + best;
+  $("over").classList.remove("hide");
+}
+let last = 0;
+function loop(ts) {
+  const dt = Math.min((ts - last) / 1000 || 0, 0.05); last = ts;
+  if (state !== "menu") update(dt);
+  draw(); requestAnimationFrame(loop);
+}
+function update(dt) {
+  if (state === "play") {
+    tleft -= dt; if (tleft <= 0) { tleft = 0; end(); }
+    hud();
+    const sp = 420;
+    let mx = 0;
+    if (keys.ArrowLeft || keys.a) mx -= 1;
+    if (keys.ArrowRight || keys.d) mx += 1;
+    if (mx) { bird.x += mx * sp * dt; bird.dir = mx; tx = null; }
+    else if (tx !== null) { const d = tx - bird.x; if (Math.abs(d) > 6) { const st = Math.sign(d) * Math.min(Math.abs(d), sp * dt * 1.2); bird.x += st; bird.dir = Math.sign(d); } }
+    bird.x = Math.max(30, Math.min(W - 30, bird.x + wind * dt * 0.3));
+    bird.flap += dt * 14;
+    bird.y = H * 0.18 + Math.sin(bird.flap * 0.4) * 8;
+    reload -= dt;
+    spawnT -= dt; if (spawnT <= 0) { spawnFolk(); spawnT = 0.5 + Math.random() * 0.9; }
+    windT -= dt; if (windT <= 0) { wind = (Math.random() - 0.5) * 160; windT = 3 + Math.random() * 3; if (Math.abs(wind) > 60) say(wind > 0 ? "Wind → " : "← Wind"); }
+  }
+  for (const b of bombs) { b.vy += 900 * dt; b.y += b.vy * dt; b.x += b.vx * dt; }
+  const nb = [];
+  for (const b of bombs) {
+    let hitF = null;
+    for (const f of folks) if (!f.hit && Math.abs(b.x - f.x) < f.size * 0.45 && b.y > groundY - f.size * 1.05 && b.y < groundY + 10) { hitF = f; break; }
+    if (hitF) {
+      hitF.hit = 1.5; hitF.vx *= 0.1;
+      score += hitF.pts; if (score < 0) score = 0;
+      texts.push({ x: hitF.x, y: groundY - hitF.size * 1.2, t: 1, s: (hitF.pts > 0 ? "+" : "") + hitF.pts, bad: hitF.pts < 0 });
+      say(hitF.line[Math.floor(Math.random() * hitF.line.length)]);
+      for (let i = 0; i < 10; i++) parts.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 300, life: 0.6 });
+      if (hitF.cop) { siren = 2.5; ArcadeCore.sounds.gameOver && ArcadeCore.sounds.gameOver(); }
+      else ArcadeCore.sounds.coin && ArcadeCore.sounds.coin();
+    } else if (b.y >= groundY) {
+      splats.push({ x: b.x, t: 4 });
+    } else nb.push(b);
+  }
+  bombs = nb;
+  for (const f of folks) { f.x += f.vx * dt; f.bob += dt * 9; if (f.hit > 0) { f.hit -= dt; if (f.hit <= 0) f.vx = Math.sign(f.vx || 1) * 140; } }
+  folks = folks.filter(f => f.x > -100 && f.x < W + 100);
+  splats.forEach(s => s.t -= dt); splats = splats.filter(s => s.t > 0);
+  for (const p of parts) { p.vy += 900 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+  parts = parts.filter(p => p.life > 0);
+  texts.forEach(t => { t.t -= dt; t.y -= 40 * dt; }); texts = texts.filter(t => t.t > 0);
+  cloud.forEach(c => { c.x += (10 + c.s * 0.2) * dt; if (c.x > W + 100) c.x = -100; });
+  if (siren > 0) siren -= dt;
+}
+function draw() {
+  const g = ctx.createLinearGradient(0, 0, 0, groundY); g.addColorStop(0, "#4aa8ff"); g.addColorStop(1, "#bfe6ff");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#fff"; ctx.globalAlpha = 0.85;
+  for (const c of cloud) { ctx.beginPath(); ctx.ellipse(c.x, c.y, c.s, c.s * 0.4, 0, 0, 6.3); ctx.ellipse(c.x + c.s * 0.5, c.y + 6, c.s * 0.7, c.s * 0.3, 0, 0, 6.3); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  // skyline
+  for (let i = 0; i < 14; i++) {
+    const bw = W / 10, bx = i * bw * 0.8 - 20, bh = 70 + ((i * 53) % 90);
+    ctx.fillStyle = i % 2 ? "#8aa4c4" : "#7a94b6"; ctx.fillRect(bx, groundY - bh - 30, bw * 0.75, bh + 30);
+  }
+  ctx.fillStyle = "#5a5f6a"; ctx.fillRect(0, groundY, W, H - groundY);
+  ctx.fillStyle = "#cfd3da"; ctx.fillRect(0, groundY - 4, W, 6);
+  ctx.fillStyle = "#f4f4f4";
+  for (const s of splats) { ctx.globalAlpha = Math.min(1, s.t); ctx.beginPath(); ctx.ellipse(s.x, groundY + 6, 14, 5, 0, 0, 6.3); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  for (const f of folks) {
+    ctx.save(); ctx.translate(f.x, groundY + 4 - Math.abs(Math.sin(f.bob)) * 6);
+    if (f.hit > 0) { ctx.rotate(Math.sin(f.hit * 30) * 0.2); }
+    ctx.font = f.size + "px serif"; ctx.scale(f.vx < 0 ? 1 : -1, 1);
+    ctx.fillText(f.e, 0, 0);
+    ctx.restore();
+    if (f.hit > 0) { ctx.font = f.size * 0.5 + "px serif"; ctx.fillText("💩", f.x, groundY - f.size * 0.8); }
+  }
+  ctx.font = "22px serif";
+  for (const b of bombs) ctx.fillText("💩", b.x, b.y);
+  for (const p of parts) { ctx.fillStyle = "#fff"; ctx.globalAlpha = Math.max(0, p.life); ctx.fillRect(p.x, p.y, 5, 5); }
+  ctx.globalAlpha = 1;
+  if (bird) {
+    ctx.save(); ctx.translate(bird.x, bird.y); ctx.scale(bird.dir > 0 ? -1 : 1, 1); ctx.rotate(Math.sin(bird.flap) * 0.15);
+    ctx.font = "56px serif"; ctx.textBaseline = "middle"; ctx.fillText("🐦", 0, 0);
+    ctx.restore();
+    if (reload > 0 && state === "play") { ctx.fillStyle = "#0006"; ctx.fillRect(bird.x - 20, bird.y + 34, 40, 5); ctx.fillStyle = "#ffe27a"; ctx.fillRect(bird.x - 20, bird.y + 34, 40 * (1 - reload / 0.55), 5); }
+  }
+  ctx.font = "900 26px Trebuchet MS"; ctx.textBaseline = "alphabetic";
+  for (const t of texts) { ctx.globalAlpha = Math.min(1, t.t * 2); ctx.fillStyle = t.bad ? "#f44" : "#fff6a0"; ctx.fillText(t.s, t.x, t.y); }
+  ctx.globalAlpha = 1;
+  if (siren > 0) {
+    const on = Math.floor(siren * 6) % 2;
+    ctx.fillStyle = on ? "rgba(255,0,0,.28)" : "rgba(0,80,255,.28)"; ctx.fillRect(0, 0, W, H);
+  }
+}
+addEventListener("keydown", e => {
+  if (e.key === " ") { e.preventDefault(); drop(); }
+  keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = true;
+});
+addEventListener("keyup", e => keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false);
+cv.addEventListener("pointermove", e => { tx = e.clientX; });
+cv.addEventListener("pointerdown", e => { tx = e.clientX; drop(); });
+function start() { reset(); state = "play"; $("menu").classList.add("hide"); $("over").classList.add("hide"); $("msg").textContent = ""; }
+$("go").onclick = start; $("again").onclick = start;
+reset(); state = "menu"; requestAnimationFrame(loop);
+</script>
+</body>
+</html>

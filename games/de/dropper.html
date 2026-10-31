@@ -1,0 +1,2100 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Cursed Dropper 3D — Falsche Physik & Uncanny Abyss</title>
+<meta name="description" content="Der unheimlichste 3D-Dropper im Browser: Stürze durch surreale Schächte voller Backrooms, schwebender Augen, Windows-Fehler und verkehrter Schwerkraft!">
+<meta name="keywords" content="dropper game, cursed dropper, minecraft dropper browser, 3d fall game, liminal backrooms game">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Cursed Dropper 3D — Falsche Physik & Uncanny Abyss">
+<meta property="og:description" content="Falle durch endlose surreale Tunnels, weiche bizarren Hindernissen aus und lande punktgenau im Wasser – fühlt sich herrlich falsch an!">
+<meta property="og:locale" content="de_DE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cursed Dropper 3D — Falsche Physik">
+<meta name="twitter:description" content="Der surreale 3D-Dropper im Browser. Überlebe den Sturz ins Unbekannte!">
+
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+
+<link rel="stylesheet" href="../../style.css">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script src="../../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 0; overflow: hidden;
+    background: #030712; color: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none; text-align: left;
+  }
+
+  #game-container {
+    position: fixed; inset: 0; width: 100vw; height: 100vh;
+    overflow: hidden; background: #000;
+  }
+  #game-container canvas {
+    display: block; width: 100%; height: 100%; margin: 0; border-radius: 0;
+  }
+
+  /* Retro Glitch CRT Overlay */
+  .crt-overlay {
+    position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+    background-size: 100% 3px, 6px 100%;
+    opacity: 0.6;
+    transition: opacity 0.3s;
+  }
+  .vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 11;
+    box-shadow: inset 0 0 100px rgba(0,0,0,0.85);
+  }
+
+  /* Back Button */
+  .back {
+    position: fixed; top: 14px; left: 14px; z-index: 50;
+    color: #e0e7ff; text-decoration: none; font-weight: 700; font-size: 0.88rem;
+    background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(99, 102, 241, 0.4);
+    padding: 8px 16px; border-radius: 999px; backdrop-filter: blur(10px);
+    display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    transition: all 0.2s;
+  }
+  .back:hover { background: #4338ca; transform: scale(1.04); color: #fff; }
+
+  /* Top HUD */
+  #hud {
+    position: fixed; top: 14px; right: 14px; z-index: 50;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end;
+  }
+  .hud-chip {
+    background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 12px;
+    font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: flex; align-items: center; gap: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .hud-chip b { color: #fff; font-family: ui-monospace, monospace; }
+  .hud-chip.highlight b { color: #38bdf8; }
+  .hud-chip.danger b { color: #f43f5e; }
+  .hud-chip.warning b { color: #fbbf24; }
+
+  /* Speedometer Needle & Altitude Bar */
+  #altimeter-wrap {
+    position: fixed; left: 18px; top: 50%; transform: translateY(-50%);
+    z-index: 45; display: flex; flex-direction: column; align-items: center;
+    background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px; padding: 12px 6px; width: 34px; height: 260px;
+    backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .alt-track {
+    position: relative; flex: 1; width: 6px; background: rgba(255,255,255,0.15);
+    border-radius: 3px; overflow: visible; margin: 8px 0;
+  }
+  #alt-thumb {
+    position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%);
+    width: 16px; height: 16px; background: #38bdf8; border: 2px solid #fff;
+    border-radius: 50%; box-shadow: 0 0 10px #38bdf8; transition: top 0.05s linear;
+  }
+  .alt-icon { font-size: 0.85rem; }
+
+  /* Cursed Anomaly Ticker */
+  #cursed-ticker {
+    position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%);
+    z-index: 45; pointer-events: none; text-align: center;
+    background: rgba(0,0,0,0.65); border: 1px solid rgba(239, 68, 68, 0.4);
+    padding: 5px 16px; border-radius: 999px; font-size: 0.78rem; font-weight: 800;
+    letter-spacing: 0.5px; color: #fca5a5; backdrop-filter: blur(6px);
+    animation: pulseTicker 2s infinite ease-in-out;
+  }
+  @keyframes pulseTicker {
+    0%, 100% { opacity: 0.8; transform: translateX(-50%) scale(1); }
+    50% { opacity: 1; transform: translateX(-50%) scale(1.03); color: #f87171; }
+  }
+
+  /* Crosshair & FPV Reticle */
+  #crosshair {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 44px; height: 44px; pointer-events: none; z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+    border: 1.5px dashed rgba(255, 255, 255, 0.4); border-radius: 50%;
+    transition: all 0.15s ease-out;
+  }
+  #crosshair.locked {
+    border-color: #10b981; border-style: solid; box-shadow: 0 0 16px rgba(16, 185, 129, 0.7);
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: rgba(255, 255, 255, 0.6);
+  }
+  #crosshair::before { width: 16px; height: 1.5px; }
+  #crosshair::after { width: 1.5px; height: 16px; }
+  .cross-dot {
+    width: 6px; height: 6px; background: #38bdf8; border-radius: 50%;
+    box-shadow: 0 0 8px #38bdf8; transition: all 0.15s;
+  }
+  #crosshair.locked .cross-dot { background: #10b981; box-shadow: 0 0 12px #10b981; }
+  #crosshair-lock-label {
+    position: absolute; top: 48px; font-size: 0.65rem; font-weight: 800;
+    letter-spacing: 1px; color: #38bdf8; white-space: nowrap; text-shadow: 0 2px 6px rgba(0,0,0,0.85);
+  }
+  #crosshair.locked #crosshair-lock-label { color: #10b981; }
+
+  /* Stamina / Flatter-Energie */
+  #stamina-bar {
+    position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%);
+    width: 140px; height: 7px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 6px; overflow: hidden; z-index: 45; display: none;
+  }
+  #stamina-fill {
+    width: 100%; height: 100%; background: linear-gradient(90deg, #10b981, #34d399);
+    transition: width 0.08s linear;
+  }
+
+  /* Touch Controls (Mobile) */
+  #touch-controls {
+    position: fixed; inset: 0; pointer-events: none; z-index: 55;
+    display: none;
+  }
+  @media (max-width: 900px), (pointer: coarse) {
+    #touch-controls { display: block; }
+    #altimeter-wrap { left: 8px; width: 28px; }
+    .hud-chip { padding: 4px 8px; font-size: 0.72rem; }
+  }
+  #joystick-zone {
+    position: absolute; bottom: 20px; left: 20px; width: 140px; height: 140px;
+    background: rgba(30, 41, 59, 0.45); border: 2px dashed rgba(255, 255, 255, 0.25);
+    border-radius: 50%; pointer-events: auto; touch-action: none;
+  }
+  #joystick-knob {
+    position: absolute; top: 50%; left: 50%; width: 54px; height: 54px;
+    margin: -27px 0 0 -27px; background: rgba(99, 102, 241, 0.8);
+    border: 2px solid #fff; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    pointer-events: none; transition: transform 0.05s linear;
+  }
+  #touch-actions {
+    position: absolute; bottom: 24px; right: 20px;
+    display: flex; flex-direction: column; gap: 12px; pointer-events: auto;
+  }
+  .action-btn {
+    width: 62px; height: 62px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3);
+    background: rgba(30, 41, 59, 0.85); color: #fff; font-size: 1.3rem; font-weight: bold;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 6px 16px rgba(0,0,0,0.6); touch-action: manipulation;
+    transition: transform 0.1s, background 0.1s;
+  }
+  .action-btn span { font-size: 0.58rem; text-transform: uppercase; margin-top: 1px; color: #cbd5e1; }
+  .action-btn:active { transform: scale(0.9); }
+  .action-btn.dive { background: rgba(225, 29, 72, 0.85); border-color: #f43f5e; }
+  .action-btn.float { background: rgba(16, 185, 129, 0.85); border-color: #34d399; }
+  .action-btn.cam { width: 48px; height: 48px; font-size: 1.1rem; align-self: flex-end; background: rgba(59, 130, 246, 0.8); }
+
+  /* Modals / Overlays */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 100; display: flex;
+    align-items: center; justify-content: center;
+    background: rgba(3, 7, 18, 0.75); backdrop-filter: blur(12px);
+    padding: 16px; opacity: 1; transition: opacity 0.25s;
+  }
+  .modal-overlay.hidden { display: none; opacity: 0; }
+  .card-panel {
+    background: linear-gradient(165deg, #1e1b4b, #0f172a);
+    border: 2px solid #6366f1; border-radius: 24px;
+    padding: clamp(20px, 4vw, 36px); max-width: 640px; width: 100%;
+    max-height: 92vh; overflow-y: auto; text-align: center;
+    box-shadow: 0 25px 70px rgba(0,0,0,0.8), 0 0 40px rgba(99, 102, 241, 0.2);
+    position: relative;
+  }
+  .card-panel h1 {
+    font-size: clamp(1.8rem, 5vw, 2.6rem); margin: 0 0 6px;
+    background: linear-gradient(135deg, #38bdf8, #818cf8, #f43f5e);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .card-panel p { color: #cbd5e1; font-size: 0.95rem; line-height: 1.5; margin: 8px 0 16px; }
+
+  /* Level Selection Grid */
+  .level-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px; margin: 18px 0;
+  }
+  .level-btn {
+    background: rgba(30, 41, 59, 0.85); border: 2px solid rgba(99, 102, 241, 0.4);
+    border-radius: 14px; padding: 12px 8px; cursor: pointer; color: #fff;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: all 0.15s; position: relative; overflow: hidden;
+  }
+  .level-btn:hover:not(:disabled) {
+    transform: translateY(-3px); border-color: #38bdf8; background: #312e81;
+    box-shadow: 0 6px 18px rgba(56, 189, 248, 0.3);
+  }
+  .level-btn:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(1); }
+  .level-btn .lvl-num { font-size: 1.25rem; font-weight: 900; }
+  .level-btn .lvl-name { font-size: 0.76rem; font-weight: 700; color: #cbd5e1; }
+  .level-btn .lvl-medal { font-size: 1.1rem; }
+  .level-btn .lvl-best { font-size: 0.68rem; color: #facc15; font-family: ui-monospace, monospace; }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+  .main-btn {
+    background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff;
+    border: none; border-radius: 14px; padding: 12px 28px; font-size: 1.05rem;
+    font-weight: 800; cursor: pointer; transition: all 0.15s;
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+  }
+  .main-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(79, 70, 229, 0.6); }
+  .main-btn.green {
+    background: linear-gradient(135deg, #059669, #10b981);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+  }
+  .main-btn.green:hover { box-shadow: 0 8px 25px rgba(16, 185, 129, 0.6); }
+  .main-btn.alt {
+    background: rgba(51, 65, 85, 0.8); box-shadow: none; border: 1px solid rgba(255,255,255,0.15);
+  }
+  .main-btn.alt:hover { background: #475569; }
+
+  /* Instructions box */
+  .instructions {
+    background: rgba(0,0,0,0.3); border-radius: 12px; padding: 10px 14px;
+    font-size: 0.8rem; color: #94a3b8; text-align: left; line-height: 1.6;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0;
+  }
+  @media (max-width: 500px) { .instructions { grid-template-columns: 1fr; } }
+  .instructions b { color: #f1f5f9; }
+
+  /* Death Screen Toast */
+  #death-screen {
+    position: fixed; inset: 0; z-index: 90; display: none;
+    align-items: center; justify-content: center; flex-direction: column;
+    background: rgba(185, 28, 28, 0.35); backdrop-filter: blur(4px);
+    text-align: center; pointer-events: auto;
+  }
+  #death-screen h2 {
+    font-size: clamp(2rem, 6vw, 3.2rem); margin: 0; color: #fecaca;
+    text-shadow: 0 0 25px #ef4444; font-weight: 900;
+  }
+  #death-reason {
+    font-size: 1.1rem; color: #fee2e2; margin: 10px 20px 20px;
+    max-width: 480px; font-style: italic;
+  }
+
+  /* Victory modal stats */
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0;
+  }
+  .stat-box {
+    background: rgba(0,0,0,0.35); border-radius: 12px; padding: 10px 6px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .stat-box small { display: block; font-size: 0.68rem; color: #94a3b8; text-transform: uppercase; }
+  .stat-box span { font-size: 1.25rem; font-weight: 800; font-family: ui-monospace, monospace; color: #38bdf8; }
+
+  /* Glitch Text animation */
+  .glitch-anim {
+    display: inline-block; position: relative; animation: glitchSkew 3s infinite linear alternate-reverse;
+  }
+  @keyframes glitchSkew {
+    0% { transform: none; }
+    20% { transform: skewX(-2deg); }
+    40% { transform: skewX(1deg); }
+    60% { transform: skewX(-1deg); }
+    80% { transform: none; }
+    100% { transform: skewX(2deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Einheitlicher Zurück-Button -->
+<a href="../../index.html" class="back">← Arcade</a>
+
+<!-- CRT & Vignette FX -->
+<div class="crt-overlay" id="crtOverlay"></div>
+<div class="vignette"></div>
+
+<!-- 3D Canvas Container -->
+<div id="game-container"></div>
+
+<!-- Crosshair in FPV -->
+<div id="crosshair">
+  <div class="cross-dot"></div>
+  <div id="crosshair-lock-label">FPV DROPPING</div>
+</div>
+
+<!-- Left Altitude Indicator -->
+<div id="altimeter-wrap">
+  <span class="alt-icon">🚀</span>
+  <div class="alt-track">
+    <div id="alt-thumb"></div>
+  </div>
+  <span class="alt-icon">🎯</span>
+</div>
+
+<!-- Top HUD Stats -->
+<div id="hud">
+  <div class="hud-chip highlight"><span id="hudLvlName">Lvl 1: Backrooms</span></div>
+  <div class="hud-chip">📏 <b id="hudAlt">300 m</b></div>
+  <div class="hud-chip warning">⚡ <b id="hudSpeed">0 km/h</b></div>
+  <div class="hud-chip danger">💀 <b id="hudDeaths">0</b></div>
+  <div class="hud-chip">⏱️ <b id="hudTime">0.0s</b></div>
+  <button class="hud-chip" id="camToggleBtn" style="cursor:pointer;" onclick="toggleCameraView()">👁️ <b id="camText">1st Person</b></button>
+</div>
+
+<!-- Stamina bar for floating -->
+<div id="stamina-bar"><div id="stamina-fill"></div></div>
+
+<!-- Cursed Anomaly Ticker -->
+<div id="cursed-ticker">⚠️ REALITÄTS-ANOMALIE: SCHWERKRAFT UNSTABIL</div>
+
+<!-- Mobile Touch Controls -->
+<div id="touch-controls">
+  <div id="joystick-zone">
+    <div id="joystick-knob"></div>
+  </div>
+  <div id="touch-actions">
+    <button class="action-btn cam" onclick="toggleCameraView()">👁️</button>
+    <button class="action-btn float" id="btnFloat">🕊️<span>Brems</span></button>
+    <button class="action-btn dive" id="btnDive">⚡<span>Sturz</span></button>
+  </div>
+</div>
+
+<!-- Death Screen Overlay -->
+<div id="death-screen">
+  <h2>💥 ZERSCHELLT!</h2>
+  <div id="death-reason">Du bist gegen ein schwebendes Sofa geprallt.</div>
+  <button class="main-btn" onclick="respawnPlayer()">↺ Nochmal versuchen (R)</button>
+</div>
+
+<!-- Victory / Finish Modal -->
+<div class="modal-overlay hidden" id="winModal">
+  <div class="card-panel">
+    <h1 id="winTitle">🎯 SICHER GELANDET!</h1>
+    <p id="winSub">Du hast das Wasser getroffen und der verqueren Physik getrotzt!</p>
+    <div style="font-size: 2.8rem; margin: 4px 0;" id="winMedal">🥇</div>
+    <div class="stat-grid">
+      <div class="stat-box"><small>Zeit</small><span id="winTime">8.4s</span></div>
+      <div class="stat-box"><small>Max. Speed</small><span id="winMaxSpeed">241 km/h</span></div>
+      <div class="stat-box"><small>Versuche</small><span id="winAttempts">3</span></div>
+    </div>
+    <div id="winRecordText" style="color: #facc15; font-weight: 800; font-size: 0.9rem; margin-bottom: 12px; display: none;">⭐ Neuer Streckenrekord! ⭐</div>
+    <div class="btn-row">
+      <button class="main-btn green" id="nextLevelBtn" onclick="goToNextLevel()">Nächstes Level ▶</button>
+      <button class="main-btn alt" onclick="restartCurrentLevel()">Wiederholen ↺</button>
+      <button class="main-btn alt" onclick="openMenu()">Level-Auswahl 📋</button>
+    </div>
+  </div>
+</div>
+
+<!-- Level Select / Main Menu Modal -->
+<div class="modal-overlay" id="mainMenu">
+  <div class="card-panel">
+    <h1><span class="glitch-anim">🌀 CURSED DROPPER 3D</span></h1>
+    <p>Stürze dich in surreale Abgründe, weiche bizarren Objekten aus und triff das Wasser am Grund. Aber Vorsicht: Die Physik fühlt sich hier absolut <b>falsch</b> an!</p>
+
+    <div class="level-grid" id="levelGrid"></div>
+
+    <div class="instructions">
+      <div><b>W A S D / Pfeile</b>: In der Luft lenken</div>
+      <div><b>Shift / Touch 'Sturz'</b>: Sturzflug (Sehr schnell!)</div>
+      <div><b>Space / Touch 'Brems'</b>: Flattern (Tempo drosseln)</div>
+      <div><b>V / Auge-Button</b>: 1st Person / 3rd Person</div>
+      <div><b>R</b>: Schneller Sofort-Respawn</div>
+      <div><b>Maus ziehen</b>: Freie Kamerasicht</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="main-btn" onclick="startSelectedLevel()">Level Starten ▶</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================================
+// AUDIO SYNTHESIZER (Cursed Web Audio API - Zero External Dependencies)
+// ============================================================================
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+let muted = false;
+if (window.ArcadeCore) {
+  muted = ArcadeCore.isMuted();
+}
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new AudioCtx();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+// Dynamic Wind Drone Generator
+let windGain = null;
+let windFilter = null;
+let droneOsc1 = null, droneOsc2 = null, droneGain = null;
+
+function setupAmbientSound() {
+  if (!audioCtx || windGain) return;
+  try {
+    // 1. Wind Noise
+    const bufferSize = audioCtx.sampleRate * 2;
+    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+    const whiteNoise = audioCtx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    whiteNoise.loop = true;
+
+    windFilter = audioCtx.createBiquadFilter();
+    windFilter.type = 'bandpass';
+    windFilter.frequency.value = 400;
+    windFilter.Q.value = 3.0;
+
+    windGain = audioCtx.createGain();
+    windGain.gain.value = 0.001;
+
+    whiteNoise.connect(windFilter);
+    windFilter.connect(windGain);
+    windGain.connect(audioCtx.destination);
+    whiteNoise.start();
+
+    // 2. Eerie Detuned Cursed Drone
+    droneOsc1 = audioCtx.createOscillator();
+    droneOsc2 = audioCtx.createOscillator();
+    droneGain = audioCtx.createGain();
+
+    droneOsc1.type = 'sawtooth';
+    droneOsc2.type = 'triangle';
+    droneOsc1.frequency.value = 55; // A1
+    droneOsc2.frequency.value = 57.5; // detuned
+
+    const droneFilter = audioCtx.createBiquadFilter();
+    droneFilter.type = 'lowpass';
+    droneFilter.frequency.value = 260;
+
+    droneGain.gain.value = 0.035;
+
+    droneOsc1.connect(droneFilter);
+    droneOsc2.connect(droneFilter);
+    droneFilter.connect(droneGain);
+    droneGain.connect(audioCtx.destination);
+
+    droneOsc1.start();
+    droneOsc2.start();
+  } catch (e) {
+    console.warn('Audio setup error:', e);
+  }
+}
+
+function updateWindSound(speedRatio) {
+  if (!audioCtx || !windGain || !windFilter) return;
+  if (muted) {
+    windGain.gain.value = 0;
+    if (droneGain) droneGain.gain.value = 0;
+    return;
+  }
+  const targetGain = Math.min(0.25, speedRatio * 0.22);
+  const targetFreq = 200 + speedRatio * 1800;
+  const now = audioCtx.currentTime;
+  windGain.gain.setTargetAtTime(targetGain, now, 0.08);
+  windFilter.frequency.setTargetAtTime(targetFreq, now, 0.08);
+  if (droneGain) {
+    droneGain.gain.setTargetAtTime(0.04, now, 0.1);
+  }
+}
+
+function playCursedSound(type) {
+  if (muted) return;
+  initAudio();
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+
+  try {
+    if (type === 'splat') {
+      // Crunchy bone snap + wet noodle slap
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(280, t);
+      osc.frequency.exponentialRampToValueAtTime(35, t + 0.35);
+      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.38);
+
+      // Noise burst slap
+      const bSize = Math.floor(audioCtx.sampleRate * 0.15);
+      const b = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate);
+      const d = b.getChannelData(0);
+      for (let i = 0; i < bSize; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bSize * 0.2));
+      const s = audioCtx.createBufferSource();
+      s.buffer = b;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.35, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+      s.connect(g);
+      g.connect(audioCtx.destination);
+      s.start(t);
+    } else if (type === 'splash') {
+      // Water dive / safe landing
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(120, t);
+      osc.frequency.exponentialRampToValueAtTime(45, t + 0.5);
+      gain.gain.setValueAtTime(0.5, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.52);
+
+      // Bubbly chord
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0.12, t + idx * 0.06);
+        g.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.06 + 0.4);
+        o.connect(g);
+        g.connect(audioCtx.destination);
+        o.start(t + idx * 0.06);
+        o.stop(t + idx * 0.06 + 0.42);
+      });
+    } else if (type === 'flap') {
+      // Awkward plastic bag flail / air-brake
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(140 + Math.random() * 60, t);
+      o.frequency.exponentialRampToValueAtTime(60, t + 0.12);
+      g.gain.setValueAtTime(0.18, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start(t);
+      o.stop(t + 0.13);
+    } else if (type === 'dive') {
+      // Whoosh dive boost
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(80, t);
+      o.frequency.linearRampToValueAtTime(260, t + 0.25);
+      g.gain.setValueAtTime(0.15, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start(t);
+      o.stop(t + 0.3);
+    } else if (type === 'boing') {
+      // Rubbery bouncy collision
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(180, t);
+      o.frequency.linearRampToValueAtTime(450, t + 0.2);
+      g.gain.setValueAtTime(0.25, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start(t);
+      o.stop(t + 0.23);
+    }
+  } catch (e) {}
+}
+
+// ============================================================================
+// LEVEL DEFINITIONS (7 Distinct Surreal Cursed Droppers)
+// ============================================================================
+const LEVELS = [
+  {
+    id: "backrooms",
+    num: 1,
+    name: "Der Endlose Flur",
+    sub: "Backrooms Level ! – Schwebende Tische & exit-signs",
+    depth: 340,
+    radius: 14,
+    gravity: 34,
+    bgColor: 0x242010,
+    wallColor: 0xd4c285,
+    fogColor: 0x1f1b0a,
+    anomalyText: "⚠️ BACKROOMS: LICHTER BRUMMEN MIT 60 HERTZ",
+    targetType: "almond_water",
+    waterColor: 0xfbbf24,
+    obstacles: "office",
+    reverseGravity: false,
+    viscosity: 1.0,
+    targetSize: 4.8
+  },
+  {
+    id: "bluescreen",
+    num: 2,
+    name: "Windows 98 BSOD",
+    sub: "System Error: Gravity.dll wurde gelöscht",
+    depth: 380,
+    radius: 15,
+    gravity: 36,
+    bgColor: 0x000088,
+    wallColor: 0x0000aa,
+    fogColor: 0x000044,
+    anomalyText: "⚠️ FEHLER 0x000000FA: PHYSIK-TREIBER FEHLT",
+    targetType: "recycle_bin",
+    waterColor: 0x38bdf8,
+    obstacles: "windows",
+    reverseGravity: false,
+    viscosity: 1.0,
+    targetSize: 4.5
+  },
+  {
+    id: "meattunnel",
+    num: 3,
+    name: "Der Fleisch-Schacht",
+    sub: "Pulsierende Venen & Riesen-Augen die dich anstarren",
+    depth: 420,
+    radius: 14,
+    gravity: 38,
+    bgColor: 0x330511,
+    wallColor: 0x9f1239,
+    fogColor: 0x1e030a,
+    anomalyText: "⚠️ ANATOMIE: DIE WÄNDE BEOBACHTEN DEINE BEWEGUNG",
+    targetType: "slime",
+    waterColor: 0x22c55e,
+    obstacles: "meat",
+    reverseGravity: false,
+    viscosity: 1.05,
+    targetSize: 4.2
+  },
+  {
+    id: "reverse",
+    num: 4,
+    name: "Falsche Richtung!",
+    sub: "WARUM FÄLLST DU NACH OBEN?! (Invertierte Welt)",
+    depth: 360,
+    radius: 16,
+    gravity: -36, // Falls UPWARDS!
+    bgColor: 0x0f172a,
+    wallColor: 0x334155,
+    fogColor: 0x090d16,
+    anomalyText: "⚠️ VERKEHRTE WELT: DU STÜRZT IN DEN HIMMEL",
+    targetType: "sky_pool",
+    waterColor: 0x06b6d4,
+    obstacles: "city_upside",
+    reverseGravity: true,
+    viscosity: 1.0,
+    targetSize: 4.4
+  },
+  {
+    id: "microwave",
+    num: 5,
+    name: "Mikrowelle um 03:33",
+    sub: "Fliegende Käsescheiben, Badeenten & schmelzende Uhren",
+    depth: 440,
+    radius: 15,
+    gravity: 40,
+    bgColor: 0x1e102e,
+    wallColor: 0x4c1d95,
+    fogColor: 0x13091e,
+    anomalyText: "⚠️ FIEBERTRAUM: SCHLAFMANGEL ERREICHT KRITISCHES NIVEAU",
+    targetType: "milk_bowl",
+    waterColor: 0xfef08a,
+    obstacles: "dreamcore",
+    reverseGravity: false,
+    viscosity: 0.95,
+    targetSize: 4.0
+  },
+  {
+    id: "honey",
+    num: 6,
+    name: "Die Honig-Matrix",
+    sub: "Zähe Luft & Laser-Gitter – Lenkung rutscht wie auf Eis",
+    depth: 460,
+    radius: 14,
+    gravity: 48,
+    bgColor: 0x271900,
+    wallColor: 0xd97706,
+    fogColor: 0x150d00,
+    anomalyText: "⚠️ VISKOSITÄT: DIE LUFT HAT DIE KONSISTENZ VON SIRUP",
+    targetType: "cyber_portal",
+    waterColor: 0xf59e0b,
+    obstacles: "lasers",
+    reverseGravity: false,
+    viscosity: 0.45, // Extreme inertia slide
+    targetSize: 3.8
+  },
+  {
+    id: "spiral",
+    num: 7,
+    name: "Non-Euklidische Hypnose",
+    sub: "Moiré-Tunnel & optische Täuschungen des Wahnsinns",
+    depth: 500,
+    radius: 13,
+    gravity: 44,
+    bgColor: 0x000000,
+    wallColor: 0xffffff,
+    fogColor: 0x000000,
+    anomalyText: "⚠️ WARNUNG: HYPNOTISCHE MUSTER KÖNNEN VERWIRREN",
+    targetType: "white_void",
+    waterColor: 0xffffff,
+    obstacles: "hypno",
+    reverseGravity: false,
+    viscosity: 1.0,
+    targetSize: 3.6
+  }
+];
+
+// DEATH ROASTS (Cursed, funny failure messages)
+const DEATH_ROASTS = [
+  "Deine Knochen haben sich spontan in Bananenquark verwandelt.",
+  "Ein schwebender Bürostuhl aus dem Jahr 1997 war stabiler als du.",
+  "Fehler 404: Landefläche nicht angetroffen.",
+  "Die Schwerkraft entschuldigt sich vielmals für diesen Aufprall.",
+  "Du hast versucht, feste Materie mit der Stirn zu verhandeln.",
+  "Die schwebende Zimmerpflanze hat diesen Aufprall persönlich genommen.",
+  "Physik-Engine meldet: Das sah extrem ungesund aus.",
+  "Zu 99% im Wasser gelandet... die restlichen 1% waren ein Betonbalken.",
+  "Dein Schutzengel hat leider gerade Kaffeepause.",
+  "Du hast die Relativitätstheorie beleidigt und wurdest zerschmettert."
+];
+
+// ============================================================================
+// GAME STATE & THREE.JS ENGINE SETUP
+// ============================================================================
+let currentLevelIndex = 0;
+let scene, camera, renderer;
+let shaftGroup, obstaclesGroup, eyeMeshes = [], animatedObstacles = [];
+let targetMesh = null;
+let playerDummy = null, dummyLimbs = [];
+
+// Player Physics
+const player = {
+  pos: new THREE.Vector3(0, 0, 0),
+  vel: new THREE.Vector3(0, 0, 0),
+  radius: 0.85,
+  isDead: false,
+  hasWon: false,
+  flapping: false,
+  diving: false,
+  stamina: 100,
+  maxSpeedReached: 0,
+  startTime: 0,
+  fallTime: 0,
+  deathsThisLevel: 0
+};
+
+let isFirstPerson = true;
+let isGameRunning = false;
+let userSteer = { x: 0, z: 0 };
+const keys = {};
+
+// Touch Joystick state
+let touchActive = false;
+let joyOrigin = { x: 0, y: 0 };
+let joyMove = { x: 0, y: 0 };
+
+// Initialize Highscores / Medals from LocalStorage
+function getLevelSaveKey(lvlId) { return 'dropper_lvl_' + lvlId; }
+function loadLevelStats(lvlId) {
+  try {
+    const raw = localStorage.getItem(getLevelSaveKey(lvlId));
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function saveLevelStats(lvlId, time, deaths) {
+  try {
+    const existing = loadLevelStats(lvlId);
+    let bestTime = time;
+    if (existing && existing.bestTime < time) bestTime = existing.bestTime;
+    const data = {
+      unlocked: true,
+      bestTime: Math.min(time, existing ? existing.bestTime : time),
+      completed: true,
+      lastPlayed: Date.now()
+    };
+    localStorage.setItem(getLevelSaveKey(lvlId), JSON.stringify(data));
+    if (window.ArcadeCore) {
+      ArcadeCore.setScore("dropper_" + lvlId, Math.round(10000 / Math.max(bestTime, 1)));
+    }
+  } catch (e) {}
+}
+
+// ============================================================================
+// THREE.JS INIT & TEXTURES
+// ============================================================================
+function init3D() {
+  const container = document.getElementById('game-container');
+  scene = new THREE.Scene();
+
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = false; // Fast & crisp
+  container.appendChild(renderer.domElement);
+
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+  scene.add(ambientLight);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+  dirLight.position.set(20, 50, 20);
+  scene.add(dirLight);
+
+  shaftGroup = new THREE.Group();
+  scene.add(shaftGroup);
+
+  obstaclesGroup = new THREE.Group();
+  scene.add(obstaclesGroup);
+
+  createPlayerRagdoll();
+  createFirstPersonViewArms();
+
+  window.addEventListener('resize', onWindowResize);
+  setupInputListeners();
+}
+
+function onWindowResize() {
+  if (!camera || !renderer) return;
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ============================================================================
+// PROCEDURAL SHAFT & OBSTACLES BUILDER
+// ============================================================================
+function buildShaft(lvl) {
+  // Clear previous
+  while (shaftGroup.children.length > 0) {
+    const obj = shaftGroup.children[0];
+    shaftGroup.remove(obj);
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) obj.material.dispose();
+  }
+  while (obstaclesGroup.children.length > 0) {
+    const obj = obstaclesGroup.children[0];
+    obstaclesGroup.remove(obj);
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) obj.material.dispose();
+  }
+  eyeMeshes = [];
+  animatedObstacles = [];
+
+  scene.background = new THREE.Color(lvl.bgColor);
+  scene.fog = new THREE.FogExp2(lvl.fogColor, 0.0055);
+
+  const depth = lvl.depth;
+  const radius = lvl.radius;
+  const isRev = lvl.reverseGravity;
+
+  // Outer Shaft Cylinder (Inverted faces so player sees inside walls)
+  const shaftGeo = new THREE.CylinderGeometry(radius, radius, depth + 40, 36, 60, true);
+  shaftGeo.scale(-1, 1, 1); // Flip normals inward
+
+  // Procedural Canvas Texture for Shaft Walls based on Level
+  const wallTex = createProceduralWallTexture(lvl);
+  const shaftMat = new THREE.MeshStandardMaterial({
+    map: wallTex,
+    roughness: 0.8,
+    metalness: 0.1,
+    color: lvl.wallColor
+  });
+  const shaftMesh = new THREE.Mesh(shaftGeo, shaftMat);
+  shaftMesh.position.y = isRev ? (depth / 2) : (-depth / 2);
+  shaftGroup.add(shaftMesh);
+
+  // Rings / Girders lining the tunnel to heighten sense of speed
+  const ringGeo = new THREE.TorusGeometry(radius - 0.2, 0.35, 8, 36);
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5 });
+  for (let y = 0; y <= depth; y += 20) {
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = isRev ? y : -y;
+    shaftGroup.add(ring);
+  }
+
+  // BUILD THE SAFE LANDING TARGET AT THE BOTTOM (or TOP in Reverse!)
+  const targetY = isRev ? (depth + 10) : (-depth - 10);
+  buildLandingTarget(lvl, targetY);
+
+  // BUILD PROCEDURAL OBSTACLES ALONG THE DROP
+  buildLevelObstacles(lvl);
+}
+
+// Procedural Canvas Texture Generator
+function createProceduralWallTexture(lvl) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  const ctx = c.getContext('2d');
+
+  if (lvl.id === 'backrooms') {
+    // Sickly yellow striped wallpaper with water stains
+    ctx.fillStyle = '#c9b775';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = '#b8a35e';
+    ctx.lineWidth = 4;
+    for (let x = 0; x < 512; x += 16) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke();
+    }
+    // Damp mould blotches
+    ctx.fillStyle = 'rgba(70, 75, 40, 0.2)';
+    for (let i = 0; i < 20; i++) {
+      ctx.beginPath();
+      ctx.arc(Math.random()*512, Math.random()*512, Math.random()*40 + 10, 0, Math.PI*2);
+      ctx.fill();
+    }
+  } else if (lvl.id === 'bluescreen') {
+    // Matrix CRT grid with hexadecimal noise
+    ctx.fillStyle = '#000080';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+    ctx.lineWidth = 2;
+    for (let x = 0; x < 512; x += 32) {
+      ctx.strokeRect(x, 0, 32, 512);
+    }
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = '14px monospace';
+    ctx.fillText('*** STOP: 0x00000050 (GRAVITY_FAULT) ***', 20, 80);
+    ctx.fillText('PAGE_FAULT_IN_FREELY_FALLING_AREA', 20, 180);
+    ctx.fillText('PHYSICS.SYS - Address 0xF72A014', 20, 280);
+  } else if (lvl.id === 'meattunnel') {
+    // Flesh & pulsing veins
+    ctx.fillStyle = '#881337';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = '#e11d48';
+    ctx.lineWidth = 6;
+    for (let i = 0; i < 15; i++) {
+      ctx.beginPath();
+      ctx.moveTo(Math.random()*512, 0);
+      ctx.bezierCurveTo(Math.random()*512, 170, Math.random()*512, 340, Math.random()*512, 512);
+      ctx.stroke();
+    }
+  } else if (lvl.id === 'spiral') {
+    // Optical illusion checkerboard
+    const size = 32;
+    for (let y = 0; y < 512; y += size) {
+      for (let x = 0; x < 512; x += size) {
+        ctx.fillStyle = ((x / size + y / size) % 2 === 0) ? '#ffffff' : '#000000';
+        ctx.fillRect(x, y, size, size);
+      }
+    }
+  } else {
+    // Cyber / Tech / Dream grid
+    ctx.fillStyle = '#1e1b4b';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 3;
+    for (let i = 0; i <= 512; i += 64) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(8, 24);
+  return tex;
+}
+
+// Build the safe landing target
+function buildLandingTarget(lvl, targetY) {
+  const isRev = lvl.reverseGravity;
+  const size = Math.max(lvl.targetSize, 5.2);
+
+  // Bottom chamber floor (Fatal solid ground everywhere EXCEPT the target)
+  const floorGeo = new THREE.CircleGeometry(lvl.radius + 2, 36);
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0x0f172a, roughness: 0.9, metalness: 0.1
+  });
+  const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+  floorMesh.rotation.x = isRev ? (Math.PI / 2) : (-Math.PI / 2);
+  floorMesh.position.y = targetY;
+  shaftGroup.add(floorMesh);
+
+  // Safe Water Pool
+  const offsetR = (lvl.num > 1) ? Math.min(lvl.radius * 0.35, (lvl.num * 0.7)) : 0;
+  const angle = (lvl.num * 1.35) % (Math.PI * 2);
+  const targetX = Math.cos(angle) * offsetR;
+  const targetZ = Math.sin(angle) * offsetR;
+
+  const waterGeo = new THREE.BoxGeometry(size, 2.5, size);
+  const waterMat = new THREE.MeshStandardMaterial({
+    color: lvl.waterColor,
+    emissive: lvl.waterColor,
+    emissiveIntensity: 0.7,
+    roughness: 0.1,
+    metalness: 0.2,
+    transparent: true,
+    opacity: 0.88
+  });
+  targetMesh = new THREE.Mesh(waterGeo, waterMat);
+  targetMesh.position.set(targetX, targetY + (isRev ? -1 : 1), targetZ);
+  shaftGroup.add(targetMesh);
+
+  // Vertical Guide Light Beam rising up the shaft so player can spot target from afar
+  const beamH = Math.abs(targetY) * 0.95;
+  const beamGeo = new THREE.CylinderGeometry(size * 0.45, size * 0.45, beamH, 16, 1, true);
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: lvl.waterColor,
+    transparent: true,
+    opacity: 0.18,
+    side: THREE.DoubleSide
+  });
+  const guideBeam = new THREE.Mesh(beamGeo, beamMat);
+  guideBeam.position.set(targetX, targetY / 2, targetZ);
+  shaftGroup.add(guideBeam);
+
+  // Safe Landing Beacon Ring
+  const beaconGeo = new THREE.TorusGeometry(size * 0.65, 0.25, 8, 24);
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+  beacon.rotation.x = Math.PI / 2;
+  beacon.position.set(targetX, targetY + (isRev ? -2.2 : 2.2), targetZ);
+  shaftGroup.add(beacon);
+
+  animatedObstacles.push({
+    mesh: beacon,
+    type: 'beacon',
+    baseY: beacon.position.y,
+    time: 0
+  });
+
+  // Target bounding box for landing check with fair forgiving margin
+  targetMesh.userData = {
+    isSafeTarget: true,
+    minX: targetX - size / 2 - 0.6,
+    maxX: targetX + size / 2 + 0.6,
+    minZ: targetZ - size / 2 - 0.6,
+    maxZ: targetZ + size / 2 + 0.6,
+    targetY: targetY
+  };
+}
+
+// Build Level Obstacles with varied cursed themes
+function buildLevelObstacles(lvl) {
+  const depth = lvl.depth;
+  const isRev = lvl.reverseGravity;
+  const numLayers = Math.floor(depth / 32);
+
+  for (let layer = 1; layer < numLayers; layer++) {
+    const yPos = isRev ? (layer * 32 + 12) : (-layer * 32 - 12);
+
+    if (lvl.id === 'backrooms') {
+      buildOfficeObstacles(yPos, lvl.radius, layer);
+    } else if (lvl.id === 'bluescreen') {
+      buildWindowsObstacles(yPos, lvl.radius, layer);
+    } else if (lvl.id === 'meattunnel') {
+      buildMeatObstacles(yPos, lvl.radius, layer);
+    } else if (lvl.id === 'reverse') {
+      buildCityObstacles(yPos, lvl.radius, layer);
+    } else if (lvl.id === 'microwave') {
+      buildDreamcoreObstacles(yPos, lvl.radius, layer);
+    } else if (lvl.id === 'honey') {
+      buildCyberObstacles(yPos, lvl.radius, layer);
+    } else {
+      buildSpiralObstacles(yPos, lvl.radius, layer);
+    }
+  }
+}
+
+// 1. BACKROOMS: Floating Desks, Filing Cabinets, Suspended Doors
+function buildOfficeObstacles(y, maxR, index) {
+  const rot = index * 1.1;
+
+  if (index % 3 === 0) {
+    // 2 Floating Office Desks on opposite sides, leaving center tunnel clear
+    for (let i = 0; i < 2; i++) {
+      const a = rot + (i * Math.PI);
+      const dist = maxR * 0.48;
+      const deskGeo = new THREE.BoxGeometry(6.5, 1.2, 3.2);
+      const deskMat = new THREE.MeshStandardMaterial({ color: 0x78512e, roughness: 0.7 });
+      const desk = new THREE.Mesh(deskGeo, deskMat);
+      desk.position.set(Math.cos(a) * dist, y, Math.sin(a) * dist);
+      desk.rotation.y = a + 0.3;
+      obstaclesGroup.add(desk);
+      registerObstacleMesh(desk, 3.3, 0.7, 1.6);
+    }
+  } else if (index % 3 === 1) {
+    // Suspended Wooden Door offset to one side
+    const a = rot;
+    const dist = maxR * 0.45;
+    const doorGeo = new THREE.BoxGeometry(3.2, 7.0, 0.4);
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.5 });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(Math.cos(a) * dist, y, Math.sin(a) * dist);
+    door.rotation.y = a;
+    door.rotation.z = 0.15;
+    obstaclesGroup.add(door);
+    registerObstacleMesh(door, 1.6, 3.5, 0.8);
+  } else {
+    // Single Fluorescent Beam offset from center, slowly spinning
+    const beamGeo = new THREE.BoxGeometry(maxR * 1.2, 0.8, 0.8);
+    const beamMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xfef08a, emissiveIntensity: 0.5 });
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.set(Math.cos(rot) * 3.5, y, Math.sin(rot) * 3.5);
+    beam.rotation.y = rot;
+    obstaclesGroup.add(beam);
+    registerObstacleMesh(beam, maxR * 0.6, 0.5, 0.5);
+
+    animatedObstacles.push({
+      mesh: beam,
+      type: 'rotate_y',
+      speed: 0.5 * ((index % 2 === 0) ? 1 : -1)
+    });
+  }
+}
+
+// 2. WINDOWS BSOD: Error boxes, giant cursor
+function buildWindowsObstacles(y, maxR, index) {
+  const rot = index * 1.3;
+  if (index % 2 === 0) {
+    // Floating Error Dialog box
+    const boxGeo = new THREE.BoxGeometry(8, 5, 0.6);
+    const boxMat = new THREE.MeshStandardMaterial({ color: 0xc0c0c0, roughness: 0.3 });
+    const dlg = new THREE.Mesh(boxGeo, boxMat);
+    const dist = (index % 3 - 1) * 3.5;
+    dlg.position.set(dist, y, 0);
+    dlg.rotation.y = rot;
+    obstaclesGroup.add(dlg);
+    registerObstacleMesh(dlg, 4.0, 2.5, 0.5);
+
+    animatedObstacles.push({
+      mesh: dlg,
+      type: 'oscillate_x',
+      baseX: dist,
+      speed: 1.0,
+      amp: 3.0
+    });
+  } else {
+    // Spinning Giant Mouse Cursor Arrow offset from center
+    const arrowGeo = new THREE.ConeGeometry(3.0, 7, 4);
+    const arrowMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+    const cursor = new THREE.Mesh(arrowGeo, arrowMat);
+    cursor.position.set(Math.cos(rot) * 5, y, Math.sin(rot) * 5);
+    cursor.rotation.z = Math.PI / 4;
+    obstaclesGroup.add(cursor);
+    registerObstacleMesh(cursor, 2.2, 3.5, 2.2);
+
+    animatedObstacles.push({
+      mesh: cursor,
+      type: 'rotate_y',
+      speed: 1.2
+    });
+  }
+}
+
+// 3. MEAT TUNNEL: Eyeballs that track you, Ribcage rings
+function buildMeatObstacles(y, maxR, index) {
+  if (index % 2 === 0) {
+    // GIANT FLOATING EYEBALL (Tracks player position dynamically!)
+    const eyeGeo = new THREE.SphereGeometry(2.8, 24, 24);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+
+    // Pupil
+    const pupilGeo = new THREE.SphereGeometry(1.1, 16, 16);
+    const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const pupil = new THREE.Mesh(pupilGeo, pupilMat);
+    pupil.position.set(0, 0, 2.5);
+    eye.add(pupil);
+
+    const a = index * 1.9;
+    eye.position.set(Math.cos(a) * 4.8, y, Math.sin(a) * 4.8);
+    obstaclesGroup.add(eye);
+    registerObstacleMesh(eye, 2.8, 2.8, 2.8);
+    eyeMeshes.push(eye);
+  } else {
+    // Spinning Ring of Teeth / Ribcage (Torus with clear center hole)
+    const ringR = maxR * 0.65;
+    const tubeR = 1.3;
+    const ringGeo = new THREE.TorusGeometry(ringR, tubeR, 12, 24);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xfdf4ff, roughness: 0.4 });
+    const rib = new THREE.Mesh(ringGeo, ringMat);
+    rib.rotation.x = Math.PI / 2;
+    rib.position.set(0, y, 0);
+    obstaclesGroup.add(rib);
+    registerObstacleMesh(rib, ringR, tubeR, ringR, true, ringR, tubeR);
+  }
+}
+
+// 4. CITY UPSIDE DOWN: Inverted streetlamps, hanging cars
+function buildCityObstacles(y, maxR, index) {
+  const rot = index * 1.5;
+  const taxiGeo = new THREE.BoxGeometry(4.0, 2.2, 8);
+  const taxiMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.4 });
+  const taxi = new THREE.Mesh(taxiGeo, taxiMat);
+  taxi.position.set(Math.cos(rot) * 5, y, Math.sin(rot) * 5);
+  taxi.rotation.x = Math.PI; // Inverted car!
+  taxi.rotation.y = rot;
+  obstaclesGroup.add(taxi);
+  registerObstacleMesh(taxi, 2.2, 1.3, 4.0);
+
+  animatedObstacles.push({
+    mesh: taxi,
+    type: 'circle',
+    center: new THREE.Vector2(0, 0),
+    radius: 5,
+    speed: 0.7,
+    angle: rot
+  });
+}
+
+// 5. DREAMCORE: Swiss Cheese Torus with huge pass-through hole, giant rubber duck
+function buildDreamcoreObstacles(y, maxR, index) {
+  if (index % 2 === 0) {
+    // Swiss Cheese Torus with wide, clear central hole
+    const ringR = maxR * 0.62;
+    const tubeR = 2.4;
+    const cheeseGeo = new THREE.TorusGeometry(ringR, tubeR, 16, 32);
+    const cheeseMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.5 });
+    const cheese = new THREE.Mesh(cheeseGeo, cheeseMat);
+    cheese.rotation.x = Math.PI / 2;
+    cheese.position.set(0, y, 0);
+    obstaclesGroup.add(cheese);
+    registerObstacleMesh(cheese, ringR, tubeR, ringR, true, ringR, tubeR);
+  } else {
+    // Giant Rubber Duck offset from center
+    const duckGrp = new THREE.Group();
+    const bodyGeo = new THREE.SphereGeometry(2.5, 16, 16);
+    const duckMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 });
+    const duckBody = new THREE.Mesh(bodyGeo, duckMat);
+    duckGrp.add(duckBody);
+
+    const headGeo = new THREE.SphereGeometry(1.5, 16, 16);
+    const duckHead = new THREE.Mesh(headGeo, duckMat);
+    duckHead.position.set(0, 2.0, 1.1);
+    duckGrp.add(duckHead);
+
+    const beakGeo = new THREE.ConeGeometry(0.7, 1.5, 12);
+    const beakMat = new THREE.MeshStandardMaterial({ color: 0xf97316 });
+    const beak = new THREE.Mesh(beakGeo, beakMat);
+    beak.rotation.x = Math.PI / 2;
+    beak.position.set(0, 2.0, 2.6);
+    duckGrp.add(beak);
+
+    const rot = index * 1.8;
+    duckGrp.position.set(Math.cos(rot) * 5.0, y, Math.sin(rot) * 5.0);
+    obstaclesGroup.add(duckGrp);
+    registerObstacleMesh(duckGrp, 2.7, 3.0, 2.7);
+
+    animatedObstacles.push({
+      mesh: duckGrp,
+      type: 'rotate_y',
+      speed: 1.0
+    });
+  }
+}
+
+// 6. CYBER MATRIX: Shifting Lasers & Rotating Propellers with offset
+function buildCyberObstacles(y, maxR, index) {
+  const bladeGeo = new THREE.BoxGeometry(maxR * 1.3, 0.4, 2.0);
+  const bladeMat = new THREE.MeshStandardMaterial({
+    color: 0x06b6d4, emissive: 0x06b6d4, emissiveIntensity: 0.6
+  });
+  const blade = new THREE.Mesh(bladeGeo, bladeMat);
+  blade.position.set(Math.cos(index) * 2.5, y, Math.sin(index) * 2.5);
+  blade.rotation.y = index * 0.8;
+  obstaclesGroup.add(blade);
+  registerObstacleMesh(blade, maxR * 0.65, 0.3, 1.0);
+
+  animatedObstacles.push({
+    mesh: blade,
+    type: 'rotate_y',
+    speed: (index % 2 === 0 ? 1 : -1) * 1.0
+  });
+}
+
+// 7. HYPNO SPIRAL: Rotating Moiré bars offset from center
+function buildSpiralObstacles(y, maxR, index) {
+  const spiralGeo = new THREE.BoxGeometry(maxR * 1.2, 0.8, 1.4);
+  const spiralMat = new THREE.MeshBasicMaterial({ color: index % 2 === 0 ? 0xffffff : 0x000000 });
+  const bar = new THREE.Mesh(spiralGeo, spiralMat);
+  bar.position.set(Math.cos(index * 1.2) * 3.0, y, Math.sin(index * 1.2) * 3.0);
+  bar.rotation.y = index * 0.6;
+  obstaclesGroup.add(bar);
+  registerObstacleMesh(bar, maxR * 0.6, 0.5, 0.8);
+
+  animatedObstacles.push({
+    mesh: bar,
+    type: 'rotate_y',
+    speed: 0.7 * (index % 2 === 0 ? 1 : -1)
+  });
+}
+
+// Register obstacle metadata for collision detection
+const registeredObstacles = [];
+function registerObstacleMesh(mesh, halfW, halfH, halfD, isDonutHole = false, ringRadius = 0, tubeRadius = 0) {
+  mesh.userData = {
+    halfW, halfH, halfD,
+    isDonutHole,
+    ringRadius,
+    tubeRadius
+  };
+  registeredObstacles.push(mesh);
+}
+
+// ============================================================================
+// PLAYER RAGDOLL DUMMY (FOR 3RD PERSON VIEW)
+// ============================================================================
+function createPlayerRagdoll() {
+  playerDummy = new THREE.Group();
+
+  // Torso
+  const torsoGeo = new THREE.BoxGeometry(0.8, 1.2, 0.5);
+  const torsoMat = new THREE.MeshStandardMaterial({ color: 0x6366f1, roughness: 0.5 });
+  const torso = new THREE.Mesh(torsoGeo, torsoMat);
+  playerDummy.add(torso);
+
+  // Head
+  const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.4 });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.position.y = 0.95;
+  playerDummy.add(head);
+
+  // Limbs that flail wildly in wind
+  dummyLimbs = [];
+  const armGeo = new THREE.BoxGeometry(0.25, 0.8, 0.25);
+  const limbMat = new THREE.MeshStandardMaterial({ color: 0x4f46e5 });
+
+  // Left Arm
+  const leftArm = new THREE.Mesh(armGeo, limbMat);
+  leftArm.position.set(-0.6, 0.3, 0);
+  playerDummy.add(leftArm);
+  dummyLimbs.push(leftArm);
+
+  // Right Arm
+  const rightArm = new THREE.Mesh(armGeo, limbMat);
+  rightArm.position.set(0.6, 0.3, 0);
+  playerDummy.add(rightArm);
+  dummyLimbs.push(rightArm);
+
+  // Left Leg
+  const legGeo = new THREE.BoxGeometry(0.28, 0.9, 0.28);
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x1e1b4b });
+  const leftLeg = new THREE.Mesh(legGeo, legMat);
+  leftLeg.position.set(-0.25, -1.0, 0);
+  playerDummy.add(leftLeg);
+  dummyLimbs.push(leftLeg);
+
+  // Right Leg
+  const rightLeg = new THREE.Mesh(legGeo, legMat);
+  rightLeg.position.set(0.25, -1.0, 0);
+  playerDummy.add(rightLeg);
+  dummyLimbs.push(rightLeg);
+
+  scene.add(playerDummy);
+  playerDummy.visible = !isFirstPerson;
+}
+
+// ============================================================================
+// FIRST PERSON VIEW ARMS & SPEED PARTICLES
+// ============================================================================
+let fpvArmsGroup = null, fpvLeftArm = null, fpvRightArm = null, windParticles = null;
+
+function createFirstPersonViewArms() {
+  fpvArmsGroup = new THREE.Group();
+
+  const gloveMat = new THREE.MeshStandardMaterial({
+    color: 0x4f46e5,
+    roughness: 0.35,
+    metalness: 0.2
+  });
+  const handMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    roughness: 0.4
+  });
+
+  // Left Arm (lower left corner)
+  fpvLeftArm = new THREE.Group();
+  const armGeo = new THREE.BoxGeometry(0.18, 0.18, 0.75);
+  const armMeshL = new THREE.Mesh(armGeo, gloveMat);
+  armMeshL.position.set(0, 0, -0.38);
+  fpvLeftArm.add(armMeshL);
+  const handGeo = new THREE.BoxGeometry(0.22, 0.12, 0.22);
+  const handMeshL = new THREE.Mesh(handGeo, handMat);
+  handMeshL.position.set(0, 0, -0.8);
+  fpvLeftArm.add(handMeshL);
+
+  fpvLeftArm.position.set(-0.45, -0.38, -0.7);
+  fpvLeftArm.rotation.set(-0.2, 0.15, 0.1);
+  fpvArmsGroup.add(fpvLeftArm);
+
+  // Right Arm (lower right corner)
+  fpvRightArm = new THREE.Group();
+  const armMeshR = new THREE.Mesh(armGeo, gloveMat);
+  armMeshR.position.set(0, 0, -0.38);
+  fpvRightArm.add(armMeshR);
+  const handMeshR = new THREE.Mesh(handGeo, handMat);
+  handMeshR.position.set(0, 0, -0.8);
+  fpvRightArm.add(handMeshR);
+
+  fpvRightArm.position.set(0.45, -0.38, -0.7);
+  fpvRightArm.rotation.set(-0.2, -0.15, -0.1);
+  fpvArmsGroup.add(fpvRightArm);
+
+  camera.add(fpvArmsGroup);
+  scene.add(camera);
+  fpvArmsGroup.visible = isFirstPerson;
+
+  createWindParticles();
+}
+
+function createWindParticles() {
+  const pCount = 200;
+  const pGeo = new THREE.BufferGeometry();
+  const pPos = new Float32Array(pCount * 3);
+  for (let i = 0; i < pCount; i++) {
+    pPos[i * 3] = (Math.random() - 0.5) * 16;
+    pPos[i * 3 + 1] = (Math.random() - 0.5) * 20;
+    pPos[i * 3 + 2] = (Math.random() - 0.5) * 16;
+  }
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  const pMat = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.22,
+    transparent: true,
+    opacity: 0.45
+  });
+  windParticles = new THREE.Points(pGeo, pMat);
+  scene.add(windParticles);
+}
+
+// ============================================================================
+// CONTROLS & INPUT
+// ============================================================================
+function setupInputListeners() {
+  window.addEventListener('keydown', (e) => {
+    initAudio();
+    setupAmbientSound();
+    keys[e.code] = true;
+
+    if (e.code === 'KeyV') {
+      toggleCameraView();
+    } else if (e.code === 'KeyR') {
+      respawnPlayer();
+    } else if (e.code === 'KeyM') {
+      toggleSound();
+    } else if (e.code === 'Space') {
+      e.preventDefault();
+      player.flapping = true;
+    } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+      player.diving = true;
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+    if (e.code === 'Space') player.flapping = false;
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') player.diving = false;
+  });
+
+  // Touch Virtual Joystick
+  const joyZone = document.getElementById('joystick-zone');
+  const joyKnob = document.getElementById('joystick-knob');
+
+  joyZone.addEventListener('touchstart', (e) => {
+    initAudio();
+    setupAmbientSound();
+    touchActive = true;
+    const rect = joyZone.getBoundingClientRect();
+    joyOrigin.x = rect.left + rect.width / 2;
+    joyOrigin.y = rect.top + rect.height / 2;
+    handleJoyTouch(e.touches[0]);
+  }, { passive: false });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!touchActive) return;
+    for (let i = 0; i < e.touches.length; i++) {
+      const t = e.touches[i];
+      if (t.clientX < window.innerWidth * 0.5) {
+        handleJoyTouch(t);
+        break;
+      }
+    }
+  }, { passive: false });
+
+  window.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0 || !Array.from(e.touches).some(t => t.clientX < window.innerWidth * 0.5)) {
+      touchActive = false;
+      joyMove.x = 0;
+      joyMove.y = 0;
+      joyKnob.style.transform = `translate(0px, 0px)`;
+      userSteer.x = 0;
+      userSteer.z = 0;
+    }
+  });
+
+  function handleJoyTouch(touch) {
+    const dx = touch.clientX - joyOrigin.x;
+    const dy = touch.clientY - joyOrigin.y;
+    const dist = Math.hypot(dx, dy);
+    const maxDist = 45;
+    const clampedDist = Math.min(dist, maxDist);
+    const angle = Math.atan2(dy, dx);
+    const nx = Math.cos(angle) * clampedDist;
+    const ny = Math.sin(angle) * clampedDist;
+
+    joyKnob.style.transform = `translate(${nx}px, ${ny}px)`;
+    userSteer.x = nx / maxDist;
+    userSteer.z = ny / maxDist;
+  }
+
+  // Touch Action Buttons
+  const btnFloat = document.getElementById('btnFloat');
+  const btnDive = document.getElementById('btnDive');
+
+  btnFloat.addEventListener('touchstart', (e) => {
+    e.preventDefault(); initAudio(); player.flapping = true;
+  });
+  btnFloat.addEventListener('touchend', () => { player.flapping = false; });
+
+  btnDive.addEventListener('touchstart', (e) => {
+    e.preventDefault(); initAudio(); player.diving = true;
+  });
+  btnDive.addEventListener('touchend', () => { player.diving = false; });
+}
+
+function toggleCameraView() {
+  isFirstPerson = !isFirstPerson;
+  if (playerDummy) playerDummy.visible = !isFirstPerson;
+  if (fpvArmsGroup) fpvArmsGroup.visible = isFirstPerson;
+  document.getElementById('crosshair').style.display = isFirstPerson ? 'flex' : 'none';
+  document.getElementById('camText').textContent = isFirstPerson ? '1st Person' : '3rd Person';
+  playCursedSound('flap');
+}
+
+function toggleSound() {
+  muted = !muted;
+  if (window.ArcadeCore) ArcadeCore.toggleMute();
+}
+
+// ============================================================================
+// LEVEL LIFECYCLE & RESPAWN
+// ============================================================================
+function loadLevel(idx) {
+  currentLevelIndex = Math.max(0, Math.min(idx, LEVELS.length - 1));
+  const lvl = LEVELS[currentLevelIndex];
+
+  registeredObstacles.length = 0;
+  buildShaft(lvl);
+
+  document.getElementById('hudLvlName').textContent = `Lvl ${lvl.num}: ${lvl.name}`;
+  document.getElementById('cursed-ticker').textContent = lvl.anomalyText;
+
+  respawnPlayer(true);
+}
+
+function respawnPlayer(resetDeaths = false) {
+  const lvl = LEVELS[currentLevelIndex];
+  const isRev = lvl.reverseGravity;
+
+  player.pos.set(0, isRev ? 2 : 2, 0); // Start at launch pad
+  player.vel.set(0, isRev ? 5 : -5, 0);
+  player.isDead = false;
+  player.hasWon = false;
+  player.flapping = false;
+  player.diving = false;
+  player.stamina = 100;
+  player.maxSpeedReached = 0;
+  player.startTime = performance.now();
+  if (resetDeaths) player.deathsThisLevel = 0;
+  else player.deathsThisLevel++;
+
+  document.getElementById('death-screen').style.display = 'none';
+  document.getElementById('winModal').classList.add('hidden');
+  document.getElementById('mainMenu').classList.add('hidden');
+  document.getElementById('hudDeaths').textContent = player.deathsThisLevel;
+
+  isGameRunning = true;
+}
+
+function restartCurrentLevel() {
+  respawnPlayer(true);
+}
+
+function goToNextLevel() {
+  if (currentLevelIndex + 1 < LEVELS.length) {
+    loadLevel(currentLevelIndex + 1);
+  } else {
+    openMenu();
+  }
+}
+
+function openMenu() {
+  isGameRunning = false;
+  document.getElementById('winModal').classList.add('hidden');
+  document.getElementById('death-screen').style.display = 'none';
+  document.getElementById('mainMenu').classList.remove('hidden');
+  renderLevelGrid();
+}
+
+function startSelectedLevel() {
+  document.getElementById('mainMenu').classList.add('hidden');
+  loadLevel(currentLevelIndex);
+}
+
+function renderLevelGrid() {
+  const grid = document.getElementById('levelGrid');
+  grid.innerHTML = LEVELS.map((lvl, i) => {
+    const stats = loadLevelStats(lvl.id);
+    const unlocked = (i === 0) || (stats && stats.unlocked) || (loadLevelStats(LEVELS[i - 1]?.id)?.completed);
+    const isCur = i === currentLevelIndex;
+    let medal = unlocked ? (stats?.completed ? '🏆' : '⚪') : '🔒';
+    let best = stats?.bestTime ? `${stats.bestTime.toFixed(1)}s` : '--';
+
+    return `
+      <button class="level-btn" ${unlocked ? '' : 'disabled'} style="${isCur ? 'border-color:#38bdf8; background:#312e81;' : ''}" onclick="selectLevel(${i})">
+        <span class="lvl-medal">${medal}</span>
+        <span class="lvl-num">#${lvl.num}</span>
+        <span class="lvl-name">${lvl.name}</span>
+        <span class="lvl-best">${best}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function selectLevel(idx) {
+  currentLevelIndex = idx;
+  startSelectedLevel();
+}
+
+// ============================================================================
+// MAIN UPDATE & PHYSICS LOOP
+// ============================================================================
+let lastTime = performance.now();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const now = performance.now();
+  const dt = Math.min((now - lastTime) / 1000, 0.1);
+  lastTime = now;
+
+  if (isGameRunning && !player.isDead && !player.hasWon) {
+    updatePhysics(dt);
+  }
+
+  updateAnimatedWorld(dt);
+  updateCamera();
+
+  renderer.render(scene, camera);
+}
+
+function updatePhysics(dt) {
+  const lvl = LEVELS[currentLevelIndex];
+  const isRev = lvl.reverseGravity;
+
+  // 1. Process Steering Inputs (Keyboard & Touch)
+  let steerX = userSteer.x;
+  let steerZ = userSteer.z;
+
+  if (keys['KeyA'] || keys['ArrowLeft']) steerX -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) steerX += 1;
+  if (keys['KeyW'] || keys['ArrowUp']) steerZ -= 1;
+  if (keys['KeyS'] || keys['ArrowDown']) steerZ += 1;
+
+  if (isRev) {
+    steerZ = -steerZ;
+  }
+
+  // Clamp input
+  const len = Math.hypot(steerX, steerZ);
+  if (len > 1) { steerX /= len; steerZ /= len; }
+
+  // 2. Air Steering & Viscosity
+  const steerPower = 34 * lvl.viscosity;
+  player.vel.x += steerX * steerPower * dt;
+  player.vel.z += steerZ * steerPower * dt;
+
+  // Horizontal air resistance (Viscosity determines drift)
+  const dragH = Math.pow(0.04, dt * lvl.viscosity);
+  player.vel.x *= dragH;
+  player.vel.z *= dragH;
+
+  // 3. Vertical Falling Acceleration & Air Mechanics
+  let targetGrav = lvl.gravity; // e.g. 36 (or -36 for reverse)
+  let terminalVelocity = 110;
+
+  // Flapping (Air-Brake / Flutter like a plastic bag)
+  if (player.flapping && player.stamina > 0) {
+    player.stamina = Math.max(0, player.stamina - dt * 35);
+    targetGrav *= 0.35;
+    terminalVelocity *= 0.45;
+    if (Math.random() < 0.2) playCursedSound('flap');
+  } else {
+    player.stamina = Math.min(100, player.stamina + dt * 25);
+  }
+
+  // Diving (Nosedive / Fall Boost)
+  if (player.diving) {
+    targetGrav *= 1.85;
+    terminalVelocity *= 1.45;
+    if (Math.random() < 0.08) playCursedSound('dive');
+  }
+
+  // Apply vertical acceleration
+  if (isRev) {
+    player.vel.y += targetGrav * dt; // Accelerate upwards
+    if (player.vel.y > terminalVelocity) player.vel.y = terminalVelocity;
+  } else {
+    player.vel.y -= targetGrav * dt; // Accelerate downwards
+    if (player.vel.y < -terminalVelocity) player.vel.y = -terminalVelocity;
+  }
+
+  // Integrate position
+  player.pos.x += player.vel.x * dt;
+  player.pos.y += player.vel.y * dt;
+  player.pos.z += player.vel.z * dt;
+
+  // Track max speed (converted to km/h)
+  const currentSpeedKmH = Math.round(Math.abs(player.vel.y) * 3.6);
+  if (currentSpeedKmH > player.maxSpeedReached) player.maxSpeedReached = currentSpeedKmH;
+
+  // 4. Boundary Collision with Shaft Outer Cylinder
+  const currentRadius = Math.hypot(player.pos.x, player.pos.z);
+  const maxSafeR = lvl.radius - player.radius;
+  if (currentRadius > maxSafeR) {
+    // Player grazed or slammed into outer shaft wall
+    if (Math.abs(player.vel.y) > 40) {
+      triggerDeath("Du bist mit voller Wucht gegen die Schachtwand geprallt.");
+      return;
+    } else {
+      // Elastic bounce off wall
+      const nx = player.pos.x / currentRadius;
+      const nz = player.pos.z / currentRadius;
+      player.pos.x = nx * maxSafeR;
+      player.pos.z = nz * maxSafeR;
+      player.vel.x *= -0.5;
+      player.vel.z *= -0.5;
+      playCursedSound('boing');
+    }
+  }
+
+  // 5. Collision with Obstacles
+  checkObstacleCollisions();
+
+  // 6. Check Target / Bottom Floor Landing
+  checkLanding(lvl);
+
+  // 7. Update HUD
+  updateHUD(currentSpeedKmH);
+
+  // 8. Update Wind Audio
+  const speedRatio = Math.abs(player.vel.y) / 100;
+  updateWindSound(speedRatio);
+}
+
+// Collision Check against all obstacles along shaft with fair rotation & grace zone
+function checkObstacleCollisions() {
+  const p = player.pos;
+  const pr = player.radius;
+
+  // Grace zone at start: never die immediately upon spawning
+  if (Math.abs(p.y) < 8) return;
+
+  for (let i = 0; i < registeredObstacles.length; i++) {
+    const obs = registeredObstacles[i];
+    const data = obs.userData;
+    if (!data) continue;
+
+    // Fast Y distance check
+    const dy = Math.abs(p.y - obs.position.y);
+    if (dy > (data.halfH + pr)) continue;
+
+    if (data.isDonutHole) {
+      // Donut Torus: Safe inside center hole OR outside ring perimeter
+      const distFromCenter = Math.hypot(p.x - obs.position.x, p.z - obs.position.z);
+      const ringR = data.ringRadius || 8.0;
+      const tubeR = data.tubeRadius || 1.8;
+      // Only hit if within the solid tube body
+      if (distFromCenter >= (ringR - tubeR - pr) && distFromCenter <= (ringR + tubeR + pr)) {
+        triggerDeath(getRandomRoast());
+        return;
+      }
+    } else {
+      // Oriented Bounding Box (OBB) transformed by obstacle rotation
+      const relX = p.x - obs.position.x;
+      const relZ = p.z - obs.position.z;
+      const angle = obs.rotation.y || 0;
+      const cos = Math.cos(-angle);
+      const sin = Math.sin(-angle);
+      const localX = relX * cos - relZ * sin;
+      const localZ = relX * sin + relZ * cos;
+
+      if (Math.abs(localX) < (data.halfW + pr) && Math.abs(localZ) < (data.halfD + pr)) {
+        triggerDeath(getRandomRoast());
+        return;
+      }
+    }
+  }
+}
+
+// Landing check at bottom or top
+function checkLanding(lvl) {
+  const isRev = lvl.reverseGravity;
+  const targetY = isRev ? (lvl.depth + 10) : (-lvl.depth - 10);
+  const passedTarget = isRev ? (player.pos.y >= targetY) : (player.pos.y <= targetY);
+
+  if (passedTarget) {
+    const data = targetMesh.userData;
+    const px = player.pos.x;
+    const pz = player.pos.z;
+
+    const hitTarget = (px >= data.minX && px <= data.maxX && pz >= data.minZ && pz <= data.maxZ);
+
+    if (hitTarget) {
+      triggerVictory();
+    } else {
+      triggerDeath("Du hast das Wasser um wenige Zentimeter verfehlt und den Betonboden geküsst.");
+    }
+  }
+}
+
+function getRandomRoast() {
+  return DEATH_ROASTS[Math.floor(Math.random() * DEATH_ROASTS.length)];
+}
+
+// Trigger Player Death
+function triggerDeath(reason) {
+  if (player.isDead || player.hasWon) return;
+  player.isDead = true;
+  playCursedSound('splat');
+
+  document.getElementById('death-reason').textContent = reason;
+  document.getElementById('death-screen').style.display = 'flex';
+
+  // Screen shake / chromatic flash
+  const crt = document.getElementById('crtOverlay');
+  crt.style.opacity = '1';
+  setTimeout(() => { crt.style.opacity = '0.6'; }, 300);
+}
+
+// Trigger Level Win
+function triggerVictory() {
+  if (player.hasWon || player.isDead) return;
+  player.hasWon = true;
+  playCursedSound('splash');
+
+  const lvl = LEVELS[currentLevelIndex];
+  const totalTime = (performance.now() - player.startTime) / 1000;
+
+  // Save Stats
+  saveLevelStats(lvl.id, totalTime, player.deathsThisLevel);
+
+  document.getElementById('winTime').textContent = `${totalTime.toFixed(2)}s`;
+  document.getElementById('winMaxSpeed').textContent = `${player.maxSpeedReached} km/h`;
+  document.getElementById('winAttempts').textContent = `${player.deathsThisLevel + 1}`;
+
+  // Medals calculation
+  let medal = '🥉';
+  if (totalTime < 10 && player.deathsThisLevel === 0) medal = '🥇 Gold';
+  else if (totalTime < 15 && player.deathsThisLevel <= 2) medal = '🥈 Silber';
+  else medal = '🥉 Bronze';
+
+  document.getElementById('winMedal').textContent = medal;
+  document.getElementById('winModal').classList.remove('hidden');
+}
+
+// ============================================================================
+// ANIMATIONS & DYNAMIC WORLD (EYES, PROPELLERS, VERTIGO DOLLY ZOOM)
+// ============================================================================
+function updateAnimatedWorld(dt) {
+  // 1. Giant Eyeballs tracking player
+  for (let i = 0; i < eyeMeshes.length; i++) {
+    const eye = eyeMeshes[i];
+    eye.lookAt(player.pos.x, player.pos.y, player.pos.z);
+  }
+
+  // 2. Animated Obstacles (Spinning, oscillating, circling)
+  for (let i = 0; i < animatedObstacles.length; i++) {
+    const anim = animatedObstacles[i];
+    if (anim.type === 'rotate_y') {
+      anim.mesh.rotation.y += anim.speed * dt;
+    } else if (anim.type === 'oscillate_x') {
+      anim.mesh.position.x = anim.baseX + Math.sin(performance.now() * 0.003 * anim.speed) * anim.amp;
+    } else if (anim.type === 'circle') {
+      anim.angle += anim.speed * dt;
+      anim.mesh.position.x = Math.cos(anim.angle) * anim.radius;
+      anim.mesh.position.z = Math.sin(anim.angle) * anim.radius;
+      anim.mesh.rotation.y = anim.angle + Math.PI / 2;
+    } else if (anim.type === 'beacon') {
+      anim.time += dt;
+      anim.mesh.rotation.z += 1.5 * dt;
+      anim.mesh.position.y = anim.baseY + Math.sin(anim.time * 4) * 0.4;
+    }
+  }
+
+  // 3. FPV Diving Arms & Wind Particles
+  const lvl = LEVELS[currentLevelIndex];
+  const isRev = lvl.reverseGravity;
+
+  if (isFirstPerson && fpvArmsGroup && fpvLeftArm && fpvRightArm) {
+    const t = performance.now() * 0.015;
+    const speed = Math.abs(player.vel.y);
+    const flutterAmp = (player.flapping ? 0.22 : 0.035) * (1 + speed * 0.008);
+
+    // Wind bobbing
+    fpvLeftArm.position.y = -0.38 + Math.sin(t) * flutterAmp;
+    fpvRightArm.position.y = -0.38 + Math.sin(t + 1.5) * flutterAmp;
+
+    // Banking roll when steering left/right
+    fpvArmsGroup.rotation.z = -player.vel.x * 0.035;
+    fpvArmsGroup.rotation.x = player.vel.z * 0.03;
+
+    // Diving streamline or Flapping paddle
+    if (player.diving) {
+      fpvLeftArm.position.z = -0.85;
+      fpvRightArm.position.z = -0.85;
+    } else if (player.flapping) {
+      fpvLeftArm.position.z = -0.55 + Math.sin(t * 3) * 0.08;
+      fpvRightArm.position.z = -0.55 + Math.sin(t * 3 + 1.5) * 0.08;
+    } else {
+      fpvLeftArm.position.z = -0.7;
+      fpvRightArm.position.z = -0.7;
+    }
+  }
+
+  // 4. Wind particles cycling upward past the camera
+  if (windParticles) {
+    windParticles.position.x = player.pos.x;
+    windParticles.position.z = player.pos.z;
+    windParticles.position.y = player.pos.y;
+    const speed = Math.abs(player.vel.y);
+    const posAttr = windParticles.geometry.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      let py = posAttr.getY(i);
+      py += (isRev ? -1 : 1) * (speed * 0.45 + 14) * dt;
+      if (py > 10) py = -10;
+      if (py < -10) py = 10;
+      posAttr.setY(i, py);
+    }
+    posAttr.needsUpdate = true;
+    windParticles.material.opacity = Math.min(0.65, 0.15 + (speed / 100) * 0.5);
+  }
+
+  // 5. Flailing Ragdoll Limbs in Skydiving Freefall Pose (in 3rd person)
+  if (!isFirstPerson && playerDummy) {
+    playerDummy.position.copy(player.pos);
+    const speed = Math.abs(player.vel.y);
+    const flailAmp = Math.min(1.2, speed * 0.015);
+    const t = performance.now() * 0.02;
+
+    // Body tilted horizontal into dive pose facing the direction of fall
+    playerDummy.rotation.x = isRev ? (Math.PI / 2) : (-Math.PI / 2);
+    playerDummy.rotation.z = -player.vel.x * 0.04;
+    playerDummy.rotation.y = player.vel.x * 0.02;
+
+    dummyLimbs[0].rotation.z = Math.sin(t) * flailAmp + 0.4; // L Arm
+    dummyLimbs[1].rotation.z = -Math.sin(t + 1) * flailAmp - 0.4; // R Arm
+    dummyLimbs[2].rotation.x = Math.sin(t * 1.2) * flailAmp; // L Leg
+    dummyLimbs[3].rotation.x = -Math.sin(t * 1.2 + 2) * flailAmp; // R Leg
+  }
+}
+
+// Camera update: looks straight DOWN into the abyss (or UP in reverse gravity)
+function updateCamera() {
+  const speed = Math.abs(player.vel.y);
+  const lvl = LEVELS[currentLevelIndex];
+  const isRev = lvl.reverseGravity;
+
+  // Dynamic Dolly Zoom: Higher speed widens FOV and stretches depth perception
+  const baseFov = 74;
+  const speedFovBonus = Math.min(28, (speed / 100) * 28);
+  camera.fov = baseFov + speedFovBonus;
+  camera.updateProjectionMatrix();
+
+  if (isFirstPerson) {
+    // 1st Person: Camera placed right at the player's eyes looking straight DOWN into the abyss
+    camera.position.set(player.pos.x, player.pos.y, player.pos.z);
+    if (isRev) {
+      // Reverse: looking straight UP into the sky
+      camera.up.set(0, 0, 1);
+      camera.lookAt(player.pos.x + player.vel.x * 0.05, player.pos.y + 100, player.pos.z + player.vel.z * 0.05);
+    } else {
+      // Normal: looking straight DOWN into the shaft
+      camera.up.set(0, 0, -1);
+      camera.lookAt(player.pos.x + player.vel.x * 0.05, player.pos.y - 100, player.pos.z + player.vel.z * 0.05);
+    }
+  } else {
+    // 3rd Person: Trailing above & behind looking down past the skydiver
+    if (isRev) {
+      camera.position.set(player.pos.x * 0.5, player.pos.y - 6.0, player.pos.z + 4.5);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(player.pos.x, player.pos.y + 25, player.pos.z - 1.5);
+    } else {
+      camera.position.set(player.pos.x * 0.5, player.pos.y + 6.0, player.pos.z + 4.5);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(player.pos.x, player.pos.y - 25, player.pos.z - 1.5);
+    }
+  }
+}
+
+// ============================================================================
+// HUD UPDATES
+// ============================================================================
+function updateHUD(speedKmH) {
+  const lvl = LEVELS[currentLevelIndex];
+  const isRev = lvl.reverseGravity;
+  const totalDepth = lvl.depth;
+
+  // Remaining Altitude
+  const currentY = Math.abs(player.pos.y);
+  const remainingMeters = Math.max(0, Math.round(totalDepth - currentY));
+  document.getElementById('hudAlt').textContent = `${remainingMeters} m`;
+  document.getElementById('hudSpeed').textContent = `${speedKmH} km/h`;
+
+  const elapsed = (performance.now() - player.startTime) / 1000;
+  document.getElementById('hudTime').textContent = `${elapsed.toFixed(1)}s`;
+
+  // Altimeter bar progress
+  const progress = Math.max(0, Math.min(1, currentY / totalDepth));
+  document.getElementById('alt-thumb').style.top = `${progress * 100}%`;
+
+  // Target Aim Reticle Feedback in FPV
+  const data = targetMesh ? targetMesh.userData : null;
+  const crosshairEl = document.getElementById('crosshair');
+  const labelEl = document.getElementById('crosshair-lock-label');
+  if (data && crosshairEl && labelEl && isFirstPerson) {
+    const px = player.pos.x;
+    const pz = player.pos.z;
+    const isTargetAligned = (px >= data.minX && px <= data.maxX && pz >= data.minZ && pz <= data.maxZ);
+    if (isTargetAligned) {
+      crosshairEl.classList.add('locked');
+      labelEl.textContent = '🎯 ZIEL IM VISIER';
+    } else {
+      crosshairEl.classList.remove('locked');
+      labelEl.textContent = 'FPV DROPPING';
+    }
+  }
+
+  // Stamina bar
+  const staminaBar = document.getElementById('stamina-bar');
+  if (player.flapping || player.stamina < 100) {
+    staminaBar.style.display = 'block';
+    document.getElementById('stamina-fill').style.width = `${player.stamina}%`;
+  } else {
+    staminaBar.style.display = 'none';
+  }
+}
+
+// ============================================================================
+// STARTUP
+// ============================================================================
+window.addEventListener('load', () => {
+  init3D();
+  renderLevelGrid();
+  loadLevel(0);
+  animate();
+});
+</script>
+</body>
+</html>

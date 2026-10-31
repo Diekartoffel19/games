@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>3D Marble Blast — Three.js Physik-Murmelbahn im Browser</title>
+<meta name="description" content="Steuere deine Glaskugel durch eine atmosphärische 3D-Welt: Balanciere über schmale Brücken, nutze Boost-Pads und sammle funkelnde Juwelen!">
+<meta name="keywords" content="3d marble blast, murmelbahn browser, threejs 3d physics game">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="3D Marble Blast — Three.js Physik-Murmelbahn im Browser">
+<meta property="og:description" content="Steuere deine Glaskugel durch eine atmosphärische 3D-Welt: Balanciere über schmale Brücken, nutze Boost-Pads und sammle funkelnde Juwelen!">
+<meta property="og:locale" content="de_DE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="3D Marble Blast — Three.js Physik-Murmelbahn im Browser">
+<meta name="twitter:description" content="Steuere deine Glaskugel durch eine atmosphärische 3D-Welt: Balanciere über schmale Brücken, nutze Boost-Pads und sammle funkelnde Juwelen!">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "3D Marble Blast — Three.js Physik-Murmelbahn im Browser",
+  "description": "Steuere deine Glaskugel durch eine atmosphärische 3D-Welt: Balanciere über schmale Brücken, nutze Boost-Pads und sammle funkelnde Juwelen!",
+  "inLanguage": "de",
+  "applicationCategory": "Game",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  }
+}
+</script>
+<link rel="stylesheet" href="../../style.css">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../../src/arcade-core.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; overflow: hidden;
+    background: #050816; color: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+    text-align: left; min-height: 0;
+  }
+  #canvas-container { position: fixed; inset: 0; }
+  #canvas-container canvas { display: block; cursor: grab; margin: 0; border-radius: 0; max-width: none; }
+  #canvas-container canvas:active { cursor: grabbing; }
+
+  .back-btn {
+    position: fixed; top: 16px; left: 16px; z-index: 40;
+    color: #c7d2fe; text-decoration: none; font-weight: 700;
+    background: rgba(15, 23, 42, .75); border: 1px solid #4338ca;
+    padding: 8px 14px; border-radius: 10px; backdrop-filter: blur(8px);
+  }
+  .back-btn:hover { background: #312e81; color: #fff; }
+
+  /* HUD */
+  #hud {
+    position: fixed; top: 14px; left: 125px; right: 14px;
+    display: none; justify-content: center; flex-wrap: wrap; gap: 8px; z-index: 10; pointer-events: none;
+  }
+  .chip {
+    background: rgba(15, 23, 42, .78); border: 1px solid rgba(129, 140, 248, .45);
+    border-radius: 12px; padding: clamp(5px, 1vw, 8px) clamp(10px, 2vw, 16px); font-weight: 800; font-size: clamp(.85rem, 2.2vw, 1.05rem);
+    backdrop-filter: blur(8px); box-shadow: 0 6px 20px rgba(0,0,0,.45); white-space: nowrap;
+  }
+  .chip small { color: #94a3b8; font-weight: 700; font-size: .68rem; display: block; letter-spacing: .5px; }
+  .gold { color: #facc15; } .cyan { color: #38bdf8; } .green { color: #4ade80; }
+
+  #controls-hint {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(15, 23, 42, .78); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 30px; padding: 7px 20px; color: #94a3b8; font-size: .82rem;
+    display: none; gap: 14px; z-index: 10; pointer-events: none; white-space: nowrap;
+  }
+  #controls-hint b { color: #f8fafc; }
+
+  #marble-touch {
+    position: fixed; bottom: 18px; left: 16px; right: 16px;
+    display: none; justify-content: space-between; align-items: flex-end;
+    z-index: 25; pointer-events: none;
+  }
+  @media (pointer: coarse), (max-width: 820px) {
+    #marble-touch.active { display: flex; }
+    #controls-hint { display: none !important; }
+  }
+  .mt-dpad {
+    display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(2, 52px);
+    gap: 6px; pointer-events: auto;
+  }
+  .mt-actions { display: flex; gap: 8px; pointer-events: auto; }
+  .mt-btn {
+    background: rgba(15, 23, 42, .82); border: 2px solid rgba(129, 140, 248, .5);
+    color: #fff; border-radius: 14px; font-weight: 800; font-size: 1.05rem;
+    min-width: 52px; min-height: 52px; padding: 0 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    touch-action: none; user-select: none;
+  }
+  .mt-btn:active { background: #4338ca; transform: scale(0.93); }
+
+  #big-text {
+    position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%);
+    font-size: clamp(3.2rem, 10vw, 6rem); font-weight: 900; z-index: 20; pointer-events: none;
+    text-shadow: 0 6px 30px rgba(56, 189, 248, .8), 0 2px 0 #000; opacity: 0;
+    transition: opacity .2s;
+  }
+  #toast {
+    position: fixed; top: 92px; left: 50%; transform: translateX(-50%);
+    background: rgba(30, 27, 75, .9); border: 1px solid #6366f1; border-radius: 14px;
+    padding: 10px 22px; font-weight: 700; font-size: 1.05rem; z-index: 20;
+    pointer-events: none; opacity: 0; transition: opacity .3s; max-width: 90vw; text-align: center;
+  }
+
+  /* Overlays */
+  .overlay {
+    position: fixed; inset: 0; display: none; z-index: 30;
+    background: rgba(3, 7, 18, .55); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center;
+  }
+  .panel {
+    background: linear-gradient(160deg, #1e1b4b, #0f172a); border: 2px solid #6366f1;
+    border-radius: 22px; padding: clamp(18px, 4vw, 30px) clamp(18px, 4vw, 38px); text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,.7); max-width: 660px; width: 94vw; max-height: 90vh; overflow-y: auto;
+  }
+  .panel h1 { margin: 0 0 4px; font-size: clamp(1.7rem, 5vw, 2.4rem); }
+  .panel p { color: #cbd5e1; margin: 6px 0; }
+  .levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0 14px; }
+  @media (max-width: 600px) { .levels { grid-template-columns: repeat(2, 1fr); } }
+  .lvl {
+    background: #312e81; border: 2px solid #4f46e5; border-radius: 14px; padding: 10px 8px;
+    cursor: pointer; color: #fff; font: inherit; transition: transform .12s, background .12s;
+  }
+  .lvl:hover:not(:disabled) { transform: translateY(-3px); background: #4338ca; }
+  .lvl:disabled { opacity: .45; cursor: not-allowed; }
+  .lvl .num { font-size: 1.5rem; font-weight: 900; }
+  .lvl .name { font-weight: 800; margin: 2px 0; font-size: .85rem; }
+  .lvl .best { font-size: .75rem; color: #facc15; }
+  .lvl .desc { font-size: .68rem; color: #a5b4fc; margin-top: 2px; }
+  .lvl .medal { font-size: 1.1rem; margin-top: 2px; }
+  .keys {
+    text-align: left; font-size: .82rem; color: #94a3b8; line-height: 1.6;
+    background: rgba(0,0,0,.25); border-radius: 12px; padding: 8px 14px;
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px;
+  }
+  .keys b { color: #e2e8f0; }
+  .btn {
+    margin: 8px 5px 0; padding: 11px 24px; font: inherit; font-weight: 800; font-size: 1rem;
+    color: #fff; border: none; border-radius: 12px; cursor: pointer; transition: transform .12s;
+    background: linear-gradient(135deg, #10b981, #059669);
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn.alt { background: #334155; }
+  .btn.blue { background: linear-gradient(135deg, #6366f1, #4338ca); }
+  .stat-row { display: flex; justify-content: center; gap: 14px; margin: 16px 0 8px; }
+  .stat-row .chip { pointer-events: none; }
+  .skin-btn {
+    border: 2px solid #6366f1; background: #1e1b4b; color: #c7d2fe;
+    border-radius: 8px; padding: 4px 10px; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+  }
+  .skin-btn.active {
+    background: #4f46e5; border-color: #facc15; color: #fff;
+  }
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+</head>
+<body>
+
+<a class="back back-btn" href="../../index.html">← Arcade</a>
+<div id="canvas-container"></div>
+
+<div id="hud">
+  <div class="chip"><small>LEVEL</small><span id="hudLevel">1</span>/8</div>
+  <div class="chip"><small>JUWELEN</small>💎 <span class="gold" id="hudGems">0/0</span></div>
+  <div class="chip"><small>ZEIT</small><span class="cyan" id="hudTime">0:00.00</span></div>
+  <div class="chip"><small>BESTZEIT</small><span class="green" id="hudBest">–</span></div>
+  <div class="chip"><small>TEMPO</small><span id="hudSpeed">0</span> km/h</div>
+  <div class="chip" id="hudPowerupChip" style="display:none; border-color:#f43f5e;"><small>POWER-UP</small><span id="hudPowerup">⚡</span></div>
+</div>
+
+<div id="controls-hint">
+  <span><b>WASD</b> Rollen</span><span><b>Leertaste</b> Springen</span>
+  <span><b>Maus ziehen / Q E</b> Kamera</span><span><b>R</b> Checkpoint</span>
+  <span><b>Esc</b> Pause</span>
+</div>
+
+<div id="marble-touch" class="active">
+  <div class="mt-dpad">
+    <div></div>
+    <button class="mt-btn" data-key="KeyW">▲</button>
+    <div></div>
+    <button class="mt-btn" data-key="KeyA">◀</button>
+    <button class="mt-btn" data-key="KeyS">▼</button>
+    <button class="mt-btn" data-key="KeyD">▶</button>
+  </div>
+  <div class="mt-actions">
+    <button class="mt-btn" id="mtRespawn">↺</button>
+    <button class="mt-btn" id="mtPause">⏸</button>
+    <button class="mt-btn" id="mtJump" style="background:rgba(16,185,129,.85);padding:0 18px;">SPRUNG</button>
+  </div>
+</div>
+
+<div id="big-text"></div>
+<div id="toast"></div>
+
+<!-- Main menu -->
+<div class="overlay" id="menu">
+  <div class="panel">
+    <h1>🔮 Marble Blast 3D</h1>
+    <p>Rolle die Murmel ins Ziel. Sammle vorher <b class="gold">alle Juwelen</b> – erst dann öffnet sich das Portal.</p>
+    
+    <!-- Kugel Skins -->
+    <div style="margin: 10px 0; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;">
+      <span style="font-size: 0.85rem; font-weight: bold; color: #a5b4fc;">🎨 Kugel-Skin:</span>
+      <div id="skinList" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;"></div>
+    </div>
+
+    <div class="levels" id="levelList"></div>
+
+    <div class="keys">
+      <span><b>W A S D / Pfeile</b> – Rollen</span>
+      <span><b>Leertaste</b> – Springen (nur am Boden)</span>
+      <span><b>Maus ziehen</b> – Kamera drehen</span>
+      <span><b>Mausrad</b> – Zoom</span>
+      <span><b>Q / E</b> – Kamera drehen</span>
+      <span><b>C</b> – Auto-Kamera an/aus</span>
+      <span><b>R</b> – Zum Checkpoint</span>
+      <span><b>M</b> – Ton an/aus</span>
+    </div>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay" id="pause">
+  <div class="panel">
+    <h1>⏸️ Pause</h1>
+    <button class="btn" id="btnResume">Weiter</button>
+    <button class="btn blue" id="btnRestart">Level neu starten</button>
+    <button class="btn alt" id="btnMenu1">Hauptmenü</button>
+  </div>
+</div>
+
+<!-- Finish -->
+<div class="overlay" id="finish">
+  <div class="panel">
+    <h1 id="finishTitle">🏆 Geschafft!</h1>
+    <div id="finMedal" style="font-size: 1.6rem; font-weight: 900; margin: 4px 0;"></div>
+    <div id="finPars" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 6px;"></div>
+    <div class="stat-row">
+      <div class="chip"><small>DEINE ZEIT</small><span class="cyan" id="finTime">0:00.00</span></div>
+      <div class="chip"><small>BESTZEIT</small><span class="green" id="finBest">–</span></div>
+    </div>
+    <div id="record">⭐ Neuer Rekord! ⭐</div>
+    <button class="btn" id="btnNext">Nächstes Level ▶</button>
+    <button class="btn blue" id="btnRetry">Nochmal</button>
+    <button class="btn alt" id="btnMenu2">Hauptmenü</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// =====================================================================
+//  AUDIO
+// =====================================================================
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioCtx();
+const master = audioCtx.createGain();
+master.gain.value = 0.8;
+master.connect(audioCtx.destination);
+let muted = localStorage.marbleMuted === '1';
+master.gain.value = muted ? 0 : 0.8;
+
+function tone(type, f1, f2, dur, vol, delay = 0) {
+  const t = audioCtx.currentTime + delay;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f1, t);
+  if (f2 !== f1) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+function playFx(name, strength = 1) {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  switch (name) {
+    case 'gem':        tone('sine', 880, 880, .12, .15); tone('sine', 1320, 1320, .25, .15, .08); break;
+    case 'jump':       tone('triangle', 240, 520, .16, .14); break;
+    case 'bounce':     tone('sine', 140, 55, .1, .12 * strength); break;
+    case 'boost':      tone('sawtooth', 260, 900, .3, .09); break;
+    case 'checkpoint': tone('triangle', 660, 660, .1, .13); tone('triangle', 990, 990, .2, .13, .1); break;
+    case 'unlock':     [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, f, .2, .12, i * .08)); break;
+    case 'locked':     tone('square', 200, 140, .2, .07); break;
+    case 'beep':       tone('sine', 600, 600, .15, .16); break;
+    case 'go':         tone('sine', 1000, 1000, .35, .18); break;
+    case 'fall':       tone('sawtooth', 300, 60, .5, .12); break;
+    case 'win':        [523, 659, 784, 1047, 1319].forEach((f, i) => tone('triangle', f, f, .3, .14, i * .1)); break;
+  }
+}
+
+// Rolling noise (brown noise -> lowpass), volume follows speed
+let rollGain = null, rollFilter = null;
+function initRollSound() {
+  if (rollGain) return;
+  const len = audioCtx.sampleRate * 2;
+  const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {
+    last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+    data[i] = last * 3.5;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  rollFilter = audioCtx.createBiquadFilter();
+  rollFilter.type = 'lowpass'; rollFilter.frequency.value = 200;
+  rollGain = audioCtx.createGain(); rollGain.gain.value = 0;
+  src.connect(rollFilter); rollFilter.connect(rollGain); rollGain.connect(master);
+  src.start();
+}
+
+// =====================================================================
+//  CONSTANTS & STATE
+// =====================================================================
+const STEP = 1 / 120;            // fixed physics step
+const MARBLE_R = 0.7;
+const JUMP_VEL = 9.5;
+const MOVE_FORCE_GROUND = 32;
+const MOVE_FORCE_AIR = 10;
+const MAX_INPUT_SPEED = 16;      // input stops accelerating above this (boosts can exceed it)
+const MAX_SPEED = 45;
+
+let scene, camera, renderer, sun, world;
+let marbleMesh, marbleBody, marbleMat, trackMat, iceMat;
+let gridTexture, marbleTexture, chevronTexture;
+
+let state = 'menu';              // menu | countdown | playing | paused | finished
+let stateBeforePause = 'playing';
+let levelIndex = 0;
+let levelTime = 0;
+let simTime = 0;
+let countdown = 0;
+let accumulator = 0;
+
+let gemsCollected = 0;
+let spawn = { x: 0, y: 2, z: 0, theta: Math.PI };
+let checkpointPos = null;
+let killY = -40;
+
+let grounded = false;
+let lastGroundedTime = -999;
+let lastJumpTime = -999;
+let jumpBufferedUntil = -999;
+let lastBounceSound = 0;
+let lastLockedMsg = 0;
+
+// Power-Ups and Surfaces
+let superJumpActive = false;
+let shockAbsorber = false;
+let activePowerupType = null;
+let selectedSkin = localStorage.marbleSkin || 'classic';
+
+const SKINS = [
+  { id: 'classic', name: 'Klassik', icon: '🔵' },
+  { id: 'chrome', name: 'Chrom', icon: '🪞' },
+  { id: 'lava', name: 'Lava', icon: '🌋' },
+  { id: 'disco', name: 'Disco', icon: '🪩' },
+  { id: 'golf', name: 'Golfball', icon: '⚪' },
+  { id: 'neon', name: 'Neon-Grid', icon: '🌐' }
+];
+
+// camera
+let camTheta = Math.PI, camPhi = 0.38, camDist = 9;
+let autoCam = localStorage.marbleAutoCam !== '0';
+let dragging = false, lastDragTime = 0, prevMX = 0, prevMY = 0;
+const camLook = new THREE.Vector3();
+
+// level content
+let levelMeshes = [], levelBodies = [];
+let gems = [], boosts = [], checkpoints = [], hints = [], movers = [], particles = [];
+let bumpers = [], conveyors = [], sweepers = [], powerups = [];
+let goal = null;
+
+const keys = {};
+const $ = id => document.getElementById(id);
+
+// =====================================================================
+//  TEXTURES
+// =====================================================================
+function makeGridTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#cfd3e3'; g.fillRect(0, 0, 64, 64); g.fillRect(64, 64, 64, 64);
+  g.strokeStyle = '#8e95b3'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, 125, 125);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+function makeMarbleTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 0, 128);
+  grd.addColorStop(0, '#0ea5e9'); grd.addColorStop(.5, '#2563eb'); grd.addColorStop(1, '#0ea5e9');
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 128);
+  const bands = [['#e0f2fe', 10, 0], ['#f43f5e', 7, 2.1], ['#ffffff', 5, 4.2]];
+  bands.forEach(([col, w, ph]) => {
+    g.strokeStyle = col; g.lineWidth = w; g.beginPath();
+    for (let x = 0; x <= 256; x += 4) {
+      const y = 64 + Math.sin(x / 256 * Math.PI * 4 + ph) * 34;
+      x === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+    }
+    g.stroke();
+  });
+  return new THREE.CanvasTexture(c);
+}
+
+function makeChevronTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#064e3b'; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = '#4ade80'; g.lineWidth = 14; g.lineCap = 'round'; g.lineJoin = 'round';
+  [34, 94].forEach(y => {
+    g.beginPath(); g.moveTo(24, y + 22); g.lineTo(64, y - 14); g.lineTo(104, y + 22); g.stroke();
+  });
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+// =====================================================================
+//  INIT
+// =====================================================================
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050816);
+  scene.fog = new THREE.Fog(0x050816, 70, 230);
+
+  camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 1000);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  $('canvas-container').appendChild(renderer.domElement);
+
+  scene.add(new THREE.HemisphereLight(0xc7d2fe, 0x1e1b4b, 0.75));
+  sun = new THREE.DirectionalLight(0xffffff, 0.95);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  const s = 30;
+  Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 120 });
+  scene.add(sun); scene.add(sun.target);
+
+  // Starfield
+  const starGeo = new THREE.BufferGeometry();
+  const pos = [];
+  for (let i = 0; i < 1600; i++) {
+    const v = new THREE.Vector3().randomDirection ? new THREE.Vector3().randomDirection() :
+      new THREE.Vector3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize();
+    v.multiplyScalar(450);
+    pos.push(v.x, v.y, v.z);
+  }
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, fog: false }));
+  scene.add(stars);
+
+  gridTexture = makeGridTexture();
+  marbleTexture = makeMarbleTexture();
+  chevronTexture = makeChevronTexture();
+
+  // Physics
+  world = new CANNON.World();
+  world.gravity.set(0, -20, 0);
+  world.broadphase = new CANNON.NaiveBroadphase();
+  world.solver.iterations = 10;
+  marbleMat = new CANNON.Material('marble');
+  trackMat = new CANNON.Material('track');
+  iceMat = new CANNON.Material('ice');
+  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, trackMat, { friction: 0.6, restitution: 0.2 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, iceMat, { friction: 0.03, restitution: 0.15 }));
+
+  createMarble();
+  applyMarbleSkin(selectedSkin);
+  bindInput();
+  renderMenu();
+  loadLevel(0);
+  showOverlay('menu');
+  requestAnimationFrame(loop);
+}
+
+function applyMarbleSkin(skinId) {
+  selectedSkin = skinId;
+  localStorage.marbleSkin = skinId;
+  if (!marbleMesh) return;
+  if (skinId === 'chrome') {
+    marbleMesh.material = new THREE.MeshStandardMaterial({
+      color: 0xf1f5f9, metalness: 0.98, roughness: 0.04
+    });
+  } else if (skinId === 'lava') {
+    marbleMesh.material = new THREE.MeshStandardMaterial({
+      color: 0x7f1d1d, emissive: 0xef4444, emissiveIntensity: 0.85, roughness: 0.35, metalness: 0.2
+    });
+  } else if (skinId === 'disco') {
+    marbleMesh.material = new THREE.MeshStandardMaterial({
+      color: 0xd946ef, metalness: 0.75, roughness: 0.15
+    });
+  } else if (skinId === 'golf') {
+    marbleMesh.material = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.9, metalness: 0.0
+    });
+  } else if (skinId === 'neon') {
+    marbleMesh.material = new THREE.MeshStandardMaterial({
+      color: 0x0f172a, emissive: 0x06b6d4, emissiveIntensity: 0.9, wireframe: true
+    });
+  } else {
+    marbleMesh.material = new THREE.MeshStandardMaterial({
+      map: marbleTexture, roughness: 0.15, metalness: 0.15
+    });
+  }
+}
+
+function createMarble() {
+  marbleMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(MARBLE_R, 40, 28),
+    new THREE.MeshStandardMaterial({ map: marbleTexture, roughness: 0.15, metalness: 0.15 })
+  );
+  marbleMesh.castShadow = true;
+  scene.add(marbleMesh);
+
+  marbleBody = new CANNON.Body({
+    mass: 2, shape: new CANNON.Sphere(MARBLE_R), material: marbleMat,
+    linearDamping: 0.04, angularDamping: 0.1
+  });
+  marbleBody.allowSleep = false;
+  marbleBody.addEventListener('collide', e => {
+    const c = e.contact;
+    let iv = 0;
+    if (c && typeof c.getImpactVelocityAlongNormal === 'function') iv = Math.abs(c.getImpactVelocityAlongNormal());
+    const now = performance.now();
+    if (iv > 5 && now - lastBounceSound > 150 && state === 'playing') {
+      playFx('bounce', Math.min(iv / 15, 1));
+      lastBounceSound = now;
+    }
+  });
+  world.addBody(marbleBody);
+}
+
+// =====================================================================
+//  LEVEL BUILDER
+// =====================================================================
+let theme = { top: 0xffffff, side: 0x334155, edge: 0x818cf8 };
+
+function track(mesh, body) {
+  if (mesh) { scene.add(mesh); levelMeshes.push(mesh); }
+  if (body) { world.addBody(body); levelBodies.push(body); }
+}
+
+function makeBox(cx, cy, cz, w, h, d, rx = 0, rz = 0, opts = {}) {
+  let mat;
+  if (opts.glass) {
+    mat = new THREE.MeshStandardMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.22, roughness: 0.1 });
+  } else {
+    const tex = gridTexture.clone();
+    tex.needsUpdate = true;
+    tex.repeat.set(w / 4, d / 4);
+    const top = new THREE.MeshStandardMaterial({ map: tex, color: opts.top || theme.top, roughness: 0.55, metalness: 0.1 });
+    const side = new THREE.MeshStandardMaterial({ color: theme.side, roughness: 0.6, metalness: 0.2 });
+    mat = [side, side, top, side, side, side];
+  }
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  mesh.position.set(cx, cy, cz);
+  mesh.rotation.set(rx, 0, rz);
+  mesh.receiveShadow = !opts.glass;
+  mesh.castShadow = !opts.glass;
+  if (!opts.glass) {
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(mesh.geometry),
+      new THREE.LineBasicMaterial({ color: opts.edge || theme.edge, transparent: true, opacity: 0.7 })
+    );
+    mesh.add(edges);
+  }
+
+  const body = new CANNON.Body({
+    mass: 0, material: trackMat,
+    type: opts.kinematic ? CANNON.Body.KINEMATIC : CANNON.Body.STATIC
+  });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)));
+  body.position.set(cx, cy, cz);
+  body.quaternion.setFromEuler(rx, 0, rz, 'XYZ');
+  track(mesh, body);
+  return { mesh, body };
+}
+
+const B = {
+  spawn(x, top, z, theta = Math.PI) { spawn = { x, y: top + 1.5, z, theta }; },
+
+  floor(x, z, w, d, top) {
+    killY = Math.min(killY, top - 25);
+    return makeBox(x, top - 0.5, z, w, 1, d);
+  },
+
+  wall(x, z, w, d, base, h) { return makeBox(x, base + h / 2, z, w, h, d, 0, 0, { glass: true }); },
+
+  // Ramp along Z between two top-surface points. The lower end is extended slightly
+  // so it tucks under the next platform (no seam / no bump).
+  rampZ(x, za, ya, zb, yb, w) {
+    let z1 = za, y1 = ya, z2 = zb, y2 = yb;
+    if (z1 > z2) { [z1, z2] = [z2, z1]; [y1, y2] = [y2, y1]; }
+    const L = Math.hypot(z2 - z1, y2 - y1), uz = (z2 - z1) / L, uy = (y2 - y1) / L, E = 0.6;
+    if (y2 < y1) { z2 += uz * E; y2 += uy * E; } else if (y1 < y2) { z1 -= uz * E; y1 -= uy * E; }
+    const L2 = Math.hypot(z2 - z1, y2 - y1);
+    const a = Math.atan2(y1 - y2, z2 - z1);
+    killY = Math.min(killY, Math.min(y1, y2) - 25);
+    return makeBox(x, (y1 + y2) / 2 - Math.cos(a) * 0.5, (z1 + z2) / 2 - Math.sin(a) * 0.5, w, 1, L2, a, 0);
+  },
+
+  // Ramp along X
+  rampX(z, xa, ya, xb, yb, d) {
+    let x1 = xa, y1 = ya, x2 = xb, y2 = yb;
+    if (x1 > x2) { [x1, x2] = [x2, x1]; [y1, y2] = [y2, y1]; }
+    const L = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / L, uy = (y2 - y1) / L, E = 0.6;
+    if (y2 < y1) { x2 += ux * E; y2 += uy * E; } else if (y1 < y2) { x1 -= ux * E; y1 -= uy * E; }
+    const L2 = Math.hypot(x2 - x1, y2 - y1);
+    const b = Math.atan2(y2 - y1, x2 - x1);
+    killY = Math.min(killY, Math.min(y1, y2) - 25);
+    return makeBox((x1 + x2) / 2 + Math.sin(b) * 0.5, (y1 + y2) / 2 - Math.cos(b) * 0.5, z, L2, 1, d, 0, b);
+  },
+
+  mover(x, z, w, d, top, axis, amp, period, phase = 0) {
+    const p = makeBox(x, top - 0.5, z, w, 1, d, 0, 0, { kinematic: true, top: 0xfde68a, edge: 0xfacc15 });
+    const m = { ...p, base: new CANNON.Vec3(x, top - 0.5, z), axis, amp, period, phase };
+    setMoverPos(m, 0);
+    movers.push(m);
+  },
+
+  gem(x, top, z) {
+    const mesh = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.55, 0),
+      new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xb45309, emissiveIntensity: 0.7, roughness: 0.2, metalness: 0.6 })
+    );
+    mesh.castShadow = true;
+    const y = top + 1.0;
+    mesh.position.set(x, y, z);
+    track(mesh);
+    gems.push({ mesh, x, y, z, collected: false, phase: Math.random() * 6 });
+  },
+
+  boost(x, z, w, d, top, dirX, dirZ, speed) {
+    const tex = chevronTexture.clone(); tex.needsUpdate = true;
+    tex.repeat.set(1, Math.max(1, Math.round(Math.max(w, d) / w)));
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(dirX !== 0 ? d : w, dirX !== 0 ? w : d),
+      new THREE.MeshBasicMaterial({ map: tex })
+    );
+    plane.rotation.x = -Math.PI / 2;
+    const grp = new THREE.Group();
+    grp.add(plane);
+    grp.position.set(x, top + 0.02, z);
+    grp.rotation.y = Math.atan2(-dirX, -dirZ);
+    track(grp);
+    boosts.push({ x, z, top, w, d, dirX, dirZ, speed, cooldown: 0, tex });
+  },
+
+  ice(x, z, w, d, top) {
+    killY = Math.min(killY, top - 25);
+    const c = makeBox(x, top - 0.5, z, w, 1, d, 0, 0, {
+      top: 0xa5f3fc, edge: 0x38bdf8
+    });
+    c.body.material = iceMat;
+    return c;
+  },
+
+  bumper(x, z, r, top, force = 26) {
+    const geo = new THREE.CylinderGeometry(r, r, 1.2, 24);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xec4899, emissive: 0xdb2777, emissiveIntensity: 0.85, roughness: 0.2, metalness: 0.3
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, top + 0.6, z);
+    mesh.castShadow = true;
+    track(mesh);
+    bumpers.push({ mesh, x, z, r, top, force, lightTime: 0 });
+  },
+
+  conveyor(x, z, w, d, top, vx, vz) {
+    killY = Math.min(killY, top - 25);
+    const box = makeBox(x, top - 0.5, z, w, 1, d, 0, 0, {
+      top: 0xfef08a, edge: 0xeab308
+    });
+    conveyors.push({ x, z, w, d, top, vx, vz });
+    return box;
+  },
+
+  sweeper(x, z, len, top, speed = 1.6) {
+    const geo = new THREE.BoxGeometry(len, 0.8, 0.4);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xf97316, emissive: 0xc2410c, emissiveIntensity: 0.7, roughness: 0.3
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, top + 0.5, z);
+    mesh.castShadow = true;
+    track(mesh);
+    sweepers.push({ mesh, x, z, len, top, speed, angle: 0 });
+  },
+
+  powerup(x, top, z, type) {
+    const colors = {
+      super_jump: 0x10b981,
+      booster: 0x3b82f6,
+      shock: 0x8b5cf6,
+      time: 0xf59e0b
+    };
+    const geo = new THREE.DodecahedronGeometry(0.55);
+    const mat = new THREE.MeshStandardMaterial({
+      color: colors[type] || 0xffffff,
+      emissive: colors[type] || 0xffffff,
+      emissiveIntensity: 0.85,
+      roughness: 0.2
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, top + 1.1, z);
+    mesh.castShadow = true;
+    track(mesh);
+    powerups.push({ mesh, x, y: top + 1.1, z, type, collected: false });
+  },
+
+  checkpoint(x, z, top) {
+    const grp = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x64748b, emissive: 0x000000, roughness: 0.4 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.1, 8, 40), mat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.06;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4), mat);
+    pole.position.set(1.4, 1.2, 0);
+    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.04), mat);
+    flag.position.set(1.8, 2.15, 0);
+    grp.add(ring, pole, flag);
+    grp.position.set(x, top, z);
+    track(grp);
+    checkpoints.push({ x, z, top, mat, active: false });
+  },
+
+  hint(x, z, r, text) { hints.push({ x, z, r, text, shown: false }); },
+
+  goal(x, z, top) {
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0x7f1d1d, emissiveIntensity: 0.9, roughness: 0.3 });
+    const discMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.3, 16, 48), ringMat);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1.9, 40), discMat);
+    ring.position.set(x, top + 2.5, z);
+    disc.position.set(x, top + 2.5, z);
+    ring.castShadow = true;
+    track(ring); track(disc);
+    goal = { x, z, top, ringMat, discMat, disc, open: false };
+  }
+};
+
+function setMoverPos(m, t) {
+  const s = Math.sin(t * Math.PI * 2 / m.period + m.phase) * m.amp;
+  m.body.position.set(m.base.x + (m.axis === 'x' ? s : 0), m.base.y, m.base.z + (m.axis === 'z' ? s : 0));
+  m.body.velocity.set(0, 0, 0);
+  m.mesh.position.copy(m.body.position);
+}
+
+// =====================================================================
+//  LEVELS (1 to 8) with Par Times & Themes
+// =====================================================================
+const LEVELS = [
+  {
+    name: 'Erste Schritte', desc: 'Rollen, Springen & Boosten lernen',
+    par: { gold: 18, silver: 28, bronze: 42 },
+    theme: { top: 0xa5b4fc, side: 0x312e81, edge: 0x818cf8 },
+    build() {
+      B.spawn(0, 0, 0);
+      B.floor(0, 0, 10, 10, 0);
+      B.wall(0, -5.25, 10, 0.5, 0, 1.2);
+      B.hint(0, 0, 4, '⌨️ W A S D zum Rollen · 🖱️ Maus ziehen zum Umsehen');
+      B.floor(0, 15, 6, 20, 0);
+      B.wall(3.25, 15, 0.5, 20, 0, 1);
+      B.wall(-3.25, 15, 0.5, 20, 0, 1);
+      B.gem(0, 0, 11); B.gem(0, 0, 19);
+      B.rampZ(0, 25, 0, 41, -4, 6);
+      B.floor(0, 47, 14, 12, -4);
+      B.checkpoint(0, 44, -4);
+      B.hint(0, 44, 3, '💎 Sammle alle Juwelen – erst dann öffnet sich das Ziel!');
+      B.gem(4, -4, 48); B.gem(-4, -4, 48);
+      B.floor(-17, 47, 20, 4, -4);
+      B.gem(-14, -4, 47);
+      B.hint(-12, 47, 3, '🚀 Leertaste = Springen. Spring über die Lücke!');
+      B.floor(-36, 47, 12, 12, -4);
+      B.checkpoint(-33, 45, -4);
+      B.boost(-36, 50, 4, 3, -4, 0, 1, 20);
+      B.hint(-37, 44, 3, '⚡ Grüne Boost-Pads geben dir einen Schub!');
+      B.floor(-36, 63, 5, 20, -4);
+      B.gem(-36, -4, 63);
+      B.floor(-36, 79, 12, 12, -4);
+      B.wall(-36, 85.25, 12, 0.5, -4, 2);
+      B.goal(-36, 81, -4);
+    }
+  },
+  {
+    name: 'Sprungschanze', desc: 'Schanze & bewegliche Plattform',
+    par: { gold: 22, silver: 34, bronze: 50 },
+    theme: { top: 0xe9d5ff, side: 0x4c1d95, edge: 0xc084fc },
+    build() {
+      B.spawn(0, 0, 0);
+      B.floor(0, 0, 10, 10, 0);
+      B.wall(0, -5.25, 10, 0.5, 0, 1.2);
+      B.hint(0, 0, 4, '🏔️ Nimm Anlauf über den Boost – die Schanze wartet!');
+      B.rampZ(0, 5, 0, 25, -7, 7);
+      B.floor(0, 29, 7, 8, -7);
+      B.boost(0, 29, 5, 4, -7, 0, 1, 24);
+      B.rampZ(0, 33, -7, 38, -5.5, 7);           // kicker
+      B.floor(0, 57, 12, 26, -8);                 // landing (gap z 38..44)
+      B.wall(0, 70.25, 12, 0.5, -8, 2);
+      B.wall(-6.25, 57, 0.5, 26, -8, 1);
+      B.wall(6.25, 54, 0.5, 20, -8, 1);
+      B.checkpoint(0, 47, -8);
+      B.gem(3, -8, 51); B.gem(-3, -8, 59);
+      B.floor(11, 67, 10, 4, -8);
+      B.hint(12, 67, 3, '⏱️ Warte auf die bewegliche Plattform!');
+      B.mover(22, 67, 4, 4, -8, 'x', 4, 4);
+      B.gem(22, -8, 67);
+      B.floor(34, 67, 12, 12, -8);
+      B.checkpoint(31, 67, -8);
+      B.gem(37, -8, 63);
+      B.rampZ(34, 73, -8, 89, -13, 6);
+      B.gem(34, -10.5, 81);
+      B.floor(34, 95, 12, 12, -13);
+      B.wall(34, 101.25, 12, 0.5, -13, 2);
+      B.goal(34, 97, -13);
+    }
+  },
+  {
+    name: 'Himmelsbahn', desc: 'Schmale Pfade & großer Finalsprung',
+    par: { gold: 25, silver: 38, bronze: 55 },
+    theme: { top: 0xfed7aa, side: 0x7c2d12, edge: 0xfb923c },
+    build() {
+      B.spawn(0, 0, 0);
+      B.floor(0, 0, 8, 8, 0);
+      B.wall(0, -4.25, 8, 0.5, 0, 1.2);
+      B.hint(0, 0, 3, '🎯 Schmaler Pfad – nicht zu schnell!');
+      B.floor(0, 17, 2.5, 26, 0);
+      B.gem(0, 0, 12); B.gem(0, 0, 22);
+      B.floor(0, 35, 10, 10, 0);
+      B.wall(0, 40.25, 10, 0.5, 0, 1.2);
+      B.checkpoint(0, 33, 0);
+      B.rampX(35, -25, -6, -5, 0, 5);
+      B.gem(-15, -3, 35);
+      B.floor(-31, 35, 12, 12, -6);
+      B.wall(-37.25, 35, 0.5, 12, -6, 1.2);
+      B.checkpoint(-28, 35, -6);
+      B.floor(-31, 56, 3, 30, -6);
+      B.gem(-31, -6, 50); B.gem(-31, -6, 62);
+      B.floor(-31, 74, 6, 6, -6);
+      B.mover(-31, 85, 5, 5, -6, 'z', 5.3, 5);
+      B.gem(-31, -6, 85);
+      B.floor(-31, 99, 12, 12, -6);
+      B.checkpoint(-31, 96, -6);
+      B.gem(-28, -6, 101);
+      B.rampZ(-31, 105, -6, 121, -12, 6);
+      B.hint(-31, 108, 3, '🚀 Volle Kraft voraus – Sprung ins Ziel!');
+      B.floor(-31, 125, 6, 8, -12);
+      B.boost(-31, 125, 4, 4, -12, 0, 1, 24);
+      B.rampZ(-31, 129, -12, 133, -11, 6);         // kicker (gap z 133..140)
+      B.floor(-31, 148, 14, 16, -13);
+      B.wall(-31, 156.25, 14, 0.5, -13, 2.5);
+      B.goal(-31, 149, -13);
+    }
+  },
+  {
+    name: 'Eispalast', desc: 'Rutschige Eisflächen & Zeitreise (-5s)',
+    par: { gold: 24, silver: 36, bronze: 52 },
+    theme: { top: 0xa5f3fc, side: 0x0369a1, edge: 0x38bdf8 },
+    build() {
+      B.spawn(0, 0, 0);
+      B.floor(0, 0, 10, 10, 0);
+      B.hint(0, 0, 4, '❄️ Achtung Glatteis! Geringe Reibung erfordert sanftes Lenken.');
+      B.ice(0, 20, 8, 30, 0);
+      B.gem(0, 0, 12); B.gem(0, 0, 25);
+      B.floor(0, 42, 12, 12, 0);
+      B.checkpoint(0, 40, 0);
+      B.powerup(0, 0, 43, 'time');
+      B.hint(0, 41, 3, '⏳ Nimm die Sanduhr für -5 Sekunden Zeitbonus!');
+      B.rampX(42, 6, 0, 24, -4, 6);
+      B.ice(30, 42, 20, 6, -4);
+      B.gem(32, -4, 42);
+      B.floor(45, 42, 10, 10, -4);
+      B.powerup(45, -4, 42, 'super_jump');
+      B.hint(45, 42, 3, '🦘 Super Jump Power-Up! Springe weit über die Lücke!');
+      B.floor(45, 75, 14, 14, -4);
+      B.wall(45, 82.25, 14, 0.5, -4, 2);
+      B.gem(42, -4, 75); B.gem(48, -4, 75);
+      B.goal(45, 76, -4);
+    }
+  },
+  {
+    name: 'Flippersaal', desc: 'Pinball-Bumper & Speed Booster',
+    par: { gold: 22, silver: 32, bronze: 48 },
+    theme: { top: 0xfbcfe8, side: 0x831843, edge: 0xf43f5e },
+    build() {
+      B.spawn(0, 0, 0);
+      B.floor(0, 0, 10, 10, 0);
+      B.hint(0, 0, 4, '🔴 Bumper katapultieren dich mit voller Wucht zurück!');
+      B.rampZ(0, 5, 0, 25, -6, 14);
+      B.floor(0, 45, 16, 28, -6);
+      B.wall(8.25, 45, 0.5, 28, -6, 2);
+      B.wall(-8.25, 45, 0.5, 28, -6, 2);
+      B.bumper(-4, 38, 1.8, -6, 26);
+      B.bumper(4, 44, 1.8, -6, 26);
+      B.bumper(0, 52, 1.8, -6, 26);
+      B.gem(-5, -6, 44); B.gem(5, -6, 38); B.gem(0, -6, 56);
+      B.floor(0, 68, 12, 14, -6);
+      B.checkpoint(0, 64, -6);
+      B.powerup(0, -6, 68, 'booster');
+      B.hint(0, 66, 3, '⚡ Speed Booster zündet puren Vorwärtsschub!');
+      B.rampZ(0, 75, -6, 95, -12, 6);
+      B.floor(0, 104, 14, 14, -12);
+      B.wall(0, 111.25, 14, 0.5, -12, 2);
+      B.goal(0, 106, -12);
+    }
+  },
+  {
+    name: 'Förderband-Fabrik', desc: 'Laufbänder & rotierender Sweeper-Balken',
+    par: { gold: 26, silver: 40, bronze: 58 },
+    theme: { top: 0xfef08a, side: 0x713f12, edge: 0xeab308 },
+    build() {
+      B.spawn(0, 0, 0);
+      B.floor(0, 0, 10, 10, 0);
+      B.hint(0, 0, 4, '🏭 Förderbänder ziehen die Murmel mit!');
+      B.conveyor(0, 18, 6, 26, 0, 0, 14);
+      B.gem(0, 0, 14); B.gem(0, 0, 24);
+      B.floor(0, 38, 12, 12, 0);
+      B.checkpoint(0, 35, 0);
+      B.hint(0, 36, 3, '⚠️ Weiche dem rotierenden Sweeper-Balken aus!');
+      B.floor(0, 56, 14, 16, 0);
+      B.sweeper(0, 56, 11, 0, 1.8);
+      B.gem(-4, 0, 56); B.gem(4, 0, 56);
+      B.conveyor(0, 76, 6, 20, 0, 0, 16);
+      B.floor(0, 94, 14, 14, 0);
+      B.wall(0, 101.25, 14, 0.5, 0, 2);
+      B.goal(0, 96, 0);
+    }
+  },
+  {
+    name: 'Stunt-Arena', desc: 'Riesige Schanzen, Schockdämpfer & Höhenflüge',
+    par: { gold: 24, silver: 36, bronze: 54 },
+    theme: { top: 0xfecdd3, side: 0x881337, edge: 0xf43f5e },
+    build() {
+      B.spawn(0, 0, 0);
+      B.floor(0, 0, 10, 10, 0);
+      B.boost(0, 3, 6, 4, 0, 0, 1, 26);
+      B.rampZ(0, 8, 0, 20, 4, 6); // Upward ski jump!
+      B.floor(0, 46, 14, 16, -2);
+      B.checkpoint(0, 41, -2);
+      B.gem(0, 2, 28); // Mid-air gem!
+      B.gem(-4, -2, 46); B.gem(4, -2, 46);
+      B.powerup(0, -2, 49, 'shock');
+      B.hint(0, 48, 3, '🛡️ Schockdämpfer schützt vor harten Landungen!');
+      B.rampZ(0, 55, -2, 65, 3, 6);
+      B.floor(0, 90, 16, 20, -5);
+      B.wall(0, 100.25, 16, 0.5, -5, 2.5);
+      B.gem(0, 1, 74);
+      B.goal(0, 92, -5);
+    }
+  },
+  {
+    name: 'Meister-Parcours', desc: 'Das große Finale: Alle Elemente vereint!',
+    par: { gold: 30, silver: 45, bronze: 65 },
+    theme: { top: 0xfef9c3, side: 0x78350f, edge: 0xfacc15 },
+    build() {
+      B.spawn(0, 0, 0);
+      B.floor(0, 0, 10, 10, 0);
+      B.hint(0, 0, 4, '👑 Das ultimative Finale! Zeige meisterhafte Kugelkontrolle.');
+      B.ice(0, 18, 6, 24, 0);
+      B.gem(0, 0, 18);
+      B.floor(0, 37, 12, 12, 0);
+      B.checkpoint(0, 34, 0);
+      B.bumper(-3, 38, 1.6, 0, 24); B.bumper(3, 38, 1.6, 0, 24);
+      B.conveyor(0, 55, 6, 22, 0, 0, 16);
+      B.floor(0, 75, 14, 14, 0);
+      B.sweeper(0, 75, 11, 0, 2.0);
+      B.gem(-3, 0, 75); B.gem(3, 0, 75);
+      B.powerup(0, 0, 78, 'super_jump');
+      B.rampZ(0, 84, 0, 94, 4, 6);
+      B.floor(0, 120, 16, 18, -4);
+      B.wall(0, 129.25, 16, 0.5, -4, 3);
+      B.gem(0, 2, 104);
+      B.goal(0, 122, -4);
+    }
+  }
+];
+
+function clearLevel() {
+  levelMeshes.forEach(m => scene.remove(m));
+  levelBodies.forEach(b => world.removeBody(b));
+  particles.forEach(p => scene.remove(p.mesh));
+  levelMeshes = []; levelBodies = [];
+  gems = []; boosts = []; checkpoints = []; hints = []; movers = []; particles = [];
+  bumpers = []; conveyors = []; sweepers = []; powerups = [];
+  superJumpActive = false;
+  shockAbsorber = false;
+  activePowerupType = null;
+  if ($('hudPowerupChip')) $('hudPowerupChip').style.display = 'none';
+  goal = null;
+}
+
+function loadLevel(i) {
+  clearLevel();
+  levelIndex = i;
+  const L = LEVELS[i];
+  theme = L.theme;
+  killY = 0;
+  L.build();
+
+  gemsCollected = 0;
+  levelTime = 0;
+  simTime = 0;
+  accumulator = 0;
+  checkpointPos = null;
+  marbleBody.linearDamping = 0.04;
+  camTheta = spawn.theta;
+  placeMarble(spawn);
+  snapCamera();
+  updateHUD();
+}
+
+function placeMarble(p) {
+  marbleBody.position.set(p.x, p.y, p.z);
+  marbleBody.velocity.set(0, 0, 0);
+  marbleBody.angularVelocity.set(0, 0, 0);
+  marbleBody.quaternion.set(0, 0, 0, 1);
+  marbleMesh.position.copy(marbleBody.position);
+  lastGroundedTime = -999;
+  jumpBufferedUntil = -999;
+}
+
+function respawn(withSound = true) {
+  if (withSound) playFx('fall');
+  const p = checkpointPos || spawn;
+  placeMarble(p);
+  camTheta = p.theta;
+  snapCamera();
+}
+
+// =====================================================================
+//  GAME FLOW
+// =====================================================================
+function showOverlay(id) {
+  ['menu', 'pause', 'finish'].forEach(o => $(o).style.display = o === id ? 'flex' : 'none');
+  const inGame = id === null;
+  $('hud').style.display = inGame || id === 'pause' ? 'flex' : 'none';
+  $('controls-hint').style.display = inGame ? 'flex' : 'none';
+}
+
+function startLevel(i) {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  initRollSound();
+  loadLevel(i);
+  state = 'countdown';
+  countdown = 3;
+  lastCountShown = 4;
+  showOverlay(null);
+}
+
+let lastCountShown = 4;
+function updateCountdown(dt) {
+  countdown -= dt;
+  const n = Math.ceil(countdown);
+  if (n !== lastCountShown && n > 0) {
+    lastCountShown = n;
+    bigText(String(n), 900);
+    playFx('beep');
+  }
+  if (countdown <= 0) {
+    state = 'playing';
+    bigText('LOS!', 700);
+    playFx('go');
+  }
+}
+
+function pauseGame() {
+  if (state !== 'playing' && state !== 'countdown') return;
+  stateBeforePause = state;
+  state = 'paused';
+  showOverlay('pause');
+}
+
+function resumeGame() {
+  if (state !== 'paused') return;
+  state = stateBeforePause;
+  showOverlay(null);
+}
+
+function goMenu() {
+  state = 'menu';
+  renderMenu();
+  loadLevel(levelIndex);
+  showOverlay('menu');
+}
+
+function finishLevel() {
+  state = 'finished';
+  marbleBody.linearDamping = 0.85;
+  playFx('win');
+
+  const key = 'marbleBest_' + levelIndex;
+  const prev = parseFloat(localStorage[key]);
+  const isRecord = !(prev > 0) || levelTime < prev;
+  if (isRecord) localStorage[key] = levelTime.toFixed(3);
+  const unlocked = parseInt(localStorage.marbleUnlocked || '1', 10);
+  if (levelIndex + 2 > unlocked && levelIndex + 1 < LEVELS.length) localStorage.marbleUnlocked = String(levelIndex + 2);
+
+  // Par Medals Calculation
+  const L = LEVELS[levelIndex];
+  let medalIcon = '🏁 GESCHAFFT!';
+  if (L.par) {
+    let medal = 'keine';
+    if (levelTime <= L.par.gold) {
+      medal = 'gold';
+      medalIcon = '🥇 GOLD-MEDAILLE!';
+    } else if (levelTime <= L.par.silver) {
+      medal = 'silver';
+      medalIcon = '🥈 SILBER-MEDAILLE!';
+    } else if (levelTime <= L.par.bronze) {
+      medal = 'bronze';
+      medalIcon = '🥉 BRONZE-MEDAILLE!';
+    }
+    const currentMedal = localStorage['marbleMedal_' + levelIndex];
+    if (medal === 'gold' || (medal === 'silver' && currentMedal !== 'gold') || (medal === 'bronze' && !currentMedal)) {
+      localStorage['marbleMedal_' + levelIndex] = medal;
+    }
+    $('finPars').textContent = `Par-Zeiten: 🥇 ${fmt(L.par.gold)} · 🥈 ${fmt(L.par.silver)} · 🥉 ${fmt(L.par.bronze)}`;
+  } else {
+    $('finPars').textContent = '';
+  }
+  $('finMedal').textContent = medalIcon;
+
+  // Sync with global ArcadeCore
+  if (window.ArcadeCore) {
+    let totalScore = (levelIndex + 1) * 1000;
+    for (let i = 0; i < LEVELS.length; i++) {
+      const m = localStorage['marbleMedal_' + i];
+      if (m === 'gold') totalScore += 500;
+      else if (m === 'silver') totalScore += 300;
+      else if (m === 'bronze') totalScore += 150;
+    }
+    ArcadeCore.saveScore('marble', totalScore);
+  }
+
+  try {
+    if (window.umami && typeof window.umami.track === 'function') {
+      window.umami.track('marble-level-complete', { level: levelIndex + 1, time: +levelTime.toFixed(2), record: isRecord });
+    }
+  } catch (e) { /* analytics must never break the game */ }
+
+  const last = levelIndex === LEVELS.length - 1;
+  $('finishTitle').textContent = last ? '👑 Alle 8 Level gemeistert!' : '🏆 Level geschafft!';
+  $('finTime').textContent = fmt(levelTime);
+  $('finBest').textContent = fmt(parseFloat(localStorage[key]));
+  $('record').style.display = isRecord ? 'block' : 'none';
+  $('btnNext').style.display = last ? 'none' : 'inline-block';
+  setTimeout(() => { if (state === 'finished') showOverlay('finish'); }, 700);
+}
+
+function renderMenu() {
+  const unlocked = parseInt(localStorage.marbleUnlocked || '1', 10);
+
+  // Render Skin Selector Buttons
+  const skinContainer = $('skinList');
+  if (skinContainer) {
+    skinContainer.innerHTML = '';
+    SKINS.forEach(s => {
+      const sbtn = document.createElement('button');
+      sbtn.className = 'skin-btn' + (selectedSkin === s.id ? ' active' : '');
+      sbtn.innerHTML = `${s.icon} ${s.name}`;
+      sbtn.onclick = () => {
+        applyMarbleSkin(s.id);
+        renderMenu();
+      };
+      skinContainer.appendChild(sbtn);
+    });
+  }
+
+  $('levelList').innerHTML = '';
+  LEVELS.forEach((L, i) => {
+    const best = parseFloat(localStorage['marbleBest_' + i]);
+    const medal = localStorage['marbleMedal_' + i];
+    const medalBadge = medal === 'gold' ? '🥇' : (medal === 'silver' ? '🥈' : (medal === 'bronze' ? '🥉' : ''));
+    const btn = document.createElement('button');
+    btn.className = 'lvl';
+    btn.disabled = i + 1 > unlocked;
+    btn.innerHTML = `<div class="num">${btn.disabled ? '🔒' : i + 1} ${medalBadge}</div>
+      <div class="name">${L.name}</div>
+      <div class="best">${best > 0 ? '⏱️ ' + fmt(best) : (btn.disabled ? 'Gesperrt' : 'Noch keine Zeit')}</div>
+      <div class="desc">${L.desc}</div>`;
+    btn.onclick = () => startLevel(i);
+    $('levelList').appendChild(btn);
+  });
+}
+
+// =====================================================================
+//  UI HELPERS
+// =====================================================================
+function fmt(t) {
+  if (!(t >= 0)) return '–';
+  const m = Math.floor(t / 60);
+  const s = t - m * 60;
+  return m + ':' + s.toFixed(2).padStart(5, '0');
+}
+
+let bigTimer = null, toastTimer = null;
+function bigText(txt, ms) {
+  const el = $('big-text');
+  el.textContent = txt; el.style.opacity = 1;
+  clearTimeout(bigTimer);
+  bigTimer = setTimeout(() => el.style.opacity = 0, ms);
+}
+function toast(txt, ms = 3500) {
+  const el = $('toast');
+  el.textContent = txt; el.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.style.opacity = 0, ms);
+}
+
+function updateHUD() {
+  $('hudLevel').textContent = levelIndex + 1;
+  $('hudGems').textContent = gemsCollected + '/' + gems.length;
+  $('hudTime').textContent = fmt(levelTime);
+  $('hudBest').textContent = fmt(parseFloat(localStorage['marbleBest_' + levelIndex]));
+  const v = marbleBody.velocity;
+  $('hudSpeed').textContent = Math.round(Math.hypot(v.x, v.z) * 3.6);
+}
+
+// =====================================================================
+//  INPUT
+// =====================================================================
+function bindInput() {
+  addEventListener('keydown', e => {
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+    keys[e.code] = true;
+    if (e.repeat) return;
+
+    if (e.code === 'Escape' || e.code === 'KeyP') {
+      if (state === 'paused') resumeGame(); else pauseGame();
+    }
+    if (e.code === 'Space' && state === 'playing') jumpBufferedUntil = simTime + 0.15;
+    if (e.code === 'KeyR' && state === 'playing') respawn();
+    if (e.code === 'KeyC') {
+      autoCam = !autoCam;
+      localStorage.marbleAutoCam = autoCam ? '1' : '0';
+      toast(autoCam ? '🎥 Auto-Kamera: AN' : '🎥 Auto-Kamera: AUS', 1500);
+    }
+    if (e.code === 'KeyM') {
+      muted = !muted;
+      localStorage.marbleMuted = muted ? '1' : '0';
+      master.gain.value = muted ? 0 : 0.8;
+      toast(muted ? '🔇 Ton aus' : '🔊 Ton an', 1500);
+    }
+    if (e.code === 'Enter' && state === 'finished' && $('finish').style.display === 'flex') {
+      levelIndex < LEVELS.length - 1 ? startLevel(levelIndex + 1) : startLevel(levelIndex);
+    }
+  });
+  addEventListener('keyup', e => { keys[e.code] = false; });
+  addEventListener('blur', () => { for (const k in keys) keys[k] = false; pauseGame(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+
+  const cv = renderer.domElement;
+  cv.addEventListener('pointerdown', e => {
+    dragging = true; prevMX = e.clientX; prevMY = e.clientY; lastDragTime = performance.now();
+  });
+  addEventListener('pointerup', () => { dragging = false; });
+  addEventListener('pointercancel', () => { dragging = false; });
+  addEventListener('pointermove', e => {
+    if (!dragging) return;
+    camTheta -= (e.clientX - prevMX) * 0.005;
+    camPhi = Math.max(0.08, Math.min(1.3, camPhi + (e.clientY - prevMY) * 0.004));
+    prevMX = e.clientX; prevMY = e.clientY;
+    lastDragTime = performance.now();
+  });
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    camDist = Math.max(4.5, Math.min(18, camDist + e.deltaY * 0.01));
+  }, { passive: false });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+
+  document.querySelectorAll('#marble-touch .mt-btn[data-key]').forEach(btn => {
+    const k = btn.dataset.key;
+    const set = v => { keys[k] = v; };
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); set(true); });
+    btn.addEventListener('pointerup', () => set(false));
+    btn.addEventListener('pointerleave', () => set(false));
+    btn.addEventListener('pointercancel', () => set(false));
+  });
+  $('mtJump')?.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); jumpRequested = true; });
+  $('mtRespawn')?.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (state === 'playing') respawnAtCheckpoint(); });
+  $('mtPause')?.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); });
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  $('btnResume').onclick = resumeGame;
+  $('btnRestart').onclick = () => startLevel(levelIndex);
+  $('btnMenu1').onclick = goMenu;
+  $('btnMenu2').onclick = goMenu;
+  $('btnRetry').onclick = () => startLevel(levelIndex);
+  $('btnNext').onclick = () => startLevel(Math.min(levelIndex + 1, LEVELS.length - 1));
+}
+
+// =====================================================================
+//  PHYSICS STEP
+// =====================================================================
+function fixedStep(dt) {
+  // moving platforms: velocity that reaches the exact target next step (no drift)
+  for (const m of movers) {
+    const s = Math.sin((simTime + dt) * Math.PI * 2 / m.period + m.phase) * m.amp;
+    const tx = m.base.x + (m.axis === 'x' ? s : 0);
+    const tz = m.base.z + (m.axis === 'z' ? s : 0);
+    m.body.velocity.set((tx - m.body.position.x) / dt, (m.base.y - m.body.position.y) / dt, (tz - m.body.position.z) / dt);
+  }
+
+  if (state === 'countdown') {
+    // hold marble on spawn during the countdown
+    marbleBody.position.set(spawn.x, spawn.y, spawn.z);
+    marbleBody.velocity.set(0, 0, 0);
+    marbleBody.angularVelocity.set(0, 0, 0);
+  } else if (state === 'playing') {
+    applyInput();
+    // jump: only with real ground contact (no air jumps)
+    if (jumpBufferedUntil > simTime && simTime - lastGroundedTime < 0.05 && simTime - lastJumpTime > 0.3) {
+      const jv = superJumpActive ? JUMP_VEL * 2.2 : JUMP_VEL;
+      marbleBody.velocity.y = Math.max(marbleBody.velocity.y, 0) + jv;
+      if (superJumpActive) {
+        superJumpActive = false;
+        if ($('hudPowerupChip')) $('hudPowerupChip').style.display = 'none';
+        playFx('boost');
+      }
+      lastJumpTime = simTime;
+      lastGroundedTime = -999;
+      jumpBufferedUntil = -999;
+      playFx('jump');
+    }
+
+    // Conveyor Belts physics push
+    const p = marbleBody.position;
+    for (const c of conveyors) {
+      if (Math.abs(p.x - c.x) < c.w / 2 && Math.abs(p.z - c.z) < c.d / 2 && p.y >= c.top - 0.2 && p.y <= c.top + 1.2) {
+        marbleBody.velocity.x += c.vx * dt * 25;
+        marbleBody.velocity.z += c.vz * dt * 25;
+      }
+    }
+
+    // Rotating Sweeper Bars
+    for (const sw of sweepers) {
+      sw.angle += sw.speed * dt;
+      sw.mesh.rotation.y = sw.angle;
+      const dx = p.x - sw.x, dz = p.z - sw.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < sw.len / 2 + MARBLE_R && Math.abs(p.y - (sw.top + 0.5)) < 1.0) {
+        const normalAngle = sw.angle + Math.PI / 2;
+        const nx = Math.cos(normalAngle), nz = Math.sin(normalAngle);
+        marbleBody.velocity.x += nx * 16;
+        marbleBody.velocity.z += nz * 16;
+        playFx('bounce', 1.5);
+      }
+    }
+  }
+
+  world.step(dt);
+  simTime += dt;
+  if (state === 'playing') levelTime += dt;
+
+  // ground detection from actual contacts (normal pointing up)
+  grounded = false;
+  for (const c of world.contacts) {
+    let ny;
+    if (c.bi === marbleBody) ny = -c.ni.y;
+    else if (c.bj === marbleBody) ny = c.ni.y;
+    else continue;
+    if (ny > 0.5) { grounded = true; break; }
+  }
+  if (grounded) lastGroundedTime = simTime;
+
+  // speed safety cap
+  const v = marbleBody.velocity;
+  const sp = v.length();
+  if (sp > MAX_SPEED) v.scale(MAX_SPEED / sp, v);
+}
+
+function applyInput() {
+  let ix = 0, iz = 0;
+  const fx = -Math.sin(camTheta), fz = -Math.cos(camTheta);   // camera forward (XZ)
+  const rx = Math.cos(camTheta), rz = -Math.sin(camTheta);    // camera right (XZ)
+  if (keys.KeyW || keys.ArrowUp)    { ix += fx; iz += fz; }
+  if (keys.KeyS || keys.ArrowDown)  { ix -= fx; iz -= fz; }
+  if (keys.KeyD || keys.ArrowRight) { ix += rx; iz += rz; }
+  if (keys.KeyA || keys.ArrowLeft)  { ix -= rx; iz -= rz; }
+  const len = Math.hypot(ix, iz);
+  if (len < 0.01) return;
+  ix /= len; iz /= len;
+  const v = marbleBody.velocity;
+  const along = v.x * ix + v.z * iz;
+  if (along > MAX_INPUT_SPEED) return;
+  const f = (simTime - lastGroundedTime < 0.1) ? MOVE_FORCE_GROUND : MOVE_FORCE_AIR;
+  marbleBody.applyForce(new CANNON.Vec3(ix * f, 0, iz * f), marbleBody.position);
+}
+
+// =====================================================================
+//  TRIGGERS (gems, boosts, checkpoints, hints, goal, falling)
+// =====================================================================
+function checkTriggers(dt) {
+  const p = marbleBody.position;
+
+  // Collect Gems
+  for (const g of gems) {
+    if (g.collected) continue;
+    if (Math.hypot(p.x - g.x, p.y - g.y, p.z - g.z) < 1.5) {
+      g.collected = true;
+      g.mesh.visible = false;
+      gemsCollected++;
+      playFx('gem');
+      burst(g.x, g.y, g.z, 0xfacc15);
+      if (gemsCollected === gems.length) {
+        playFx('unlock');
+        toast('🌀 Alle Juwelen gesammelt – das Ziel ist offen!');
+      }
+    }
+  }
+
+  // Pinball Bumpers
+  for (const bmp of bumpers) {
+    const dist = Math.hypot(p.x - bmp.x, p.z - bmp.z);
+    if (dist < bmp.r + MARBLE_R && p.y >= bmp.top - 0.5 && p.y <= bmp.top + 2.5) {
+      const nx = (p.x - bmp.x) / (dist || 1);
+      const nz = (p.z - bmp.z) / (dist || 1);
+      marbleBody.velocity.x = nx * bmp.force;
+      marbleBody.velocity.z = nz * bmp.force;
+      marbleBody.velocity.y = 8;
+      playFx('bounce', 2);
+      burst(bmp.x, bmp.top + 1, bmp.z, 0xec4899);
+      bmp.lightTime = 0.3;
+      toast('💥 BUMPER!', 1000);
+    }
+  }
+
+  // Power-Ups
+  for (const pu of powerups) {
+    if (pu.collected) continue;
+    if (Math.hypot(p.x - pu.x, p.y - pu.y, p.z - pu.z) < 1.6) {
+      pu.collected = true;
+      pu.mesh.visible = false;
+      playFx('boost');
+      burst(pu.x, pu.y, pu.z, 0x10b981);
+      if (pu.type === 'super_jump') {
+        superJumpActive = true;
+        toast('🦘 SUPER JUMP bereit! Drücke Leertaste!', 2500);
+        if ($('hudPowerupChip')) {
+          $('hudPowerupChip').style.display = 'inline-flex';
+          $('hudPowerup').textContent = '🦘 SUPER JUMP';
+        }
+      } else if (pu.type === 'booster') {
+        const fx = -Math.sin(camTheta), fz = -Math.cos(camTheta);
+        marbleBody.velocity.x += fx * 30;
+        marbleBody.velocity.z += fz * 30;
+        toast('⚡ SPEED BOOSTER!', 2000);
+      } else if (pu.type === 'shock') {
+        shockAbsorber = true;
+        toast('🛡️ SCHOCKDÄMPFER AKTIV!', 2000);
+        if ($('hudPowerupChip')) {
+          $('hudPowerupChip').style.display = 'inline-flex';
+          $('hudPowerup').textContent = '🛡️ SCHOCK';
+        }
+      } else if (pu.type === 'time') {
+        levelTime = Math.max(0, levelTime - 5.0);
+        playFx('gem');
+        toast('⏳ ZEITREISE: -5.00s!', 2200);
+      }
+    }
+  }
+
+  for (const b of boosts) {
+    b.cooldown = Math.max(0, b.cooldown - dt);
+    const hw = (b.dirX !== 0 ? b.d : b.w) / 2 + 0.3;   // half size across the travel direction
+    const hd = (b.dirX !== 0 ? b.w : b.d) / 2 + 0.3;   // half size along the travel direction
+    const dx = p.x - b.x, dz = p.z - b.z;
+    const along = dx * b.dirX + dz * b.dirZ;
+    const across = Math.abs(dx * b.dirZ - dz * b.dirX);
+    if (b.cooldown === 0 && Math.abs(along) < hd && across < hw && p.y > b.top && p.y < b.top + 2) {
+      const v = marbleBody.velocity;
+      const cur = v.x * b.dirX + v.z * b.dirZ;
+      if (cur < b.speed) {
+        v.x += b.dirX * (b.speed - cur);
+        v.z += b.dirZ * (b.speed - cur);
+      }
+      b.cooldown = 0.6;
+      playFx('boost');
+    }
+  }
+
+  for (const c of checkpoints) {
+    if (c.active) continue;
+    if (Math.hypot(p.x - c.x, p.z - c.z) < 2.2 && p.y > c.top - 1 && p.y < c.top + 7) {
+      checkpoints.forEach(o => { o.active = false; o.mat.color.setHex(0x64748b); o.mat.emissive.setHex(0x000000); });
+      c.active = true;
+      c.mat.color.setHex(0x22d3ee); c.mat.emissive.setHex(0x0e7490);
+      checkpointPos = { x: c.x, y: c.top + 1.5, z: c.z, theta: camTheta };
+      playFx('checkpoint');
+      toast('🚩 Checkpoint erreicht! (R = zurück zum Checkpoint)', 2200);
+    }
+  }
+
+  for (const h of hints) {
+    if (!h.shown && Math.hypot(p.x - h.x, p.z - h.z) < h.r) { h.shown = true; toast(h.text, 4000); }
+  }
+
+  if (goal && Math.hypot(p.x - goal.x, p.z - goal.z) < 2.3 && p.y > goal.top - 0.5 && p.y < goal.top + 5) {
+    if (gemsCollected === gems.length) {
+      finishLevel();
+    } else if (performance.now() - lastLockedMsg > 2000) {
+      lastLockedMsg = performance.now();
+      playFx('locked');
+      const missing = gems.length - gemsCollected;
+      toast(`🔒 Noch ${missing} ${missing === 1 ? 'Juwel fehlt' : 'Juwelen fehlen'}!`, 2000);
+    }
+  }
+
+  if (p.y < killY) respawn();
+}
+
+// =====================================================================
+//  VISUALS
+// =====================================================================
+function burst(x, y, z, color) {
+  for (let i = 0; i < 12; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), new THREE.MeshBasicMaterial({ color }));
+    m.position.set(x, y, z);
+    scene.add(m);
+    particles.push({
+      mesh: m, life: 0.7,
+      vel: new THREE.Vector3((Math.random() - .5) * 8, Math.random() * 6 + 2, (Math.random() - .5) * 8)
+    });
+  }
+}
+
+function updateVisuals(dt, t) {
+  marbleMesh.position.copy(marbleBody.position);
+  marbleMesh.quaternion.copy(marbleBody.quaternion);
+  if (selectedSkin === 'disco' && marbleMesh) {
+    marbleMesh.material.color.setHSL((t * 0.4) % 1, 0.9, 0.55);
+  }
+  for (const m of movers) m.mesh.position.copy(m.body.position);
+
+  for (const g of gems) {
+    if (g.collected) continue;
+    g.mesh.rotation.y += dt * 2;
+    g.mesh.position.y = g.y + Math.sin(t * 2.5 + g.phase) * 0.15;
+  }
+  for (const b of boosts) b.tex.offset.y -= dt * 1.5;
+
+  if (goal) {
+    const open = gemsCollected === gems.length;
+    if (open !== goal.open) {
+      goal.open = open;
+      goal.ringMat.color.setHex(open ? 0x22c55e : 0xef4444);
+      goal.ringMat.emissive.setHex(open ? 0x166534 : 0x7f1d1d);
+      goal.discMat.color.setHex(open ? 0x4ade80 : 0xef4444);
+    }
+    goal.discMat.opacity = open ? 0.45 + Math.sin(t * 4) * 0.15 : 0.25;
+    goal.disc.rotation.z += dt;
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    p.vel.y -= 15 * dt;
+    p.mesh.position.addScaledVector(p.vel, dt);
+    p.mesh.scale.setScalar(Math.max(0.01, p.life / 0.7));
+    if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
+  }
+
+  // sun + shadow follow marble
+  const mp = marbleMesh.position;
+  sun.position.set(mp.x + 25, mp.y + 45, mp.z + 15);
+  sun.target.position.copy(mp);
+
+  // rolling sound
+  if (rollGain) {
+    const v = marbleBody.velocity;
+    const sp = Math.hypot(v.x, v.z);
+    const target = (state === 'playing' && grounded) ? Math.min(sp / 20, 1) * 0.35 : 0;
+    rollGain.gain.setTargetAtTime(target, audioCtx.currentTime, 0.06);
+    rollFilter.frequency.setTargetAtTime(150 + sp * 35, audioCtx.currentTime, 0.06);
+  }
+}
+
+// =====================================================================
+//  CAMERA
+// =====================================================================
+function angleDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function desiredCamPos(target) {
+  return new THREE.Vector3(
+    target.x + Math.sin(camTheta) * Math.cos(camPhi) * camDist,
+    target.y + Math.sin(camPhi) * camDist + 1,
+    target.z + Math.cos(camTheta) * Math.cos(camPhi) * camDist
+  );
+}
+
+function snapCamera() {
+  const t = marbleMesh.position;
+  camera.position.copy(desiredCamPos(t));
+  camLook.set(t.x, t.y + 0.5, t.z);
+  camera.lookAt(camLook);
+}
+
+function updateCamera(dt) {
+  if (keys.KeyQ) camTheta += dt * 2.2;
+  if (keys.KeyE) camTheta -= dt * 2.2;
+
+  const t = marbleMesh.position;
+  if (state === 'menu') {
+    camTheta += dt * 0.15;
+  } else if (autoCam && state === 'playing' && !dragging && performance.now() - lastDragTime > 1500) {
+    const v = marbleBody.velocity;
+    const sp = Math.hypot(v.x, v.z);
+    if (sp > 4) {
+      const fx = -Math.sin(camTheta), fz = -Math.cos(camTheta);
+      if ((v.x * fx + v.z * fz) / sp > -0.3) {          // don't spin around when rolling backwards
+        camTheta += angleDiff(Math.atan2(-v.x, -v.z), camTheta) * Math.min(1, dt * 1.6);
+      }
+    }
+  }
+
+  const k = 1 - Math.exp(-dt * 10);
+  camera.position.lerp(desiredCamPos(t), k);
+  camLook.lerp(new THREE.Vector3(t.x, t.y + 0.5, t.z), k);
+  camera.lookAt(camLook);
+}
+
+// =====================================================================
+//  MAIN LOOP
+// =====================================================================
+let lastFrame = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - lastFrame) / 1000, 0.1);
+  lastFrame = now;
+  const t = now / 1000;
+
+  if (state === 'countdown') updateCountdown(dt);
+
+  if (state === 'countdown' || state === 'playing' || state === 'finished') {
+    accumulator += dt;
+    let steps = 0;
+    while (accumulator >= STEP && steps < 12) {
+      fixedStep(STEP);
+      accumulator -= STEP;
+      steps++;
+    }
+    if (steps === 12) accumulator = 0;
+    if (state === 'playing') checkTriggers(dt);
+  }
+
+  updateVisuals(dt, t);
+  updateCamera(dt);
+  if (state !== 'menu') updateHUD();
+  renderer.render(scene, camera);
+}
+
+init();
+</script>
+</body>
+</html>

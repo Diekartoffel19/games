@@ -1,0 +1,2600 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Paris Protest 3D: Gen Z Simulator — Low-Poly 3D Arcade</title>
+<meta name="description" content="Inspiriert von der Polytrack 3D-Engine: Düse auf einem getunten E-Scooter durch Paris, crashe Barrikaden, starte Megafon-Schockwellen & streame den Gen-Z-Protest live auf TikTok!">
+<meta name="keywords" content="polytrack, 3d browser game, three.js racing, paris protest simulator, gen z simulator, low poly 3d, webgl arcade">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#090d16">
+
+<!-- Open Graph / Meta -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Paris Protest 3D: Gen Z Simulator">
+<meta property="og:description" content="Low-Poly 3D Arcade im Polytrack-Stil: Düse mit E-Scooter über Pariser Boulevards, durchbrich Barrikaden und gehe viral!">
+<meta property="og:locale" content="de_DE">
+
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+
+<!-- Three.js (Gleiche 3D-Engine wie Polytrack) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../../src/arcade-core.js"></script>
+<link rel="stylesheet" href="../../style.css">
+<link rel="icon" type="image/x-icon" href="../../src/favicon.ico">
+
+<style>
+  :root {
+    --neon-pink: #ff2a85;
+    --neon-cyan: #00f2fe;
+    --neon-lime: #39ff14;
+    --neon-yellow: #ffe600;
+    --poly-bg: #090e17;
+    --panel-bg: rgba(13, 19, 33, 0.82);
+    --panel-border: rgba(255, 255, 255, 0.15);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--poly-bg);
+    color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* 3D Canvas Viewport */
+  #viewport-container {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+    overflow: hidden;
+  }
+
+  canvas#three-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Speed Lines Overlay (Polytrack feel) */
+  #speed-lines {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+    background: radial-gradient(circle at center, transparent 60%, rgba(0, 242, 254, 0.18) 95%, rgba(255, 42, 133, 0.25) 100%);
+  }
+
+  /* Flash overlay for impacts */
+  #impact-flash {
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 5;
+    transition: opacity 0.2s ease-out;
+  }
+
+  /* Back Button */
+  .back {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 30;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 8px 14px;
+    border-radius: 10px;
+    backdrop-filter: blur(12px);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .back:hover {
+    border-color: var(--neon-cyan);
+    transform: translateY(-2px);
+  }
+
+  /* HUD Elements */
+  #hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 16px;
+  }
+
+  /* Top Bar */
+  .hud-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-left: 160px; /* Offset for back button */
+    gap: 12px;
+  }
+
+  .poly-badge {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    backdrop-filter: blur(12px);
+    border-radius: 12px;
+    padding: 8px 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    transform: skewX(-6deg);
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .poly-badge > * {
+    transform: skewX(6deg);
+  }
+
+  /* TikTok Live Phone Mockup */
+  .tiktok-live-card {
+    background: rgba(12, 14, 22, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 16px;
+    backdrop-filter: blur(14px);
+    width: 250px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    pointer-events: auto;
+    transition: transform 0.2s ease;
+  }
+
+  .tiktok-header {
+    background: linear-gradient(90deg, #ff0050, #00f2fe);
+    padding: 6px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: #fff;
+  }
+
+  .live-pill {
+    background: #e11d48;
+    padding: 2px 8px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    animation: livePulse 1.2s infinite;
+  }
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #fff;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .tiktok-chat-container {
+    height: 110px;
+    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 8px 10px;
+    gap: 5px;
+    font-size: 12px;
+  }
+
+  .chat-msg {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    animation: slideUpFade 0.25s ease-out;
+  }
+  .chat-user {
+    font-weight: 700;
+    color: var(--neon-cyan);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .chat-text {
+    color: #e2e8f0;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+  @keyframes slideUpFade {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Center Banner Notifications */
+  .hud-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .combo-streak {
+    font-size: clamp(22px, 4vw, 36px);
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: -0.5px;
+    text-transform: uppercase;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 20px rgba(255, 230, 0, 0.6), 0 3px 0 #000;
+    opacity: 0;
+    transform: scale(0.8) skewX(-10deg);
+    transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .combo-streak.active {
+    opacity: 1;
+    transform: scale(1) skewX(-10deg);
+  }
+
+  .stunt-banner {
+    background: rgba(0,0,0,0.65);
+    border: 1px solid var(--neon-pink);
+    color: #fff;
+    padding: 4px 18px;
+    border-radius: 20px;
+    font-weight: 800;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.2s ease;
+  }
+  .stunt-banner.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* TikTok Gift Banner */
+  .gift-banner {
+    position: absolute;
+    top: 130px;
+    right: 0;
+    background: linear-gradient(135deg, rgba(255, 42, 133, 0.95), rgba(0, 242, 254, 0.9));
+    border: 1px solid #fff;
+    border-radius: 14px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 10px 25px rgba(255, 42, 133, 0.5);
+    opacity: 0;
+    transform: translateY(-10px) scale(0.9);
+    transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    pointer-events: none;
+    z-index: 25;
+    min-width: 200px;
+  }
+  .gift-banner.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  /* Bottom HUD */
+  .hud-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+  }
+
+  .speedo-cluster {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    backdrop-filter: blur(14px);
+    padding: 12px 20px;
+    transform: skewX(-8deg);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    min-width: 170px;
+  }
+  .speedo-cluster > * {
+    transform: skewX(8deg);
+  }
+
+  .speedo-num {
+    font-size: 48px;
+    line-height: 1;
+    font-weight: 900;
+    font-style: italic;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+  }
+  .speedo-unit {
+    font-size: 13px;
+    color: var(--neon-cyan);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-left: 6px;
+  }
+
+  .boost-meter-container {
+    width: 100%;
+    height: 7px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .boost-meter-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--neon-cyan), var(--neon-lime));
+    transition: width 0.1s linear;
+  }
+
+  /* Action Cooldown Buttons (HUD bottom right) */
+  .action-deck {
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+  }
+
+  .hud-btn {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    backdrop-filter: blur(12px);
+    border-radius: 14px;
+    padding: 10px 14px;
+    color: #fff;
+    font-weight: 800;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+    transition: all 0.15s ease;
+    min-width: 76px;
+  }
+  .hud-btn:hover {
+    border-color: var(--neon-pink);
+    transform: translateY(-2px);
+  }
+  .hud-btn:active {
+    transform: translateY(1px);
+  }
+  .hud-btn .key-hint {
+    font-size: 10px;
+    color: #94a3b8;
+    background: rgba(255,255,255,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* Mobile Onscreen Controls */
+  #mobile-controls {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    pointer-events: none;
+    z-index: 25;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  @media (pointer: coarse), (max-width: 860px) {
+    #mobile-controls {
+      display: flex;
+    }
+    .hud-top {
+      padding-left: 90px;
+    }
+    .tiktok-live-card {
+      width: 190px;
+    }
+  }
+
+  .d-pad, .touch-actions {
+    display: flex;
+    gap: 8px;
+    pointer-events: auto;
+  }
+  .touch-circle {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.78);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    touch-action: manipulation;
+  }
+  .touch-circle:active {
+    background: var(--neon-pink);
+    border-color: #fff;
+  }
+
+  /* Modal Overlays (Menu / Pause / Game Over) */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, rgba(10, 14, 26, 0.85) 0%, rgba(5, 7, 13, 0.96) 100%);
+    backdrop-filter: blur(8px);
+    padding: 20px;
+  }
+  .modal-overlay.hidden {
+    display: none !important;
+  }
+
+  .modal-box {
+    background: #0f172a;
+    border: 2px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(0, 242, 254, 0.15);
+    border-radius: 20px;
+    max-width: 580px;
+    width: 100%;
+    padding: 28px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .modal-box::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan), var(--neon-yellow));
+  }
+
+  .modal-title {
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: -0.5px;
+    text-transform: uppercase;
+    background: linear-gradient(180deg, #fff 0%, #cbd5e1 50%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 8px;
+  }
+
+  .modal-desc {
+    color: #94a3b8;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 22px;
+  }
+
+  .mode-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+
+  .mode-btn {
+    background: rgba(30, 41, 59, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 14px 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s ease;
+  }
+  .mode-btn.active, .mode-btn:hover {
+    background: rgba(0, 242, 254, 0.15);
+    border-color: var(--neon-cyan);
+    transform: translateY(-2px);
+  }
+  .mode-icon {
+    font-size: 26px;
+    margin-bottom: 6px;
+  }
+  .mode-name {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+  }
+
+  .big-play-btn {
+    background: linear-gradient(135deg, var(--neon-pink), #e11d48);
+    color: #fff;
+    border: 0;
+    border-radius: 14px;
+    padding: 14px 34px;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 10px 25px rgba(225, 29, 72, 0.45);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    transform: skewX(-6deg);
+  }
+  .big-play-btn > * {
+    transform: skewX(6deg);
+  }
+  .big-play-btn:hover {
+    transform: skewX(-6deg) translateY(-2px);
+    box-shadow: 0 14px 30px rgba(225, 29, 72, 0.6);
+  }
+
+  .keys-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 16px;
+    margin-top: 20px;
+    font-size: 12px;
+    color: #64748b;
+  }
+  .kbd-chip {
+    background: rgba(255,255,255,0.08);
+    padding: 3px 7px;
+    border-radius: 6px;
+    color: #cbd5e1;
+    font-family: monospace;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<a href="../../index.html" class="back">← Zurück zur Arcade</a>
+
+<div id="viewport-container">
+  <canvas id="three-canvas"></canvas>
+</div>
+
+<!-- Visual FX Overlays -->
+<div id="speed-lines"></div>
+<div id="impact-flash"></div>
+
+<!-- HUD Layer -->
+<div id="hud">
+  <!-- Top Bar -->
+  <div class="hud-top">
+    <div style="display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;">
+      <div class="poly-badge">
+        <span style="font-size: 20px;">🥐</span>
+        <div>
+          <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">PARIS CLOUT</div>
+          <div id="score-display" style="font-size: 22px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums;">0</div>
+        </div>
+      </div>
+
+      <div class="poly-badge" id="heat-badge" style="border-color: rgba(255, 230, 0, 0.4);">
+        <span style="font-size: 18px;">🔥</span>
+        <div>
+          <div style="font-size: 10px; font-weight: 800; color: #fbbf24; text-transform: uppercase;">CRS HEAT</div>
+          <div id="heat-stars" style="font-size: 14px; font-weight: 900; color: #ffe600; letter-spacing: 2px;">⭐☆☆☆☆</div>
+        </div>
+      </div>
+
+      <div class="poly-badge" id="best-badge" style="border-color: rgba(0, 242, 254, 0.35);">
+        <span style="font-size: 18px;">🏆</span>
+        <div>
+          <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">REKORD</div>
+          <div id="best-display" style="font-size: 14px; font-weight: 900; color: #00f2fe; font-variant-numeric: tabular-nums;">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live TikTok Simulation -->
+    <div style="position: relative;">
+      <div class="tiktok-live-card">
+        <div class="tiktok-header">
+          <span class="live-pill"><span class="live-dot"></span> LIVE</span>
+          <span id="viewers-count">12.8k Zusch.</span>
+        </div>
+        <div class="tiktok-chat-container" id="tiktok-chat">
+          <!-- Live Chat Messages will append here -->
+        </div>
+      </div>
+
+      <!-- TikTok Gift Alert Banner -->
+      <div id="gift-alert" class="gift-banner">
+        <span id="gift-icon" style="font-size: 26px;">🚀</span>
+        <div>
+          <div id="gift-user" style="font-size: 10px; font-weight: 800; color: var(--neon-cyan);">@elon_musketeer</div>
+          <div id="gift-name" style="font-size: 12px; font-weight: 900; color: #fff;">sent GALAXY ROCKET! (+25,000)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center Combo & Stunt Alerts -->
+  <div class="hud-center">
+    <div class="combo-streak" id="combo-alert">3x BARRICADE SMASH!</div>
+    <div class="stunt-banner" id="stunt-alert">+5,000 CLOUT • OLLIE TRICK</div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="hud-bottom">
+    <!-- Speedometer -->
+    <div class="speedo-cluster">
+      <div style="display: flex; align-items: baseline;">
+        <span class="speedo-num" id="speedo-val">0</span>
+        <span class="speedo-unit">KM/H</span>
+      </div>
+      <div style="font-size: 10px; font-weight: 800; color: #94a3b8; margin-top: 2px;">ESPRESSO BOOST</div>
+      <div class="boost-meter-container">
+        <div class="boost-meter-fill" id="boost-bar"></div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="action-deck">
+      <button class="hud-btn" id="btn-megaphone" title="Megafon Schockwelle">
+        <span style="font-size: 22px;">📢</span>
+        <span>MEGAPHON</span>
+        <span class="key-hint">[E]</span>
+      </button>
+      <button class="hud-btn" id="btn-graffiti" title="Graffiti Tag sprühen">
+        <span style="font-size: 22px;">🎨</span>
+        <span>SPRAY TAG</span>
+        <span class="key-hint">[F]</span>
+      </button>
+      <button class="hud-btn" id="btn-jump" title="Ollie Sprung">
+        <span style="font-size: 22px;">🛴</span>
+        <span>JUMP</span>
+        <span class="key-hint">[LEER]</span>
+      </button>
+      <button class="hud-btn" id="btn-cam" title="Kamera wechseln">
+        <span style="font-size: 22px;">🎥</span>
+        <span>CAM</span>
+        <span class="key-hint">[C]</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile Touch Overlay -->
+<div id="mobile-controls">
+  <div class="d-pad">
+    <div class="touch-circle" id="touch-left">◀</div>
+    <div class="touch-circle" id="touch-right">▶</div>
+  </div>
+  <div class="touch-actions">
+    <div class="touch-circle" id="touch-brake" style="background: rgba(239, 68, 68, 0.4);">🛑</div>
+    <div class="touch-circle" id="touch-gas" style="background: rgba(34, 197, 94, 0.4);">⚡</div>
+    <div class="touch-circle" id="touch-action" style="background: rgba(0, 242, 254, 0.4);">📢</div>
+  </div>
+</div>
+
+<!-- Start Menu / Game Modal -->
+<div class="modal-overlay" id="start-modal">
+  <div class="modal-box">
+    <div class="modal-title">PARIS PROTEST 3D</div>
+    <div style="font-weight: 800; font-size: 13px; color: var(--neon-cyan); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;">GEN Z PROTEST SIMULATOR</div>
+    <p class="modal-desc">
+      Angetrieben von der gleichen 3D-Engine wie <strong>Polytrack (Three.js)</strong>: Rase auf deiner getunten Trottinette über die Pariser Prachtboulevards, durchbrich CRS-Polizeisperren, yeete Mülltonnen mit dem Megafon und streame live für maximale TikTok-Clout!
+    </p>
+
+    <div class="mode-grid">
+      <div class="mode-btn active" data-mode="boulevard">
+        <div class="mode-icon">🏁</div>
+        <div class="mode-name">Boulevard Rush</div>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Polytrack Checkpoint-Rennen</div>
+      </div>
+      <div class="mode-btn" data-mode="freestyle">
+        <div class="mode-icon">🔥</div>
+        <div class="mode-name">Riot Sandbox</div>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Freie Fahrt & Barrikaden-Chaos</div>
+      </div>
+      <div class="mode-btn" data-mode="evade">
+        <div class="mode-icon">🚔</div>
+        <div class="mode-name">CRS Police Evade</div>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Überlebe das Großaufgebot</div>
+      </div>
+    </div>
+
+    <button class="big-play-btn" id="start-btn">
+      <span>LOSPROTESTIEREN</span>
+      <span>⚡</span>
+    </button>
+
+    <div class="keys-legend">
+      <span><span class="kbd-chip">W / ⬆</span> Gas</span>
+      <span><span class="kbd-chip">S / ⬇</span> Bremse</span>
+      <span><span class="kbd-chip">A / D</span> Lenken</span>
+      <span><span class="kbd-chip">LEERTASTE</span> Ollie / Drift</span>
+      <span><span class="kbd-chip">SHIFT</span> Espresso-Nitro</span>
+      <span><span class="kbd-chip">E</span> Megafon</span>
+      <span><span class="kbd-chip">F</span> Graffiti-Tag</span>
+      <span><span class="kbd-chip">R</span> Respawn</span>
+    </div>
+  </div>
+</div>
+
+<!-- Victory / Result Modal -->
+<div class="modal-overlay hidden" id="result-modal">
+  <div class="modal-box">
+    <div class="modal-title" id="result-title">ARC DE TRIOMPHE CONQUERED! 🇫🇷</div>
+    <div style="font-weight: 800; font-size: 14px; color: var(--neon-pink); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;" id="result-rank">TIKTOK RIOT GOD 👑</div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; text-align: left;">
+      <div style="background: rgba(255,255,255,0.06); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+        <div style="font-size: 11px; color: #94a3b8; font-weight: 800;">FINAL CLOUT</div>
+        <div id="result-clout" style="font-size: 24px; font-weight: 900; color: #fff;">0</div>
+      </div>
+      <div style="background: rgba(255,255,255,0.06); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+        <div style="font-size: 11px; color: #94a3b8; font-weight: 800;">CROISSANTS 🥐</div>
+        <div id="result-croissants" style="font-size: 24px; font-weight: 900; color: #fbbf24;">0</div>
+      </div>
+      <div style="background: rgba(255,255,255,0.06); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+        <div style="font-size: 11px; color: #94a3b8; font-weight: 800;">BARRIKADEN 💥</div>
+        <div id="result-smashes" style="font-size: 24px; font-weight: 900; color: var(--neon-pink);">0</div>
+      </div>
+      <div style="background: rgba(255,255,255,0.06); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+        <div style="font-size: 11px; color: #94a3b8; font-weight: 800;">PEAK ZUSCHAUER 👀</div>
+        <div id="result-viewers" style="font-size: 24px; font-weight: 900; color: var(--neon-cyan);">0</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <button class="big-play-btn" id="retry-btn">
+        <span>NOCHMAL ZOCKEN</span>
+        <span>⚡</span>
+      </button>
+      <a href="../../index.html" class="btn" style="text-decoration: none; padding: 14px 24px; border-radius: 14px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); font-weight: 800; color: #fff; display: inline-flex; align-items: center; gap: 6px;">
+        <span>🎮</span>
+        <span>ZUR ARCADE</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * PARIS PROTEST 3D — GEN Z SIMULATOR
+ * Realisiert mit Three.js (der gleichen 3D-Engine wie Polytrack).
+ * Low-Poly Ästhetik, Flat-Shading, responsive Fahrzeugphysik, Barrikaden-Zerstörung
+ * und integrierter Web-Audio Synthesizer.
+ */
+
+(() => {
+  'use strict';
+
+  // --- AUDIO SYNTHESIZER (Polytrack & Protest Sounds) ---
+  const AudioEngine = {
+    ctx: null,
+    musicOsc: null,
+    musicGain: null,
+    bassStep: 0,
+    musicTimer: null,
+    muted: false,
+
+    init() {
+      if (this.ctx) return;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      this.ctx = new AudioCtx();
+    },
+
+    isMuted() {
+      return (window.ArcadeCore && ArcadeCore.isMuted()) || this.muted;
+    },
+
+    resume() {
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+    },
+
+    playTone(freq, dur, type = 'sine', gain = 0.2) {
+      if (this.isMuted() || !this.ctx) return;
+      try {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        g.gain.setValueAtTime(gain, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + dur);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + dur);
+      } catch (e) {}
+    },
+
+    playMegaphone() {
+      if (this.isMuted() || !this.ctx) return;
+      try {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(820, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(220, this.ctx.currentTime + 0.35);
+        g.gain.setValueAtTime(0.38, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.35);
+      } catch (e) {}
+    },
+
+    playImpact() {
+      this.playTone(90, 0.2, 'square', 0.28);
+    },
+
+    playJump() {
+      this.playTone(340, 0.2, 'sine', 0.18);
+    },
+
+    playBoost() {
+      this.playTone(580, 0.4, 'triangle', 0.28);
+    },
+
+    playCroissant() {
+      if (this.isMuted() || !this.ctx) return;
+      [587, 880, 1174].forEach((f, i) => {
+        setTimeout(() => this.playTone(f, 0.14, 'sine', 0.18), i * 60);
+      });
+    },
+
+    playMatcha() {
+      if (this.isMuted() || !this.ctx) return;
+      try {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1080, this.ctx.currentTime + 0.35);
+        g.gain.setValueAtTime(0.24, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.35);
+      } catch (e) {}
+    },
+
+    playGift() {
+      if (this.isMuted() || !this.ctx) return;
+      [523, 659, 784, 1046].forEach((f, i) => {
+        setTimeout(() => this.playTone(f, 0.2, 'triangle', 0.22), i * 75);
+      });
+    },
+
+    playDrift() {
+      if (this.isMuted() || !this.ctx) return;
+      this.playTone(190 + Math.random() * 80, 0.08, 'sawtooth', 0.06);
+    },
+
+    playSpray() {
+      if (this.isMuted() || !this.ctx) return;
+      try {
+        const bufferSize = this.ctx.sampleRate * 0.15;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+        noise.connect(g);
+        g.connect(this.ctx.destination);
+        noise.start();
+      } catch (e) {}
+    },
+
+    playSiren() {
+      this.playTone(460, 0.18, 'sawtooth', 0.09);
+      setTimeout(() => {
+        this.playTone(340, 0.22, 'sawtooth', 0.09);
+      }, 190);
+    },
+
+    startElectroBeat() {
+      if (this.musicTimer || this.isMuted()) return;
+      const bassNotes = [110, 110, 130.8, 110, 98, 98, 123.4, 110];
+      this.musicTimer = setInterval(() => {
+        if (this.isMuted() || !this.ctx) return;
+        const freq = bassNotes[this.bassStep % bassNotes.length];
+        this.playTone(freq, 0.09, 'sawtooth', 0.06);
+        if (this.bassStep % 4 === 0) {
+          this.playTone(60, 0.08, 'triangle', 0.14); // Kick
+        }
+        this.bassStep++;
+      }, 234); // ~128 BPM
+    }
+  };
+
+  // --- THREE.JS SETUP (Polytrack Engine) ---
+  const canvas = document.getElementById('three-canvas');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xb0d5f8); // Typischer Polytrack Cyan/Blue Himmel
+  scene.fog = new THREE.FogExp2(0xb0d5f8, 0.0055);
+
+  const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.2, 800);
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  // --- BELEUCHTUNG (Polytrack Flat-Shading Ästhetik) ---
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x445566, 0.65);
+  scene.add(hemiLight);
+
+  const dirLight = new THREE.DirectionalLight(0xfff7e6, 0.95);
+  dirLight.position.set(60, 100, 40);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.near = 10;
+  dirLight.shadow.camera.far = 300;
+  dirLight.shadow.camera.left = -90;
+  dirLight.shadow.camera.right = 90;
+  dirLight.shadow.camera.top = 90;
+  dirLight.shadow.camera.bottom = -90;
+  scene.add(dirLight);
+
+  // --- LOW-POLY MATERIALIEN MIT FLAT SHADING ---
+  const materials = {
+    road: new THREE.MeshLambertMaterial({ color: 0x2b303c, flatShading: true }),
+    sidewalk: new THREE.MeshLambertMaterial({ color: 0xc8ccd6, flatShading: true }),
+    curb: new THREE.MeshLambertMaterial({ color: 0x9ca3af, flatShading: true }),
+    buildingBeige: new THREE.MeshLambertMaterial({ color: 0xe8dfcb, flatShading: true }),
+    buildingCream: new THREE.MeshLambertMaterial({ color: 0xf5eedb, flatShading: true }),
+    roofZinc: new THREE.MeshLambertMaterial({ color: 0x5a6978, flatShading: true }),
+    windowGlass: new THREE.MeshLambertMaterial({ color: 0x1e293b, flatShading: true }),
+    balconyBlack: new THREE.MeshLambertMaterial({ color: 0x111827, flatShading: true }),
+    woodPallet: new THREE.MeshLambertMaterial({ color: 0xb57c42, flatShading: true }),
+    trashCanGreen: new THREE.MeshLambertMaterial({ color: 0x15803d, flatShading: true }),
+    trashCanBlack: new THREE.MeshLambertMaterial({ color: 0x1f2937, flatShading: true }),
+    coneOrange: new THREE.MeshLambertMaterial({ color: 0xf97316, flatShading: true }),
+    policeBlue: new THREE.MeshLambertMaterial({ color: 0x1d4ed8, flatShading: true }),
+    policeWhite: new THREE.MeshLambertMaterial({ color: 0xf8fafc, flatShading: true }),
+    scooterLime: new THREE.MeshLambertMaterial({ color: 0x22c55e, flatShading: true }),
+    scooterDark: new THREE.MeshLambertMaterial({ color: 0x0f172a, flatShading: true }),
+    characterSkin: new THREE.MeshLambertMaterial({ color: 0xfcd34d, flatShading: true }),
+    characterHoodie: new THREE.MeshLambertMaterial({ color: 0xec4899, flatShading: true }),
+    characterPants: new THREE.MeshLambertMaterial({ color: 0x1e293b, flatShading: true }),
+    boostPad: new THREE.MeshBasicMaterial({ color: 0x00f2fe }),
+    arcStone: new THREE.MeshLambertMaterial({ color: 0xd6cbb7, flatShading: true }),
+    eiffelMetal: new THREE.MeshLambertMaterial({ color: 0x645c55, flatShading: true })
+  };
+
+  // --- WELT & PARIS BOULEVARD GENERIERUNG ---
+  const WORLD = {
+    length: 1200, // Boulevard Länge
+    roadWidth: 26,
+    sidewalkWidth: 10,
+    props: [],
+    barricades: [],
+    boostPads: [],
+    policeVans: [],
+    ramps: [],
+    croissants: [],
+    matchas: [],
+    activeChasers: [],
+    graffitiDecals: []
+  };
+
+  // 1. Boden & Straße
+  const roadGeo = new THREE.PlaneGeometry(WORLD.roadWidth, WORLD.length);
+  const roadMesh = new THREE.Mesh(roadGeo, materials.road);
+  roadMesh.rotation.x = -Math.PI / 2;
+  roadMesh.position.z = WORLD.length / 2 - 100;
+  roadMesh.receiveShadow = true;
+  scene.add(roadMesh);
+
+  // Weiße Mittelstreifen
+  const dashCount = Math.floor(WORLD.length / 8);
+  const dashGeo = new THREE.PlaneGeometry(0.5, 4);
+  const dashMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  for (let i = 0; i < dashCount; i++) {
+    const dash = new THREE.Mesh(dashGeo, dashMat);
+    dash.rotation.x = -Math.PI / 2;
+    dash.position.set(0, 0.02, -100 + i * 8);
+    scene.add(dash);
+  }
+
+  // Gehwege links & rechts
+  [-1, 1].forEach(side => {
+    const swGeo = new THREE.BoxGeometry(WORLD.sidewalkWidth, 0.4, WORLD.length);
+    const swMesh = new THREE.Mesh(swGeo, materials.sidewalk);
+    swMesh.position.set(side * (WORLD.roadWidth / 2 + WORLD.sidewalkWidth / 2), 0.2, WORLD.length / 2 - 100);
+    swMesh.receiveShadow = true;
+    scene.add(swMesh);
+
+    // Bordsteinkante
+    const curbGeo = new THREE.BoxGeometry(0.3, 0.45, WORLD.length);
+    const curbMesh = new THREE.Mesh(curbGeo, materials.curb);
+    curbMesh.position.set(side * (WORLD.roadWidth / 2), 0.225, WORLD.length / 2 - 100);
+    scene.add(curbMesh);
+  });
+
+  // 2. Haussmann-Gebäude entlang der Straße
+  function createHaussmannBuilding(x, z, side) {
+    const group = new THREE.Group();
+    const w = 18 + Math.random() * 8;
+    const h = 26 + Math.random() * 12;
+    const d = 16;
+
+    // Hauptkörper (Kalkstein)
+    const mat = Math.random() > 0.5 ? materials.buildingBeige : materials.buildingCream;
+    const bodyGeo = new THREE.BoxGeometry(w, h, d);
+    const bodyMesh = new THREE.Mesh(bodyGeo, mat);
+    bodyMesh.position.y = h / 2;
+    bodyMesh.castShadow = true;
+    bodyMesh.receiveShadow = true;
+    group.add(bodyMesh);
+
+    // Mansarddach (Zink)
+    const roofH = 6;
+    const roofGeo = new THREE.BoxGeometry(w * 0.92, roofH, d * 0.88);
+    const roofMesh = new THREE.Mesh(roofGeo, materials.roofZinc);
+    roofMesh.position.y = h + roofH / 2;
+    roofMesh.castShadow = true;
+    group.add(roofMesh);
+
+    // Fenster & Balkone
+    const floors = Math.floor(h / 5);
+    const winCols = Math.floor(w / 4);
+    for (let f = 1; f < floors; f++) {
+      const yPos = f * 5 + 1;
+      // Durchgehender Pariser Schmiedeeisen-Balkon im 2. & 5. Stock
+      if (f === 2 || f === 5) {
+        const balGeo = new THREE.BoxGeometry(w * 0.95, 0.8, 1.2);
+        const bal = new THREE.Mesh(balGeo, materials.balconyBlack);
+        bal.position.set(0, yPos - 0.4, -side * (d / 2 + 0.6));
+        group.add(bal);
+      }
+      for (let c = 0; c < winCols; c++) {
+        const xPos = (c - (winCols - 1) / 2) * 3.8;
+        const winGeo = new THREE.BoxGeometry(1.6, 2.8, 0.2);
+        const win = new THREE.Mesh(winGeo, materials.windowGlass);
+        win.position.set(xPos, yPos, -side * (d / 2 + 0.1));
+        group.add(win);
+      }
+    }
+
+    // Erdgeschoss Cafe / Ladenfront
+    const shopGeo = new THREE.BoxGeometry(w * 0.85, 3.5, 0.4);
+    const shopMat = new THREE.MeshLambertMaterial({
+      color: [0x881337, 0x1e3a8a, 0x14532d, 0x78350f][Math.floor(Math.random() * 4)],
+      flatShading: true
+    });
+    const shop = new THREE.Mesh(shopGeo, shopMat);
+    shop.position.set(0, 1.75, -side * (d / 2 + 0.2));
+    group.add(shop);
+
+    group.position.set(x, 0, z);
+    scene.add(group);
+  }
+
+  // Boulevards mit Gebäuden füllen
+  const bldgSpacing = 24;
+  for (let z = -60; z < WORLD.length; z += bldgSpacing) {
+    createHaussmannBuilding(-WORLD.roadWidth / 2 - WORLD.sidewalkWidth - 9, z, -1);
+    createHaussmannBuilding(WORLD.roadWidth / 2 + WORLD.sidewalkWidth + 9, z, 1);
+  }
+
+  // 3. Arc de Triomphe am Ende des Boulevards (Ziel / Monument)
+  function buildArcDeTriomphe(zPos) {
+    const arc = new THREE.Group();
+    // Basis-Pfeiler
+    const legGeo = new THREE.BoxGeometry(10, 32, 16);
+    const leftLeg = new THREE.Mesh(legGeo, materials.arcStone);
+    leftLeg.position.set(-16, 16, 0);
+    leftLeg.castShadow = true;
+    const rightLeg = leftLeg.clone();
+    rightLeg.position.set(16, 16, 0);
+    arc.add(leftLeg, rightLeg);
+
+    // Torbogen-Decke
+    const archTopGeo = new THREE.BoxGeometry(44, 16, 18);
+    const archTop = new THREE.Mesh(archTopGeo, materials.arcStone);
+    archTop.position.set(0, 40, 0);
+    archTop.castShadow = true;
+    arc.add(archTop);
+
+    // Attika & Skulpturen-Relief
+    const crownGeo = new THREE.BoxGeometry(46, 6, 20);
+    const crown = new THREE.Mesh(crownGeo, materials.arcStone);
+    crown.position.set(0, 51, 0);
+    crown.castShadow = true;
+    arc.add(crown);
+
+    arc.position.set(0, 0, zPos);
+    scene.add(arc);
+  }
+  buildArcDeTriomphe(WORLD.length - 80);
+
+  // 4. Eiffelturm in der Ferne
+  function buildEiffelTower(xPos, zPos) {
+    const tower = new THREE.Group();
+    // 1. Etage
+    const baseGeo = new THREE.CylinderGeometry(14, 26, 40, 4);
+    const base = new THREE.Mesh(baseGeo, materials.eiffelMetal);
+    base.position.y = 20;
+    tower.add(base);
+    // 2. Etage
+    const midGeo = new THREE.CylinderGeometry(6, 12, 60, 4);
+    const mid = new THREE.Mesh(midGeo, materials.eiffelMetal);
+    mid.position.y = 70;
+    tower.add(mid);
+    // Spitze
+    const spireGeo = new THREE.CylinderGeometry(0.5, 4, 90, 4);
+    const spire = new THREE.Mesh(spireGeo, materials.eiffelMetal);
+    spire.position.y = 145;
+    tower.add(spire);
+
+    tower.position.set(xPos, 0, zPos);
+    tower.scale.set(1.5, 1.5, 1.5);
+    scene.add(tower);
+  }
+  buildEiffelTower(180, 500);
+
+  // 5. Pariser Straßen-Details: Bäume, Laternen, Colonnes Morris
+  for (let z = 0; z < WORLD.length - 120; z += 30) {
+    [-1, 1].forEach(side => {
+      const treeX = side * (WORLD.roadWidth / 2 + 3);
+      // Low-Poly Platane
+      const trunkGeo = new THREE.CylinderGeometry(0.3, 0.45, 4.5, 5);
+      const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5a4a3a, flatShading: true });
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.position.set(treeX, 2.25, z);
+      trunk.castShadow = true;
+
+      const leavesGeo = new THREE.DodecahedronGeometry(2.4, 0);
+      const leavesMat = new THREE.MeshLambertMaterial({ color: 0x4d7c0f, flatShading: true });
+      const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+      leaves.position.set(treeX, 5.5, z);
+      leaves.castShadow = true;
+      scene.add(trunk, leaves);
+
+      // Pariser Colonne Morris (Werbesäule) alle 120m
+      if (z % 120 === 0) {
+        const pillarGeo = new THREE.CylinderGeometry(1.2, 1.2, 4.8, 8);
+        const pillarMat = new THREE.MeshLambertMaterial({ color: 0x166534, flatShading: true });
+        const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+        pillar.position.set(side * (WORLD.roadWidth / 2 + 6), 2.4, z + 10);
+        pillar.castShadow = true;
+
+        const domeGeo = new THREE.ConeGeometry(1.5, 1.2, 8);
+        const dome = new THREE.Mesh(domeGeo, pillarMat);
+        dome.position.set(side * (WORLD.roadWidth / 2 + 6), 5.4, z + 10);
+        scene.add(pillar, dome);
+      }
+    });
+  }
+
+  // --- DYNAMISCHE PHYSIK-OBJEKTE (Polytrack Physik-Feel) ---
+  // Barrikaden (Holzpaletten), Mülltonnen, Pylonen
+  function spawnBarricade(x, z, angle = 0) {
+    const group = new THREE.Group();
+    // 3 Holzpaletten quer
+    for (let i = -1; i <= 1; i++) {
+      const pGeo = new THREE.BoxGeometry(4.2, 1.4, 0.8);
+      const p = new THREE.Mesh(pGeo, materials.woodPallet);
+      p.position.set(i * 3.8, 0.7, 0);
+      p.castShadow = true;
+      group.add(p);
+    }
+    // Protest-Banner ("RETRAITE À 20 ANS" / "GEN Z ON TOP")
+    const bannerGeo = new THREE.PlaneGeometry(8, 1.6);
+    const canvasBanner = document.createElement('canvas');
+    canvasBanner.width = 512;
+    canvasBanner.height = 128;
+    const bctx = canvasBanner.getContext('2d');
+    bctx.fillStyle = '#ef4444';
+    bctx.fillRect(0, 0, 512, 128);
+    bctx.fillStyle = '#ffffff';
+    bctx.font = 'bold 36px Arial';
+    bctx.textAlign = 'center';
+    bctx.textBaseline = 'middle';
+    const slogans = ['LIBERTÉ 🥖', 'RETRAITE À 20 ANS', 'NO WORK BEFORE 11', 'SKIBIDI RIOT 💀', 'PAS CONTENT!'];
+    bctx.fillText(slogans[Math.floor(Math.random() * slogans.length)], 256, 64);
+    const bannerTex = new THREE.CanvasTexture(canvasBanner);
+    const bannerMat = new THREE.MeshBasicMaterial({ map: bannerTex });
+    const bannerMesh = new THREE.Mesh(bannerGeo, bannerMat);
+    bannerMesh.position.set(0, 1.8, 0.45);
+    group.add(bannerMesh);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = angle;
+    scene.add(group);
+
+    WORLD.barricades.push({
+      mesh: group,
+      x, z,
+      radius: 5.5,
+      hit: false,
+      vx: 0, vz: 0, vy: 0,
+      rotVx: 0, rotVy: 0
+    });
+  }
+
+  function spawnTrashCan(x, z) {
+    const geo = new THREE.CylinderGeometry(0.8, 0.7, 1.8, 7);
+    const mat = Math.random() > 0.5 ? materials.trashCanGreen : materials.trashCanBlack;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.9, z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+
+    WORLD.props.push({
+      mesh,
+      x, z,
+      radius: 1.2,
+      hit: false,
+      vx: 0, vz: 0, vy: 0,
+      rotVx: 0, rotVy: 0
+    });
+  }
+
+  function spawnTrafficCone(x, z) {
+    const geo = new THREE.ConeGeometry(0.5, 1.2, 6);
+    const mesh = new THREE.Mesh(geo, materials.coneOrange);
+    mesh.position.set(x, 0.6, z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+
+    WORLD.props.push({
+      mesh,
+      x, z,
+      radius: 0.8,
+      hit: false,
+      vx: 0, vz: 0, vy: 0,
+      rotVx: 0, rotVy: 0
+    });
+  }
+
+  // Polytrack Stunt-Schanzen (Orange Neon Ramps)
+  function spawnStuntRamp(x, z, angle = 0) {
+    const rampGroup = new THREE.Group();
+    const w = 7.5;
+    const l = 7.5;
+
+    // Slanted ramp plane
+    const rampGeo = new THREE.BoxGeometry(w, 0.45, l);
+    const rampMat = new THREE.MeshLambertMaterial({ color: 0xf97316, flatShading: true });
+    const rampMesh = new THREE.Mesh(rampGeo, rampMat);
+    rampMesh.rotation.x = 0.28; // ~16 deg slope
+    rampMesh.position.set(0, 1.25, 0);
+    rampMesh.castShadow = true;
+    rampMesh.receiveShadow = true;
+    rampGroup.add(rampMesh);
+
+    // Side supports
+    const sideMat = new THREE.MeshLambertMaterial({ color: 0x1f2937, flatShading: true });
+    [-w / 2 + 0.25, w / 2 - 0.25].forEach(sx => {
+      const supGeo = new THREE.BoxGeometry(0.35, 2.2, l * 0.85);
+      const sup = new THREE.Mesh(supGeo, sideMat);
+      sup.position.set(sx, 1.1, -0.4);
+      rampGroup.add(sup);
+    });
+
+    // Neon arrows on ramp
+    const arrowGeo = new THREE.PlaneGeometry(3.6, 1.2);
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffe600, side: THREE.DoubleSide });
+    const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+    arrow.rotation.x = -Math.PI / 2 + 0.28;
+    arrow.position.set(0, 1.5, 0.2);
+    rampGroup.add(arrow);
+
+    rampGroup.position.set(x, 0, z);
+    rampGroup.rotation.y = angle;
+    scene.add(rampGroup);
+
+    WORLD.ramps.push({
+      x, z,
+      radius: 4.8,
+      boostVy: 22,
+      boostSpeed: 1.3
+    });
+  }
+
+  // Goldene Croissants zum Einsammeln
+  function spawnCroissant(x, z, y = 1.6) {
+    const group = new THREE.Group();
+    const cGeo = new THREE.TorusGeometry(0.7, 0.32, 8, 16, Math.PI * 1.3);
+    const cMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b, flatShading: true });
+    const cMesh = new THREE.Mesh(cGeo, cMat);
+    cMesh.rotation.x = Math.PI / 2;
+    group.add(cMesh);
+
+    const haloGeo = new THREE.RingGeometry(0.85, 1.1, 16);
+    const haloMat = new THREE.MeshBasicMaterial({ color: 0xffe600, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.rotation.x = Math.PI / 2;
+    group.add(halo);
+
+    group.position.set(x, y, z);
+    scene.add(group);
+
+    WORLD.croissants.push({
+      mesh: group,
+      x, z, y,
+      baseY: y,
+      collected: false
+    });
+  }
+
+  // Iced Matcha Super-Nitro Power-up
+  function spawnMatcha(x, z, y = 1.8) {
+    const group = new THREE.Group();
+    const cupGeo = new THREE.CylinderGeometry(0.5, 0.38, 1.2, 8);
+    const cupMat = new THREE.MeshLambertMaterial({ color: 0x22c55e, flatShading: true });
+    const cup = new THREE.Mesh(cupGeo, cupMat);
+    group.add(cup);
+
+    const lidGeo = new THREE.CylinderGeometry(0.52, 0.52, 0.15, 8);
+    const lidMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const lid = new THREE.Mesh(lidGeo, lidMat);
+    lid.position.y = 0.65;
+    group.add(lid);
+
+    const strawGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6);
+    const strawMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+    const straw = new THREE.Mesh(strawGeo, strawMat);
+    straw.position.set(0.15, 0.95, 0);
+    straw.rotation.z = -0.2;
+    group.add(straw);
+
+    group.position.set(x, y, z);
+    scene.add(group);
+
+    WORLD.matchas.push({
+      mesh: group,
+      x, z, y,
+      baseY: y,
+      collected: false
+    });
+  }
+
+  // Nitro Boost-Pads (Matcha / Espresso Nitro im Polytrack-Design)
+  function spawnBoostPad(x, z) {
+    const padGroup = new THREE.Group();
+    const padGeo = new THREE.PlaneGeometry(3.6, 6);
+    const padMesh = new THREE.Mesh(padGeo, materials.boostPad);
+    padMesh.rotation.x = -Math.PI / 2;
+    padMesh.position.y = 0.03;
+    padGroup.add(padMesh);
+
+    // Pfeile
+    const arrowGeo = new THREE.ConeGeometry(1.2, 2.2, 3);
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+    arrow.rotation.x = -Math.PI / 2;
+    arrow.position.set(0, 0.05, 0);
+    padGroup.add(arrow);
+
+    padGroup.position.set(x, 0, z);
+    scene.add(padGroup);
+
+    WORLD.boostPads.push({ x, z, radius: 2.8 });
+  }
+
+  // CRS Polizeiwagen (Fourgons Bleus)
+  function spawnPoliceVan(x, z) {
+    const van = new THREE.Group();
+    const bodyGeo = new THREE.BoxGeometry(3.2, 2.6, 7.5);
+    const body = new THREE.Mesh(bodyGeo, materials.policeBlue);
+    body.position.y = 1.6;
+    body.castShadow = true;
+    van.add(body);
+
+    const stripeGeo = new THREE.BoxGeometry(3.25, 0.6, 7.55);
+    const stripe = new THREE.Mesh(stripeGeo, materials.policeWhite);
+    stripe.position.y = 1.5;
+    van.add(stripe);
+
+    const lightGeo = new THREE.BoxGeometry(1.6, 0.35, 0.8);
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
+    const light = new THREE.Mesh(lightGeo, lightMat);
+    light.position.set(0, 3.1, 0.5);
+    van.add(light);
+
+    const wheelGeo = new THREE.CylinderGeometry(0.65, 0.65, 0.5, 8);
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111 });
+    [-1.6, 1.6].forEach(wx => {
+      [-2.2, 2.2].forEach(wz => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat);
+        w.rotation.z = Math.PI / 2;
+        w.position.set(wx, 0.65, wz);
+        van.add(w);
+      });
+    });
+
+    van.position.set(x, 0, z);
+    scene.add(van);
+
+    WORLD.policeVans.push({
+      mesh: van,
+      lightMat,
+      x, z,
+      radius: 4.2,
+      active: true
+    });
+  }
+
+  // Aktive CRS Verfolgungs-Streifen
+  function spawnActivePoliceCruiser(zPos, xLane = null) {
+    const lane = xLane !== null ? xLane : [-7, -2.5, 2.5, 7][Math.floor(Math.random() * 4)];
+    const van = new THREE.Group();
+
+    const bodyGeo = new THREE.BoxGeometry(3.2, 2.6, 7.5);
+    const body = new THREE.Mesh(bodyGeo, materials.policeBlue);
+    body.position.y = 1.6;
+    body.castShadow = true;
+    van.add(body);
+
+    const stripeGeo = new THREE.BoxGeometry(3.25, 0.6, 7.55);
+    const stripe = new THREE.Mesh(stripeGeo, materials.policeWhite);
+    stripe.position.y = 1.5;
+    van.add(stripe);
+
+    const lightGeo = new THREE.BoxGeometry(1.6, 0.35, 0.8);
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
+    const light = new THREE.Mesh(lightGeo, lightMat);
+    light.position.set(0, 3.1, 0.5);
+    van.add(light);
+
+    const wheelGeo = new THREE.CylinderGeometry(0.65, 0.65, 0.5, 8);
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111 });
+    [-1.6, 1.6].forEach(wx => {
+      [-2.2, 2.2].forEach(wz => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat);
+        w.rotation.z = Math.PI / 2;
+        w.position.set(wx, 0.65, wz);
+        van.add(w);
+      });
+    });
+
+    van.position.set(lane, 0, zPos);
+    van.rotation.y = Math.PI; // Fährt Spieler frontal entgegen
+    scene.add(van);
+
+    WORLD.activeChasers.push({
+      mesh: van,
+      lightMat,
+      x: lane,
+      z: zPos,
+      speed: 28 + Math.random() * 12,
+      radius: 3.5,
+      hit: false,
+      vx: 0, vy: 0, vz: 0,
+      rotVx: 0, rotVy: 0
+    });
+  }
+
+  // Welt mit Hindernissen, Schanzen & Croissants befüllen
+  for (let z = 30; z < WORLD.length - 120; z += 35) {
+    // Barrikaden
+    const barX = (Math.random() - 0.5) * (WORLD.roadWidth - 10);
+    spawnBarricade(barX, z, (Math.random() - 0.5) * 0.4);
+
+    // Mülltonnen am Rand
+    spawnTrashCan(-WORLD.roadWidth / 2 + 1.2, z + 8);
+    spawnTrashCan(WORLD.roadWidth / 2 - 1.2, z + 16);
+
+    // Pylonen
+    spawnTrafficCone((Math.random() - 0.5) * 8, z + 20);
+
+    // Stunt Schanzen alle 85m!
+    if (z % 85 < 35 && z > 50) {
+      const rx = (Math.random() - 0.5) * 12;
+      spawnStuntRamp(rx, z + 15);
+      // Reihe von 3 Croissants über der Schanze!
+      spawnCroissant(rx, z + 18, 3.5);
+      spawnCroissant(rx, z + 26, 5.0);
+      spawnCroissant(rx, z + 34, 3.2);
+    } else {
+      // Croissants auf der Straße
+      if (Math.random() < 0.6) {
+        spawnCroissant((Math.random() - 0.5) * 14, z + 12, 1.4);
+      }
+    }
+
+    // Boost-Pads alle 70m
+    if (z % 70 < 30) {
+      spawnBoostPad((Math.random() - 0.5) * 12, z + 25);
+    }
+
+    // Matcha Super-Nitro alle 130m
+    if (z % 130 < 35 && z > 70) {
+      spawnMatcha((Math.random() - 0.5) * 10, z + 30, 1.8);
+    }
+
+    // Statische CRS Sperren alle 110m
+    if (z % 110 < 35 && z > 60) {
+      const side = Math.random() > 0.5 ? 1 : -1;
+      spawnPoliceVan(side * 6, z + 25);
+    }
+  }
+
+  // --- SPIELER-FAHRZEUG: TUNED TROTTINETTE & GEN Z CHARAKTER ---
+  const player = {
+    group: new THREE.Group(),
+    x: 0,
+    y: 0,
+    z: 0,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    yaw: 0,
+    speed: 0,
+    grounded: true,
+    drift: false,
+    driftAngle: 0,
+    nitro: 100,
+    nitroActive: false,
+    superNitroTimer: 0,
+    steerInput: 0,
+    throttleInput: 0,
+    ollieTimer: 0,
+    stuntTilt: 0,
+    airSpin: 0,
+    airFlip: 0,
+    driftScoreTimer: 0,
+    cloutScore: 0,
+    croissantCount: 0,
+    barricadeSmashCount: 0,
+    heatLevel: 1,
+    comboMultiplier: 1,
+    comboTimer: 0,
+    cameraMode: 0,
+    peakViewers: 12800
+  };
+
+  // E-Scooter 3D Modell bauen (Low-Poly Polytrack-Stil)
+  function buildScooterAndRider() {
+    const sGroup = new THREE.Group();
+
+    // 1. Scooter-Deck (Trittbrett mit LED-Unterbodenbeleuchtung)
+    const deckGeo = new THREE.BoxGeometry(0.65, 0.16, 2.2);
+    const deck = new THREE.Mesh(deckGeo, materials.scooterDark);
+    deck.position.y = 0.28;
+    deck.castShadow = true;
+    sGroup.add(deck);
+
+    // Lime-Grüner Rand / Grip-Tape
+    const gripGeo = new THREE.BoxGeometry(0.55, 0.04, 2.0);
+    const grip = new THREE.Mesh(gripGeo, materials.scooterLime);
+    grip.position.set(0, 0.38, 0);
+    sGroup.add(grip);
+
+    // LED Glow Unterboden
+    const glowGeo = new THREE.PlaneGeometry(0.7, 2.0);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.rotation.x = Math.PI / 2;
+    glow.position.set(0, 0.18, 0);
+    sGroup.add(glow);
+
+    // Lenkstange
+    const stemGeo = new THREE.CylinderGeometry(0.06, 0.06, 2.1, 6);
+    const stem = new THREE.Mesh(stemGeo, materials.scooterDark);
+    stem.position.set(0, 1.25, 0.85);
+    stem.rotation.x = -0.12;
+    sGroup.add(stem);
+
+    // Lenker
+    const barGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.2, 6);
+    const bar = new THREE.Mesh(barGeo, materials.scooterLime);
+    bar.rotation.z = Math.PI / 2;
+    bar.position.set(0, 2.2, 0.75);
+    sGroup.add(bar);
+
+    // Räder (Vorne & Hinten)
+    const wheelGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.2, 8);
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111 });
+    const frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
+    frontWheel.rotation.z = Math.PI / 2;
+    frontWheel.position.set(0, 0.24, 1.0);
+    const rearWheel = frontWheel.clone();
+    rearWheel.position.set(0, 0.24, -0.9);
+    sGroup.add(frontWheel, rearWheel);
+
+    // Megafon am Lenker montiert!
+    const megaGeo = new THREE.ConeGeometry(0.25, 0.6, 6);
+    const megaMat = new THREE.MeshLambertMaterial({ color: 0xef4444, flatShading: true });
+    const mega = new THREE.Mesh(megaGeo, megaMat);
+    mega.rotation.x = Math.PI / 2;
+    mega.position.set(0.3, 2.15, 0.95);
+    sGroup.add(mega);
+
+    // 2. Gen Z Protestor Charakter (Low-Poly)
+    const rider = new THREE.Group();
+
+    // Hoodie-Körper
+    const torsoGeo = new THREE.BoxGeometry(0.7, 1.1, 0.45);
+    const torso = new THREE.Mesh(torsoGeo, materials.characterHoodie);
+    torso.position.set(0, 1.85, -0.1);
+    torso.castShadow = true;
+    rider.add(torso);
+
+    // Beine
+    const legGeo = new THREE.BoxGeometry(0.24, 1.0, 0.25);
+    const leftLeg = new THREE.Mesh(legGeo, materials.characterPants);
+    leftLeg.position.set(-0.18, 0.9, -0.1);
+    const rightLeg = leftLeg.clone();
+    rightLeg.position.set(0.18, 0.9, 0.2);
+    rider.add(leftLeg, rightLeg);
+
+    // Kopf & Beanie / Cap
+    const headGeo = new THREE.BoxGeometry(0.4, 0.45, 0.4);
+    const head = new THREE.Mesh(headGeo, materials.characterSkin);
+    head.position.set(0, 2.65, -0.05);
+    head.castShadow = true;
+    rider.add(head);
+
+    // Beanie
+    const hatGeo = new THREE.BoxGeometry(0.45, 0.25, 0.45);
+    const hatMat = new THREE.MeshLambertMaterial({ color: 0x00f2fe, flatShading: true });
+    const hat = new THREE.Mesh(hatGeo, hatMat);
+    hat.position.set(0, 2.88, -0.05);
+    rider.add(hat);
+
+    // Neon-Sunglasses / Cyber-Glasses
+    const glassesGeo = new THREE.BoxGeometry(0.42, 0.12, 0.1);
+    const glassesMat = new THREE.MeshBasicMaterial({ color: 0xffe600 });
+    const glasses = new THREE.Mesh(glassesGeo, glassesMat);
+    glasses.position.set(0, 2.68, 0.18);
+    rider.add(glasses);
+
+    sGroup.add(rider);
+    return { group: sGroup, rider, frontWheel, rearWheel };
+  }
+
+  const scooterParts = buildScooterAndRider();
+  player.group.add(scooterParts.group);
+  scene.add(player.group);
+
+  // --- PARTIKEL SYSTEM (Drift-Rauch, Nitro-Funken, Megafon-Welle) ---
+  const particles = [];
+  const particleGeo = new THREE.DodecahedronGeometry(0.2, 0);
+  const smokeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
+  const sparkMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
+
+  function emitSmoke(pos, color = 0xffffff) {
+    const p = new THREE.Mesh(particleGeo, smokeMat.clone());
+    p.material.color.setHex(color);
+    p.position.copy(pos);
+    p.scale.setScalar(0.6 + Math.random() * 0.8);
+    scene.add(p);
+    particles.push({
+      mesh: p,
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: 1.0 + Math.random() * 1.5,
+      vz: (Math.random() - 0.5) * 1.5,
+      life: 0.6
+    });
+  }
+
+  // Megafon-Schockwellen Ring
+  const shockwaves = [];
+  const shockGeo = new THREE.RingGeometry(0.5, 1.2, 24);
+  const shockMat = new THREE.MeshBasicMaterial({ color: 0xff2a85, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+
+  function emitShockwave(pos, dir) {
+    const ring = new THREE.Mesh(shockGeo, shockMat.clone());
+    ring.position.copy(pos);
+    ring.rotation.x = Math.PI / 2;
+    scene.add(ring);
+    shockwaves.push({
+      mesh: ring,
+      scale: 1,
+      maxScale: 18,
+      life: 0.45,
+      x: pos.x,
+      z: pos.z
+    });
+  }
+
+  // --- STEUERUNG (Keyboard & Touch) ---
+  const keys = {
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    jump: false,
+    nitro: false,
+    action: false,
+    graffiti: false
+  };
+
+  window.addEventListener('keydown', e => {
+    AudioEngine.init();
+    AudioEngine.resume();
+    AudioEngine.startElectroBeat();
+
+    switch (e.code) {
+      case 'KeyW':
+      case 'ArrowUp':
+        keys.forward = true;
+        break;
+      case 'KeyS':
+      case 'ArrowDown':
+        keys.backward = true;
+        break;
+      case 'KeyA':
+      case 'ArrowLeft':
+        keys.left = true;
+        break;
+      case 'KeyD':
+      case 'ArrowRight':
+        keys.right = true;
+        break;
+      case 'Space':
+        keys.jump = true;
+        e.preventDefault();
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        keys.nitro = true;
+        break;
+      case 'KeyE':
+        triggerMegaphone();
+        break;
+      case 'KeyF':
+        triggerGraffiti();
+        break;
+      case 'KeyC':
+        player.cameraMode = (player.cameraMode + 1) % 3;
+        break;
+      case 'KeyR':
+        respawnPlayer();
+        break;
+    }
+  });
+
+  window.addEventListener('keyup', e => {
+    switch (e.code) {
+      case 'KeyW':
+      case 'ArrowUp':
+        keys.forward = false;
+        break;
+      case 'KeyS':
+      case 'ArrowDown':
+        keys.backward = false;
+        break;
+      case 'KeyA':
+      case 'ArrowLeft':
+        keys.left = false;
+        break;
+      case 'KeyD':
+      case 'ArrowRight':
+        keys.right = false;
+        break;
+      case 'Space':
+        keys.jump = false;
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        keys.nitro = false;
+        break;
+    }
+  });
+
+  // Touch & UI Buttons verdrahten
+  function setupTouchBtn(id, pressFn, releaseFn) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      AudioEngine.init();
+      AudioEngine.resume();
+      pressFn();
+    });
+    el.addEventListener('pointerup', e => {
+      e.preventDefault();
+      if (releaseFn) releaseFn();
+    });
+    el.addEventListener('pointercancel', e => {
+      if (releaseFn) releaseFn();
+    });
+  }
+
+  setupTouchBtn('touch-left', () => keys.left = true, () => keys.left = false);
+  setupTouchBtn('touch-right', () => keys.right = true, () => keys.right = false);
+  setupTouchBtn('touch-gas', () => keys.forward = true, () => keys.forward = false);
+  setupTouchBtn('touch-brake', () => keys.backward = true, () => keys.backward = false);
+  setupTouchBtn('touch-action', () => triggerMegaphone());
+
+  document.getElementById('btn-megaphone').addEventListener('click', triggerMegaphone);
+  document.getElementById('btn-graffiti').addEventListener('click', triggerGraffiti);
+  document.getElementById('btn-jump').addEventListener('click', () => {
+    if (player.grounded) {
+      player.vy = 12;
+      player.grounded = false;
+      AudioEngine.playJump();
+    }
+  });
+  document.getElementById('btn-cam').addEventListener('click', () => {
+    player.cameraMode = (player.cameraMode + 1) % 3;
+  });
+
+  // --- GAME LOGIK & GEN Z FEATURES ---
+  let gameRunning = false;
+  let gameMode = 'boulevard';
+
+  const UI = {
+    score: document.getElementById('score-display'),
+    speedo: document.getElementById('speedo-val'),
+    boostBar: document.getElementById('boost-bar'),
+    viewers: document.getElementById('viewers-count'),
+    chat: document.getElementById('tiktok-chat'),
+    comboAlert: document.getElementById('combo-alert'),
+    stuntAlert: document.getElementById('stunt-alert'),
+    speedLines: document.getElementById('speed-lines'),
+    impactFlash: document.getElementById('impact-flash'),
+    startModal: document.getElementById('start-modal'),
+    heatStars: document.getElementById('heat-stars'),
+    bestDisplay: document.getElementById('best-display'),
+    giftAlert: document.getElementById('gift-alert'),
+    giftIcon: document.getElementById('gift-icon'),
+    giftUser: document.getElementById('gift-user'),
+    giftName: document.getElementById('gift-name'),
+    resultModal: document.getElementById('result-modal'),
+    resultTitle: document.getElementById('result-title'),
+    resultRank: document.getElementById('result-rank'),
+    resultClout: document.getElementById('result-clout'),
+    resultCroissants: document.getElementById('result-croissants'),
+    resultSmashes: document.getElementById('result-smashes'),
+    resultViewers: document.getElementById('result-viewers'),
+    retryBtn: document.getElementById('retry-btn')
+  };
+
+  function updateHighscoreDisplay() {
+    let best = 0;
+    if (window.ArcadeCore) {
+      best = ArcadeCore.getScore('paris_protest') || 0;
+    }
+    if (UI.bestDisplay) UI.bestDisplay.textContent = Number(best).toLocaleString();
+  }
+  updateHighscoreDisplay();
+
+  // TikTok Live-Chat Stream
+  const viralComments = [
+    { u: 'croissant_fan23', t: 'BRO IS DRIFTING ON A LIME SCOOTER 😭💀' },
+    { u: 'skibidi_paris', t: 'W PROTEST FR FR NO CAP' },
+    { u: 'marie_antoinette', t: 'Macron is shaking rn 💀' },
+    { u: 'berlin_expat', t: 'Paris is so aesthetic tonight ✨' },
+    { u: 'baguette_yeeter', t: 'WAS THAT A FLYING TRASH CAN?? 🗑️' },
+    { u: 'dj_techno_guy', t: 'Drop the Spotify playlist bestie 🔊' },
+    { u: 'chad_riot', t: 'CRS police stands no chance vs Trottinette!' },
+    { u: 'clout_goblin', t: '100k likes for a kickflip over the barricade!' },
+    { u: 'espresso_king', t: 'Matcha Nitro Boost activated 🍵⚡' },
+    { u: 'paris_metro', t: 'Metro wishes it was this fast' },
+    { u: 'croissant_enjoyer', t: 'DID BRO JUST DO A 720 BACKFLIP?! 🥐🤯' },
+    { u: 'emily_in_paris', t: 'Emily could NEVER do this stunt 🔥' }
+  ];
+
+  let viewerBase = 12800;
+  function addTikTokComment(customText = null, customUser = null) {
+    const item = customText 
+      ? { u: customUser || 'riot_fan', t: customText }
+      : viralComments[Math.floor(Math.random() * viralComments.length)];
+
+    const msg = document.createElement('div');
+    msg.className = 'chat-msg';
+    msg.innerHTML = `<span class="chat-user">@${item.u}</span><span class="chat-text">${item.t}</span>`;
+    UI.chat.appendChild(msg);
+
+    if (UI.chat.children.length > 5) {
+      UI.chat.removeChild(UI.chat.firstChild);
+    }
+  }
+
+  setInterval(() => {
+    if (gameRunning) {
+      addTikTokComment();
+      const delta = Math.floor((Math.random() - 0.35) * 120);
+      viewerBase = Math.max(1000, viewerBase + delta + player.speed * 10);
+      player.peakViewers = Math.max(player.peakViewers, viewerBase);
+      UI.viewers.textContent = (viewerBase / 1000).toFixed(1) + 'k Zusch.';
+    }
+  }, 2000);
+
+  // TikTok Live Geschenke (Roses, Lion, Rocket)
+  const TIKTOK_GIFTS = [
+    { icon: '🌹', name: 'ROSE', clout: 1500, users: ['croissant_queen', 'paris_bae', 'baguette_fan'] },
+    { icon: '🦁', name: 'GOLDEN LION', clout: 20000, users: ['skibidi_boss', 'habibi_investor', 'crypto_bro'] },
+    { icon: '🚀', name: 'GALAXY ROCKET', clout: 35000, users: ['elon_musketeer', 'hype_beast', 'mr_beast_fan'] },
+    { icon: '👑', name: 'DIAMOND CROWN', clout: 50000, users: ['french_oil_baron', 'techno_pope', 'gigachad_riot'] }
+  ];
+
+  function triggerRandomGift() {
+    if (!gameRunning) return;
+    const gift = TIKTOK_GIFTS[Math.floor(Math.random() * TIKTOK_GIFTS.length)];
+    const user = gift.users[Math.floor(Math.random() * gift.users.length)];
+    if (UI.giftIcon) UI.giftIcon.textContent = gift.icon;
+    if (UI.giftUser) UI.giftUser.textContent = '@' + user;
+    if (UI.giftName) UI.giftName.textContent = `sent ${gift.name}! (+${gift.clout.toLocaleString()})`;
+    if (UI.giftAlert) UI.giftAlert.classList.add('show');
+    AudioEngine.playGift();
+    showStunt(`GIFT: ${gift.name} ${gift.icon}`, gift.clout);
+    viewerBase += Math.floor(gift.clout / 2);
+
+    clearTimeout(UI.giftAlert?.timer);
+    UI.giftAlert.timer = setTimeout(() => UI.giftAlert.classList.remove('show'), 2200);
+  }
+
+  setInterval(() => {
+    if (gameRunning && Math.random() < 0.4) {
+      triggerRandomGift();
+    }
+  }, 5000);
+
+  function updateHeatLevel() {
+    const newHeat = Math.min(5, 1 + Math.floor(player.cloutScore / 25000) + Math.floor(player.barricadeSmashCount / 3));
+    if (newHeat !== player.heatLevel) {
+      player.heatLevel = newHeat;
+      const stars = '⭐'.repeat(player.heatLevel) + '☆'.repeat(5 - player.heatLevel);
+      if (UI.heatStars) UI.heatStars.textContent = `${stars} HEAT ${player.heatLevel}`;
+      addTikTokComment(`CRS HEAT LEVEL REACHED ${player.heatLevel} STARS! 🚔🚨`);
+      AudioEngine.playSiren();
+    }
+  }
+
+  function showStunt(name, points) {
+    player.cloutScore += points * player.comboMultiplier;
+    UI.score.textContent = Math.round(player.cloutScore).toLocaleString();
+
+    UI.stuntAlert.textContent = `+${points * player.comboMultiplier} CLOUT • ${name}`;
+    UI.stuntAlert.classList.add('show');
+    clearTimeout(UI.stuntAlert.timer);
+    UI.stuntAlert.timer = setTimeout(() => UI.stuntAlert.classList.remove('show'), 1600);
+
+    // Multiplier Streak
+    player.comboMultiplier = Math.min(10, player.comboMultiplier + 1);
+    player.comboTimer = 3.8;
+    UI.comboAlert.textContent = `${player.comboMultiplier}x COMBO STREAK!`;
+    UI.comboAlert.classList.add('active');
+
+    updateHeatLevel();
+  }
+
+  function triggerMegaphone() {
+    AudioEngine.playMegaphone();
+    const shockPos = new THREE.Vector3(player.x, 0.4, player.z);
+    emitShockwave(shockPos, player.yaw);
+
+    let hits = 0;
+    // Barrikaden wegpusten
+    WORLD.barricades.forEach(b => {
+      const dist = Math.hypot(b.x - player.x, b.z - player.z);
+      if (dist < 16) {
+        b.vx = (b.x - player.x) * 1.8 + (Math.random() - 0.5) * 6;
+        b.vz = (b.z - player.z) * 1.8 + 10;
+        b.vy = 9 + Math.random() * 6;
+        b.rotVx = Math.random() * 8;
+        b.hit = true;
+        hits++;
+      }
+    });
+
+    // Props wegpusten
+    WORLD.props.forEach(p => {
+      const dist = Math.hypot(p.x - player.x, p.z - player.z);
+      if (dist < 16) {
+        p.vx = (p.x - player.x) * 2.2;
+        p.vz = (p.z - player.z) * 2.2 + 12;
+        p.vy = 11 + Math.random() * 5;
+        p.rotVx = Math.random() * 10;
+        p.hit = true;
+        hits++;
+      }
+    });
+
+    // CRS Verfolger wegschleudern!
+    WORLD.activeChasers.forEach(van => {
+      const dist = Math.hypot(van.x - player.x, van.z - player.z);
+      if (dist < 18 && !van.hit) {
+        van.hit = true;
+        van.vy = 14;
+        van.vz = 24;
+        van.vx = (Math.random() - 0.5) * 10;
+        van.rotVx = 6;
+        van.rotVy = (Math.random() - 0.5) * 10;
+        hits += 3;
+        showStunt('CRS POLICE VAN FLIP 🚔💥', 15000);
+        addTikTokComment('MEGAPHONE JUST YEETED THE POLICE VAN LMAOOO 💀');
+      }
+    });
+
+    if (hits > 0) {
+      AudioEngine.playImpact();
+      showStunt('MEGAPHON SHOCKWAVE', hits * 1200);
+    }
+  }
+
+  function triggerGraffiti() {
+    AudioEngine.playSpray();
+    const sprayGeo = new THREE.PlaneGeometry(3.5, 3.5);
+    const sprayCanvas = document.createElement('canvas');
+    sprayCanvas.width = 256;
+    sprayCanvas.height = 256;
+    const sctx = sprayCanvas.getContext('2d');
+    const colors = ['#ff2a85', '#00f2fe', '#ffe600', '#39ff14'];
+    sctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+    sctx.font = 'bold 44px Arial';
+    sctx.textAlign = 'center';
+    sctx.textBaseline = 'middle';
+    const tags = ['GEN Z', 'SKIBIDI', '🥐', 'LIBERTÉ', 'W PROTEST', 'FR FR', 'RIOT 2026'];
+    sctx.fillText(tags[Math.floor(Math.random() * tags.length)], 128, 128);
+
+    const sprayTex = new THREE.CanvasTexture(sprayCanvas);
+    const sprayMat = new THREE.MeshBasicMaterial({ map: sprayTex, transparent: true, opacity: 0.85 });
+    const sprayMesh = new THREE.Mesh(sprayGeo, sprayMat);
+    sprayMesh.rotation.x = -Math.PI / 2;
+    sprayMesh.position.set(player.x, 0.04, player.z);
+    scene.add(sprayMesh);
+
+    showStunt('STREET TAG', 900);
+    emitSmoke(new THREE.Vector3(player.x, 0.6, player.z), 0xff2a85);
+  }
+
+  function respawnPlayer() {
+    player.x = 0;
+    player.y = 0.5;
+    player.z = Math.max(0, player.z - 35);
+    player.vx = 0;
+    player.vy = 0;
+    player.vz = 0;
+    player.speed = 0;
+    player.yaw = 0;
+    player.airSpin = 0;
+    player.airFlip = 0;
+    scooterParts.group.rotation.x = 0;
+    scooterParts.group.rotation.y = 0;
+    player.grounded = true;
+  }
+
+  function triggerGameOver(victory = false) {
+    gameRunning = false;
+    if (window.ArcadeCore) {
+      ArcadeCore.saveScore('paris_protest', Math.round(player.cloutScore));
+    }
+    updateHighscoreDisplay();
+
+    if (UI.resultTitle) UI.resultTitle.textContent = victory ? 'ARC DE TRIOMPHE CONQUERED! 🇫🇷' : 'BUSTED BY CRS POLICE! 🚔';
+    let rank = 'STREET AMATEUR';
+    if (player.cloutScore > 100000) rank = 'TIKTOK RIOT GOD 👑';
+    else if (player.cloutScore > 50000) rank = 'PARISIAN LEGEND 🥖';
+    else if (player.cloutScore > 20000) rank = 'VIRAL REBEL 🔥';
+    if (UI.resultRank) UI.resultRank.textContent = rank;
+
+    if (UI.resultClout) UI.resultClout.textContent = Math.round(player.cloutScore).toLocaleString();
+    if (UI.resultCroissants) UI.resultCroissants.textContent = player.croissantCount;
+    if (UI.resultSmashes) UI.resultSmashes.textContent = player.barricadeSmashCount;
+    if (UI.resultViewers) UI.resultViewers.textContent = (player.peakViewers / 1000).toFixed(1) + 'k';
+    if (UI.resultModal) UI.resultModal.classList.remove('hidden');
+  }
+
+  // --- HAUPT-PHYSIKSCHLEIFE (Polytrack Arcade Handling) ---
+  let lastTime = performance.now();
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    if (!gameRunning) {
+      renderer.render(scene, camera);
+      return;
+    }
+
+    // 1. Eingaben & Lenkung
+    const maxSteer = 1.4;
+    let targetSteer = 0;
+    if (keys.left) targetSteer += maxSteer;
+    if (keys.right) targetSteer -= maxSteer;
+    player.steerInput += (targetSteer - player.steerInput) * Math.min(1, dt * 10);
+
+    // Driften mit Space am Boden
+    const isDrifting = keys.jump && player.grounded && Math.abs(player.steerInput) > 0.25;
+    if (isDrifting) {
+      player.driftAngle = -player.steerInput * 0.45;
+      player.driftScoreTimer += dt;
+      if (player.driftScoreTimer > 0.25) {
+        showStunt('DRIFT SLIDE 💨', 400);
+        AudioEngine.playDrift();
+        player.driftScoreTimer = 0;
+      }
+      emitSmoke(new THREE.Vector3(player.x, 0.2, player.z - 0.9), 0x00f2fe);
+    } else {
+      player.driftAngle *= 0.85;
+    }
+
+    // 2. Beschleunigung & Nitro (Polytrack Snappy Grip)
+    let accel = 0;
+    const isSuperNitro = player.superNitroTimer > 0;
+    if (isSuperNitro) {
+      player.superNitroTimer -= dt;
+    }
+
+    const hasNitro = (keys.nitro || isSuperNitro) && (player.nitro > 5 || isSuperNitro);
+    const maxSpeed = hasNitro ? (isSuperNitro ? 96 : 82) : 54;
+    if (keys.forward) accel = 34;
+    if (keys.backward) accel = -24;
+
+    if (hasNitro) {
+      if (!isSuperNitro) {
+        player.nitro = Math.max(0, player.nitro - dt * 32);
+      }
+      accel *= isSuperNitro ? 2.1 : 1.75;
+      UI.speedLines.style.opacity = '1';
+      emitSmoke(new THREE.Vector3(player.x, 0.4, player.z - 1.2), isSuperNitro ? 0x39ff14 : 0x00f2fe);
+    } else {
+      player.nitro = Math.min(100, player.nitro + dt * 14);
+      UI.speedLines.style.opacity = '0';
+    }
+    UI.boostBar.style.width = player.nitro + '%';
+
+    // 3. Ollie / Jump am Boden (nur wenn nicht gedriftet wird)
+    if (keys.jump && player.grounded && Math.abs(player.steerInput) <= 0.25) {
+      player.vy = 13.5;
+      player.grounded = false;
+      AudioEngine.playJump();
+      showStunt('OLLIE AIRTIME', 500);
+      keys.jump = false;
+    }
+
+    // 4. Drehung & Drift am Boden
+    if (player.grounded) {
+      player.yaw += (player.steerInput * (player.speed / 40) * dt * (isDrifting ? 2.9 : 2.2));
+    } else {
+      // In der Luft: Stunt Flips & Spins!
+      if (keys.left) player.airSpin += dt * 640;
+      if (keys.right) player.airSpin -= dt * 640;
+      if (keys.backward) player.airFlip -= dt * 480; // Backflip
+      if (keys.forward) player.airFlip += dt * 480;  // Frontflip
+
+      scooterParts.group.rotation.y = THREE.MathUtils.degToRad(player.airSpin);
+      scooterParts.group.rotation.x = THREE.MathUtils.degToRad(player.airFlip);
+    }
+
+    // Geschwindigkeit berechnen
+    player.speed += accel * dt;
+    player.speed *= Math.pow(0.962, dt * 60);
+
+    // Vektor-Bewegung
+    const forwardX = Math.sin(player.yaw + player.driftAngle);
+    const forwardZ = Math.cos(player.yaw + player.driftAngle);
+
+    player.vx = forwardX * (player.speed / 3.6);
+    player.vz = forwardZ * (player.speed / 3.6);
+
+    player.x += player.vx * dt;
+    player.z += player.vz * dt;
+
+    // Schwerkraft & Sprunghöhe
+    if (!player.grounded) {
+      player.vy -= 26 * dt; // Gravity
+      player.y += player.vy * dt;
+      if (player.y <= 0) {
+        player.y = 0;
+        player.vy = 0;
+        player.grounded = true;
+
+        // Landung auswerten: Stunt-Clout vergeben!
+        const spins = Math.floor(Math.abs(player.airSpin) / 280);
+        const flips = Math.floor(Math.abs(player.airFlip) / 280);
+        if (spins > 0 || flips > 0) {
+          const stuntTitle = (flips > 0 ? (flips * 360 + '° FLIP ') : '') + (spins > 0 ? (spins * 360 + '° SPIN') : '');
+          const points = (spins * 4500) + (flips * 7000);
+          showStunt(`STUNT: ${stuntTitle} 🛴✨`, points);
+          AudioEngine.playTone(660, 0.25, 'sine', 0.2);
+          addTikTokComment(`SICK ${stuntTitle} LANDED! 👑 W STEEZE`);
+        }
+        player.airSpin = 0;
+        player.airFlip = 0;
+        scooterParts.group.rotation.y = 0;
+        scooterParts.group.rotation.x = 0;
+      }
+    }
+
+    // Straßen-Grenzen
+    const roadBoundary = WORLD.roadWidth / 2 - 1.5;
+    if (Math.abs(player.x) > roadBoundary) {
+      player.x = Math.sign(player.x) * roadBoundary;
+      player.speed *= 0.88;
+    }
+
+    // 3D Modell aktualisieren
+    player.group.position.set(player.x, player.y, player.z);
+    player.group.rotation.y = player.yaw + player.driftAngle;
+
+    // Neigung in Kurven & Stunts
+    const targetRoll = -player.steerInput * (player.speed / 60) * 0.45;
+    player.group.rotation.z += (targetRoll - player.group.rotation.z) * dt * 8;
+
+    // Räder-Drehung
+    const wheelRot = (player.speed * dt * 6);
+    scooterParts.frontWheel.rotation.x += wheelRot;
+    scooterParts.rearWheel.rotation.x += wheelRot;
+
+    // HUD Geschwindigkeit
+    UI.speedo.textContent = Math.round(Math.abs(player.speed));
+
+    // 5. Stunt-Schanzen Kollision & Mega Launch!
+    WORLD.ramps.forEach(ramp => {
+      const dist = Math.hypot(ramp.x - player.x, ramp.z - player.z);
+      if (dist < ramp.radius && player.grounded) {
+        player.grounded = false;
+        player.vy = ramp.boostVy;
+        player.speed = Math.max(player.speed * ramp.boostSpeed, 74);
+        AudioEngine.playJump();
+        showStunt('MEGA RAMP LAUNCH 🚀', 3500);
+        addTikTokComment('INSANE RAMP AIRTIME BRO IS FLYING 🛴💨');
+        emitSmoke(new THREE.Vector3(player.x, 0.5, player.z), 0xffe600);
+      }
+    });
+
+    // 6. Croissants Einsammeln
+    WORLD.croissants.forEach(c => {
+      if (!c.collected) {
+        c.mesh.rotation.y += dt * 3.5;
+        c.mesh.position.y = c.baseY + Math.sin(now * 0.004 + c.z) * 0.25;
+        const dist = Math.hypot(c.x - player.x, c.z - player.z);
+        if (dist < 2.5 && Math.abs(c.mesh.position.y - (player.y + 1.2)) < 2.5) {
+          c.collected = true;
+          scene.remove(c.mesh);
+          player.croissantCount++;
+          showStunt('GOLDEN CROISSANT 🥐', 1500);
+          AudioEngine.playCroissant();
+          emitSmoke(new THREE.Vector3(player.x, player.y + 1, player.z), 0xf59e0b);
+        }
+      }
+    });
+
+    // 7. Matcha Super-Nitro Power-Up
+    WORLD.matchas.forEach(m => {
+      if (!m.collected) {
+        m.mesh.rotation.y += dt * 3.0;
+        m.mesh.position.y = m.baseY + Math.sin(now * 0.003 + m.z) * 0.2;
+        const dist = Math.hypot(m.x - player.x, m.z - player.z);
+        if (dist < 2.5 && Math.abs(m.mesh.position.y - (player.y + 1.2)) < 2.4) {
+          m.collected = true;
+          scene.remove(m.mesh);
+          player.superNitroTimer = 4.5;
+          player.nitro = 100;
+          player.speed = Math.max(player.speed, 88);
+          showStunt('SUPER MATCHA NITRO 🍵⚡', 5000);
+          AudioEngine.playMatcha();
+          addTikTokComment('MATCHALATTE OVERDOSE ACTIVATED 🍵🏎️');
+        }
+      }
+    });
+
+    // 8. Kollision mit Boost-Pads
+    WORLD.boostPads.forEach(bp => {
+      const dist = Math.hypot(bp.x - player.x, bp.z - player.z);
+      if (dist < bp.radius) {
+        player.speed = Math.max(player.speed, 86);
+        player.nitro = 100;
+        AudioEngine.playBoost();
+        showStunt('ESPRESSO NITRO', 1500);
+        emitSmoke(new THREE.Vector3(player.x, 0.4, player.z), 0x39ff14);
+      }
+    });
+
+    // 9. Kollision mit Barrikaden (Smashen & Yeeten!)
+    WORLD.barricades.forEach(b => {
+      if (!b.hit) {
+        const dist = Math.hypot(b.x - player.x, b.z - player.z);
+        if (dist < b.radius) {
+          b.hit = true;
+          player.barricadeSmashCount++;
+          b.vx = (b.x - player.x) * 2 + (Math.random() - 0.5) * 8;
+          b.vz = player.vz * 1.2 + 8;
+          b.vy = 9 + Math.random() * 5;
+          b.rotVx = (Math.random() - 0.5) * 12;
+          b.rotVy = (Math.random() - 0.5) * 12;
+
+          AudioEngine.playImpact();
+          showStunt('BARRICADE SMASH', 2500);
+          addTikTokComment('THE BARRICADE EXPLODED LMAOOO 💀🔥');
+
+          UI.impactFlash.style.opacity = '0.35';
+          setTimeout(() => UI.impactFlash.style.opacity = '0', 120);
+          player.speed *= 0.88;
+        }
+      } else {
+        b.x += b.vx * dt;
+        b.z += b.vz * dt;
+        b.mesh.position.y += b.vy * dt;
+        b.vy -= 22 * dt;
+        b.mesh.rotation.x += b.rotVx * dt;
+        b.mesh.rotation.y += b.rotVy * dt;
+        b.mesh.position.x = b.x;
+        b.mesh.position.z = b.z;
+        if (b.mesh.position.y < 0) {
+          b.mesh.position.y = 0;
+          b.vx *= 0.5;
+          b.vz *= 0.5;
+        }
+      }
+    });
+
+    // 10. Props Physik (Mülltonnen & Pylonen)
+    WORLD.props.forEach(p => {
+      if (!p.hit) {
+        const dist = Math.hypot(p.x - player.x, p.z - player.z);
+        if (dist < p.radius + 1.2) {
+          p.hit = true;
+          p.vx = (p.x - player.x) * 3;
+          p.vz = player.vz * 1.4 + 6;
+          p.vy = 11 + Math.random() * 6;
+          p.rotVx = Math.random() * 10;
+          AudioEngine.playImpact();
+          showStunt('PROP YEET', 900);
+        }
+      } else {
+        p.x += p.vx * dt;
+        p.z += p.vz * dt;
+        p.mesh.position.y += p.vy * dt;
+        p.vy -= 24 * dt;
+        p.mesh.rotation.x += p.rotVx * dt;
+        p.mesh.position.x = p.x;
+        p.mesh.position.z = p.z;
+        if (p.mesh.position.y < 0.6) {
+          p.mesh.position.y = 0.6;
+          p.vx *= 0.6;
+          p.vz *= 0.6;
+        }
+      }
+    });
+
+    // 11. Aktive CRS Verfolger Spawnen & Bewegen
+    if (gameMode === 'evade' || player.heatLevel >= 2) {
+      if (WORLD.activeChasers.length < Math.min(4, player.heatLevel + 1) && Math.random() < 0.018) {
+        spawnActivePoliceCruiser(player.z + 160);
+      }
+    }
+
+    for (let i = WORLD.activeChasers.length - 1; i >= 0; i--) {
+      const van = WORLD.activeChasers[i];
+      if ((Math.floor(now / 300) + i) % 2 === 0) {
+        van.lightMat.color.setHex(0x00f2fe);
+      } else {
+        van.lightMat.color.setHex(0xef4444);
+      }
+
+      if (!van.hit) {
+        van.z -= van.speed * dt;
+        van.mesh.position.set(van.x, 0, van.z);
+
+        // Kollision mit Spieler
+        const dist = Math.hypot(van.x - player.x, van.z - player.z);
+        if (dist < van.radius) {
+          if (hasNitro) {
+            // Mit Nitro wegrammen!
+            van.hit = true;
+            van.vy = 12;
+            van.vz = 20;
+            van.rotVx = 8;
+            AudioEngine.playImpact();
+            showStunt('POLICE RAM SMASH 🚔💥', 10000);
+          } else {
+            // Spieler prallt ab
+            AudioEngine.playImpact();
+            player.speed *= 0.4;
+            player.cloutScore = Math.max(0, player.cloutScore - 2000);
+            UI.score.textContent = Math.round(player.cloutScore).toLocaleString();
+            UI.impactFlash.style.opacity = '0.5';
+            setTimeout(() => UI.impactFlash.style.opacity = '0', 160);
+
+            if (gameMode === 'evade' && player.speed < 10) {
+              triggerGameOver(false);
+              return;
+            }
+          }
+        }
+      } else {
+        // Fliegender CRS Wagen
+        van.x += van.vx * dt;
+        van.z += van.vz * dt;
+        van.mesh.position.y += van.vy * dt;
+        van.vy -= 25 * dt;
+        van.mesh.rotation.x += van.rotVx * dt;
+        van.mesh.rotation.y += van.rotVy * dt;
+        van.mesh.position.x = van.x;
+        van.mesh.position.z = van.z;
+        if (van.mesh.position.y < 0) {
+          van.mesh.position.y = 0;
+          van.vx *= 0.5;
+          van.vz *= 0.5;
+        }
+      }
+
+      // Weit hinter Spieler aufräumen
+      if (van.z < player.z - 60) {
+        scene.remove(van.mesh);
+        WORLD.activeChasers.splice(i, 1);
+      }
+    }
+
+    // 12. Partikel & Schockwellen updaten
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.mesh.position.z += p.vz * dt;
+      p.life -= dt;
+      p.mesh.scale.multiplyScalar(0.97);
+      if (p.life <= 0) {
+        scene.remove(p.mesh);
+        particles.splice(i, 1);
+      }
+    }
+
+    for (let i = shockwaves.length - 1; i >= 0; i--) {
+      const sw = shockwaves[i];
+      sw.scale += (sw.maxScale - sw.scale) * dt * 14;
+      sw.mesh.scale.set(sw.scale, sw.scale, 1);
+      sw.life -= dt;
+      sw.mesh.material.opacity = sw.life * 2;
+      if (sw.life <= 0) {
+        scene.remove(sw.mesh);
+        shockwaves.splice(i, 1);
+      }
+    }
+
+    // Combo Timer Decay
+    if (player.comboTimer > 0) {
+      player.comboTimer -= dt;
+      if (player.comboTimer <= 0) {
+        player.comboMultiplier = 1;
+        UI.comboAlert.classList.remove('active');
+      }
+    }
+
+    // 13. DYNAMISCHE KAMERA (Polytrack Chase Cam mit Lerp & FOV Punch)
+    const targetFov = hasNitro ? 78 : (player.grounded ? 65 : 72);
+    camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 6);
+    camera.updateProjectionMatrix();
+
+    let camTargetPos = new THREE.Vector3();
+    let camLookTarget = new THREE.Vector3(player.x, player.y + 1.6, player.z + 4);
+
+    if (player.cameraMode === 0) {
+      const camDist = 9.5;
+      const camHeight = 3.6;
+      camTargetPos.set(
+        player.x - Math.sin(player.yaw) * camDist,
+        player.y + camHeight,
+        player.z - Math.cos(player.yaw) * camDist
+      );
+    } else if (player.cameraMode === 1) {
+      const camDist = 4.8;
+      const camHeight = 2.2;
+      camTargetPos.set(
+        player.x - Math.sin(player.yaw) * camDist,
+        player.y + camHeight,
+        player.z - Math.cos(player.yaw) * camDist
+      );
+    } else {
+      const camDist = 5.5;
+      const camHeight = 2.6;
+      camTargetPos.set(
+        player.x + Math.sin(player.yaw + 0.3) * camDist,
+        player.y + camHeight,
+        player.z + Math.cos(player.yaw + 0.3) * camDist
+      );
+      camLookTarget.set(player.x, player.y + 1.8, player.z);
+    }
+
+    camera.position.lerp(camTargetPos, Math.min(1, dt * 9));
+    camera.lookAt(camLookTarget);
+
+    // Ziel erreicht? (Boulevard Rush Modus)
+    if (gameMode === 'boulevard' && player.z >= WORLD.length - 90) {
+      showStunt('ARC DE TRIOMPHE CONQUERED!', 35000);
+      addTikTokComment('THEY REACHED THE ARC DE TRIOMPHE 🏆🔥✨');
+      triggerGameOver(true);
+      return;
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  // --- START & MODI-AUSWAHL ---
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      gameMode = btn.dataset.mode;
+    });
+  });
+
+  document.getElementById('start-btn').addEventListener('click', () => {
+    AudioEngine.init();
+    AudioEngine.resume();
+    AudioEngine.startElectroBeat();
+    UI.startModal.classList.add('hidden');
+    gameRunning = true;
+    addTikTokComment('LIVE STREAM STARTED! Lets goooo 🚀');
+  });
+
+  if (UI.retryBtn) {
+    UI.retryBtn.addEventListener('click', () => {
+      UI.resultModal.classList.add('hidden');
+      respawnPlayer();
+      player.cloutScore = 0;
+      player.croissantCount = 0;
+      player.barricadeSmashCount = 0;
+      player.heatLevel = 1;
+      player.comboMultiplier = 1;
+      UI.score.textContent = '0';
+      if (UI.heatStars) UI.heatStars.textContent = '⭐☆☆☆☆ HEAT 1';
+      gameRunning = true;
+      AudioEngine.resume();
+      AudioEngine.startElectroBeat();
+    });
+  }
+
+  // Window Resize Handling
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // Renderloop starten
+  requestAnimationFrame(animate);
+
+})();
+</script>
+</body>
+</html>
