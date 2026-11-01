@@ -13,6 +13,7 @@ Eine umfassende, eigenständige Sammlung von **über 65 Browser-Games, interakti
 Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Audio API via [`src/arcade-core.js`](src/arcade-core.js)) und Touch-/Keyboard-Steuerung:
 
 * **Physik & Ragdoll:**
+  * [`games/ballistics.html`](games/ballistics.html) — *Panzer-Querschnitt: Slow-Mo Ballistik & Zerstörungs-Simulator (Mehrschicht-Panzerung, ERA, Keramik, Spalling & Röntgen-Kill-Cam)*
   * [`games/magnet.html`](games/magnet.html) — *Magnet-Puzzler: Polaritäts-Panik (Coulomb-Physik, Decken-Anziehung & Büroklammern-Abwehr)*
   * [`games/kofferstapler.html`](games/kofferstapler.html) — *Koffer-Stapler Extreme (Airport Jenga mit Matter.js-Physik & Turbulenzen-Test)*
   * [`games/einkaufswagen.html`](games/einkaufswagen.html) — *Einkaufswagen-Rallye (Supermarkt Derby mit klemmendem Rad & Ragdoll)*

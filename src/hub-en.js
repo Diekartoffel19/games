@@ -1,5 +1,6 @@
 // English card texts for the hub (index.html). null name = keep original name.
 window.HUB_EN = {
+  ballistics: ['Tank Armor Cutaway: Slow-Mo Ballistics Lab', 'Fire APFSDS tungsten darts, HEAT shaped charges, HESH shells, Railguns, anvils or an indestructible Nokia 3310 at up to 4,000 m/s into multi-layer tank cross-sections (ERA, Ceramic, RHA Steel, Kevlar) and watch penetration, shockwaves, spalling & ammo-rack cook-offs in ultra slow-motion!'],
   magnet: ['Magnet Puzzler: Polarity Panic', 'You are a high-powered electromagnet! Switch between PLUS (Red) and MINUS (Blue) to cling to ceilings, launch across laser chasms with Coulomb force and repel flying scrap paperclips!'],
   microwave: ['Microwave Meltdown: The Office Microwave', 'What happens when you put tin foil, a 90s CD-ROM, a metal fork and a raw egg into the office microwave? Unleash high-voltage plasma lightning and stop 0.1s before meltdown!'],
   einkaufswagen: ['Shopping Cart Rally: Supermarket Derby', 'Race an overloaded shopping cart with a jammed front wheel through the supermarket! Smash ravioli pyramids, collect deposit slips, upgrade with WD-40 and enjoy slow-mo ragdoll crashes!'],
