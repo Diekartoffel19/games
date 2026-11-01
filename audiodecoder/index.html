@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SignalScope Live – Echtzeit Audio-Empfänger & Multi-Decoder Studio</title>
+  <meta name="description" content="Empfange Audio live über Mikrofon oder Loopback und dekodiere Morse-Code (CW), DTMF-Töne, AFSK Binär-/Text-Datenströme, Live-SSTV-Bilder und Frequenzen in Echtzeit!">
+  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+  <style>
+    :root {
+      --bg: #060a12;
+      --card: #0d1424;
+      --card-alt: #131c31;
+      --border: rgba(148, 163, 184, 0.18);
+      --cyan: #38bdf8;
+      --green: #4ade80;
+      --amber: #fbbf24;
+      --red: #fb7185;
+      --purple: #a78bfa;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.45;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* Top Header */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .back-btn {
+      color: var(--muted);
+      text-decoration: none;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      transition: all 0.15s;
+    }
+    .back-btn:hover { color: #fff; border-color: var(--cyan); }
+    h1 {
+      margin: 0;
+      font-size: 1.45rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+    h1 span { color: var(--cyan); }
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(71, 85, 105, 0.3);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .live-pill.receiving {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: var(--green);
+      color: var(--green);
+      box-shadow: 0 0 14px rgba(74, 222, 128, 0.25);
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .live-pill.receiving .dot {
+      animation: pulse 1.1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(1.3); }
+    }
+
+    /* Receiver Control Strip */
+    .rx-strip {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 900px) {
+      .rx-strip { grid-template-columns: 1fr; }
+    }
+    .rx-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .btn {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      font-weight: 800;
+      font-size: 0.85rem;
+      padding: 9px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .btn:hover { background: #334155; border-color: var(--cyan); }
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      border-color: var(--cyan);
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+    }
+    .btn-primary.active-mic {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      border-color: #fca5a5;
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.4);
+    }
+    .btn-amber {
+      background: rgba(245, 158, 11, 0.18);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: var(--amber);
+    }
+    .btn-amber:hover { background: rgba(245, 158, 11, 0.3); }
+
+    .rx-params {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .param-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .param-item select, .param-item input[type="range"] {
+      background: #060a12;
+      color: #fff;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 5px 8px;
+      font-size: 0.78rem;
+      accent-color: var(--cyan);
+    }
+
+    .rx-telemetry {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .stat-pill {
+      background: #060a12;
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      min-width: 82px;
+    }
+    .stat-pill small { font-size: 0.62rem; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+    .stat-pill strong { font-size: 0.9rem; font-variant-numeric: tabular-nums; color: var(--cyan); }
+
+    /* Visualizers Row */
+    .vis-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 900px) {
+      .vis-grid { grid-template-columns: 1fr; }
+    }
+    .vis-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .vis-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.74rem;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    canvas.vis-canvas {
+      width: 100%;
+      height: 150px;
+      background: #030712;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      display: block;
+    }
+
+    /* Mode Tabs */
+    .mode-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .mode-tab {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 10px 16px;
+      border-radius: 11px;
+      font-weight: 800;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+    .mode-tab:hover { color: #fff; border-color: rgba(56, 189, 248, 0.4); }
+    .mode-tab.active {
+      background: rgba(2, 132, 199, 0.22);
+      border-color: var(--cyan);
+      color: #fff;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+    }
+
+    /* Workspace Columns: Left = Live Decoder Output, Right = Interactive Test Transmitter / Mode Controls */
+    .work-grid {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 920px) {
+      .work-grid { grid-template-columns: 1fr; }
+    }
+    .panel-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .panel-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 900;
+      font-size: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    /* Terminal Output Box */
+    .terminal-box {
+      background: #030712;
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+      min-height: 210px;
+      max-height: 340px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.95rem;
+      color: var(--green);
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+    }
+    .terminal-box .placeholder {
+      color: #475569;
+      font-style: italic;
+    }
+
+    .sub-stream-box {
+      background: #060a12;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-family: monospace;
+      font-size: 0.82rem;
+      color: var(--amber);
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    /* DTMF Keypad Grid */
+    .dtmf-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      max-width: 320px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .dtmf-key {
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 6px;
+      color: #fff;
+      font-weight: 900;
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: all 0.1s;
+    }
+    .dtmf-key small {
+      font-size: 0.6rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .dtmf-key:hover { border-color: var(--cyan); background: #1e293b; }
+    .dtmf-key.detected {
+      background: #0284c7;
+      border-color: #7dd3fc;
+      transform: scale(1.05);
+      box-shadow: 0 0 18px rgba(56, 189, 248, 0.7);
+    }
+
+    /* SSTV Live Canvas */
+    .sstv-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    #sstvRxCanvas {
+      width: 320px;
+      height: 240px;
+      max-width: 100%;
+      background: #000;
+      border: 2px solid var(--cyan);
+      border-radius: 8px;
+      image-rendering: pixelated;
+    }
+
+    /* Pitch Gauge */
+    .pitch-display {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #030712;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      gap: 4px;
+    }
+    .pitch-note {
+      font-size: 3rem;
+      font-weight: 900;
+      color: var(--cyan);
+      line-height: 1;
+    }
+    .pitch-hz {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--amber);
+    }
+
+    textarea.tx-input, input.tx-input {
+      width: 100%;
+      background: #060a12;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 10px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.88rem;
+      resize: vertical;
+    }
+    textarea.tx-input:focus, input.tx-input:focus {
+      outline: none;
+      border-color: var(--cyan);
+    }
+
+    .badge-info {
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--cyan);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- HEADER -->
+  <header class="top-bar">
+    <div class="brand-group">
+      <a href="../index.html#tools" class="back-btn">⬅ Arcade Hub</a>
+      <h1>Signal<span>Scope</span> Live</h1>
+      <div class="live-pill" id="rxStatePill">
+        <span class="dot"></span>
+        <span id="rxStateText">Empfänger im Standby</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <label class="btn" style="cursor:pointer;">
+        📂 Audiodatei live abspielen
+        <input type="file" id="audioFileInput" accept="audio/*" hidden>
+      </label>
+    </div>
+  </header>
+
+  <!-- LIVE RECEIVER CONTROL BAR -->
+  <section class="rx-strip">
+    <div class="rx-buttons">
+      <button class="btn btn-primary" id="btnMicToggle" onclick="toggleLiveMicrophone()">
+        🎙️ Live-Mikrofon starten
+      </button>
+      <button class="btn btn-amber" id="btnQuickDemo" onclick="runInstantLiveDemo()">
+        ⚡ Live-Signal testen (Loopback + Ton)
+      </button>
+    </div>
+
+    <div class="rx-params">
+      <div class="param-item">
+        <label for="micSelect">Eingang:</label>
+        <select id="micSelect"><option value="">Standard-Mikrofon</option></select>
+      </div>
+      <div class="param-item">
+        <label for="rngGain">Verstärkung:</label>
+        <input type="range" id="rngGain" min="0.5" max="8" step="0.5" value="2.0" style="width:85px">
+        <span id="lblGain">2.0×</span>
+      </div>
+      <div class="param-item">
+        <label for="rngSquelch">Rauschsperre (Squelch):</label>
+        <input type="range" id="rngSquelch" min="5" max="85" step="1" value="28" style="width:85px">
+        <span id="lblSquelch">28%</span>
+      </div>
+    </div>
+
+    <div class="rx-telemetry">
+      <div class="stat-pill">
+        <small>Peak-Frequenz</small>
+        <strong id="statPeakHz">0 Hz</strong>
+      </div>
+      <div class="stat-pill">
+        <small>Signal-Pegel</small>
+        <strong id="statLevel">0%</strong>
+      </div>
+      <div class="stat-pill">
+        <small>Musik-Note</small>
+        <strong id="statNote">--</strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- REALTIME WATERFALL SPECTROGRAM & SPECTRUM / OSCILLOSCOPE -->
+  <section class="vis-grid">
+    <div class="vis-card">
+      <div class="vis-head">
+        <span>🌊 Echtzeit-Wasserfall-Spektrogramm (0 – 4.500 Hz)</span>
+        <span id="visCursorInfo" style="color:var(--cyan)">Klicke ins Spektrum für Träger-Lock</span>
+      </div>
+      <canvas id="waterfallCanvas" class="vis-canvas" width="680" height="150"></canvas>
+    </div>
+    <div class="vis-card">
+      <div class="vis-head">
+        <span>📊 Live FFT-Spektrum, Squelch-Schwelle & Wellenform</span>
+        <span id="visSampleRate">48.0 kHz FFT</span>
+      </div>
+      <canvas id="spectrumCanvas" class="vis-canvas" width="520" height="150"></canvas>
+    </div>
+  </section>
+
+  <!-- 5 LIVE DECODER MODE TABS -->
+  <nav class="mode-tabs">
+    <button class="mode-tab active" data-mode="morse" onclick="switchDecoderMode('morse')">
+      📡 1. Morse-Code (CW Live)
+    </button>
+    <button class="mode-tab" data-mode="dtmf" onclick="switchDecoderMode('dtmf')">
+      ☎️ 2. DTMF Touch-Tone
+    </button>
+    <button class="mode-tab" data-mode="afsk" onclick="switchDecoderMode('afsk')">
+      💻 3. AFSK Daten-Modem (Text/Hex)
+    </button>
+    <button class="mode-tab" data-mode="sstv" onclick="switchDecoderMode('sstv')">
+      🖼️ 4. Live-SSTV Bild-Scanner
+    </button>
+    <button class="mode-tab" data-mode="pitch" onclick="switchDecoderMode('pitch')">
+      🎵 5. Frequenz- & Noten-Logger
+    </button>
+  </nav>
+
+  <!-- WORKSPACE: LEFT = LIVE DECODED OUTPUT, RIGHT = MODE SETTINGS & LIVE TEST TRANSMITTER -->
+  <div class="work-grid">
+    <!-- LEFT COLUMN: LIVE DECODER OUTPUT -->
+    <section class="panel-card">
+      <div class="panel-title">
+        <span id="decoderTitle">📡 Live Morse-Code (CW) Dekodierung</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn" style="padding:5px 10px;font-size:0.75rem;" onclick="copyDecodedText()">📋 Kopieren</button>
+          <button class="btn" style="padding:5px 10px;font-size:0.75rem;" onclick="downloadDecodedLog()">💾 .txt</button>
+          <button class="btn" style="padding:5px 10px;font-size:0.75rem;" onclick="clearDecoderOutput()">🗑️ Leeren</button>
+        </div>
+      </div>
+
+      <!-- Live Symbol / Bit Buffer Bar -->
+      <div class="sub-stream-box">
+        <span id="liveSymbolBuffer">Aktuelle Zeichen-Pufferung: (warte auf Signal...)</span>
+        <span class="badge-info" id="liveSubMetric">700 Hz | 16 WPM</span>
+      </div>
+
+      <!-- SSTV Image Box (only visible in SSTV mode) -->
+      <div class="sstv-wrap" id="sstvBox" style="display:none;">
+        <canvas id="sstvRxCanvas" width="160" height="120"></canvas>
+        <div style="display:flex;gap:10px;align-items:center;font-size:0.8rem;color:var(--muted);">
+          <span id="sstvLineInfo">Zeile: 0 / 120</span>
+          <button class="btn" style="padding:4px 10px;font-size:0.74rem;" onclick="saveSstvPng()">🖼️ Bild als PNG speichern</button>
+        </div>
+      </div>
+
+      <!-- Pitch Big Gauge (only visible in Pitch mode) -->
+      <div class="pitch-display" id="pitchBox" style="display:none;">
+        <div class="pitch-note" id="bigNoteDisplay">--</div>
+        <div class="pitch-hz" id="bigHzDisplay">0.0 Hz (0 Cent)</div>
+      </div>
+
+      <!-- Live Decoded Stream Terminal -->
+      <div class="terminal-box" id="decodedTerminal"><span class="placeholder">Live-Stream bereit. Starte das Mikrofon oder klicke rechts auf „Signal senden“, um die Live-Dekodierung Zeichen für Zeichen in Echtzeit zu sehen...</span></div>
+    </section>
+
+    <!-- RIGHT COLUMN: PROTOCOL CONTROLS & BUILT-IN LIVE TRANSMITTER -->
+    <section class="panel-card">
+      <div class="panel-title">
+        <span id="txPanelTitle">⚙️ Decoder-Parameter & Live-Test-Sender</span>
+        <span class="badge-info">Echtzeit-Loopback + Lautsprecher</span>
+      </div>
+
+      <!-- MORSE CONTROLS -->
+      <div id="ctrlMorse" class="mode-ctrl-pane">
+        <p style="font-size:0.8rem;color:var(--muted);margin-top:0;">
+          Erkennt Pieptöne (CW) live über das Mikrofon oder den Test-Sender. Du kannst die Trägerfrequenz auf Auto-Lock lassen oder fest einstellen.
+        </p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <div class="param-item">
+            <label>CW-Frequenz:</label>
+            <input type="range" id="morseFreqRange" min="400" max="1400" step="10" value="700" oninput="updateMorseParams()">
+            <span id="morseFreqLbl">700 Hz</span>
+          </div>
+          <div class="param-item">
+            <label><input type="checkbox" id="morseAutoFreq" checked> Auto-Frequenz-Lock</label>
+          </div>
+          <div class="param-item">
+            <label>Tempo (WPM):</label>
+            <input type="range" id="morseWpmRange" min="6" max="30" step="1" value="15" oninput="updateMorseParams()">
+            <span id="morseWpmLbl">15 WPM</span>
+          </div>
+        </div>
+
+        <label style="font-size:0.78rem;font-weight:800;color:var(--cyan);">🔊 Morse-Signal live senden & gleichzeitig dekodieren:</label>
+        <textarea id="morseTxText" class="tx-input" rows="2">SOS HALLO WELT 2026</textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="transmitMorseLive()">▶ Morse-Code jetzt senden</button>
+          <button class="btn" id="cwKeyBtn" onpointerdown="cwKeyDown()" onpointerup="cwKeyUp()" onpointerleave="cwKeyUp()">🎹 Manuelle Morsetaste (Halten)</button>
+          <button class="btn" onclick="stopAllTransmissions()">⏹ Stopp</button>
+        </div>
+      </div>
+
+      <!-- DTMF CONTROLS -->
+      <div id="ctrlDtmf" class="mode-ctrl-pane" style="display:none;">
+        <p style="font-size:0.8rem;color:var(--muted);margin-top:0;">
+          8-Frequenz Goertzel-Filterbank (`697–941 Hz` × `1209–1633 Hz`). Halte ein Telefon ans Mikrofon oder tippe auf das Tastenfeld:
+        </p>
+        <div class="dtmf-grid" id="dtmfKeypad"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+          <input type="text" id="dtmfSeqInput" class="tx-input" value="018054646#2026*" placeholder="Nummernfolge...">
+          <button class="btn btn-primary" style="white-space:nowrap;" onclick="transmitDtmfSequence()">▶ Folge wählen</button>
+        </div>
+      </div>
+
+      <!-- AFSK DATA MODEM CONTROLS -->
+      <div id="ctrlAfsk" class="mode-ctrl-pane" style="display:none;">
+        <p style="font-size:0.8rem;color:var(--muted);margin-top:0;">
+          Akustisches Live-Datenmodem (Mark = `1200 Hz`, Space = `2200 Hz`). Jedes empfangene Byte wird sofort live im Terminal als **UTF-8 Text & Hex-Stream** ausgegeben!
+        </p>
+        <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+          <div class="param-item">
+            <label>Darstellung:</label>
+            <select id="afskFormatSelect">
+              <option value="text_hex">Text + HEX Live</option>
+              <option value="text">Nur UTF-8 Text</option>
+              <option value="bin">Binär (010101)</option>
+            </select>
+          </div>
+          <div class="param-item">
+            <label>Baudrate:</label>
+            <select id="afskBaudSelect">
+              <option value="50">50 Baud (Sehr robust über Raum-Luft)</option>
+              <option value="100" selected>100 Baud (Standard Live-Stream)</option>
+              <option value="200">200 Baud (Schnell)</option>
+            </select>
+          </div>
+        </div>
+        <label style="font-size:0.78rem;font-weight:800;color:var(--cyan);">🔊 Datenpaket / Text live als FSK-Audio senden:</label>
+        <textarea id="afskTxText" class="tx-input" rows="3">GEHEIM-PAKET #42: Live Audio Decoder funktioniert in Echtzeit!</textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-primary" onclick="transmitAfskLive()">📡 Datenstrom live senden</button>
+          <button class="btn" onclick="stopAllTransmissions()">⏹ Stopp</button>
+        </div>
+      </div>
+
+      <!-- SSTV IMAGE CONTROLS -->
+      <div id="ctrlSstv" class="mode-ctrl-pane" style="display:none;">
+        <p style="font-size:0.8rem;color:var(--muted);margin-top:0;">
+          Empfängt und zeichnet **Slow-Scan Television (SSTV)** Bilder Zeile für Zeile live während der Ton läuft (`1200 Hz` Sync-Puls, `1500–2300 Hz` Helligkeit/Farbe)!
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <button class="btn btn-primary" onclick="transmitSstvTestImage('radar')">📡 Radar-Testbild senden</button>
+          <button class="btn btn-amber" onclick="transmitSstvTestImage('retro')">👾 Pixel-Art senden</button>
+          <label class="btn" style="cursor:pointer;">
+            🖼️ Eigenes Bild als SSTV-Ton senden
+            <input type="file" id="sstvCustomImg" accept="image/*" hidden onchange="transmitCustomSstvImage(event)">
+          </label>
+          <button class="btn" onclick="stopAllTransmissions()">⏹ Stopp</button>
+        </div>
+      </div>
+
+      <!-- PITCH / NOTE LOGGER CONTROLS -->
+      <div id="ctrlPitch" class="mode-ctrl-pane" style="display:none;">
+        <p style="font-size:0.8rem;color:var(--muted);margin-top:0;">
+          Präziser Echtzeit-Frequenz- und Musiknoten-Detektor. Singe, pfeife oder spiele ein Instrument vor dem Mikrofon – jede erkannte Note wird live mit Zeitstempel protokolliert!
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="playTestMelody()">🎵 Test-Melodie abspielen & live erkennen</button>
+          <button class="btn" onclick="stopAllTransmissions()">⏹ Stopp</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // --- AUDIO CONTEXT & LIVE GRAPH ---
+  let audioCtx = null;
+  let analyser = null;
+  let inputGainNode = null;
+  let micStream = null;
+  let micSource = null;
+  let isMicActive = false;
+  let activeTxTimerIds = [];
+  let activeOscillators = [];
+
+  const FFT_SIZE = 4096;
+  let freqData = null;
+  let timeData = null;
+
+  // Decoder Mode: 'morse', 'dtmf', 'afsk', 'sstv', 'pitch'
+  let currentMode = 'morse';
+  let squelchThreshold = 28; // 0..100%
+  let decodedLogText = '';
+
+  function ensureAudioGraph() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC({ sampleRate: 48000 });
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = FFT_SIZE;
+      analyser.smoothingTimeConstant = 0.15;
+
+      inputGainNode = audioCtx.createGain();
+      inputGainNode.gain.value = parseFloat(document.getElementById('rngGain').value) || 2.0;
+      inputGainNode.connect(analyser);
+
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      timeData = new Float32Array(analyser.fftSize);
+      document.getElementById('visSampleRate').textContent = `${(audioCtx.sampleRate / 1000).toFixed(1)} kHz FFT`;
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  // --- MICROPHONE STREAM ---
+  async function refreshMicDevices() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const mics = devs.filter(d => d.kind === 'audioinput');
+      const sel = document.getElementById('micSelect');
+      const prev = sel.value;
+      sel.length = 1;
+      mics.forEach((m, idx) => {
+        const opt = document.createElement('option');
+        opt.value = m.deviceId;
+        opt.textContent = m.label || `Mikrofon ${idx + 1}`;
+        sel.appendChild(opt);
+      });
+      if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+    } catch (e) {}
+  }
+  refreshMicDevices();
+
+  window.toggleLiveMicrophone = async () => {
+    ensureAudioGraph();
+    if (isMicActive) {
+      stopMicrophone();
+      return;
+    }
+    try {
+      const devId = document.getElementById('micSelect').value;
+      const constraints = {
+        audio: {
+          deviceId: devId ? { exact: devId } : undefined,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      };
+      micStream = await navigator.mediaDevices.getUserMedia(constraints);
+      micSource = audioCtx.createMediaStreamSource(micStream);
+      micSource.connect(inputGainNode);
+      isMicActive = true;
+      refreshMicDevices();
+      updateRxPill('Live-Mikrofon aktiv', true);
+      const btn = document.getElementById('btnMicToggle');
+      btn.textContent = '⏹ Mikrofon stoppen';
+      btn.classList.add('active-mic');
+    } catch (err) {
+      appendDecodedText(`\n[Hinweis: Mikrofonzugriff nicht verfügbar (${err.message}). Nutze den integrierten Live-Loopback-Sender oder lade eine Audiodatei!]\n`);
+    }
+  };
+
+  function stopMicrophone() {
+    if (micSource) {
+      try { micSource.disconnect(); } catch (e) {}
+      micSource = null;
+    }
+    if (micStream) {
+      micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
+    }
+    isMicActive = false;
+    updateRxPill('Empfänger im Standby', false);
+    const btn = document.getElementById('btnMicToggle');
+    btn.textContent = '🎙️ Live-Mikrofon starten';
+    btn.classList.remove('active-mic');
+  }
+
+  function updateRxPill(text, active) {
+    const pill = document.getElementById('rxStatePill');
+    document.getElementById('rxStateText').textContent = text;
+    pill.classList.toggle('receiving', active);
+  }
+
+  // Play uploaded audio file into the live decoder
+  document.getElementById('audioFileInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    ensureAudioGraph();
+    stopAllTransmissions();
+    const arrayBuf = await file.arrayBuffer();
+    const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+    const src = audioCtx.createBufferSource();
+    src.buffer = audioBuf;
+    src.connect(inputGainNode);
+    src.connect(audioCtx.destination);
+    src.start();
+    activeOscillators.push(src);
+    updateRxPill(`Spiele Datei: ${file.name}`, true);
+    src.onended = () => {
+      if (!isMicActive) updateRxPill('Empfänger im Standby', false);
+    };
+  });
+
+  // Gain & Squelch sliders
+  document.getElementById('rngGain').addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    document.getElementById('lblGain').textContent = `${v.toFixed(1)}×`;
+    if (inputGainNode) inputGainNode.gain.value = v;
+  });
+  document.getElementById('rngSquelch').addEventListener('input', (e) => {
+    squelchThreshold = parseInt(e.target.value, 10);
+    document.getElementById('lblSquelch').textContent = `${squelchThreshold}%`;
+  });
+
+  // --- TERMINAL HELPERS ---
+  function appendDecodedText(str) {
+    decodedLogText += str;
+    const term = document.getElementById('decodedTerminal');
+    term.textContent = decodedLogText;
+    term.scrollTop = term.scrollHeight;
+  }
+
+  window.clearDecoderOutput = () => {
+    decodedLogText = '';
+    document.getElementById('decodedTerminal').innerHTML = '<span class="placeholder">Ausgabe geleert. Warte auf Live-Signal...</span>';
+    morseCurrentSymbols = '';
+    lastNoteLogged = '';
+    clearSstvCanvas();
+  };
+
+  window.copyDecodedText = () => {
+    if (!decodedLogText) return;
+    navigator.clipboard.writeText(decodedLogText);
+  };
+
+  window.downloadDecodedLog = () => {
+    const blob = new Blob([decodedLogText || ''], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `signalscope-${currentMode}-${Date.now()}.txt`;
+    a.click();
+  };
+
+  // --- GOERTZEL / FREQUENCY MAGNITUDE HELPER ---
+  function getMagnitudeAtHz(targetHz) {
+    if (!analyser || !freqData) return 0;
+    const binWidth = audioCtx.sampleRate / analyser.fftSize;
+    const bin = Math.round(targetHz / binWidth);
+    if (bin < 1 || bin >= freqData.length - 1) return 0;
+    return Math.max(freqData[bin - 1], freqData[bin], freqData[bin + 1]) / 255;
+  }
+
+  // --- 1. MORSE CODE (CW) LIVE DECODER & TRANSMITTER ---
+  const MORSE_TABLE = {
+    '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
+    '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
+    '-.-': 'K', '.-..': 'L', '--': 'M', '-.': 'N', '---': 'O',
+    '.--.': 'P', '--.-': 'Q', '.-.': 'R', '...': 'S', '-': 'T',
+    '..-': 'U', '...-': 'V', '.--': 'W', '-..-': 'X', '-.--': 'Y',
+    '--..': 'Z', '-----': '0', '.----': '1', '..---': '2', '...--': '3',
+    '....-': '4', '.....': '5', '-....': '6', '--...': '7', '---..': '8',
+    '----.': '9', '.-.-.-': '.', '--..--': ',', '..--..': '?', '-..-.': '/'
+  };
+  const CHAR_TO_MORSE = {};
+  Object.entries(MORSE_TABLE).forEach(([k, v]) => { CHAR_TO_MORSE[v] = k; });
+
+  let morseTargetHz = 700;
+  let morseWpm = 15;
+  let morseToneState = false;
+  let morseStateStartMs = performance.now();
+  let morseCurrentSymbols = '';
+  let morseWordSpacePrinted = true;
+  let manualCwOsc = null;
+
+  window.updateMorseParams = () => {
+    morseTargetHz = parseInt(document.getElementById('morseFreqRange').value, 10);
+    morseWpm = parseInt(document.getElementById('morseWpmRange').value, 10);
+    document.getElementById('morseFreqLbl').textContent = `${morseTargetHz} Hz`;
+    document.getElementById('morseWpmLbl').textContent = `${morseWpm} WPM`;
+    document.getElementById('liveSubMetric').textContent = `${morseTargetHz} Hz | ${morseWpm} WPM`;
+  };
+
+  function processLiveMorse(nowMs, peakHz, peakLevel) {
+    const autoLock = document.getElementById('morseAutoFreq').checked;
+    if (autoLock && peakLevel > (squelchThreshold / 100) + 0.08 && peakHz >= 380 && peakHz <= 1600) {
+      morseTargetHz = Math.round(morseTargetHz * 0.8 + peakHz * 0.2);
+      document.getElementById('morseFreqRange').value = morseTargetHz;
+      document.getElementById('morseFreqLbl').textContent = `${morseTargetHz} Hz`;
+    }
+
+    const mag = getMagnitudeAtHz(morseTargetHz);
+    const thresh = squelchThreshold / 100;
+    const isToneOn = mag > thresh;
+    const ditMs = 1200 / morseWpm;
+    const elapsed = nowMs - morseStateStartMs;
+
+    if (isToneOn !== morseToneState) {
+      if (morseToneState) {
+        // Tone just ended -> classify Dit or Dah
+        if (elapsed >= ditMs * 0.35) {
+          const sym = elapsed < ditMs * 1.9 ? '.' : '-';
+          morseCurrentSymbols += sym;
+          morseWordSpacePrinted = false;
+          document.getElementById('liveSymbolBuffer').textContent = `CW-Puffer: ${morseCurrentSymbols}`;
+        }
+      }
+      morseToneState = isToneOn;
+      morseStateStartMs = nowMs;
+    } else if (!morseToneState) {
+      // Silence ongoing -> check character or word boundary
+      if (morseCurrentSymbols.length > 0 && elapsed >= ditMs * 2.3) {
+        const decodedChar = MORSE_TABLE[morseCurrentSymbols] || '';
+        appendDecodedText(decodedChar);
+        morseCurrentSymbols = '';
+        document.getElementById('liveSymbolBuffer').textContent = `Letztes Zeichen: '${decodedChar}'`;
+      } else if (morseCurrentSymbols.length === 0 && !morseWordSpacePrinted && elapsed >= ditMs * 5.8) {
+        appendDecodedText(' ');
+        morseWordSpacePrinted = true;
+      }
+    }
+  }
+
+  window.transmitMorseLive = () => {
+    ensureAudioGraph();
+    stopAllTransmissions();
+    const text = (document.getElementById('morseTxText').value || 'SOS').toUpperCase();
+    const ditSec = (1200 / morseWpm) / 1000;
+    const freq = morseTargetHz;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.value = 0;
+
+    osc.connect(gain);
+    gain.connect(inputGainNode); // Direct loopback to live analyser!
+    gain.connect(audioCtx.destination); // Also audible on speakers!
+
+    let t = audioCtx.currentTime + 0.06;
+    for (const ch of text) {
+      if (ch === ' ') {
+        t += ditSec * 4;
+        continue;
+      }
+      const code = CHAR_TO_MORSE[ch];
+      if (!code) continue;
+      for (const sym of code) {
+        const dur = sym === '.' ? ditSec : ditSec * 3;
+        gain.gain.setValueAtTime(0.35, t);
+        t += dur;
+        gain.gain.setValueAtTime(0.0, t);
+        t += ditSec;
+      }
+      t += ditSec * 2;
+    }
+
+    osc.start();
+    osc.stop(t + 0.1);
+    activeOscillators.push(osc);
+    updateRxPill('Sende & dekodiere Morse live...', true);
+    osc.onended = () => {
+      if (!isMicActive) updateRxPill('Empfänger im Standby', false);
+    };
+  };
+
+  window.cwKeyDown = () => {
+    ensureAudioGraph();
+    if (manualCwOsc) return;
+    manualCwOsc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    manualCwOsc.frequency.value = morseTargetHz;
+    g.gain.value = 0.35;
+    manualCwOsc.connect(g);
+    g.connect(inputGainNode);
+    g.connect(audioCtx.destination);
+    manualCwOsc.start();
+  };
+  window.cwKeyUp = () => {
+    if (manualCwOsc) {
+      try { manualCwOsc.stop(); } catch (e) {}
+      manualCwOsc = null;
+    }
+  };
+
+  // --- 2. DTMF TOUCH-TONE LIVE DECODER & KEYPAD ---
+  const DTMF_ROWS = [697, 770, 852, 941];
+  const DTMF_COLS = [1209, 1336, 1477, 1633];
+  const DTMF_CHARS = [
+    ['1', '2', '3', 'A'],
+    ['4', '5', '6', 'B'],
+    ['7', '8', '9', 'C'],
+    ['*', '0', '#', 'D']
+  ];
+
+  let lastDtmfChar = null;
+  let lastDtmfTime = 0;
+
+  function initDtmfKeypad() {
+    const grid = document.getElementById('dtmfKeypad');
+    let html = '';
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        const ch = DTMF_CHARS[r][c];
+        html += `
+          <button class="dtmf-key" id="dtmfKey_${ch}" onpointerdown="playDtmfTone('${ch}', ${DTMF_ROWS[r]}, ${DTMF_COLS[c]})">
+            <span>${ch}</span>
+            <small>${DTMF_ROWS[r]}+${DTMF_COLS[c]}</small>
+          </button>`;
+      }
+    }
+    grid.innerHTML = html;
+  }
+  initDtmfKeypad();
+
+  function processLiveDtmf(nowMs) {
+    const thresh = (squelchThreshold / 100) * 0.85;
+    let bestR = -1, maxRVal = 0;
+    for (let r = 0; r < 4; r++) {
+      const m = getMagnitudeAtHz(DTMF_ROWS[r]);
+      if (m > maxRVal) { maxRVal = m; bestR = r; }
+    }
+    let bestC = -1, maxCVal = 0;
+    for (let c = 0; c < 4; c++) {
+      const m = getMagnitudeAtHz(DTMF_COLS[c]);
+      if (m > maxCVal) { maxCVal = m; bestC = c; }
+    }
+
+    document.querySelectorAll('.dtmf-key').forEach(el => el.classList.remove('detected'));
+
+    if (bestR >= 0 && bestC >= 0 && maxRVal > thresh && maxCVal > thresh) {
+      const ch = DTMF_CHARS[bestR][bestC];
+      const keyEl = document.getElementById(`dtmfKey_${ch}`);
+      if (keyEl) keyEl.classList.add('detected');
+      document.getElementById('liveSymbolBuffer').textContent = `DTMF erkannt: [${ch}] (${DTMF_ROWS[bestR]} Hz + ${DTMF_COLS[bestC]} Hz)`;
+
+      if (ch !== lastDtmfChar && nowMs - lastDtmfTime > 110) {
+        appendDecodedText(ch);
+        lastDtmfChar = ch;
+        lastDtmfTime = nowMs;
+      }
+    } else if (nowMs - lastDtmfTime > 85) {
+      lastDtmfChar = null;
+    }
+  }
+
+  window.playDtmfTone = (ch, fRow, fCol, duration = 0.16) => {
+    ensureAudioGraph();
+    const o1 = audioCtx.createOscillator();
+    const o2 = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o1.frequency.value = fRow;
+    o2.frequency.value = fCol;
+    g.gain.value = 0.22;
+    o1.connect(g);
+    o2.connect(g);
+    g.connect(inputGainNode);
+    g.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    o1.start(now); o2.start(now);
+    o1.stop(now + duration); o2.stop(now + duration);
+  };
+
+  window.transmitDtmfSequence = () => {
+    ensureAudioGraph();
+    stopAllTransmissions();
+    const seq = (document.getElementById('dtmfSeqInput').value || '').toUpperCase();
+    let delay = 0;
+    updateRxPill('Wähle DTMF-Folge live...', true);
+    for (const ch of seq) {
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          if (DTMF_CHARS[r][c] === ch) {
+            const tid = setTimeout(() => {
+              playDtmfTone(ch, DTMF_ROWS[r], DTMF_COLS[c], 0.14);
+            }, delay);
+            activeTxTimerIds.push(tid);
+            delay += 220;
+          }
+        }
+      }
+    }
+  };
+
+  // --- 3. AFSK LIVE DATA STREAM DECODER & TRANSMITTER ---
+  // Mark (1) = 1200 Hz, Space (0) = 2200 Hz. UART frame: Start bit (0) + 8 data bits (LSB first) + Stop bit (1)
+  const AFSK_MARK_HZ = 1200;
+  const AFSK_SPACE_HZ = 2200;
+  let afskRxState = 'IDLE'; // 'IDLE', 'DATA'
+  let afskBitSampleTime = 0;
+  let afskCurrentByte = 0;
+  let afskBitIndex = 0;
+
+  function processLiveAfsk(nowMs) {
+    const baud = parseInt(document.getElementById('afskBaudSelect').value, 10) || 100;
+    const bitMs = 1000 / baud;
+    const magMark = getMagnitudeAtHz(AFSK_MARK_HZ);
+    const magSpace = getMagnitudeAtHz(AFSK_SPACE_HZ);
+    const thresh = (squelchThreshold / 100) * 0.75;
+
+    if (magMark < thresh && magSpace < thresh) {
+      afskRxState = 'IDLE';
+      return;
+    }
+
+    const bit = magMark >= magSpace ? 1 : 0;
+    document.getElementById('liveSymbolBuffer').textContent =
+      `AFSK Träger: ${bit === 1 ? 'MARK (1200 Hz = 1)' : 'SPACE (2200 Hz = 0)'} | ${baud} Baud`;
+
+    if (afskRxState === 'IDLE') {
+      // Detect Start Bit (0 = Space tone)
+      if (bit === 0) {
+        afskRxState = 'DATA';
+        afskBitIndex = 0;
+        afskCurrentByte = 0;
+        afskBitSampleTime = nowMs + bitMs * 1.45; // sample middle of bit 0
+      }
+    } else if (afskRxState === 'DATA') {
+      if (nowMs >= afskBitSampleTime) {
+        if (afskBitIndex < 8) {
+          afskCurrentByte |= (bit << afskBitIndex);
+          afskBitIndex++;
+          afskBitSampleTime += bitMs;
+        } else {
+          // Stop bit reached -> output decoded byte immediately!
+          const byteVal = afskCurrentByte & 0xFF;
+          if (byteVal >= 32 && byteVal <= 126 || byteVal >= 160 || byteVal === 10) {
+            const fmt = document.getElementById('afskFormatSelect').value;
+            const ch = String.fromCharCode(byteVal);
+            const hex = byteVal.toString(16).toUpperCase().padStart(2, '0');
+            const bin = byteVal.toString(2).padStart(8, '0');
+            if (fmt === 'text') appendDecodedText(ch);
+            else if (fmt === 'bin') appendDecodedText(`${bin} `);
+            else appendDecodedText(`${ch}[${hex}] `);
+          }
+          afskRxState = 'IDLE';
+        }
+      }
+    }
+  }
+
+  window.transmitAfskLive = () => {
+    ensureAudioGraph();
+    stopAllTransmissions();
+    const text = document.getElementById('afskTxText').value || 'TEST';
+    const baud = parseInt(document.getElementById('afskBaudSelect').value, 10) || 100;
+    const bitMs = 1000 / baud;
+    const bytes = new TextEncoder().encode(text);
+
+    // Build bit sequence with UART framing
+    const bits = [1, 1, 1, 1]; // preamble idle mark
+    for (const b of bytes) {
+      bits.push(0); // start bit
+      for (let i = 0; i < 8; i++) {
+        bits.push((b >> i) & 1);
+      }
+      bits.push(1, 1); // 2 stop bits for clean live JS timer sync
+    }
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = AFSK_MARK_HZ;
+    gain.gain.value = 0.32;
+    osc.connect(gain);
+    gain.connect(inputGainNode);
+    gain.connect(audioCtx.destination);
+
+    const startT = audioCtx.currentTime + 0.05;
+    bits.forEach((b, idx) => {
+      osc.frequency.setValueAtTime(b === 1 ? AFSK_MARK_HZ : AFSK_SPACE_HZ, startT + (idx * bitMs) / 1000);
+    });
+
+    osc.start(startT);
+    osc.stop(startT + (bits.length * bitMs) / 1000 + 0.05);
+    activeOscillators.push(osc);
+    updateRxPill(`Sende AFSK-Datenstrom (${bytes.length} Bytes)...`, true);
+  };
+
+  // --- 4. LIVE SSTV IMAGE SCANLINE DECODER & TRANSMITTER ---
+  const sstvCanvas = document.getElementById('sstvRxCanvas');
+  const sstvCtx = sstvCanvas.getContext('2d');
+  let sstvRow = 0;
+  let sstvCol = 0;
+  let sstvLastSyncMs = 0;
+
+  function clearSstvCanvas() {
+    sstvCtx.fillStyle = '#020617';
+    sstvCtx.fillRect(0, 0, sstvCanvas.width, sstvCanvas.height);
+    sstvRow = 0;
+    sstvCol = 0;
+  }
+  clearSstvCanvas();
+
+  function processLiveSstv(nowMs, peakHz, peakLevel) {
+    if (peakLevel < (squelchThreshold / 100) * 0.7) return;
+
+    // 1200 Hz Sync pulse starts a new scanline
+    if (peakHz >= 1120 && peakHz <= 1280 && nowMs - sstvLastSyncMs > 70) {
+      sstvRow = (sstvRow + 1) % sstvCanvas.height;
+      sstvCol = 0;
+      sstvLastSyncMs = nowMs;
+      document.getElementById('sstvLineInfo').textContent = `Zeile: ${sstvRow + 1} / ${sstvCanvas.height} (Sync 1200 Hz)`;
+      return;
+    }
+
+    // 1500 Hz (Black) to 2300 Hz (White/Color) pixel luminance
+    if (peakHz >= 1420 && peakHz <= 2450) {
+      const lum = Math.max(0, Math.min(255, Math.round(((peakHz - 1500) / 800) * 255)));
+      sstvCtx.fillStyle = `rgb(${Math.round(lum * 0.85)}, ${lum}, ${Math.min(255, Math.round(lum * 1.15))})`;
+      sstvCtx.fillRect(sstvCol, sstvRow, 3, 2);
+      sstvCol = Math.min(sstvCanvas.width - 1, sstvCol + 2);
+      document.getElementById('liveSymbolBuffer').textContent =
+        `SSTV Scanline #${sstvRow + 1} | Pixel X=${sstvCol} | ${Math.round(peakHz)} Hz (Luma ${lum})`;
+    }
+  }
+
+  window.transmitSstvTestImage = (pattern = 'radar') => {
+    ensureAudioGraph();
+    stopAllTransmissions();
+    clearSstvCanvas();
+    sstvRow = -1;
+
+    const W_IMG = 64;
+    const H_IMG = 48;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    gain.gain.value = 0.3;
+    osc.connect(gain);
+    gain.connect(inputGainNode);
+    gain.connect(audioCtx.destination);
+
+    let t = audioCtx.currentTime + 0.05;
+    for (let y = 0; y < H_IMG; y++) {
+      // 1200 Hz horizontal sync pulse
+      osc.frequency.setValueAtTime(1200, t);
+      t += 0.025;
+      for (let x = 0; x < W_IMG; x++) {
+        let v = 0;
+        if (pattern === 'radar') {
+          const dx = x - W_IMG / 2;
+          const dy = y - H_IMG / 2;
+          const dist = Math.hypot(dx, dy);
+          v = (Math.abs(dist - 18) < 2.5 || Math.abs(dist - 9) < 2 || x === W_IMG / 2 || y === H_IMG / 2) ? 1.0 : 0.15;
+        } else {
+          // Retro space invader icon
+          const cx = Math.abs(x - W_IMG / 2);
+          v = (y > 10 && y < 36 && ((cx < 14 && (y + cx) % 4 !== 0))) ? 0.95 : 0.1;
+        }
+        osc.frequency.setValueAtTime(1500 + v * 800, t);
+        t += 0.0028;
+      }
+    }
+
+    osc.start();
+    osc.stop(t + 0.05);
+    activeOscillators.push(osc);
+    appendDecodedText(`[SSTV Bildübertragung gestartet: ${pattern.toUpperCase()} (${W_IMG}×${H_IMG})]\n`);
+    updateRxPill('Empfange Live-SSTV Scanlines...', true);
+  };
+
+  window.transmitCustomSstvImage = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const off = document.createElement('canvas');
+      off.width = 64;
+      off.height = 48;
+      const octx = off.getContext('2d');
+      octx.drawImage(img, 0, 0, 64, 48);
+      const data = octx.getImageData(0, 0, 64, 48).data;
+
+      ensureAudioGraph();
+      stopAllTransmissions();
+      clearSstvCanvas();
+      sstvRow = -1;
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      gain.gain.value = 0.3;
+      osc.connect(gain);
+      gain.connect(inputGainNode);
+      gain.connect(audioCtx.destination);
+
+      let t = audioCtx.currentTime + 0.05;
+      for (let y = 0; y < 48; y++) {
+        osc.frequency.setValueAtTime(1200, t);
+        t += 0.025;
+        for (let x = 0; x < 64; x++) {
+          const idx = (y * 64 + x) * 4;
+          const lum = (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114) / 255;
+          osc.frequency.setValueAtTime(1500 + lum * 800, t);
+          t += 0.0028;
+        }
+      }
+      osc.start();
+      osc.stop(t + 0.05);
+      activeOscillators.push(osc);
+      appendDecodedText(`[SSTV Eigenes Bild wird live gesendet: ${file.name}]\n`);
+    };
+    img.src = URL.createObjectURL(file);
+  };
+
+  window.saveSstvPng = () => {
+    const a = document.createElement('a');
+    a.href = sstvCanvas.toDataURL('image/png');
+    a.download = `sstv-live-${Date.now()}.png`;
+    a.click();
+  };
+
+  // --- 5. FREQUENCY & MUSICAL NOTE LOGGER ---
+  const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  let lastNoteLogged = '';
+  let lastNoteTime = 0;
+
+  function hzToNoteInfo(hz) {
+    if (hz < 40) return null;
+    const midi = 69 + 12 * Math.log2(hz / 440);
+    const rounded = Math.round(midi);
+    const cents = Math.round((midi - rounded) * 100);
+    const name = NOTE_NAMES[((rounded % 12) + 12) % 12];
+    const oct = Math.floor(rounded / 12) - 1;
+    return { note: `${name}${oct}`, cents, hz };
+  }
+
+  function processLivePitch(nowMs, peakHz, peakLevel) {
+    if (peakLevel < (squelchThreshold / 100) || peakHz < 55) {
+      document.getElementById('bigNoteDisplay').textContent = '--';
+      return;
+    }
+    const info = hzToNoteInfo(peakHz);
+    if (!info) return;
+    document.getElementById('bigNoteDisplay').textContent = info.note;
+    document.getElementById('bigHzDisplay').textContent =
+      `${peakHz.toFixed(1)} Hz (${info.cents >= 0 ? '+' : ''}${info.cents} Cent)`;
+    document.getElementById('liveSymbolBuffer').textContent =
+      `Erkannte Tonhöhe: ${info.note} (${peakHz.toFixed(1)} Hz)`;
+
+    if (info.note !== lastNoteLogged && nowMs - lastNoteTime > 160) {
+      appendDecodedText(`${info.note} (${Math.round(peakHz)}Hz) → `);
+      lastNoteLogged = info.note;
+      lastNoteTime = nowMs;
+    }
+  }
+
+  window.playTestMelody = () => {
+    ensureAudioGraph();
+    stopAllTransmissions();
+    const notesHz = [523.25, 659.25, 783.99, 1046.50, 783.99, 1046.50]; // C5 E5 G5 C6
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    gain.gain.value = 0.3;
+    osc.connect(gain);
+    gain.connect(inputGainNode);
+    gain.connect(audioCtx.destination);
+    let t = audioCtx.currentTime + 0.05;
+    notesHz.forEach((f) => {
+      osc.frequency.setValueAtTime(f, t);
+      t += 0.28;
+    });
+    osc.start();
+    osc.stop(t);
+    activeOscillators.push(osc);
+  };
+
+  // --- STOP TRANSMISSIONS & QUICK DEMO ---
+  window.stopAllTransmissions = () => {
+    activeTxTimerIds.forEach(id => clearTimeout(id));
+    activeTxTimerIds = [];
+    activeOscillators.forEach(o => {
+      try { o.stop(); o.disconnect(); } catch (e) {}
+    });
+    activeOscillators = [];
+    if (!isMicActive) updateRxPill('Empfänger im Standby', false);
+  };
+
+  window.runInstantLiveDemo = () => {
+    if (currentMode === 'morse') transmitMorseLive();
+    else if (currentMode === 'dtmf') transmitDtmfSequence();
+    else if (currentMode === 'afsk') transmitAfskLive();
+    else if (currentMode === 'sstv') transmitSstvTestImage('radar');
+    else if (currentMode === 'pitch') playTestMelody();
+  };
+
+  // --- SWITCH DECODER MODE ---
+  window.switchDecoderMode = (mode) => {
+    currentMode = mode;
+    document.querySelectorAll('.mode-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    document.getElementById('ctrlMorse').style.display = mode === 'morse' ? 'block' : 'none';
+    document.getElementById('ctrlDtmf').style.display = mode === 'dtmf' ? 'block' : 'none';
+    document.getElementById('ctrlAfsk').style.display = mode === 'afsk' ? 'block' : 'none';
+    document.getElementById('ctrlSstv').style.display = mode === 'sstv' ? 'block' : 'none';
+    document.getElementById('ctrlPitch').style.display = mode === 'pitch' ? 'block' : 'none';
+
+    document.getElementById('sstvBox').style.display = mode === 'sstv' ? 'flex' : 'none';
+    document.getElementById('pitchBox').style.display = mode === 'pitch' ? 'flex' : 'none';
+
+    const titles = {
+      morse: '📡 Live Morse-Code (CW) Dekodierung',
+      dtmf: '☎️ Live DTMF Touch-Tone Dekodierung',
+      afsk: '💻 Live AFSK Datenstrom (UTF-8 & HEX)',
+      sstv: '🖼️ Live-SSTV Bild-Scanner (Zeile für Zeile)',
+      pitch: '🎵 Live Frequenz- & Musiknoten-Protokoll'
+    };
+    document.getElementById('decoderTitle').textContent = titles[mode];
+  };
+
+  // Click on waterfall/spectrum to lock Morse carrier frequency
+  const wfCanvas = document.getElementById('waterfallCanvas');
+  const spCanvas = document.getElementById('spectrumCanvas');
+  const wfCtx = wfCanvas.getContext('2d');
+  const spCtx = spCanvas.getContext('2d');
+
+  wfCanvas.addEventListener('pointerdown', (e) => {
+    const rect = wfCanvas.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const clickedHz = Math.round(ratio * 4500);
+    if (clickedHz >= 300 && clickedHz <= 2000) {
+      morseTargetHz = clickedHz;
+      document.getElementById('morseAutoFreq').checked = false;
+      document.getElementById('morseFreqRange').value = clickedHz;
+      updateMorseParams();
+    }
+  });
+
+  // --- MAIN REAL-TIME RENDER & DECODER LOOP ---
+  function renderAndDecodeLoop(nowMs) {
+    if (analyser && freqData && timeData) {
+      analyser.getByteFrequencyData(freqData);
+      analyser.getFloatTimeDomainData(timeData);
+
+      // Find peak frequency between 60 Hz and 4500 Hz with parabolic interpolation
+      const sampleRate = audioCtx.sampleRate;
+      const binHz = sampleRate / analyser.fftSize;
+      const maxBin = Math.min(freqData.length - 2, Math.floor(4500 / binHz));
+      let bestBin = 0;
+      let bestVal = 0;
+      for (let i = 2; i <= maxBin; i++) {
+        if (freqData[i] > bestVal) {
+          bestVal = freqData[i];
+          bestBin = i;
+        }
+      }
+
+      let peakHz = bestBin * binHz;
+      if (bestBin > 1 && bestBin < maxBin) {
+        const y1 = freqData[bestBin - 1];
+        const y2 = freqData[bestBin];
+        const y3 = freqData[bestBin + 1];
+        const denom = y1 - 2 * y2 + y3;
+        if (denom !== 0) {
+          peakHz = (bestBin + 0.5 * (y1 - y3) / denom) * binHz;
+        }
+      }
+      const peakLevel = bestVal / 255;
+
+      // Update Top Telemetry
+      document.getElementById('statPeakHz').textContent = peakLevel > 0.05 ? `${Math.round(peakHz)} Hz` : '0 Hz';
+      document.getElementById('statLevel').textContent = `${Math.round(peakLevel * 100)}%`;
+      const nInfo = peakLevel > 0.08 ? hzToNoteInfo(peakHz) : null;
+      document.getElementById('statNote').textContent = nInfo ? nInfo.note : '--';
+
+      // Run Active Live Decoder
+      if (currentMode === 'morse') processLiveMorse(nowMs, peakHz, peakLevel);
+      else if (currentMode === 'dtmf') processLiveDtmf(nowMs);
+      else if (currentMode === 'afsk') processLiveAfsk(nowMs);
+      else if (currentMode === 'sstv') processLiveSstv(nowMs, peakHz, peakLevel);
+      else if (currentMode === 'pitch') processLivePitch(nowMs, peakHz, peakLevel);
+
+      // 1. Draw Scrolling Waterfall Spectrogram
+      const W_WF = wfCanvas.width;
+      const H_WF = wfCanvas.height;
+      wfCtx.drawImage(wfCanvas, 0, 1, W_WF, H_WF - 1, 0, 0, W_WF, H_WF - 1);
+      for (let x = 0; x < W_WF; x++) {
+        const hz = (x / W_WF) * 4500;
+        const bin = Math.min(freqData.length - 1, Math.floor(hz / binHz));
+        const v = freqData[bin];
+        if (v < 15) {
+          wfCtx.fillStyle = '#030712';
+        } else if (v < 110) {
+          wfCtx.fillStyle = `rgb(10, ${Math.round(v * 1.4)}, ${Math.round(80 + v * 1.5)})`;
+        } else {
+          wfCtx.fillStyle = `rgb(${Math.round(v)}, ${Math.round(180 + (v - 110) * 0.5)}, 40)`;
+        }
+        wfCtx.fillRect(x, H_WF - 1, 1, 1);
+      }
+
+      // Draw target carrier marker on waterfall bottom edge
+      if (currentMode === 'morse') {
+        const mx = (morseTargetHz / 4500) * W_WF;
+        wfCtx.fillStyle = '#ef4444';
+        wfCtx.fillRect(mx - 2, H_WF - 4, 4, 4);
+      }
+
+      // 2. Draw FFT Spectrum + Squelch Line + Time Waveform
+      const W_SP = spCanvas.width;
+      const H_SP = spCanvas.height;
+      spCtx.fillStyle = '#030712';
+      spCtx.fillRect(0, 0, W_SP, H_SP);
+
+      // FFT Bars
+      spCtx.fillStyle = 'rgba(56, 189, 248, 0.75)';
+      for (let x = 0; x < W_SP; x += 2) {
+        const hz = (x / W_SP) * 4500;
+        const bin = Math.min(freqData.length - 1, Math.floor(hz / binHz));
+        const h = (freqData[bin] / 255) * (H_SP - 14);
+        spCtx.fillRect(x, H_SP - h, 1.5, h);
+      }
+
+      // Squelch threshold line
+      const sqY = H_SP - (squelchThreshold / 100) * (H_SP - 14);
+      spCtx.strokeStyle = 'rgba(251, 113, 133, 0.75)';
+      spCtx.setLineDash([4, 4]);
+      spCtx.beginPath();
+      spCtx.moveTo(0, sqY);
+      spCtx.lineTo(W_SP, sqY);
+      spCtx.stroke();
+      spCtx.setLineDash([]);
+
+      // Time-domain waveform overlay
+      spCtx.strokeStyle = '#4ade80';
+      spCtx.lineWidth = 1.4;
+      spCtx.beginPath();
+      const step = Math.floor(timeData.length / W_SP);
+      for (let x = 0; x < W_SP; x++) {
+        const sample = timeData[x * step] || 0;
+        const y = H_SP * 0.32 + sample * 38;
+        if (x === 0) spCtx.moveTo(x, y);
+        else spCtx.lineTo(x, y);
+      }
+      spCtx.stroke();
+    }
+
+    requestAnimationFrame(renderAndDecodeLoop);
+  }
+
+  requestAnimationFrame(renderAndDecodeLoop);
+})();
+</script>
+</body>
+</html>

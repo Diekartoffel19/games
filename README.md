@@ -47,6 +47,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
 ### 🛠️ Web Tools & Air-Gap Utilities
 Nützliche Browser-Werkzeuge mit modernem Canvas-, Web Audio- und Sensor-Support:
 
+* **[`audiodecoder/index.html`](audiodecoder/index.html)** — *SignalScope Live (Echtzeit Audio-Empfänger & Multi-Decoder)*: Empfängt Audio live über Mikrofon oder Loopback und dekodiert Morse-Code (CW), DTMF-Touch-Tones, AFSK Text-/Hex-Datenströme, Live-SSTV-Bilder und Frequenzen/Noten in Echtzeit mit Wasserfall-Spektrogramm.
 * **[`filetoaudio/index.html`](filetoaudio/index.html)** — *FileTone 2.0 (Acoustic Modem)*: Überträgt Dateien und Text als hochfrequente akustische Datenpakete über Lautsprecher und Mikrofon (Air-Gap Data Transfer mit Reed-Solomon-Fehlerkorrektur).
 * **[`qraudio/index.html`](qraudio/index.html)** — *QR Audio Stream*: Optische Daten- und Audioübertragung über animierte QR-Codes per Webcam.
 * **[`sbb/index.html`](sbb/index.html)** — *ÖV Verspätungs-Wächter*: Echtzeit-Abfahrten, Störungen & Verspätungen für Schweizer Züge (SBB API).

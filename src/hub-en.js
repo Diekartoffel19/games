@@ -68,6 +68,7 @@ window.HUB_EN = {
   pizzaschnitt: ['Pizza Precision Cut', '2-player duel: cut the pizza in exactly 50/50 with one slice – area and toppings count. Whoever is less accurate pays the bill!'],
   spaghettibruecke: ['Spaghetti Bridge Duel', 'Build a bridge from nothing but noodles and marshmallows – then roll a fat hamster in a ball across it. Whose construction holds?'],
   zeitschleife: ['Time Loop: Zeitgeist', 'Every time loop repeats: your earlier self runs along as a ghost and holds down switches. Help yourself!'],
+  audiodecoder: ['SignalScope Live (Real-Time Audio Receiver & Decoder)', 'Universal real-time audio receiver & multi-decoder studio: decode Morse code (CW), DTMF touch-tones, AFSK binary/text data streams, live SSTV scanline images and musical notes/frequencies live via microphone with a waterfall spectrogram & built-in test transmitter!', 'Live Audio / CW / DTMF / AFSK / SSTV'],
   sbb: ['Public Transport Delay Watcher (SBB)', 'Real-time monitoring & alerts for Swiss train and public transport connections. Live delays, cancellations, platform changes and push notifications right in the browser.', 'SBB / Public Transit Live'],
   git: [null, 'Interactive 3D and 2D visualization of Git repositories with bloom shaders, commit networks, branch flows and developer statistics.'],
   qraudio: [null, 'Optical high-speed audio transmission via animated QR codes in real time using webcam and monitor – completely without a network connection or cables.'],
