@@ -1,5 +1,6 @@
 // English card texts for the hub (index.html). null name = keep original name.
 window.HUB_EN = {
+  badezimmer: ['The Silent Bathroom: In-Law Escape', 'Visiting your partner\'s parents. The toilet paper is gone, the flush roars like a tractor and every floorboard squeaks! Silence pipes with dental floss, find emergency tissues and sneak past Walter back to Sunday roast!'],
   ballistics: ['Tank Armor Cutaway: Slow-Mo Ballistics Lab', 'Fire APFSDS tungsten darts, HEAT shaped charges, HESH shells, Railguns, anvils or an indestructible Nokia 3310 at up to 4,000 m/s into multi-layer tank cross-sections (ERA, Ceramic, RHA Steel, Kevlar) and watch penetration, shockwaves, spalling & ammo-rack cook-offs in ultra slow-motion!'],
   magnet: ['Magnet Puzzler: Polarity Panic', 'You are a high-powered electromagnet! Switch between PLUS (Red) and MINUS (Blue) to cling to ceilings, launch across laser chasms with Coulomb force and repel flying scrap paperclips!'],
   microwave: ['Microwave Meltdown: The Office Microwave', 'What happens when you put tin foil, a 90s CD-ROM, a metal fork and a raw egg into the office microwave? Unleash high-voltage plasma lightning and stop 0.1s before meltdown!'],
@@ -49,6 +50,7 @@ window.HUB_EN = {
   aura: [null, 'Escape the aura debt (-10k), mog hallway bosses, master mewing & become the cosmic Gigachad!'],
   animeclicker: [null, 'Collect spirit energy with cute waifus, limit breaks, boss raids & isekai reincarnation!'],
   suika: [null, 'Drop fruits and merge them with physics into the giant watermelon!'],
+  suika3d: [null, 'The watermelon game in 3D: drop fruits into a glass box, rotate the camera and merge them into the giant melon!'],
   frogger: [null, 'Cross dangerous highways and raging rivers in the retro classic!'],
   casino: [null, 'The ultimate 4-in-1 casino: one-armed bandit with mega jackpot, Plinko pyramid (up to 1,000x), 6-deck blackjack and wheel roulette with a shared VIP bankroll!'],
   marble: [null, 'Real 3D physics marble run: steer the glass ball over ramps, boost pads and collect gems!'],

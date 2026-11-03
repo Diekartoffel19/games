@@ -96,7 +96,6 @@ http://localhost:8000/
 │   ├── hub-en.js         # Englische Übersetzungen & Metadaten für den Hub
 │   └── favicon.ico       # Arcade-Favicon
 ├── games/                # Alle eigenständigen HTML5-Spiele (Englisch / Standard)
-│   └── de/               # Deutsche Versionen der Spiele
 ├── filetoaudio/          # Akustisches Datenmodem (Web Audio FSK / Reed-Solomon)
 ├── qraudio/              # QR-Code Video-Stream Datenübertragung
 ├── git/                  # 3D Git-Repository Visualizer
@@ -109,4 +108,4 @@ http://localhost:8000/
 ---
 
 ## 🌍 Mehrsprachigkeit (i18n)
-Der Hub unterstützt flüssiges Umschalten zwischen **Deutsch (DE)** und **Englisch (EN)** mit automatischer Speicherung in `localStorage`. Spiele verfügen über synchronisierte DE-Pendants im Ordner [`games/de/`](games/de/).
+Der Hub unterstützt flüssiges Umschalten zwischen **Deutsch (DE)** und **Englisch (EN)** mit automatischer Speicherung in `localStorage`. Alle Spiele laufen standardmäßig auf Englisch.
