@@ -119,7 +119,7 @@
     <div class="bar" id="canbar"><i></i></div>
     <div class="row"><span class="lbl">Knitterfrei</span><b id="wf">0%</b></div>
     <div class="row"><span class="lbl">Stärke im Ziel</span><b id="sp">0%</b></div>
-    <div id="hint">Linke Maustaste: bügeln · Rechte Maustaste / Leertaste: Stärke sprühen</div>
+    <div id="hint"><b style="color:#ff8a2a">Orange umrandet = noch knittrig.</b> Linke Maustaste: bügeln · Rechte Maustaste / Leertaste: Stärke sprühen</div>
   </div>
   <div class="box" id="bl">
     <b>W/S</b> Nase runter/hoch · <b>A/D</b> Kurve<br>
@@ -278,7 +278,7 @@ function shirtStats() {
   for (let k = 0; k < NC; k++) {
     if (!mask[k]) continue;
     if (sc[k]) { bu++; continue; }
-    if (wr[k] < 0.12) sm++;
+    if (wr[k] < WR_SMOOTH) sm++;
     if (st[k] >= BAND_LO && st[k] <= BAND_HI) ib++;
   }
   return { wf: sm / NM, sp: ib / NM, sc: bu / NM };
@@ -384,8 +384,11 @@ function sampleGrid(arr, u, v) {
   const ix = Math.floor(gx), iy = Math.floor(gy), fx = gx - ix, fy = gy - iy, k = iy * GW + ix;
   return lerp(lerp(arr[k], arr[k + 1], fx), lerp(arr[k + GW], arr[k + GW + 1], fx), fy);
 }
+const WR_SMOOTH = 0.12;
+const needPx = new Uint8Array(OW * OH);
 function drawShirtTo(ctx, W, H, starchView, withTool) {
   const d = img.data;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 160);
   for (let y = 0; y < OH; y++) for (let x = 0; x < OW; x++) {
     const k = y * OW + x, o = k * 4;
     if (!pxMask[k]) { d[o + 3] = 0; continue; }
@@ -405,9 +408,24 @@ function drawShirtTo(ctx, W, H, starchView, withTool) {
       R = shirtRGB[0] * b; G = shirtRGB[1] * b; B = shirtRGB[2] * b;
       const sv = Math.min(s, 1) * 0.22; R = lerp(R, 190, sv); G = lerp(G, 220, sv); B = lerp(B, 255, sv);
       if (s > 1) { const t = Math.min(1, (s - 1) * 2) * 0.5; R = lerp(R, 240, t); G = lerp(G, 220, t); B = lerp(B, 150, t); }
+      if (withTool) {
+        // Noch zu bügeln: pulsierende Orange-Tönung; glatt: leicht aufgehellt
+        if (w >= WR_SMOOTH) { const t = 0.2 + 0.3 * clamp((w - WR_SMOOTH) / 0.5, 0, 1) + pulse * 0.12; R = lerp(R, 255, t); G = lerp(G, 120, t); B = lerp(B, 40, t); }
+        else { R = Math.min(255, R * 1.06); G = Math.min(255, G * 1.06); B = Math.min(255, B * 1.06); }
+      }
     }
+    needPx[k] = !scv && w >= WR_SMOOTH ? 1 : 0;
     if (scv) { R = 90 + pxCrumple[k] * 30; G = 50; B = 20; }
     d[o] = R; d[o + 1] = G; d[o + 2] = B; d[o + 3] = 255;
+  }
+  if (withTool && !starchView) {
+    // Umriss um alle noch knittrigen Bereiche
+    for (let y = 0; y < OH; y++) for (let x = 0; x < OW; x++) {
+      const k = y * OW + x; if (!needPx[k]) continue;
+      const border = (x > 0 && pxMask[k - 1] && !needPx[k - 1]) || (x < OW - 1 && pxMask[k + 1] && !needPx[k + 1]) ||
+        (y > 0 && pxMask[k - OW] && !needPx[k - OW]) || (y < OH - 1 && pxMask[k + OW] && !needPx[k + OW]);
+      if (border) { const o = k * 4; d[o] = 255; d[o + 1] = 90 + pulse * 60; d[o + 2] = 0; }
+    }
   }
   octx.putImageData(img, 0, 0);
   ctx.clearRect(0, 0, W, H);
@@ -522,6 +540,7 @@ const shirtMat = new THREE.ShaderMaterial({
       float nd=(vUv.x-0.5)*(vUv.x-0.5)/0.007225+(vUv.y-0.87)*(vUv.y-0.87)/0.0049; if(nd<1.9) c*=0.85;
       if(abs(vUv.x-0.5)<0.012&&vUv.y<0.8) c*=0.92;
       float s=vD.g*1.5; c=mix(c,vec3(0.75,0.86,1.0),clamp(s,0.0,1.0)*0.22); if(s>1.0) c=mix(c,vec3(0.95,0.88,0.6),0.4);
+      c=mix(c,vec3(1.0,0.5,0.15),step(0.12,vD.r)*(1.0-vD.b)*0.3);
       c=mix(c,vec3(0.3,0.17,0.07),vD.b);
       gl_FragColor=vec4(c*l,1.0); }`
 });
