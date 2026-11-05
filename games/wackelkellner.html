@@ -30,8 +30,10 @@ button:active { transform:translateY(3px); box-shadow:0 1px 0 #2b1560; }
   <h1>🍽️ Wackel-Kellner</h1>
   <p>Dein erster Tag. Dein Tablett ist instabil und du auch. Bring jede Bestellung zum Tisch.</p>
   <p><b>Steuern:</b> ← → oder linke/rechte Bildschirmseite halten. Damit kippst du das Tablett.</p>
-  <p>Achte auf die <b>Warnungen</b>: Dann kommt gleich ein Stoß von dieser Seite. Gegenhalten! Gläser rutschen am schnellsten.</p>
-  <p style="font-size:13px;opacity:.7">Mehr als 8 zerbrochene Teile und der Chef schmeißt dich raus.</p>
+  <p>Achte auf die <b>Warnungen</b>: Der Pfeil zeigt, wohin du gleich geschubst wirst. Gegenhalten! Gläser rutschen am schnellsten. <b>❗</b> heißt: Teil fällt gleich.</p>
+  <p><b>Fehlerfrei geliefert</b> = Serie, mehr Trinkgeld und der Chef verzeiht eine Scherbe.</p>
+  <p style="font-size:13px;opacity:.7">8 zerbrochene Teile und der Chef schmeißt dich raus. P / Esc = Pause.</p>
+  <p id="mbest" style="font-size:14px;font-weight:700"></p>
   <button id="go">Kommt sofort!</button>
 </div></div>
 <div class="overlay hide" id="over"><div class="card">
@@ -58,7 +60,8 @@ const TYPES = [
 ];
 const EVENTS = [
   { txt: "🐕 Hund!", sound: "wuff" }, { txt: "🍌 Banane!", sound: "slip" }, { txt: "👶 Kleinkind!", sound: "wah" },
-  { txt: "🚪 Türe auf!", sound: "bang" }, { txt: "🤳 Influencer!", sound: "click" }, { txt: "🤧 Gast niest!", sound: "ha" }
+  { txt: "🚪 Türe auf!", sound: "bang" }, { txt: "🤳 Influencer!", sound: "click" }, { txt: "🤧 Gast niest!", sound: "ha" },
+  { txt: "🪜 Stufe!", sound: "bang", kind: "bump", from: 1 }, { txt: "🧽 Nasser Boden!", sound: "slip", kind: "slick", from: 2 }
 ];
 const GUESTS = ["🧔", "👩", "👨‍🦳", "👩‍🦰", "🧑‍🎤", "👴"];
 const THANKS = ["Na endlich!", "Das hab ich nicht bestellt.", "Trinkgeld? Haha.", "Super, danke!", "Ist das vegan?", "Bravo, Junge!"];
@@ -67,9 +70,12 @@ const BROKE = ["KLIRR!", "Das zieh ich dir ab!", "Der Chef hat's gesehen.", "Sch
 const MAX_BROKEN = 8, TRAY_W = 170, WALK_LEN = 2300;
 let best = Number(ArcadeCore.getScore("wackelkellner")) || 0;
 let state = "menu", stack, debris, parts, floats, tilt, tiltV, order, score, broken, delivered, walked, speed, evT, warn, kick, keys = {}, ptr = 0, bubble, bubbleT, arrive, shake, gust, steps, guest;
+let orderBroken = 0, streak = 0, bestStreak = 0, slickT = 0, bumpT = 0;
+$("mbest").textContent = best ? "Rekord: " + best + " CHF" : "";
 
 function reset() {
   score = 0; broken = 0; delivered = 0; debris = []; parts = []; floats = []; shake = 0; bubble = ""; bubbleT = 0;
+  streak = 0; bestStreak = 0;
   newOrder();
 }
 function newOrder() {
@@ -83,7 +89,8 @@ function newOrder() {
   }
   stack.sort((a, b) => b.type.w - a.type.w);
   tilt = 0; tiltV = 0; walked = 0; speed = 210 + Math.min(delivered * 8, 90);
-  evT = rnd(2.0, 3.2); warn = null; kick = 0; arrive = 0; gust = 0; steps = 0; guest = pickOf(GUESTS);
+  evT = delivered === 0 ? 3.5 : rnd(2.0, 3.2); warn = null; kick = 0; arrive = 0; gust = 0; steps = 0; guest = pickOf(GUESTS);
+  orderBroken = 0; slickT = 0; bumpT = 0;
   say("Bestellung " + order + ": " + n + " Teile!");
 }
 function say(s) { bubble = s; bubbleT = 1.8; }
@@ -102,8 +109,10 @@ function shatter(i) {
   let yy = 0;
   for (let k = 0; k < i; k++) yy += stack[k].type.h;
   const lost = stack.splice(i);
+  if (streak >= 2) float(cx, h - 120, "Serie verloren!", "#ff6b6b");
+  streak = 0;
   for (const it of lost) {
-    broken++;
+    broken++; orderBroken++;
     const dir = Math.sign(it.off || tilt || 1);
     debris.push({ e: it.type.e, x: cx + (it.x || 0), y: h - yy, vx: dir * rnd(70, 260) + Math.sin(tilt) * 200, vy: rnd(-260, -80), r: 0, vr: rnd(-9, 9) });
     yy += it.type.h;
@@ -117,18 +126,22 @@ function over() {
   if (rec) { best = score; ArcadeCore.saveScore("wackelkellner", best); }
   ArcadeCore.gameOver();
   $("otitle").textContent = rec ? "Gefeuert, aber Rekord! 🏆" : "Gefeuert! 🧾";
-  $("otext").textContent = delivered + " Bestellungen, " + broken + " Scherbenhaufen. Trinkgeld: " + score + " CHF · Rekord: " + best + " CHF. " + (delivered >= 6 ? "Der Chef weint. Vor Rührung, sagt er." : "Dein Lohn wurde mit den Tellern verrechnet.");
+  $("mbest").textContent = "Rekord: " + best + " CHF";
+  $("otext").textContent = delivered + " Bestellungen, beste Serie: " + bestStreak + ". Trinkgeld: " + score + " CHF · Rekord: " + best + " CHF. " + (delivered >= 6 ? "Der Chef weint. Vor Rührung, sagt er." : "Dein Lohn wurde mit den Tellern verrechnet.");
   setTimeout(() => $("over").classList.remove("hide"), 900);
 }
 function deliver() {
   const n = stack.length; let tips = 0;
   for (const it of stack) tips += it.type.pts;
-  const perfect = n > 0 && broken === 0;
-  tips = Math.round(tips * (1 + delivered * 0.1));
+  const perfect = n > 0 && orderBroken === 0;
+  if (perfect) { streak++; bestStreak = Math.max(bestStreak, streak); }
+  const mult = 1 + delivered * 0.1 + (perfect ? 0.25 * Math.min(streak, 8) : 0);
+  tips = Math.round(tips * mult);
   if (n === 0) { say("Wo ist mein Essen?!"); }
   else {
-    score += tips; say(pickOf(THANKS));
+    score += tips; say(perfect && streak >= 2 ? "Serie x" + streak + "! Perfekt!" : pickOf(THANKS));
     float(W * 0.42, trayY() - 80, "+" + tips + " CHF" + (perfect ? " 🌟" : ""));
+    if (perfect && broken > 0) { broken--; float(W * 0.42, trayY() - 120, "Chef verzeiht 1 💥", "#6fd"); }
     ArcadeCore.coin();
   }
   delivered++;
@@ -168,14 +181,17 @@ function update(dt) {
     if (arrive <= 0 && state === "play") newOrder();
     return;
   }
-  walked += speed * dt; steps += dt * speed / 42;
+  // Leeres Tablett: schnell zum Tisch eilen
+  const spd = stack.length ? speed : speed * 3.5;
+  walked += spd * dt; steps += dt * spd / 42;
   if (walked >= WALK_LEN) return deliver();
+  slickT = Math.max(0, slickT - dt); bumpT = Math.max(0, bumpT - dt);
   // Tablett: umgekehrtes Pendel, je höher der Turm, desto instabiler
   const input = (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + ptr;
   const unstable = 1.0 + stack.length * 0.2;
   const stepJolt = Math.sin(steps * Math.PI) * 0.35;
   tiltV += (tilt * unstable * 4 + input * 4.4 + stepJolt + rnd(-0.5, 0.5) + kick) * dt;
-  tiltV *= Math.pow(0.28, dt);
+  tiltV *= Math.pow(slickT > 0 ? 0.5 : 0.28, dt);
   tilt += tiltV * dt;
   if (Math.abs(tilt) > 0.7) { tilt = Math.sign(tilt) * 0.7; tiltV *= -0.3; }
   kick = Math.max(0, Math.abs(kick) - dt * 30) * Math.sign(kick);
@@ -183,17 +199,26 @@ function update(dt) {
   if (warn) {
     warn.t -= dt;
     if (warn.t <= 0) {
-      kick = warn.side * (5 + Math.min(delivered, 8) * 0.4); tone(warn.ev.sound); shake = 0.18; warn = null;
+      const kind = warn.ev.kind || "kick";
+      if (kind === "bump") {
+        // Stufe: alles hüpft kurz, Haftung reißt ab
+        for (const it of stack) it.v += rnd(-70, 70);
+        tiltV += warn.side * -1.2; bumpT = 0.35;
+      } else if (kind === "slick") {
+        slickT = 2.6; kick = -warn.side * 2.5;
+      } else kick = -warn.side * (5 + Math.min(delivered, 8) * 0.4);
+      tone(warn.ev.sound); shake = 0.18; warn = null;
       evT = Math.max(1.4, rnd(2.6, 4) - delivered * 0.15);
     }
-  } else if ((evT -= dt) <= 0 && walked < WALK_LEN - 300) {
-    warn = { side: Math.random() < 0.5 ? -1 : 1, ev: pickOf(EVENTS), t: Math.max(0.55, 1 - delivered * 0.05) };
+  } else if (stack.length && (evT -= dt) <= 0 && walked < WALK_LEN - 300) {
+    const pool = EVENTS.filter(e => (e.from || 0) <= delivered);
+    warn = { side: Math.random() < 0.5 ? -1 : 1, ev: pickOf(pool), t: Math.max(0.55, 1 - delivered * 0.05) };
   }
   // Teile rutschen: Haftreibung, dann Gleiten relativ zum Teil darunter
   const G = 620, a = Math.sin(tilt) * G + Math.sin(steps * Math.PI) * 7;
   let x = 0;
   for (let i = 0; i < stack.length; i++) {
-    const it = stack[i], mu = it.type.mu * G * 0.6;
+    const it = stack[i], mu = it.type.mu * G * 0.6 * (slickT > 0 ? 0.55 : 1);
     if (it.v === 0 && Math.abs(a) < mu) { /* haftet */ }
     else {
       const prev = it.v;
@@ -203,8 +228,15 @@ function update(dt) {
     }
     x += it.off; it.x = x;
     const below = i === 0 ? TRAY_W : stack[i - 1].type.w;
-    if (Math.abs(it.off) > (below + it.type.w) * 0.42 && !(i === 0 && Math.abs(it.off) < TRAY_W / 2)) { shatter(i); break; }
-    if (i === 0 && Math.abs(it.off) > TRAY_W / 2) { shatter(0); break; }
+    const limit = i === 0 ? TRAY_W / 2 : (below + it.type.w) * 0.42;
+    it.risk = Math.abs(it.off) / limit;
+    if (it.risk > 1) { shatter(i); break; }
+    // Knapp gerettet: Bonus
+    if (it.risk > 0.8) it.close = true;
+    else if (it.close && it.risk < 0.35) {
+      it.close = false; score += 5;
+      float(W * 0.42 + it.x, trayY() - 60, "Knapp! +5", "#6fd"); ArcadeCore.playTone(1200, 0.08, "triangle", 0.1);
+    }
   }
 }
 function draw(t) {
@@ -223,7 +255,7 @@ function draw(t) {
     ctx.fillStyle = "#1d3557"; ctx.fillRect(x + 40, H * 0.26, 90, H * 0.3);
     emoji("🌙", x + 85, H * 0.34, 28);
   }
-  ctx.fillStyle = "#6d4c2f"; ctx.fillRect(-40, H * 0.83, W + 80, H);
+  ctx.fillStyle = slickT > 0 ? "#4f6f8f" : "#6d4c2f"; ctx.fillRect(-40, H * 0.83, W + 80, H);
   ctx.fillStyle = "#5b3e25";
   for (let x = -(scroll % 80) - 80; x < W + 80; x += 80) ctx.fillRect(x, H * 0.83, 4, H);
   // Tisch mit Gast am Ziel
@@ -241,6 +273,7 @@ function draw(t) {
     if (blink) { ctx.fillStyle = "rgba(255,60,60,.22)"; ctx.fillRect(warn.side > 0 ? W * 0.72 : 0, 0, W * 0.28, H); }
     label(warn.side > 0 ? "⬅️" : "➡️", x, H * 0.46, 46);
     label(warn.ev.txt, Math.max(90, Math.min(W - 90, x + (warn.side > 0 ? -30 : 30))), H * 0.36, Math.min(W * 0.05, 24), "#ffe066");
+    label(warn.side > 0 ? "▶ halten!" : "◀ halten!", Math.max(70, Math.min(W - 70, x)), H * 0.54, 18, "#fff");
   }
   for (const d of debris) emoji(d.e, d.x, d.y, 34, d.r);
   ctx.fillStyle = "#e7f6ff";
@@ -252,6 +285,12 @@ function draw(t) {
   // HUD
   label(score + " CHF", W - 70, 26, 22, "#ffe066");
   label("💥 " + broken + "/" + MAX_BROKEN, W - 70, 56, 16, broken >= MAX_BROKEN - 2 ? "#ff6b6b" : "#fff");
+  if (streak > 0) label("🌟 Serie x" + streak, W - 70, 82, 15, "#6fd");
+  if (slickT > 0) label("🧽 Rutschig!", W / 2, 64, 15, "#9cf");
+  if (state === "pause") {
+    ctx.fillStyle = "#0008"; ctx.fillRect(0, 0, W, H);
+    label("⏸ Pause", W / 2, H * 0.4, 44); label("P / Esc / Tippen = weiter", W / 2, H * 0.4 + 46, 18);
+  }
   const barW = Math.min(W * 0.34, 240), bx = W / 2 - barW / 2;
   ctx.fillStyle = "#0007"; ctx.fillRect(bx, 18, barW, 10);
   ctx.fillStyle = "#6fd"; ctx.fillRect(bx, 18, barW * Math.min(1, walked / WALK_LEN), 10);
@@ -275,12 +314,16 @@ function drawWaiter(t) {
   ctx.beginPath(); ctx.moveTo(x + 22, ty + 72); ctx.lineTo(x + 50, ty + 34); ctx.lineTo(x, ty + 2); ctx.stroke();
   const danger = Math.abs(tilt) > 0.3;
   emoji(danger ? "😱" : stack.length > 5 ? "😬" : "🙂", x, ty + 42, 46);
-  ctx.save(); ctx.translate(x, ty); ctx.rotate(tilt);
+  const hop = bumpT > 0 ? -Math.sin(bumpT / 0.35 * Math.PI) * 14 : 0;
+  ctx.save(); ctx.translate(x, ty + hop); ctx.rotate(tilt);
   ctx.fillStyle = "#c0c5cc"; ctx.fillRect(-TRAY_W / 2, -5, TRAY_W, 9);
   let y = -5;
   for (const it of stack) {
     const h = it.type.h, cx = it.x || 0;
-    emoji(it.type.e, cx, y - h / 2, Math.max(it.type.w, it.type.h) * 1.1);
+    // Rutschende Teile wackeln sichtbar
+    const wob = Math.max(-0.35, Math.min(0.35, (it.v || 0) * 0.002));
+    emoji(it.type.e, cx, y - h / 2, Math.max(it.type.w, it.type.h) * 1.1, wob);
+    if (it.risk > 0.65 && Math.floor(t * 10) % 2) label("❗", cx + Math.sign(it.off) * (it.type.w / 2 + 6), y - h / 2, 20, "#ff6b6b");
     y -= h;
   }
   ctx.restore();
@@ -295,17 +338,30 @@ function label(s, x, y, size, col = "#fff") {
   ctx.lineWidth = size / 5; ctx.strokeStyle = "#000a"; ctx.lineJoin = "round"; ctx.strokeText(s, x, y);
   ctx.fillStyle = col; ctx.fillText(s, x, y);
 }
-cv.addEventListener("pointerdown", e => { ptr = e.clientX < W / 2 ? -1 : 1; });
+function togglePause() {
+  if (state === "play") { state = "pause"; keys = {}; ptr = 0; }
+  else if (state === "pause") { state = "play"; last = performance.now(); }
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden && state === "play") togglePause(); });
+addEventListener("blur", () => { keys = {}; ptr = 0; });
+cv.addEventListener("pointerdown", e => {
+  if (state === "pause") { togglePause(); return; }
+  ptr = e.clientX < W / 2 ? -1 : 1;
+});
 addEventListener("pointermove", e => { if (e.buttons && ptr !== 0) ptr = e.clientX < W / 2 ? -1 : 1; });
 addEventListener("pointerup", () => { ptr = 0; });
 addEventListener("pointercancel", () => { ptr = 0; });
 addEventListener("keydown", e => {
-  if (e.key === "ArrowLeft" || e.key === "a") keys.left = true;
-  if (e.key === "ArrowRight" || e.key === "d") keys.right = true;
+  const k = e.key.toLowerCase();
+  if (k === "arrowleft" || k === "a") keys.left = true;
+  if (k === "arrowright" || k === "d") keys.right = true;
+  if ((k === "p" || k === "escape") && !e.repeat) togglePause();
+  if ((k === " " || k === "enter") && !e.repeat && (state === "menu" || (state === "over" && !$("over").classList.contains("hide")))) { e.preventDefault(); start(); }
 });
 addEventListener("keyup", e => {
-  if (e.key === "ArrowLeft" || e.key === "a") keys.left = false;
-  if (e.key === "ArrowRight" || e.key === "d") keys.right = false;
+  const k = e.key.toLowerCase();
+  if (k === "arrowleft" || k === "a") keys.left = false;
+  if (k === "arrowright" || k === "d") keys.right = false;
 });
 function start() {
   reset(); state = "play";

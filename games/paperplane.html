@@ -95,7 +95,7 @@
   <div class="card panel">
     <h1 id="ovTitle">Paper Plane Glider</h1>
     <div class="stars" id="ovStars"></div>
-    <p id="ovText">Glide through the living room, ride warm air over the radiator and coffee, avoid fans and doors, collect golden rings and land gently on the notebook pad at the far desk.<br><br>Land slow (&lt; 22 km/h) and level.</p>
+    <p id="ovText">Glide through the living room, ride warm air over the radiator and coffee, avoid fans and doors, collect golden rings and land gently on the notebook pad at the far desk.<br><br>Land slow (&lt; 27 km/h) and level.</p>
     <button class="btn" id="ovBtn">Throw the plane</button>
   </div>
 </div>
@@ -106,7 +106,7 @@
   const $ = (id) => document.getElementById(id);
 
   // ---------- Config ----------
-  const G = 9.8, LIFT_C = 0.155, DRAG_C = 0.011, MIN_SPEED = 3.6, SAFE_LAND = 6.2, LAND_PITCH = 0.4;
+  const G = 9.8, LIFT_C = 0.17, DRAG_C = 0.009, MIN_SPEED = 2.8, SAFE_LAND = 7.5, LAND_PITCH = 0.6;
   const ROOM = { x: 8, y: 9, zStart: 6, zEnd: -72 };
   const DT = 1 / 60;
 
@@ -234,7 +234,7 @@
   // Landing desk with notebook pad
   const DESK = { x: 0, z: -66, h: 2.4, w: 6, d: 3.4 };
   table(DESK.x, DESK.z, DESK.w, DESK.d, DESK.h);
-  const PAD = { x: DESK.x, z: DESK.z, y: DESK.h + 0.1, hw: 1.6, hd: 1.25 };
+  const PAD = { x: DESK.x, z: DESK.z, y: DESK.h + 0.1, hw: 2.2, hd: 1.55 };
   box(PAD.hw * 2, 0.04, PAD.hd * 2, M.note, PAD.x, PAD.y, PAD.z);
   const padRings = [];
   for (let i = 0; i < 3; i++) {
@@ -274,7 +274,7 @@
       const b = box(2.0, 0.04, 0.42, M.darkWood, 1.2, 0, 0, false, null);
       const arm = new THREE.Group(); arm.rotation.y = i * Math.PI / 2; arm.add(b); blades.add(arm);
     }
-    fans.push({ x, y, z, r: 2.25, blades, draft: 3.0, strength: 11 });
+    fans.push({ x, y, z, r: 2.25, blades, draft: 2.6, strength: 6 });
   }
   fan(-1, -24); fan(2, -46);
 
@@ -412,13 +412,13 @@
   bb.addEventListener('touchend', () => { touch.boost = false; }); bb.addEventListener('touchcancel', () => { touch.boost = false; });
 
   function readInput() {
-    // pitchIn > 0 means nose up. Default: W / stick-up = nose down (push forward), like a flight stick.
+    // pitchIn > 0 means nose up. Default: W / stick-up = nose up; invert gives flight-stick feel.
     let p = 0, r = 0;
-    if (keys.KeyW || keys.ArrowUp) p -= 1;
-    if (keys.KeyS || keys.ArrowDown) p += 1;
+    if (keys.KeyW || keys.ArrowUp) p += 1;
+    if (keys.KeyS || keys.ArrowDown) p -= 1;
     if (keys.KeyA || keys.ArrowLeft) r -= 1;
     if (keys.KeyD || keys.ArrowRight) r += 1;
-    p += touch.y; r += touch.x;
+    p -= touch.y; r += touch.x;
     if (invert) p = -p;
     return { pitch: Math.max(-1, Math.min(1, p)), roll: Math.max(-1, Math.min(1, r)), boost: !!(keys.Space || keys.ShiftLeft || keys.ShiftRight || touch.boost) };
   }
@@ -498,7 +498,9 @@
 
     // Attitude
     if (!P.stalled) {
-      P.pitch += inp.pitch * 1.3 * dt;
+      P.pitch += inp.pitch * 0.9 * dt;
+      // Auto-trim: without input the nose eases back to a gentle glide angle
+      if (!inp.pitch) P.pitch += (-0.06 - P.pitch) * Math.min(1, 1.2 * dt);
       const targetRoll = -inp.roll * 0.85;
       P.roll += (targetRoll - P.roll) * Math.min(1, 5 * dt);
     } else {
@@ -506,9 +508,9 @@
       P.pitch += (-0.9 - P.pitch) * 2.5 * dt;
       P.spin += dt * 7; P.roll = Math.sin(P.spin) * 0.9;
       P.yaw += 2.4 * dt;
-      if (P.speed > MIN_SPEED + 2.2) { P.stalled = false; showMsg('Recovered'); }
+      if (P.speed > MIN_SPEED + 1.2) { P.stalled = false; showMsg('Recovered'); }
     }
-    P.pitch = Math.max(-1.1, Math.min(0.75, P.pitch));
+    P.pitch = Math.max(-0.8, Math.min(0.55, P.pitch));
     P.yaw += P.roll * 1.5 * dt;
 
     // Speed along flight path: gravity trades altitude for speed, drag bleeds it off
@@ -516,9 +518,9 @@
     P.speed += (-G * sinP - DRAG_C * P.speed * P.speed) * dt;
     flapCd -= dt;
     if (inp.boost && P.stamina > 0.01) {
-      P.speed += 5.5 * dt; P.stamina = Math.max(0, P.stamina - dt * 0.45);
+      P.speed += 5.5 * dt; P.stamina = Math.max(0, P.stamina - dt * 0.3);
       if (flapCd <= 0) { sfx.flap(); flapCd = 0.18; }
-    } else P.stamina = Math.min(1, P.stamina + dt * 0.06);
+    } else P.stamina = Math.min(1, P.stamina + dt * 0.12);
     P.speed = Math.max(0.5, Math.min(22, P.speed));
 
     // Lift vs gravity on the vertical sink rate
@@ -536,7 +538,7 @@
     for (const f of fans) {
       const d = Math.hypot(P.pos.x - f.x, P.pos.z - f.z);
       if (d < f.draft && P.pos.y < f.y) { const k = 1 - d / f.draft; P.vy -= f.strength * k * dt; P.yaw += (Math.random() - 0.5) * 3 * k * dt * 4; P.roll += (Math.random() - 0.5) * k * 0.15; turb = Math.max(turb, k); }
-      if (d < f.r && Math.abs(P.pos.y - f.y) < 0.3) return crash('Chopped by the ceiling fan.');
+      if (d < f.r && Math.abs(P.pos.y - f.y) < 0.2) return crash('Chopped by the ceiling fan.');
     }
     P.vy *= 1 - Math.min(1, 1.8 * dt);
     P.vy = Math.max(-8, Math.min(6, P.vy));
@@ -556,7 +558,7 @@
 
     // Forward raycast against furniture
     if (stepLen > 0) {
-      ray.set(P.pos, P.vel.clone().normalize()); ray.far = stepLen + 0.35;
+      ray.set(P.pos, P.vel.clone().normalize()); ray.far = stepLen + 0.12;
       const hit = ray.intersectObjects(colliders, false);
       if (hit.length) return crash('Smacked into the furniture.');
     }

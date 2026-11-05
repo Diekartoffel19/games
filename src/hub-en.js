@@ -21,7 +21,7 @@ window.HUB_EN = {
   cannon_sheep: [null, 'Fire sheep out of a cannon and bounce them over trampolines for a distance record!'],
   buerostuhl: ['Office Chair GP', 'Race through the office on fire-extinguisher-powered swivel chairs and drift around water coolers!'],
   schwarzfahrer: [null, 'Dodge ticket inspectors on the subway: swap seats, read the newspaper and switch carriages!'],
-  stadiumrush: [null, 'Polytrack & Trackmania 3D time trials in your browser: 12 tracks (A01–L12) with boosters, ramps & elevated tracks, drift particles, checkpoints, your own ghosts and bronze to author medals!'],
+  stadiumrush: [null, 'Polytrack & Trackmania 3D time trials in your browser: 24 tracks (A01–X24) with boosters, ramps & elevated tracks, drift particles, checkpoints, your own ghosts and bronze to author medals!'],
   ikea: ['Furniture Assembly from Hell', 'Build absurd Swedish furniture from cryptic instructions: wobbly physics, Allen-key timing and wooden dowels. Screw set in crooked? Then everything collapses in the load test – and your partner\'s satisfaction drops.'],
   physiklabor: ['Physics Lab', 'Your physics sandbox with its own engine: pendulums, chains, Newton\'s cradles & suspension bridges, freehand shapes, motor cars, water with real buoyancy, 6 materials (wood floats, metal sinks, balloons rise), bombs, undo & save – and tweak gravity, wind and time!'],
   driftisles: [null, 'Endless Minecraft-style block world: biomes, caves with lava, ores, animals and zombies & creepers at night. Build, craft, survive – or explore infinite Sky Isles.'],
