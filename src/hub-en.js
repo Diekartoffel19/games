@@ -1,5 +1,9 @@
 // English card texts for the hub (index.html). null name = keep original name.
 window.HUB_EN = {
+  miniwahnsinn: ['Mini-Madness', '13 blitz minigames every second: zip your pants, swat mosquitoes, hold in a fart and whatever you do, do not press the red button. It keeps getting faster!'],
+  omanachschlag: ['Grandma\'s Refill', 'You look so thin! Grandma keeps refilling your plate: eat until you burst, or sneak food to the dog and into Grandpa\'s open mouth when she looks away.'],
+  kuhski: ['Cow on Skis', 'One cow, two skis, zero brakes: race down the Alps, slalom, jump off ramps, do moo-backflips and scare the tourists!'],
+  wackelkellner: ['Wobbly Waiter', 'Balance wobbly towers of dishes through the restaurant. Dogs, bananas and toddlers crash into you, glasses slip and the chef counts every shard!'],
   badezimmer: ['The Silent Bathroom: In-Law Escape', 'Visiting your partner\'s parents. The toilet paper is gone, the flush roars like a tractor and every floorboard squeaks! Silence pipes with dental floss, find emergency tissues and sneak past Walter back to Sunday roast!'],
   ballistics: ['Tank Armor Cutaway: Slow-Mo Ballistics Lab', 'Fire APFSDS tungsten darts, HEAT shaped charges, HESH shells, Railguns, anvils or an indestructible Nokia 3310 at up to 4,000 m/s into multi-layer tank cross-sections (ERA, Ceramic, RHA Steel, Kevlar) and watch penetration, shockwaves, spalling & ammo-rack cook-offs in ultra slow-motion!'],
   magnet: ['Magnet Puzzler: Polarity Panic', 'You are a high-powered electromagnet! Switch between PLUS (Red) and MINUS (Blue) to cling to ceilings, launch across laser chasms with Coulomb force and repel flying scrap paperclips!'],
@@ -51,6 +55,7 @@ window.HUB_EN = {
   animeclicker: [null, 'Collect spirit energy with cute waifus, limit breaks, boss raids & isekai reincarnation!'],
   suika: [null, 'Drop fruits and merge them with physics into the giant watermelon!'],
   suika3d: [null, 'The watermelon game in 3D: drop fruits into a glass box, rotate the camera and merge them into the giant melon!'],
+  paperplane: [null, 'Glide an origami paper plane through a cozy living room: ride warm updrafts, dodge fans and doors, collect golden rings and land softly on the desk pad!'],
   frogger: [null, 'Cross dangerous highways and raging rivers in the retro classic!'],
   casino: [null, 'The ultimate 4-in-1 casino: one-armed bandit with mega jackpot, Plinko pyramid (up to 1,000x), 6-deck blackjack and wheel roulette with a shared VIP bankroll!'],
   marble: [null, 'Real 3D physics marble run: steer the glass ball over ramps, boost pads and collect gems!'],
