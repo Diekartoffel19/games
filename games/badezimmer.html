@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>The Silent Bathroom — The In-Law Escape 🦹</title>
-  <meta name="description" content="Visiting your partner's parents. The toilet paper is gone, the flush roars like a tractor and every floorboard squeaks. Sneak back to the dining table unnoticed!">
+  <title>The Silent Bathroom 3D — The In-Law Escape 🦹</title>
+  <meta name="description" content="Visiting your partner's parents. The toilet paper is gone, the flush roars like a tractor and every floorboard squeaks. Sneak back to the dining table unnoticed — now in first person 3D!">
   <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
   <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
   <script src="../src/arcade-core.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -399,11 +400,104 @@
       .bottom-bar { padding: 6px 12px; gap: 8px; }
       .task-badge { font-size: 0.7rem; padding: 4px 8px; }
     }
+
+    /* ---------- First-person 3D additions ---------- */
+    #crosshair {
+      position: fixed; left: 50%; top: 50%;
+      width: 6px; height: 6px; margin: -3px 0 0 -3px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.85);
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.35);
+      pointer-events: none; z-index: 25;
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+    #crosshair.target { transform: scale(1.8); background: #fbbf24; }
+    #interactPrompt {
+      position: fixed; left: 50%; top: calc(50% + 26px);
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(251, 191, 36, 0.6);
+      color: #fef3c7; font-weight: 800; font-size: 0.85rem;
+      padding: 5px 12px; border-radius: 10px;
+      pointer-events: none; z-index: 25; white-space: nowrap;
+      display: none;
+    }
+    #interactPrompt kbd {
+      background: #fbbf24; color: #0f172a; border-radius: 5px;
+      padding: 0 6px; margin-right: 6px; font-family: inherit;
+    }
+    #alertVignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 20;
+      box-shadow: inset 0 0 160px 40px rgba(239, 68, 68, 0.9);
+      opacity: 0; transition: opacity 0.25s ease;
+    }
+    #alertVignette.warn { box-shadow: inset 0 0 140px 30px rgba(234, 179, 8, 0.85); }
+
+    #startOverlay {
+      position: fixed; inset: 0; z-index: 45;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(6px);
+      padding: 16px;
+      cursor: pointer;
+    }
+    #startOverlay.hidden { display: none; }
+    .start-card {
+      background: #0f172a; border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 20px; padding: 26px; max-width: 480px; width: 100%;
+      text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    }
+    .start-card h1 { margin: 0 0 6px; font-size: 1.6rem; }
+    .start-card p { color: #94a3b8; font-size: 0.9rem; line-height: 1.5; margin: 0 0 16px; }
+    .start-card ul {
+      text-align: left; color: #cbd5e1; font-size: 0.84rem; line-height: 1.7;
+      margin: 0 0 18px; padding-left: 20px;
+    }
+    .start-card kbd {
+      background: #1e293b; border: 1px solid #334155; border-radius: 5px;
+      padding: 0 5px; font-family: inherit; font-size: 0.78rem;
+    }
+    .start-cta {
+      display: inline-block; background: #4f46e5; color: #fff;
+      font-weight: 800; padding: 11px 26px; border-radius: 12px;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse { 50% { transform: scale(1.05); } }
+
+    .item-card .opt-key {
+      font-size: 0.65rem; font-weight: 800; color: #0f172a;
+      background: #fbbf24; border-radius: 5px; padding: 0 6px;
+    }
+
+    /* Touch controls */
+    #joyBase {
+      position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px;
+      border-radius: 50%; border: 2px solid rgba(255,255,255,0.35);
+      background: rgba(15,23,42,0.35); pointer-events: none; z-index: 26;
+      display: none;
+    }
+    #joyKnob {
+      position: absolute; left: 50%; top: 50%; width: 50px; height: 50px;
+      margin: -25px 0 0 -25px; border-radius: 50%;
+      background: rgba(255,255,255,0.55);
+    }
+    #btnUse {
+      position: fixed; right: 18px; bottom: 120px; z-index: 31;
+      width: 74px; height: 74px; border-radius: 50%;
+      font-size: 1.6rem; justify-content: center; padding: 0;
+      display: none;
+    }
+    body.touch #btnUse { display: inline-flex; }
+    body.touch #crosshair { width: 8px; height: 8px; }
   </style>
 </head>
 <body>
 
   <canvas id="gameCanvas"></canvas>
+  <div id="alertVignette"></div>
+  <div id="crosshair"></div>
+  <div id="interactPrompt"></div>
+  <div id="joyBase"><div id="joyKnob"></div></div>
 
   <!-- Top HUD -->
   <div class="hud-header">
@@ -412,8 +506,11 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         <span>Arcade</span>
       </a>
-      <button id="btnSneak" class="btn-hud" title="Sneak (Tread softly)">
+      <button id="btnSneak" class="btn-hud" title="Sneak (hold Shift or toggle with C)">
         <span>🤫 Sneak</span>
+      </button>
+      <button id="btnTest" class="btn-hud" title="Test the floorboard in front of you (F)">
+        <span>🪵 Test</span>
       </button>
       <div id="sneakStatus" class="sneak-indicator">Walking</div>
     </div>
@@ -453,17 +550,35 @@
 
   <!-- Bottom Task / Action Tray -->
   <div class="bottom-bar">
-    <div id="taskPaper" class="task-badge">🧻 1. Fix paper shortage</div>
-    <div id="taskPipe" class="task-badge">🔧 2. Muffle rattling pipes</div>
-    <div id="taskValve" class="task-badge">🧵 3. Tie valve &amp; flush quietly</div>
-    <div id="taskSpray" class="task-badge">🌸 4. Neutralize odor</div>
-    <div id="taskEscape" class="task-badge">🚪 5. Escape to dining table</div>
+    <div id="taskPaper" class="task-badge" title="Fix the paper shortage">🧻 Paper</div>
+    <div id="taskPipe" class="task-badge" title="Muffle the rattling pipe">🔧 Pipe</div>
+    <div id="taskValve" class="task-badge" title="Tie the valve &amp; flush quietly">🧵 Quiet flush</div>
+    <div id="taskSpray" class="task-badge" title="Neutralize the odor">🌸 Odor</div>
+    <div id="taskEscape" class="task-badge" title="Escape to the dining table">🚪 Back to table</div>
 
     <div style="display:flex; gap:6px; align-items:center; margin-left:8px;">
-      <span style="font-size:0.75rem; font-weight:700; color:#94a3b8;">Inventory:</span>
+      <span style="font-size:0.75rem; font-weight:700; color:#94a3b8;">Inventory (1-3):</span>
       <div id="slot1" class="inventory-slot" title="Slot 1"></div>
       <div id="slot2" class="inventory-slot" title="Slot 2"></div>
       <div id="slot3" class="inventory-slot" title="Slot 3"></div>
+    </div>
+  </div>
+
+  <button id="btnUse" class="btn-hud" title="Use / interact">✋</button>
+
+  <!-- Start / Pause Overlay -->
+  <div id="startOverlay">
+    <div class="start-card">
+      <h1>🦹 The Silent Bathroom</h1>
+      <p>Sunday roast at your partner's parents. You're locked in their bathroom with a disaster on your hands. Fix everything, then sneak back to your seat — without Walter noticing a thing.</p>
+      <ul id="controlsList">
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move, mouse to look</li>
+        <li><kbd>Shift</kbd> hold to sneak (or <kbd>C</kbd> to toggle) — walking is LOUD</li>
+        <li><kbd>E</kbd> / left click: use what the dot points at</li>
+        <li><kbd>1</kbd>-<kbd>3</kbd> use inventory item · <kbd>F</kbd> test floorboard ahead</li>
+        <li>When Walter looks up from his plate: freeze!</li>
+      </ul>
+      <span class="start-cta" id="startCta">Click to play</span>
     </div>
   </div>
 
@@ -474,7 +589,7 @@
       <p id="modalDesc">Choose an action.</p>
       <div id="modalGrid" class="modal-grid"></div>
       <div class="modal-actions">
-        <button id="modalCloseBtn" class="btn-secondary">Close</button>
+        <button id="modalCloseBtn" class="btn-secondary">Close (Esc)</button>
       </div>
     </div>
   </div>
@@ -494,8 +609,8 @@
 
 <script>
 /**
- * Das stille Badezimmer (The In-Law Escape)
- * Complete Stealth Puzzle & Sound Matrix Simulation
+ * Das stille Badezimmer 3D (The In-Law Escape)
+ * First-person stealth puzzle with a sound matrix, built on three.js
  */
 
 // ==========================================
@@ -795,10 +910,19 @@ const AudioEngine = (() => {
 
 
 // ==========================================
-// 2. GAME STATE & SIMULATION CONSTANTS
+// 2. GAME STATE & CONSTANTS
 // ==========================================
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const IS_TOUCH = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+if (IS_TOUCH) document.body.classList.add('touch');
+
+const T = 0.6;          // size of one grid tile in meters
+const WALL_H = 2.5;     // room height
+const PLAYER_R = 0.2;   // collision radius
+const REACH = 1.9;      // interaction distance
+const EYE_WALK = 1.62, EYE_SNEAK = 1.22;
+const SPEED_WALK = 2.0, SPEED_SNEAK = 0.95; // m/s
+const START = { gx: 4.5, gy: 5.5, yaw: Math.PI * 0.25 };
 
 const UI = {
   dbVal: document.getElementById('dbValue'),
@@ -806,6 +930,8 @@ const UI = {
   suspicionFill: document.getElementById('suspicionFill'),
   suspicionPercent: document.getElementById('suspicionPercent'),
   btnSneak: document.getElementById('btnSneak'),
+  btnTest: document.getElementById('btnTest'),
+  btnUse: document.getElementById('btnUse'),
   sneakStatus: document.getElementById('sneakStatus'),
   btnMic: document.getElementById('btnMic'),
   btnSound: document.getElementById('btnSound'),
@@ -822,6 +948,13 @@ const UI = {
   endDesc: document.getElementById('endDesc'),
   endStats: document.getElementById('endStats'),
   btnRestart: document.getElementById('btnRestart'),
+  startOverlay: document.getElementById('startOverlay'),
+  startCta: document.getElementById('startCta'),
+  crosshair: document.getElementById('crosshair'),
+  prompt: document.getElementById('interactPrompt'),
+  vignette: document.getElementById('alertVignette'),
+  joyBase: document.getElementById('joyBase'),
+  joyKnob: document.getElementById('joyKnob'),
   slots: [
     document.getElementById('slot1'),
     document.getElementById('slot2'),
@@ -839,40 +972,32 @@ const UI = {
 const Game = {
   state: 'PLAYING', // 'PLAYING', 'INSPECT', 'GAME_OVER', 'VICTORY'
   phase: 'BATHROOM', // 'BATHROOM', 'HALLWAY'
+  started: false,
 
   // Decibel & Suspicion system
   currentDb: 24,
   targetDb: 24,
-  maxPeakDb: 24,
   suspicion: 0, // 0 to 100%
   isSneaking: false,
+  shake: 0,
 
-  // Player position & movement
+  // First-person player (world meters)
   player: {
-    x: 4,
-    y: 5,
-    visualX: 4,
-    visualY: 5,
-    targetTileX: 4,
-    targetTileY: 5,
+    x: START.gx * T, z: START.gy * T,
+    yaw: START.yaw, pitch: -0.12,
+    gx: Math.floor(START.gx), gy: Math.floor(START.gy),
+    eye: EYE_WALK,
     moving: false,
-    path: [],
-    pendingInteract: null,
-    speed: 4.5,
-    facing: { dx: 0, dy: 1 },
+    stepAccum: 0,
+    bob: 0,
     stepsTaken: 0,
     squeaksTriggered: 0
   },
 
-  // Tilemap Sound Matrix
   gridW: 16,
   gridH: 10,
-  tileSize: 64,
-  originX: 0,
-  originY: 0,
   tiles: [],
 
-  // MacGyver Quest State
   inventory: [],
   selectedItemIndex: -1,
   tasks: {
@@ -885,10 +1010,8 @@ const Game = {
     satAtTable: false
   },
 
-  // Father-in-Law Walter & Mother-in-Law Gertrud Eye-Contact System
+  // Walter sits across the table and faces the hallway (grid units)
   inlaws: {
-    tableX: 13.5,
-    tableY: 4.5,
     lookingAtHallway: false,
     warning: false,
     seenNotified: false,
@@ -896,22 +1019,20 @@ const Game = {
     lookInterval: 6.0,
     lookDuration: 2.8,
     warnDuration: 1.3,
-    eyeX: 14,
-    eyeY: 3.7,
-    visionRange: 6.5,
+    eyeX: 15.3,
+    eyeY: 4.5,
+    visionRange: 7,
     visionCone: 0.45
   },
   looted: {},
 
-  // Chaos hazards
+  // Chaos hazards (grid tiles)
   hazards: [
     { type: 'duck', x: 6, y: 3, triggered: false },
     { type: 'soap', x: 3, y: 7, triggered: false },
     { type: 'can', x: 5, y: 2, triggered: false }
   ],
 
-  // Particles
-  particles: [],
   ripples: [],
 
   stats: {
@@ -922,7 +1043,6 @@ const Game = {
   }
 };
 
-// Available MacGyver Items
 const ITEMS = {
   FLOSS: { id: 'FLOSS', name: 'Dental Floss', icon: '🧵', desc: 'Extra tear-resistant. Perfect for restraining the hissing float valve.' },
   SPONGE: { id: 'SPONGE', name: 'Old Guest Towel', icon: '🧽', desc: 'Thick and soft. Muffles the vibrating copper pipe against the wall.' },
@@ -934,62 +1054,56 @@ const ITEMS = {
 
 
 // ==========================================
-// 3. SOUND MATRIX TILEMAP GENERATION
+// 3. SOUND MATRIX TILEMAP
 // ==========================================
+// Bathroom x 1..7 | door (8,5) | creaky hallway x 9..12 | dining room x 13..15
+function tileTypeAt(x, y) {
+  if (x === 0 || y === 0 || y === 9 || (x === 8 && y !== 5)) return 'wall';
+  if (x === 8 && y === 5) return 'door';
+  if (x <= 7) {
+    if ((x === 1 && y === 1) || (x === 7 && y === 1)) return 'furniture'; // bin, plant
+    if (x === 1 && y === 2) return 'toilet';
+    if (x === 1 && y === 5) return 'sink';
+    if (x >= 6 && y >= 6) return 'bathtub';
+    if (x >= 3 && x <= 4 && y >= 4 && y <= 5) return 'rug';
+    return 'tile';
+  }
+  if (x === 12 && y === 8) return 'furniture'; // grandfather clock
+  if (x <= 12) return 'wood';
+  if (x === 15 && y <= 2) return 'furniture'; // sideboard
+  if (x === 14 && y >= 3 && y <= 5) return 'table';
+  if (x === 15 && y === 4) return 'inlaw';   // Walter
+  if (x === 14 && y === 6) return 'inlaw';   // Gertrud
+  if (x === 13 && y === 4) return 'table_chair'; // your seat
+  return 'carpet';
+}
+
 function initTilemap() {
   Game.tiles = [];
   for (let y = 0; y < Game.gridH; y++) {
     const row = [];
     for (let x = 0; x < Game.gridW; x++) {
-      let type = 'tile'; // default ceramic bathroom tile
-      let squeakFactor = 0; // 0 to 1
-
-      // Bathroom Zone (x: 1..7, y: 1..8)
-      if (x === 0 || y === 0 || y === 9 || (x === 8 && y !== 5)) {
-        type = 'wall';
-      } else if (x === 8 && y === 5) {
-        type = 'door'; // Bathroom door
-      } else if (x <= 7) {
-        // Bathroom interior
-        if (x === 2 && y === 2) type = 'toilet';
-        else if (x === 2 && y === 5) type = 'sink';
-        else if (x === 6 && y >= 6 && y <= 8) type = 'bathtub';
-        else if (x >= 3 && x <= 4 && y >= 4 && y <= 5) type = 'rug'; // Bath mat
-        else {
-          type = 'tile';
-        }
-      } else {
-        // Hallway & Dining Zone (x >= 9)
-        if (y === 0 || y === 9) {
-          type = 'wall';
-        } else if (x >= 9 && x <= 12) {
-          // Hallway with vintage squeaky floorboards
-          type = 'wood';
-          // Procedural squeak tension
-          squeakFactor = ((x * 7 + y * 13) % 10) / 10;
-        } else if (x >= 13) {
-          // Dining Room
-          type = 'carpet';
-          if (x === 14 && y === 5) type = 'table_chair'; // Goal chair
-        }
-      }
-
+      const type = tileTypeAt(x, y);
       row.push({
-        x,
-        y,
-        type,
-        squeakFactor,
-        tested: false, // Player can test boards
-        hasRipples: false
+        x, y, type,
+        squeakFactor: type === 'wood' ? ((x * 7 + y * 13) % 10) / 10 : 0,
+        tested: false
       });
     }
     Game.tiles.push(row);
   }
 }
 
+function isWalkable(x, y) {
+  if (x < 0 || x >= Game.gridW || y < 0 || y >= Game.gridH) return false;
+  const t = Game.tiles[y][x].type;
+  if (t === 'door') return Game.tasks.bathroomUnlocked;
+  return t === 'tile' || t === 'rug' || t === 'wood' || t === 'carpet';
+}
+
 
 // ==========================================
-// 4. INTERACTIVE OBJECTS & DIALOGUE
+// 4. DIALOGUE, MODALS & INVENTORY
 // ==========================================
 function showDialogue(text, duration = 3200) {
   UI.dialogueBubble.textContent = text;
@@ -1000,34 +1114,47 @@ function showDialogue(text, duration = 3200) {
   }, duration);
 }
 
+let modalOptions = [];
 function openModal(title, desc, options) {
   Game.state = 'INSPECT';
+  clearMoveInput();
+  unlockPointer();
   UI.modalTitle.textContent = title;
   UI.modalDesc.textContent = desc;
   UI.modalGrid.innerHTML = '';
+  modalOptions = options;
 
-  options.forEach(opt => {
+  options.forEach((opt, i) => {
     const card = document.createElement('div');
     card.className = 'item-card';
     card.innerHTML = `
+      ${IS_TOUCH ? '' : `<span class="opt-key">${i + 1}</span>`}
       <div class="item-icon">${opt.icon}</div>
       <div class="item-title">${opt.title}</div>
       <div class="item-desc">${opt.desc}</div>
     `;
-    card.onclick = () => {
-      opt.action();
-      closeModal();
-    };
+    card.onclick = () => chooseModalOption(i);
     UI.modalGrid.appendChild(card);
   });
 
   UI.modalOverlay.classList.add('active');
 }
 
+function chooseModalOption(i) {
+  const opt = modalOptions[i];
+  if (!opt) return;
+  opt.action();
+  closeModal();
+}
+
 function closeModal() {
   UI.modalOverlay.classList.remove('active');
+  modalOptions = [];
   // An option may have ended the game; don't resurrect it
-  if (Game.state === 'INSPECT') Game.state = 'PLAYING';
+  if (Game.state === 'INSPECT') {
+    Game.state = 'PLAYING';
+    lockPointer();
+  }
 }
 
 // Takes an item once per run (no infinite floss)
@@ -1285,11 +1412,11 @@ function sprayDeodorant() {
 
 
 // ==========================================
-// 6. DECIBEL CALCULATION & AWKWARDNESS METER
+// 5. DECIBEL CALCULATION & AWKWARDNESS METER
 // ==========================================
 function addDecibels(amount) {
   Game.targetDb = Math.min(100, Math.max(20, Game.targetDb + amount));
-  createRipple(Game.player.x, Game.player.y, amount);
+  if (amount > 0) createRipple(amount);
   if (Game.targetDb > Game.stats.peakDecibel) {
     Game.stats.peakDecibel = Math.round(Game.targetDb);
   }
@@ -1306,17 +1433,6 @@ function triggerAwkwardness(amount, quote = "", silent = false) {
   if (Game.suspicion >= 100) {
     triggerGameOver("In-Law Disaster! Walter yanked open the door: 'What have you been doing in here for 40 minutes?!'");
   }
-}
-
-function createRipple(gridX, gridY, db) {
-  Game.ripples.push({
-    x: (gridX + 0.5) * Game.tileSize + Game.originX,
-    y: (gridY + 0.5) * Game.tileSize + Game.originY,
-    radius: 5,
-    maxRadius: Math.min(160, db * 2),
-    alpha: 0.9,
-    color: db > 70 ? '#ef4444' : (db > 45 ? '#eab308' : '#38bdf8')
-  });
 }
 
 function updateDecibelSystem(dt) {
@@ -1337,26 +1453,23 @@ function updateDecibelSystem(dt) {
   Game.currentDb += (Game.targetDb - Game.currentDb) * Math.min(1, dt * 12);
   const rounded = Math.round(Game.currentDb);
 
-  // Update HUD
   UI.dbVal.textContent = `${rounded} dB`;
   const pct = Math.min(100, (rounded / 95) * 100);
   UI.dbBarFill.style.width = `${pct}%`;
 
   if (rounded < 45) {
-    UI.dbVal.style.color = '#22c55e'; // Green Safe
+    UI.dbVal.style.color = '#22c55e';
   } else if (rounded < 72) {
-    UI.dbVal.style.color = '#eab308'; // Amber Alert
-    // Suspicion slowly creeps up
+    UI.dbVal.style.color = '#eab308';
     Game.suspicion = Math.min(100, Game.suspicion + dt * 4.5);
   } else {
-    UI.dbVal.style.color = '#ef4444'; // Red Danger
+    UI.dbVal.style.color = '#ef4444';
     Game.suspicion = Math.min(100, Game.suspicion + dt * 16.0);
     if (Math.random() < 0.02) {
       showDialogue("Gertrud: 'Walter, is the heating radiator rattling upstairs again?!'");
     }
   }
 
-  // Suspicion decay if super quiet
   if (rounded < 35 && Game.suspicion > 0) {
     Game.suspicion = Math.max(0, Game.suspicion - dt * 2.2);
   }
@@ -1371,7 +1484,7 @@ function updateDecibelSystem(dt) {
 
 
 // ==========================================
-// 7. HALLWAY SNEAK & VISION CONE MECHANIC
+// 6. WALTER'S GAZE (HALLWAY SNEAK)
 // ==========================================
 function updateInlawsVision(dt) {
   if (Game.phase !== 'HALLWAY') return;
@@ -1381,10 +1494,9 @@ function updateInlawsVision(dt) {
 
   if (!il.lookingAtHallway && !il.warning) {
     if (il.lookTimer >= il.lookInterval) {
-      // Telegraph first so the player has time to stop
       il.lookTimer = 0;
       il.warning = true;
-      showDialogue("🍴 Walter puts down his fork... FREEZE! (Space / tap yourself to stop)", 2000);
+      showDialogue("🍴 Walter puts down his fork... FREEZE!", 2000);
       AudioEngine.playTone(330, 0.15, 'triangle', 0.12);
     }
   } else if (il.warning) {
@@ -1393,7 +1505,7 @@ function updateInlawsVision(dt) {
       il.warning = false;
       il.lookingAtHallway = true;
       il.seenNotified = false;
-      showDialogue("👁️ Walter glances down the hallway! Hide in a corner or stand still!", 2200);
+      showDialogue("👁️ Walter looks down the hallway! Don't move, don't make a sound!", 2200);
       AudioEngine.playTone(280, 0.25, 'triangle', 0.15);
     }
   } else {
@@ -1403,10 +1515,9 @@ function updateInlawsVision(dt) {
       il.lookInterval = 4.5 + Math.random() * 3.5;
       showDialogue("Walter takes another bite of roast...", 1800);
     } else if (playerInVision() && (Game.player.moving || Game.currentDb > 42)) {
-      // Seen moving or heard: suspicion rises, quote and buzzer only once per look
       triggerAwkwardness(35 * dt, il.seenNotified ? "" : "Walter is staring directly at you!", il.seenNotified);
       if (!il.seenNotified) { il.seenNotified = true; AudioEngine.playTone(180, 0.4, 'sawtooth', 0.25); }
-      if (Math.random() < dt * 4) createRipple(Game.player.visualX, Game.player.visualY, 75);
+      if (Math.random() < dt * 4) createRipple(75);
     }
   }
 }
@@ -1414,7 +1525,7 @@ function updateInlawsVision(dt) {
 // Is the player inside Walter's vision cone (grid units)?
 function playerInVision() {
   const il = Game.inlaws, p = Game.player;
-  const dx = p.visualX + 0.5 - il.eyeX, dy = p.visualY + 0.5 - il.eyeY;
+  const dx = p.x / T - il.eyeX, dy = p.z / T - il.eyeY;
   if (Math.hypot(dx, dy) > il.visionRange) return false;
   let a = Math.atan2(dy, dx) - Math.PI;
   a = Math.atan2(Math.sin(a), Math.cos(a));
@@ -1423,457 +1534,847 @@ function playerInVision() {
 
 
 // ==========================================
-// 8. PLAYER MOVEMENT & SOUND MATRIX TILES
+// 7. THREE.JS WORLD
 // ==========================================
-function tryMovePlayer(targetX, targetY) {
-  if (Game.state !== 'PLAYING' || Game.player.moving) return;
-  if (targetX < 0 || targetX >= Game.gridW || targetY < 0 || targetY >= Game.gridH) return;
-  // Only single steps to a neighbouring tile (no teleporting across walls)
-  if (Math.abs(targetX - Game.player.x) + Math.abs(targetY - Game.player.y) !== 1) return;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 
-  const tile = Game.tiles[targetY][targetX];
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070d);
+scene.fog = new THREE.Fog(0x05070d, 7, 15);
 
-  // Blocked tiles
-  if (tile.type === 'wall' || tile.type === 'bathtub') {
-    return;
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.04, 40);
+camera.rotation.order = 'YXZ';
+
+const raycaster = new THREE.Raycaster();
+const interactables = [];
+const occluders = [];
+
+function makeTex(w, h, draw, rx = 1, ry = 1) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(rx, ry);
+  t.encoding = THREE.sRGBEncoding;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 1;
+  return t;
+}
+function noise(g, w, h, amount, alpha) {
+  for (let i = 0; i < amount; i++) {
+    g.fillStyle = Math.random() < 0.5 ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha})`;
+    g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
   }
+}
 
-  // Interacting with Bathroom Hotspots
-  if (tile.type === 'toilet') {
-    interactWithToilet();
-    return;
-  }
-  if (tile.type === 'sink') {
-    interactWithSink();
-    return;
-  }
-
-  // Bathroom Door Check
-  if (tile.type === 'door') {
-    const t = Game.tasks;
-    const missing = [];
-    if (!t.paperSolved) missing.push('paper');
-    if (!t.pipeSilenced || !t.valveTied) missing.push('pipes & valve');
-    else if (!t.flushedSilently) missing.push('quiet flush');
-    if (!t.odorNeutralized) missing.push('odor');
-    if (missing.length) {
-      Game.player.path = []; Game.player.pendingInteract = null;
-      showDialogue("Can't leave yet! Still to do: " + missing.join(', ') + ".");
-      return;
+const TEX = {
+  floorTile: makeTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#e8edf1'; g.fillRect(0, 0, w, h);
+    noise(g, w, h, 500, 0.03);
+    g.fillStyle = '#aab4be';
+    g.fillRect(0, 0, w, 4); g.fillRect(0, 0, 4, h);
+  }, 14, 16),
+  bathWall: makeTex(128, 512, (g, w, h) => {
+    g.fillStyle = '#f3f4ee'; g.fillRect(0, 0, w, h);
+    // lower 5/8: pastel mint tiles, upper: paint
+    const tileTop = h * 3 / 8;
+    g.fillStyle = '#bfe0d6'; g.fillRect(0, tileTop, w, h - tileTop);
+    noise(g, w, h, 600, 0.025);
+    g.fillStyle = '#93b8ad';
+    for (let x = 0; x <= w; x += w / 2) g.fillRect(x - 2, tileTop, 3, h - tileTop);
+    for (let y = tileTop; y <= h; y += h / 8) g.fillRect(0, y - 2, w, 3);
+    g.fillStyle = '#6b9a8c'; g.fillRect(0, tileTop - 6, w, 8); // border strip
+  }),
+  hallWall: makeTex(128, 512, (g, w, h) => {
+    for (let x = 0; x < w; x += 16) {
+      g.fillStyle = (x / 16) % 2 ? '#cdbf8e' : '#d9cd9f';
+      g.fillRect(x, 0, 16, h);
     }
-    if (!Game.tasks.bathroomUnlocked) {
-      Game.tasks.bathroomUnlocked = true;
-      Game.phase = 'HALLWAY';
-      AudioEngine.playTone(420, 0.2, 'sine', 0.1);
-      showDialogue("Door handle pressed softly... Stepping into the creaky vintage hallway!");
-      return;
+    g.fillStyle = 'rgba(120,90,40,0.15)';
+    for (let y = 10; y < h * 0.62; y += 28) for (let x = 8; x < w; x += 32) g.fillRect(x, y, 4, 8);
+    const wt = h * 0.62;
+    g.fillStyle = '#6b4526'; g.fillRect(0, wt, w, h - wt);
+    g.fillStyle = '#5a3a20'; g.fillRect(14, wt + 22, w - 28, h - wt - 50);
+    g.fillStyle = '#3f2814'; g.fillRect(0, wt - 6, w, 10);
+    noise(g, w, h, 700, 0.04);
+  }),
+  dineWall: makeTex(128, 512, (g, w, h) => {
+    g.fillStyle = '#b5795a'; g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(255,220,170,0.18)';
+    for (let y = 16; y < h * 0.6; y += 40) for (let x = (y / 40 % 2) * 20 + 10; x < w; x += 40) {
+      g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.fill();
+    }
+    const wt = h * 0.6;
+    g.fillStyle = '#4a2c18'; g.fillRect(0, wt, w, h - wt);
+    g.fillStyle = '#3a2212'; g.fillRect(12, wt + 20, w - 24, h - wt - 44);
+    g.fillStyle = '#d6b36a'; g.fillRect(0, wt - 4, w, 5);
+    noise(g, w, h, 600, 0.04);
+  }),
+  carpet: makeTex(256, 512, (g, w, h) => {
+    g.fillStyle = '#6d1a26'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#d4a24c'; g.lineWidth = 6; g.strokeRect(14, 14, w - 28, h - 28);
+    g.strokeStyle = '#2b3a67'; g.lineWidth = 10; g.strokeRect(30, 30, w - 60, h - 60);
+    g.fillStyle = 'rgba(212,162,76,0.5)';
+    for (let y = 70; y < h - 60; y += 46) for (let x = 70; x < w - 60; x += 46) {
+      g.save(); g.translate(x, y); g.rotate(Math.PI / 4); g.fillRect(-6, -6, 12, 12); g.restore();
+    }
+    noise(g, w, h, 3000, 0.06);
+  }),
+  rug: makeTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#f0a7c8'; g.fillRect(0, 0, w, h);
+    noise(g, w, h, 2500, 0.08);
+    g.strokeStyle = '#fbcfe8'; g.lineWidth = 6; g.strokeRect(8, 8, w - 16, h - 16);
+  })
+};
+
+function makePlankTexture() {
+  return makeTex(128, 128, (g, w, h) => {
+    const planks = 3;
+    for (let i = 0; i < planks; i++) {
+      const y = i * h / planks;
+      const l = 38 + Math.random() * 10;
+      g.fillStyle = `hsl(28, 45%, ${l}%)`;
+      g.fillRect(0, y, w, h / planks);
+      g.strokeStyle = 'rgba(60,30,10,0.25)';
+      for (let k = 0; k < 6; k++) {
+        g.beginPath();
+        const gy = y + 4 + Math.random() * (h / planks - 8);
+        g.moveTo(0, gy);
+        g.bezierCurveTo(w * 0.3, gy + 3, w * 0.6, gy - 3, w, gy + 1);
+        g.stroke();
+      }
+      g.fillStyle = '#2a170a'; g.fillRect(0, y, w, 2);
+      g.fillRect((i * 47) % w, y, 2, h / planks); // butt joint
+    }
+    noise(g, w, h, 400, 0.05);
+  });
+}
+
+function mat(color, opts = {}) {
+  return new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.75, metalness: 0 }, opts));
+}
+const MAT = {
+  porcelain: mat(0xf8fafc, { roughness: 0.18 }),
+  chrome: mat(0xdde3ea, { roughness: 0.2, metalness: 0.9 }),
+  copper: mat(0xc07a3c, { roughness: 0.35, metalness: 0.85 }),
+  ceiling: mat(0xf1ece2, { roughness: 0.95 }),
+  darkWood: mat(0x4a2d18, { roughness: 0.6 }),
+  wood: mat(0x8a5a32, { roughness: 0.6 }),
+  white: mat(0xffffff, { roughness: 0.6 }),
+  cloth: mat(0xf5f1e6, { roughness: 0.95 }),
+  skin: mat(0xf1c7a5, { roughness: 0.8 }),
+  black: mat(0x111111, { roughness: 0.4 }),
+  wallBath: mat(0xffffff, { map: TEX.bathWall, roughness: 0.4 }),
+  wallHall: mat(0xffffff, { map: TEX.hallWall, roughness: 0.85 }),
+  wallDine: mat(0xffffff, { map: TEX.dineWall, roughness: 0.85 })
+};
+
+function add(mesh, parent = scene) { parent.add(mesh); return mesh; }
+function box(w, h, d, material, x, y, z, parent = scene) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  m.position.set(x, y, z);
+  return add(m, parent);
+}
+function cyl(rt, rb, h, material, x, y, z, parent = scene, seg = 20) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), material);
+  m.position.set(x, y, z);
+  return add(m, parent);
+}
+function sph(r, material, x, y, z, parent = scene) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), material);
+  m.position.set(x, y, z);
+  return add(m, parent);
+}
+function plane(w, h, material, x, y, z, rotX = -Math.PI / 2, parent = scene) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
+  m.position.set(x, y, z);
+  m.rotation.x = rotX;
+  return add(m, parent);
+}
+// Invisible, generous hit volume so small objects are easy to aim at
+const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
+function hitbox(parent, w, h, d, x, y, z) {
+  return box(w, h, d, HIT_MAT, x, y, z, parent);
+}
+function makeInteractable(obj, label, fn) {
+  obj.userData.interact = { label, fn };
+  interactables.push(obj);
+}
+
+const World = {};
+
+function regionMat(gx, gy) {
+  if (gx < 0 || gy < 0 || gx >= Game.gridW || gy >= Game.gridH) return MAT.wallHall;
+  if (Game.tiles[gy][gx].type === 'wall') return MAT.wallHall;
+  return gx <= 7 ? MAT.wallBath : (gx <= 12 ? MAT.wallHall : MAT.wallDine);
+}
+
+function buildWorld() {
+  // ---- Lights ----
+  add(new THREE.HemisphereLight(0xdfe8ff, 0x3a3226, 0.35));
+  const bathLight = add(new THREE.PointLight(0xeaf4ff, 0.95, 9, 1.4));
+  bathLight.position.set(2.7, WALL_H - 0.25, 3.0);
+  const hallLight = add(new THREE.PointLight(0xffc98a, 0.55, 6, 1.6));
+  hallLight.position.set(6.4, WALL_H - 0.3, 3.0);
+  const dineLight = add(new THREE.PointLight(0xffbf73, 1.25, 9, 1.4));
+  dineLight.position.set(8.6, 2.05, 2.7);
+  World.dineLight = dineLight;
+
+  // Lamp fixtures
+  cyl(0.22, 0.22, 0.04, mat(0xffffff, { emissive: 0xeaf4ff, emissiveIntensity: 1.2 }), 2.7, WALL_H - 0.02, 3.0);
+  sph(0.12, mat(0xfff3d6, { emissive: 0xffc98a, emissiveIntensity: 1.1 }), 6.4, WALL_H - 0.2, 3.0);
+  // Dining chandelier
+  cyl(0.008, 0.008, 0.35, MAT.black, 8.6, WALL_H - 0.17, 2.7);
+  const shade = cyl(0.12, 0.3, 0.22, mat(0xf6e3b4, { emissive: 0xffb35c, emissiveIntensity: 0.6, side: THREE.DoubleSide }), 8.6, 2.2, 2.7);
+  shade.material.transparent = true; shade.material.opacity = 0.95;
+
+  // ---- Walls ----
+  const wallGeo = new THREE.BoxGeometry(T, WALL_H, T);
+  for (let gy = 0; gy < Game.gridH; gy++) {
+    for (let gx = 0; gx <= Game.gridW; gx++) {
+      const isWall = gx === Game.gridW || Game.tiles[gy][gx].type === 'wall';
+      if (!isWall) continue;
+      const mats = [regionMat(gx + 1, gy), regionMat(gx - 1, gy), MAT.ceiling, MAT.ceiling, regionMat(gx, gy + 1), regionMat(gx, gy - 1)];
+      const m = new THREE.Mesh(wallGeo, mats);
+      m.position.set((gx + 0.5) * T, WALL_H / 2, (gy + 0.5) * T);
+      scene.add(m);
+      occluders.push(m);
     }
   }
+  // Lintel above the bathroom door
+  const lintelH = WALL_H - 2.05;
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(T, lintelH, T), [MAT.wallHall, MAT.wallBath, MAT.ceiling, MAT.white, MAT.white, MAT.white]);
+  lintel.position.set(8.5 * T, 2.05 + lintelH / 2, 5.5 * T);
+  scene.add(lintel);
+  occluders.push(lintel);
 
-  // Goal Chair in Dining Room
-  if (tile.type === 'table_chair') {
+  // ---- Floors & ceiling ----
+  plane(7 * T, 8 * T, mat(0xffffff, { map: TEX.floorTile, roughness: 0.3 }), 4.5 * T, 0, 5 * T);
+  plane(3 * T, 8 * T, mat(0xffffff, { map: TEX.carpet, roughness: 1 }), 14.5 * T, 0, 5 * T);
+  plane(2 * T, 2 * T, mat(0xffffff, { map: TEX.rug, roughness: 1 }), 4 * T, 0.006, 5 * T);
+  const ceil = plane(17 * T, 10 * T, MAT.ceiling, 8.5 * T, WALL_H, 5 * T, Math.PI / 2);
+  occluders.push(ceil);
+
+  // Hallway boards: one mesh per tile so tested boards can glow
+  World.boards = {};
+  const boardGeo = new THREE.PlaneGeometry(T, T);
+  for (let gy = 1; gy <= 8; gy++) {
+    for (let gx = 8; gx <= 12; gx++) {
+      if (gx === 8 && gy !== 5) continue;
+      const tile = Game.tiles[gy][gx];
+      const wear = tile.squeakFactor * 0.22;
+      const m = new THREE.Mesh(boardGeo, mat(new THREE.Color(1 - wear, 1 - wear * 1.1, 1 - wear * 1.3), { map: makePlankTexture(), roughness: 0.55, emissive: 0x000000 }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set((gx + 0.5) * T, 0.001, (gy + 0.5) * T);
+      scene.add(m);
+      World.boards[gx + ',' + gy] = m;
+    }
+  }
+  // Skirting boards in the hallway
+  box(4 * T, 0.1, 0.02, MAT.darkWood, 11 * T, 0.05, T + 0.01);
+  box(4 * T, 0.1, 0.02, MAT.darkWood, 11 * T, 0.05, 9 * T - 0.01);
+
+  buildBathroom();
+  buildHallway();
+  buildDining();
+  buildHazards();
+  buildVisionCone();
+}
+
+function buildBathroom() {
+  // ---- Toilet against the west wall (tile 1,2), facing +x ----
+  const toilet = new THREE.Group();
+  toilet.position.set(T, 0, 2.5 * T);
+  scene.add(toilet);
+  cyl(0.12, 0.15, 0.38, MAT.porcelain, 0.36, 0.19, 0, toilet);
+  const bowl = cyl(0.2, 0.15, 0.14, MAT.porcelain, 0.4, 0.4, 0, toilet); bowl.scale.set(1.2, 1, 0.92);
+  const water = cyl(0.15, 0.15, 0.01, mat(0x9fc6d8, { roughness: 0.05, metalness: 0.2 }), 0.41, 0.46, 0, toilet); water.scale.set(1.2, 1, 0.92);
+  const seat = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 8, 24), mat(0xffffff, { roughness: 0.3 }));
+  seat.rotation.x = Math.PI / 2; seat.scale.set(1.2, 0.92, 1); seat.position.set(0.41, 0.485, 0); toilet.add(seat);
+  box(0.17, 0.4, 0.44, MAT.porcelain, 0.09, 0.72, 0, toilet);
+  box(0.19, 0.035, 0.46, MAT.porcelain, 0.09, 0.935, 0, toilet);
+  const btn = cyl(0.032, 0.032, 0.012, MAT.chrome, 0.09, 0.958, 0, toilet);
+  btn.userData.flushBtn = true;
+  // Rattling copper supply pipe
+  cyl(0.016, 0.016, 0.55, MAT.copper, 0.04, 0.28, 0.17, toilet);
+  const pipeElbow = cyl(0.016, 0.016, 0.1, MAT.copper, 0.04, 0.55, 0.12, toilet); pipeElbow.rotation.x = Math.PI / 2;
+  World.towelWrap = cyl(0.045, 0.045, 0.2, mat(0x5b9bd5, { roughness: 1 }), 0.04, 0.3, 0.17, toilet);
+  World.towelWrap.visible = false;
+  World.tissueBox = box(0.12, 0.07, 0.2, mat(0x7dd3fc, { roughness: 0.8 }), 0.09, 0.99, 0.05, toilet);
+  World.tissueBox.visible = false;
+  World.toilet = toilet;
+  hitbox(toilet, 0.68, 1.05, 0.52, 0.32, 0.52, 0);
+  makeInteractable(toilet, () => (Game.tasks.pipeSilenced && Game.tasks.valveTied) ? 'Flush toilet' : 'Inspect toilet & cistern', interactWithToilet);
+
+  // ---- Paper holder on the west wall next to the toilet ----
+  const holder = new THREE.Group();
+  holder.position.set(T, 0.72, 3.45 * T);
+  scene.add(holder);
+  box(0.04, 0.05, 0.16, MAT.chrome, 0.02, 0.03, 0, holder);
+  const rod = cyl(0.008, 0.008, 0.16, MAT.chrome, 0.08, 0, 0, holder); rod.rotation.x = Math.PI / 2;
+  const core = cyl(0.024, 0.024, 0.1, mat(0x9c6b3c, { roughness: 1 }), 0.08, 0, 0, holder); core.rotation.x = Math.PI / 2;
+  World.paperCore = core;
+  hitbox(holder, 0.22, 0.28, 0.34, 0.1, 0, 0);
+  makeInteractable(holder, 'Toilet paper holder', interactWithPaperHolder);
+
+  // Small bin
+  cyl(0.11, 0.09, 0.28, mat(0xcbd5e1, { metalness: 0.6, roughness: 0.35 }), 1.5 * T, 0.14, 1.5 * T);
+
+  // ---- Sink against the west wall (tile 1,5) ----
+  const sink = new THREE.Group();
+  sink.position.set(T, 0, 5.5 * T);
+  scene.add(sink);
+  cyl(0.07, 0.1, 0.74, MAT.porcelain, 0.22, 0.37, 0, sink);
+  box(0.42, 0.14, 0.56, MAT.porcelain, 0.23, 0.82, 0, sink);
+  box(0.32, 0.02, 0.44, mat(0xd7e3ec, { roughness: 0.1 }), 0.25, 0.895, 0, sink);
+  cyl(0.02, 0.025, 0.14, MAT.chrome, 0.06, 0.96, 0, sink);
+  box(0.1, 0.02, 0.025, MAT.chrome, 0.11, 1.02, 0, sink);
+  cyl(0.02, 0.02, 0.04, mat(0xdc2626), 0.06, 0.92, 0.09, sink);
+  cyl(0.02, 0.02, 0.04, mat(0x2563eb), 0.06, 0.92, -0.09, sink);
+  // Towel hook with the old guest towel
+  box(0.04, 0.02, 0.06, MAT.chrome, 0.02, 1.12, 0.42, sink);
+  World.sinkTowel = box(0.04, 0.42, 0.26, mat(0x5b9bd5, { roughness: 1 }), 0.05, 0.92, 0.42, sink);
+  World.sink = sink;
+  hitbox(sink, 0.5, 1.18, 0.9, 0.25, 0.59, 0.12);
+  makeInteractable(sink, 'Sink & guest towel', interactWithSink);
+
+  // ---- Mirror cabinet above the sink ----
+  const cab = new THREE.Group();
+  cab.position.set(T, 1.55, 5.5 * T);
+  scene.add(cab);
+  box(0.14, 0.62, 0.58, MAT.white, 0.07, 0, 0, cab);
+  plane(0.54, 0.56, mat(0x9fb3c2, { roughness: 0.04, metalness: 1, emissive: 0x1b2836 }), 0.142, 0, 0, 0, cab).rotation.y = Math.PI / 2;
+  box(0.02, 0.1, 0.02, MAT.chrome, 0.15, 0, 0.22, cab);
+  hitbox(cab, 0.22, 0.66, 0.62, 0.11, 0.02, 0);
+  makeInteractable(cab, "Open mother-in-law's mirror cabinet", interactWithCabinet);
+
+  // ---- Bathtub (tiles 6..7, 6..8) ----
+  const tub = new THREE.Group();
+  tub.position.set(7 * T, 0, 7.5 * T);
+  scene.add(tub);
+  box(1.16, 0.56, 1.76, MAT.porcelain, 0, 0.28, 0, tub);
+  box(0.94, 0.02, 1.54, mat(0xc6ddea, { roughness: 0.15 }), 0, 0.565, 0, tub);
+  box(0.06, 0.18, 0.06, MAT.chrome, 0, 0.66, 0.84, tub);
+  // Shower curtain rail + curtain
+  cyl(0.01, 0.01, 1.76, MAT.chrome, -0.58, 2.0, 0, tub).rotation.x = Math.PI / 2;
+  const curtain = box(0.01, 1.4, 0.9, mat(0xfde68a, { roughness: 0.9, transparent: true, opacity: 0.88 }), -0.58, 1.3, -0.42, tub);
+  curtain.rotation.y = 0.05;
+  // Rubber duck army on the tub rim
+  for (let i = 0; i < 3; i++) duckMesh(0.6 + i * 0.06, -0.52, 0.56, -0.3 + i * 0.25, tub);
+
+  // Towel radiator on the north wall
+  for (let i = 0; i < 6; i++) cyl(0.012, 0.012, 0.5, MAT.chrome, 3.0, 0.5 + i * 0.12, T + 0.06).rotation.z = Math.PI / 2;
+  // Plant
+  cyl(0.1, 0.08, 0.2, mat(0xb45309), 7.5 * T, 0.1, 1.5 * T);
+  sph(0.17, mat(0x15803d, { roughness: 1 }), 7.5 * T, 0.36, 1.5 * T);
+}
+
+function duckMesh(scale, x, y, z, parent = scene) {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.scale.setScalar(scale);
+  parent.add(g);
+  const yellow = mat(0xfacc15, { roughness: 0.35 });
+  const body = sph(0.075, yellow, 0, 0.06, 0, g); body.scale.set(1.35, 0.85, 1);
+  sph(0.048, yellow, 0.06, 0.13, 0, g);
+  const beak = box(0.05, 0.016, 0.04, mat(0xf97316), 0.11, 0.125, 0, g);
+  beak.rotation.z = -0.15;
+  sph(0.008, MAT.black, 0.095, 0.145, 0.025, g);
+  sph(0.008, MAT.black, 0.095, 0.145, -0.025, g);
+  return g;
+}
+
+function buildHallway() {
+  // ---- Bathroom door, hinged at the north edge of tile (8,5) ----
+  const pivot = new THREE.Group();
+  pivot.position.set(8.5 * T, 0, 5 * T + 0.01);
+  scene.add(pivot);
+  box(0.045, 2.02, T - 0.02, mat(0xf4f1ea, { roughness: 0.5 }), 0, 1.01, (T - 0.02) / 2, pivot);
+  box(0.05, 0.7, 0.4, mat(0xe7e2d8, { roughness: 0.5 }), 0, 1.5, (T - 0.02) / 2, pivot);
+  sph(0.025, MAT.chrome, 0.05, 1.0, T - 0.09, pivot);
+  sph(0.025, MAT.chrome, -0.05, 1.0, T - 0.09, pivot);
+  World.door = pivot;
+  World.doorOpen = 0;
+  makeInteractable(pivot, () => Game.tasks.bathroomUnlocked ? null : 'Open bathroom door', tryOpenDoor);
+  occluders.push(pivot);
+
+  // Picture frames along the hallway
+  const frames = [
+    [9.3, 1.55, 0.3, 0x1e3a8a], [10.9, 1.6, 0.42, 0x166534], [12.2, 1.5, 0.28, 0x7c2d12]
+  ];
+  frames.forEach(([gx, y, s, c], i) => {
+    const z = T + 0.02, z2 = 9 * T - 0.02;
+    box(s + 0.06, s * 1.25 + 0.06, 0.02, mat(0xb08d57, { metalness: 0.5, roughness: 0.4 }), gx * T, y, z);
+    box(s, s * 1.25, 0.01, mat(c, { emissive: c, emissiveIntensity: 0.15 }), gx * T, y, z + 0.012);
+    box(s + 0.06, s * 1.25 + 0.06, 0.02, mat(0xb08d57, { metalness: 0.5, roughness: 0.4 }), (gx + 0.3) * T, y + 0.05, z2);
+    box(s, s * 1.25, 0.01, mat(0x6b21a8 + i * 0x101010, { emissive: 0x3b0764, emissiveIntensity: 0.12 }), (gx + 0.3) * T, y + 0.05, z2 - 0.012);
+  });
+  // Grandfather clock in the dark corner
+  box(0.4, 1.9, 0.3, MAT.darkWood, 12.5 * T, 0.95, 9 * T - 0.16);
+  cyl(0.13, 0.13, 0.02, mat(0xf5e9c8, { emissive: 0x3a2e14 }), 12.5 * T, 1.6, 9 * T - 0.32).rotation.x = Math.PI / 2;
+}
+
+function buildPerson(opts) {
+  const g = new THREE.Group();
+  g.position.set(opts.x, 0, opts.z);
+  g.rotation.y = opts.rot;
+  scene.add(g);
+  // Chair
+  box(0.44, 0.05, 0.44, MAT.wood, 0, 0.46, 0, g);
+  box(0.05, 0.55, 0.44, MAT.wood, -0.2, 0.74, 0, g);
+  [[-0.18, -0.18], [-0.18, 0.18], [0.18, -0.18], [0.18, 0.18]].forEach(([a, b]) => box(0.04, 0.46, 0.04, MAT.wood, a, 0.23, b, g));
+  // Body (front = +x)
+  const shirt = mat(opts.shirt, { roughness: 0.9 });
+  box(0.24, 0.5, 0.38, shirt, -0.04, 0.78, 0, g);
+  box(0.36, 0.13, 0.14, mat(opts.pants, { roughness: 0.9 }), 0.12, 0.54, 0.09, g);
+  box(0.36, 0.13, 0.14, mat(opts.pants, { roughness: 0.9 }), 0.12, 0.54, -0.09, g);
+  box(0.1, 0.46, 0.12, mat(opts.pants), 0.3, 0.23, 0.09, g);
+  box(0.1, 0.46, 0.12, mat(opts.pants), 0.3, 0.23, -0.09, g);
+  // Arms
+  const armL = new THREE.Group(); armL.position.set(-0.02, 0.98, 0.23); g.add(armL);
+  box(0.09, 0.09, 0.09, shirt, 0.14, -0.2, 0, armL).scale.set(3.4, 1, 1);
+  const armR = new THREE.Group(); armR.position.set(-0.02, 0.98, -0.23); g.add(armR);
+  box(0.3, 0.09, 0.09, shirt, 0.14, -0.2, 0, armR);
+  box(0.1, 0.012, 0.012, MAT.chrome, 0.32, -0.18, 0, armR); // fork
+  // Head
+  const head = new THREE.Group(); head.position.set(-0.02, 1.15, 0); g.add(head);
+  sph(0.11, MAT.skin, 0, 0.06, 0, head);
+  const hair = sph(0.115, mat(opts.hair, { roughness: 1 }), -0.025, 0.1, 0, head); hair.scale.set(1, 0.75, 1);
+  if (opts.bun) sph(0.06, mat(opts.hair, { roughness: 1 }), -0.1, 0.16, 0, head);
+  sph(0.022, MAT.skin, 0.11, 0.05, 0, head);
+  const eyeW = mat(0xffffff, { roughness: 0.3 });
+  sph(0.02, eyeW, 0.095, 0.085, 0.04, head); sph(0.02, eyeW, 0.095, 0.085, -0.04, head);
+  sph(0.01, MAT.black, 0.112, 0.085, 0.04, head); sph(0.01, MAT.black, 0.112, 0.085, -0.04, head);
+  if (opts.glasses) {
+    box(0.01, 0.035, 0.05, mat(0x222222, { transparent: true, opacity: 0.5 }), 0.112, 0.085, 0.042, head);
+    box(0.01, 0.035, 0.05, mat(0x222222, { transparent: true, opacity: 0.5 }), 0.112, 0.085, -0.042, head);
+  }
+  if (opts.moustache) box(0.02, 0.025, 0.09, mat(0x9ca3af), 0.112, 0.015, 0, head);
+  return { group: g, head, armR };
+}
+
+function buildDining() {
+  // ---- Table (tiles 14, 3..5) ----
+  const tx = 14.5 * T, tz = 4.5 * T;
+  box(0.62, 0.04, 1.78, MAT.wood, tx, 0.76, tz);
+  box(0.66, 0.012, 1.82, MAT.cloth, tx, 0.786, tz);
+  [[-0.26, -0.84], [0.26, -0.84], [-0.26, 0.84], [0.26, 0.84]].forEach(([a, b]) => box(0.05, 0.74, 0.05, MAT.wood, tx + a, 0.37, tz + b));
+  // Roast platter, plates, candles
+  const platter = cyl(0.17, 0.17, 0.015, MAT.porcelain, tx, 0.8, tz); platter.scale.z = 1.4;
+  const roast = sph(0.1, mat(0x7c3f1d, { roughness: 0.6 }), tx, 0.85, tz); roast.scale.set(1, 0.6, 1.5);
+  [[tx - 0.17, tz], [tx + 0.17, tz], [tx, tz + 0.7]].forEach(([x, z]) => cyl(0.11, 0.1, 0.012, MAT.porcelain, x, 0.795, z));
+  cyl(0.06, 0.04, 0.05, mat(0xfef3c7), tx + 0.15, 0.82, tz - 0.6); // gravy boat
+  [-0.45, 0.45].forEach(o => {
+    cyl(0.015, 0.015, 0.2, mat(0xfffbeb), tx + 0.02, 0.89, tz + o);
+    sph(0.014, mat(0xffd27a, { emissive: 0xffa31a, emissiveIntensity: 2 }), tx + 0.02, 1.0, tz + o);
+  });
+  const candle = add(new THREE.PointLight(0xffa64d, 0.35, 3, 2)); candle.position.set(tx, 1.05, tz);
+  World.candle = candle;
+
+  // ---- Walter faces the hallway (tile 15,4) ----
+  World.walter = buildPerson({ x: 15.45 * T, z: 4.5 * T, rot: Math.PI, shirt: 0x3f6e4a, pants: 0x3b3b46, hair: 0xd1d5db, glasses: true, moustache: true });
+  // ---- Gertrud at the south end (tile 14,6), facing the table ----
+  World.gertrud = buildPerson({ x: 14.5 * T, z: 6.55 * T, rot: Math.PI / 2, shirt: 0x9d4b73, pants: 0x4b3a5a, hair: 0xe5e7eb, bun: true });
+
+  // ---- Your empty seat (tile 13,4) facing the table ----
+  const seat = new THREE.Group();
+  seat.position.set(13.55 * T, 0, 4.5 * T);
+  scene.add(seat);
+  box(0.44, 0.05, 0.44, MAT.wood, 0, 0.46, 0, seat);
+  box(0.05, 0.55, 0.44, MAT.wood, -0.2, 0.74, 0, seat);
+  [[-0.18, -0.18], [-0.18, 0.18], [0.18, -0.18], [0.18, 0.18]].forEach(([a, b]) => box(0.04, 0.46, 0.04, MAT.wood, a, 0.23, b, seat));
+  const glow = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 40), new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.0, depthWrite: false }));
+  glow.rotation.x = -Math.PI / 2; glow.position.y = 0.01; seat.add(glow);
+  World.seatGlow = glow;
+  hitbox(seat, 0.5, 1.05, 0.5, 0, 0.52, 0);
+  makeInteractable(seat, 'Sit down at the table', () => {
+    if (!Game.tasks.bathroomUnlocked) return;
     triggerVictory();
+  });
+
+  // Window behind Walter (night), sideboard
+  box(0.02, 1.0, 0.9, mat(0x0b1a33, { emissive: 0x0b1f40, emissiveIntensity: 0.6, roughness: 0.1 }), 16 * T - 0.01, 1.45, 4.5 * T);
+  box(0.03, 1.08, 0.06, MAT.white, 16 * T - 0.02, 1.45, 4.5 * T);
+  box(0.03, 0.06, 0.98, MAT.white, 16 * T - 0.02, 1.45, 4.5 * T);
+  box(0.4, 0.85, 1.14, MAT.darkWood, 15.62 * T, 0.425, 2 * T);
+  sph(0.1, mat(0x60a5fa, { roughness: 0.2 }), 15.62 * T, 0.95, 1.7 * T);
+}
+
+function buildHazards() {
+  Game.hazards.forEach(h => {
+    const cx = (h.x + 0.5) * T, cz = (h.y + 0.5) * T;
+    let g;
+    if (h.type === 'duck') {
+      g = duckMesh(1.1, cx, 0, cz);
+      g.rotation.y = 2.2;
+    } else if (h.type === 'can') {
+      g = new THREE.Group(); g.position.set(cx, 0, cz); scene.add(g);
+      const c = cyl(0.033, 0.033, 0.18, mat(0x16a34a, { metalness: 0.7, roughness: 0.3 }), 0, 0.033, 0, g);
+      c.rotation.z = Math.PI / 2;
+      const cap = cyl(0.025, 0.025, 0.03, MAT.white, 0.1, 0.033, 0, g); cap.rotation.z = Math.PI / 2;
+      g.rotation.y = 0.6;
+    } else {
+      g = new THREE.Group(); g.position.set(cx, 0, cz); scene.add(g);
+      box(0.1, 0.03, 0.065, mat(0xf472b6, { roughness: 0.15 }), 0, 0.015, 0, g);
+      g.rotation.y = -0.4;
+    }
+    h.mesh = g;
+    h.base = { x: cx, z: cz, ry: g.rotation.y };
+    h.anim = 0;
+  });
+}
+
+function resetHazardMeshes() {
+  Game.hazards.forEach(h => {
+    h.mesh.position.set(h.base.x, 0, h.base.z);
+    h.mesh.rotation.set(0, h.base.ry, 0);
+    h.mesh.scale.setScalar(h.type === 'duck' ? 1.1 : 1);
+    h.anim = 0;
+  });
+}
+
+function buildVisionCone() {
+  const il = Game.inlaws;
+  const geo = new THREE.CircleGeometry(il.visionRange * T, 40, Math.PI - il.visionCone, il.visionCone * 2);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(il.eyeX * T, 0.012, il.eyeY * T);
+  scene.add(m);
+  World.cone = m;
+}
+
+// Expanding sound rings on the floor around the player
+const rippleGeo = new THREE.RingGeometry(0.92, 1, 48);
+function createRipple(db) {
+  const color = db > 70 ? 0xef4444 : (db > 45 ? 0xeab308 : 0x38bdf8);
+  const m = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(Game.player.x, 0.02, Game.player.z);
+  m.scale.setScalar(0.1);
+  scene.add(m);
+  Game.ripples.push({ mesh: m, r: 0.1, maxR: Math.max(0.4, Math.min(2.6, db * 0.028)) });
+  if (db >= 60) Game.shake = Math.max(Game.shake, Math.min(0.06, db / 1500));
+}
+
+function updateRipples(dt) {
+  for (let i = Game.ripples.length - 1; i >= 0; i--) {
+    const r = Game.ripples[i];
+    r.r += dt * 2.8;
+    r.mesh.scale.setScalar(r.r);
+    r.mesh.material.opacity = 0.8 * Math.max(0, 1 - r.r / r.maxR);
+    if (r.r >= r.maxR) {
+      scene.remove(r.mesh);
+      r.mesh.material.dispose();
+      Game.ripples.splice(i, 1);
+    }
+  }
+}
+
+function clearRipples() {
+  Game.ripples.forEach(r => { scene.remove(r.mesh); r.mesh.material.dispose(); });
+  Game.ripples = [];
+}
+
+
+// ==========================================
+// 8. DOOR, FLOORBOARDS & HAZARDS
+// ==========================================
+function tryOpenDoor() {
+  if (Game.tasks.bathroomUnlocked) return;
+  const t = Game.tasks;
+  const missing = [];
+  if (!t.paperSolved) missing.push('paper');
+  if (!t.pipeSilenced || !t.valveTied) missing.push('pipes & valve');
+  else if (!t.flushedSilently) missing.push('quiet flush');
+  if (!t.odorNeutralized) missing.push('odor');
+  if (missing.length) {
+    showDialogue("Can't leave yet! Still to do: " + missing.join(', ') + ".");
     return;
   }
+  Game.tasks.bathroomUnlocked = true;
+  Game.phase = 'HALLWAY';
+  AudioEngine.playSqueak(0.25);
+  AudioEngine.playTone(420, 0.2, 'sine', 0.1);
+  addDecibels(8);
+  showDialogue("Door handle pressed softly... The creaky hallway awaits. Walter is facing it!", 3600);
+}
 
-  // Perform Step onto Tile
-  Game.player.targetTileX = targetX;
-  Game.player.targetTileY = targetY;
-  Game.player.moving = true;
-  Game.player.facing = { dx: targetX - Game.player.x, dy: targetY - Game.player.y };
-  Game.player.stepsTaken++;
+function testFloorboard() {
+  const p = Game.player;
+  const ax = p.x - Math.sin(p.yaw) * 0.6, az = p.z - Math.cos(p.yaw) * 0.6;
+  const gx = Math.floor(ax / T), gy = Math.floor(az / T);
+  if (gx < 0 || gy < 0 || gx >= Game.gridW || gy >= Game.gridH) return;
+  const tile = Game.tiles[gy][gx];
+  if (tile.type !== 'wood') {
+    showDialogue("Nothing to test here. Only the old hallway boards creak.");
+    return;
+  }
+  tile.tested = true;
+  AudioEngine.playTone(200 + tile.squeakFactor * 300, 0.08, 'triangle', 0.04);
+  addDecibels(6);
+  const board = World.boards[gx + ',' + gy];
+  if (board) {
+    const bad = tile.squeakFactor > 0.6;
+    board.material.emissive.setHex(bad ? 0x991b1b : 0x166534);
+    board.material.emissiveIntensity = 0.55;
+  }
+  showDialogue(`Board tested: ${tile.squeakFactor > 0.6 ? '⚠️ VERY SQUEAKY!' : 'Relatively stable.'}`);
+}
 
-  // Calculate Noise based on Tile surface & Sneak Mode
+function onFootstep() {
+  const p = Game.player;
+  const tile = Game.tiles[p.gy] && Game.tiles[p.gy][p.gx];
+  if (!tile) return;
+  p.stepsTaken++;
   let stepNoise = 0;
-
   if (tile.type === 'rug' || tile.type === 'carpet') {
     stepNoise = Game.isSneaking ? 4 : 10;
-  } else if (tile.type === 'tile') {
+    AudioEngine.playTone(70 + Math.random() * 20, 0.05, 'sine', Game.isSneaking ? 0.015 : 0.04);
+  } else if (tile.type === 'tile' || tile.type === 'door') {
     stepNoise = Game.isSneaking ? 8 : 24;
+    AudioEngine.playTone(110 + Math.random() * 40, 0.04, 'triangle', Game.isSneaking ? 0.02 : 0.07);
   } else if (tile.type === 'wood') {
-    // Squeaky plank
     const squeakDb = 35 + tile.squeakFactor * 45;
     if (Game.isSneaking) {
       stepNoise = squeakDb * 0.45;
-      AudioEngine.playSqueak(0.35);
+      AudioEngine.playSqueak(0.35 * (0.4 + tile.squeakFactor));
     } else {
       stepNoise = squeakDb;
       AudioEngine.playSqueak(1.0);
-      Game.player.squeaksTriggered++;
+      p.squeaksTriggered++;
     }
   }
-
   addDecibels(stepNoise);
+}
 
-  // Check Chaos Hazards on Tile
+function onEnterTile(gx, gy) {
   Game.hazards.forEach(h => {
-    if (!h.triggered && h.x === targetX && h.y === targetY) {
-      h.triggered = true;
-      if (h.type === 'duck') {
-        AudioEngine.playDuckHonk();
-        addDecibels(85);
-        Game.stats.ducksStepped++;
-        showDialogue("SQUEEEEEAAAK! Stepped squarely on the rubber duck!", 2600);
-        triggerAwkwardness(30);
-      } else if (h.type === 'can') {
-        AudioEngine.playCanClank();
-        addDecibels(78);
-        showDialogue("CLANG! The deodorant can rolls noisily across the tiles!", 2600);
-        triggerAwkwardness(25);
-      } else if (h.type === 'soap') {
-        AudioEngine.playTone(190, 0.3, 'sine', 0.3);
-        addDecibels(65);
-        showDialogue("WHOOSH! Slipped on the soap bar!", 2600);
-        triggerAwkwardness(20);
-      }
+    if (h.triggered || h.x !== gx || h.y !== gy) return;
+    h.triggered = true;
+    h.anim = 0.0001;
+    if (h.type === 'duck') {
+      AudioEngine.playDuckHonk();
+      addDecibels(85);
+      Game.stats.ducksStepped++;
+      showDialogue("SQUEEEEEAAAK! Stepped squarely on the rubber duck!", 2600);
+      triggerAwkwardness(30);
+    } else if (h.type === 'can') {
+      AudioEngine.playCanClank();
+      addDecibels(78);
+      showDialogue("CLANG! The deodorant can rolls noisily across the tiles!", 2600);
+      triggerAwkwardness(25);
+    } else if (h.type === 'soap') {
+      AudioEngine.playTone(190, 0.3, 'sine', 0.3);
+      addDecibels(65);
+      Game.shake = 0.12;
+      Game.player.pitch -= 0.25;
+      showDialogue("WHOOSH! Slipped on the soap bar!", 2600);
+      triggerAwkwardness(20);
     }
   });
 }
 
-// ---------- Hotspots & pathfinding ----------
-const HOTSPOTS = [
-  { x: 2, y: 2, open: () => interactWithToilet() },
-  { x: 2, y: 5, open: () => interactWithSink() },
-  { x: 2, y: 1, open: () => interactWithCabinet() },
-  { x: 1, y: 2, open: () => interactWithPaperHolder() }
-];
-const near = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by)) <= 1;
-
-function isWalkable(x, y) {
-  if (x < 0 || x >= Game.gridW || y < 0 || y >= Game.gridH) return false;
-  const t = Game.tiles[y][x].type;
-  if (t === 'door') return Game.tasks.bathroomUnlocked;
-  return t !== 'wall' && t !== 'bathtub' && t !== 'toilet' && t !== 'sink' && t !== 'table_chair';
+function updateHazards(dt) {
+  Game.hazards.forEach(h => {
+    if (!h.anim || h.anim >= 1) return;
+    h.anim = Math.min(1, h.anim + dt * 1.2);
+    const k = h.anim, e = 1 - Math.pow(1 - k, 3);
+    if (h.type === 'duck') {
+      const s = 1.1 * (1 - 0.5 * Math.sin(k * Math.PI) * (1 - k));
+      h.mesh.scale.set(1.1, Math.max(0.5, s), 1.1);
+      h.mesh.position.x = h.base.x + e * 0.35;
+    } else if (h.type === 'can') {
+      h.mesh.position.z = h.base.z + e * 0.9;
+      h.mesh.position.x = h.base.x - e * 0.3;
+      h.mesh.children[0].rotation.x = e * 18;
+    } else {
+      h.mesh.position.x = h.base.x + e * 0.7;
+      h.mesh.rotation.y = h.base.ry + e * 4;
+    }
+  });
 }
 
-// BFS from the player; goal(x, y) decides arrival. Final tile may be non-walkable
-// (door, chair) when allowGoalTile is set, so the last step triggers its interaction.
-function findPath(goal, allowGoalTile) {
-  const p = Game.player, W = Game.gridW;
-  const key = (x, y) => y * W + x;
-  const hazardAt = (x, y) => Game.hazards.some(h => !h.triggered && h.x === x && h.y === y);
-  for (const avoidHazards of [true, false]) {
-    const prev = new Map([[key(p.x, p.y), null]]);
-    const queue = [[p.x, p.y]];
-    while (queue.length) {
-      const [cx, cy] = queue.shift();
-      if (goal(cx, cy) && (cx !== p.x || cy !== p.y)) {
-        const path = [];
-        let k = key(cx, cy);
-        while (prev.get(k) !== null) { path.unshift({ x: k % W, y: Math.floor(k / W) }); k = prev.get(k); }
-        return path;
-      }
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = cx + dx, ny = cy + dy, nk = key(nx, ny);
-        if (prev.has(nk) || nx < 0 || ny < 0 || nx >= W || ny >= Game.gridH) continue;
-        const isGoal = allowGoalTile && goal(nx, ny) && Game.tiles[ny][nx].type !== 'wall';
-        if (!isGoal && (!isWalkable(nx, ny) || (avoidHazards && hazardAt(nx, ny)))) continue;
-        prev.set(nk, key(cx, cy));
-        if (isGoal) { queue.unshift([nx, ny]); break; }
-        queue.push([nx, ny]);
-      }
+
+// ==========================================
+// 9. FIRST-PERSON MOVEMENT & COLLISION
+// ==========================================
+const keys = {};
+const touchMove = { x: 0, y: 0 };
+function clearMoveInput() {
+  for (const k in keys) keys[k] = false;
+  touchMove.x = touchMove.y = 0;
+}
+
+function blockedAt(x, z) {
+  const minX = Math.floor((x - PLAYER_R) / T), maxX = Math.floor((x + PLAYER_R) / T);
+  const minZ = Math.floor((z - PLAYER_R) / T), maxZ = Math.floor((z + PLAYER_R) / T);
+  for (let gy = minZ; gy <= maxZ; gy++) {
+    for (let gx = minX; gx <= maxX; gx++) {
+      if (isWalkable(gx, gy)) continue;
+      // circle vs tile AABB
+      const cx = Math.max(gx * T, Math.min(x, (gx + 1) * T));
+      const cz = Math.max(gy * T, Math.min(z, (gy + 1) * T));
+      if ((x - cx) ** 2 + (z - cz) ** 2 < PLAYER_R * PLAYER_R) return true;
     }
   }
-  return null;
-}
-
-function handleTileTap(gx, gy) {
-  const p = Game.player;
-  p.pendingInteract = null;
-  // Tap yourself = freeze
-  if (gx === p.x && gy === p.y) { p.path = []; return; }
-  const spot = HOTSPOTS.find(h => h.x === gx && h.y === gy);
-  if (spot) {
-    if (near(p.x, p.y, gx, gy) && !p.moving) { p.path = []; spot.open(); return; }
-    const path = findPath((x, y) => near(x, y, gx, gy) && isWalkable(x, y), false);
-    if (path) { p.path = path; p.pendingInteract = spot.open; }
-    return;
-  }
-  if (gx < 0 || gy < 0 || gx >= Game.gridW || gy >= Game.gridH) return;
-  const path = findPath((x, y) => x === gx && y === gy, true);
-  if (path) p.path = path;
-  else showDialogue("Can't get there from here.");
-}
-
-function interactNearby() {
-  const p = Game.player;
-  const spot = HOTSPOTS.find(h => near(p.x, p.y, h.x, h.y));
-  if (spot) spot.open();
+  return false;
 }
 
 function updatePlayer(dt) {
   const p = Game.player;
-  p.speed = Game.isSneaking ? 2.4 : 4.5;
-  if (p.moving) {
-    const dx = p.targetTileX - p.visualX, dy = p.targetTileY - p.visualY;
-    const dist = Math.hypot(dx, dy), stepLen = p.speed * dt;
-    if (dist <= stepLen) {
-      p.visualX = p.x = p.targetTileX;
-      p.visualY = p.y = p.targetTileY;
-      p.moving = false;
-    } else {
-      p.visualX += dx / dist * stepLen;
-      p.visualY += dy / dist * stepLen;
-    }
+  let f = 0, r = 0;
+  if (Game.state === 'PLAYING' && !isPaused()) {
+    if (keys.KeyW || keys.ArrowUp) f += 1;
+    if (keys.KeyS || keys.ArrowDown) f -= 1;
+    if (keys.KeyD || keys.ArrowRight) r += 1;
+    if (keys.KeyA || keys.ArrowLeft) r -= 1;
+    f += -touchMove.y; r += touchMove.x;
   }
-  if (!p.moving && Game.state === 'PLAYING') {
-    if (p.path.length) {
-      const n = p.path.shift();
-      tryMovePlayer(n.x, n.y);
-      if (!p.moving) p.path = []; // blocked or interaction opened
-    } else if (p.pendingInteract) {
-      const f = p.pendingInteract; p.pendingInteract = null; f();
+  const len = Math.hypot(f, r);
+  if (len > 1) { f /= len; r /= len; }
+
+  const speed = Game.isSneaking ? SPEED_SNEAK : SPEED_WALK;
+  const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
+  const dx = (-sin * f + cos * r) * speed * dt;
+  const dz = (-cos * f - sin * r) * speed * dt;
+
+  const ox = p.x, oz = p.z;
+  // Sub-steps so we stop flush against walls even on slow frames
+  const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.04));
+  for (let i = 0; i < n; i++) {
+    if (dx && !blockedAt(p.x + dx / n, p.z)) p.x += dx / n;
+    if (dz && !blockedAt(p.x, p.z + dz / n)) p.z += dz / n;
+  }
+  const moved = Math.hypot(p.x - ox, p.z - oz);
+  p.moving = moved / Math.max(dt, 1e-4) > 0.25;
+
+  // Tile change: hazards
+  const gx = Math.floor(p.x / T), gy = Math.floor(p.z / T);
+  if (gx !== p.gx || gy !== p.gy) {
+    p.gx = gx; p.gy = gy;
+    onEnterTile(gx, gy);
+  }
+
+  // One footstep per tile length travelled
+  p.stepAccum += moved;
+  if (p.stepAccum >= T) {
+    p.stepAccum -= T;
+    onFootstep();
+  }
+
+  // Camera: eye height, head bob, shake
+  p.eye += ((Game.isSneaking ? EYE_SNEAK : EYE_WALK) - p.eye) * Math.min(1, dt * 8);
+  if (p.moving) p.bob += moved * (Game.isSneaking ? 7 : 9);
+  const bobY = p.moving ? Math.sin(p.bob) * (Game.isSneaking ? 0.012 : 0.03) : 0;
+  Game.shake = Math.max(0, Game.shake - dt * 0.25);
+  const sx = (Math.random() - 0.5) * Game.shake, sy = (Math.random() - 0.5) * Game.shake;
+  camera.position.set(p.x + sx, p.eye + bobY + sy, p.z);
+  p.pitch = Math.max(-1.45, Math.min(1.45, p.pitch));
+  camera.rotation.set(p.pitch, p.yaw, 0);
+}
+
+// ---------- Look-at target / interaction ----------
+let currentTarget = null;
+const rayList = [];
+function findInteractTarget() {
+  camera.updateMatrixWorld();
+  raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+  raycaster.far = REACH;
+  if (!rayList.length) rayList.push(...interactables, ...occluders);
+  const hits = raycaster.intersectObjects(rayList, true);
+  for (const hit of hits) {
+    let o = hit.object;
+    while (o && !o.userData.interact) {
+      if (occluders.includes(o)) return null;
+      o = o.parent;
     }
+    if (!o) continue;
+    const label = typeof o.userData.interact.label === 'function' ? o.userData.interact.label() : o.userData.interact.label;
+    return label ? { obj: o, label, fn: o.userData.interact.fn } : null;
+  }
+  return null;
+}
+
+function updateTargetUI() {
+  currentTarget = (Game.state === 'PLAYING' && !isPaused()) ? findInteractTarget() : null;
+  UI.crosshair.classList.toggle('target', !!currentTarget);
+  if (currentTarget) {
+    UI.prompt.innerHTML = `${IS_TOUCH ? '✋' : '<kbd>E</kbd>'}${currentTarget.label}`;
+    UI.prompt.style.display = 'block';
+  } else {
+    UI.prompt.style.display = 'none';
   }
 }
 
-function testFloorboard(x, y) {
-  if (x < 0 || x >= Game.gridW || y < 0 || y >= Game.gridH) return;
-  const tile = Game.tiles[y][x];
-  if (tile.type === 'wood') {
-    if (!near(Game.player.x, Game.player.y, x, y)) {
-      showDialogue("Too far away. Stand next to a board to test it with your toe.");
-      return;
-    }
-    tile.tested = true;
-    AudioEngine.playTone(200 + tile.squeakFactor * 300, 0.08, 'triangle', 0.04);
-    addDecibels(6);
-    showDialogue(`Board tested: ${tile.squeakFactor > 0.6 ? '⚠️ VERY SQUEAKY!' : 'Relatively stable.'}`);
-  }
+function interactTarget() {
+  if (Game.state !== 'PLAYING') return;
+  const t = findInteractTarget();
+  if (t) t.fn();
 }
 
 
 // ==========================================
-// 9. RENDER LOOP (CANVAS GRAPHICS)
+// 10. VISUAL SYNC (tasks, Walter, cone)
 // ==========================================
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+let clock = 0;
+function updateVisuals(dt) {
+  clock += dt;
+  World.towelWrap.visible = Game.tasks.pipeSilenced;
+  World.sinkTowel.visible = !Game.looted.SPONGE;
+  World.tissueBox.visible = Game.tasks.paperSolved;
 
-  Game.tileSize = Math.floor(Math.min(canvas.width / (Game.gridW + 1), canvas.height / (Game.gridH + 1.5)));
-  if (Game.tileSize < 38) Game.tileSize = 38;
-  if (Game.tileSize > 74) Game.tileSize = 74;
+  // Door swing
+  const doorTarget = Game.tasks.bathroomUnlocked ? 1 : 0;
+  World.doorOpen += (doorTarget - World.doorOpen) * Math.min(1, dt * 2.5);
+  World.door.rotation.y = -World.doorOpen * Math.PI * 0.5;
 
-  Game.originX = Math.floor((canvas.width - Game.gridW * Game.tileSize) / 2);
-  Game.originY = Math.floor((canvas.height - Game.gridH * Game.tileSize) / 2 + 20);
-}
-window.addEventListener('resize', resizeCanvas);
-
-function drawGame() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Background ambiance
-  ctx.fillStyle = '#070a13';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Render Tiles
-  for (let y = 0; y < Game.gridH; y++) {
-    for (let x = 0; x < Game.gridW; x++) {
-      const tile = Game.tiles[y][x];
-      const px = Game.originX + x * Game.tileSize;
-      const py = Game.originY + y * Game.tileSize;
-      const ts = Game.tileSize;
-
-      // Base tile colors
-      if (tile.type === 'wall') {
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.strokeStyle = '#0f172a';
-        ctx.strokeRect(px, py, ts, ts);
-      } else if (tile.type === 'tile') {
-        // Ceramic Bathroom Checker
-        ctx.fillStyle = (x + y) % 2 === 0 ? '#334155' : '#273549';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-        ctx.strokeRect(px, py, ts, ts);
-      } else if (tile.type === 'rug') {
-        ctx.fillStyle = '#0d9488';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.strokeStyle = '#14b8a6';
-        ctx.strokeRect(px + 2, py + 2, ts - 4, ts - 4);
-      } else if (tile.type === 'wood') {
-        // Wooden floorboards in hallway
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(px, py, ts, ts);
-
-        // Plank lines
-        ctx.strokeStyle = '#451a03';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(px, py + ts * 0.33); ctx.lineTo(px + ts, py + ts * 0.33);
-        ctx.moveTo(px, py + ts * 0.66); ctx.lineTo(px + ts, py + ts * 0.66);
-        ctx.stroke();
-
-        // Tested squeak warning indicator
-        if (tile.tested) {
-          ctx.fillStyle = tile.squeakFactor > 0.6 ? 'rgba(239, 68, 68, 0.45)' : 'rgba(34, 197, 94, 0.35)';
-          ctx.fillRect(px + 4, py + 4, ts - 8, ts - 8);
-          ctx.fillStyle = '#fff';
-          ctx.font = `${Math.floor(ts * 0.28)}px sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.fillText(tile.squeakFactor > 0.6 ? '⚠️' : '✓', px + ts / 2, py + ts * 0.65);
-        }
-      } else if (tile.type === 'carpet') {
-        ctx.fillStyle = '#831843'; // Dining room red carpet
-        ctx.fillRect(px, py, ts, ts);
-      } else if (tile.type === 'door') {
-        ctx.fillStyle = Game.tasks.bathroomUnlocked ? '#10b981' : '#b45309';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = '#fff';
-        ctx.font = `${Math.floor(ts * 0.4)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText(Game.tasks.bathroomUnlocked ? '🔓' : '🚪', px + ts / 2, py + ts * 0.68);
-      } else if (tile.type === 'toilet') {
-        ctx.fillStyle = '#273549';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.font = `${Math.floor(ts * 0.6)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('🚽', px + ts / 2, py + ts * 0.75);
-      } else if (tile.type === 'sink') {
-        ctx.fillStyle = '#273549';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.font = `${Math.floor(ts * 0.55)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('🚰', px + ts / 2, py + ts * 0.72);
-      } else if (tile.type === 'bathtub') {
-        ctx.fillStyle = '#1e3a8a';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.font = `${Math.floor(ts * 0.5)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('🛁', px + ts / 2, py + ts * 0.7);
-      } else if (tile.type === 'table_chair') {
-        ctx.fillStyle = '#831843';
-        ctx.fillRect(px, py, ts, ts);
-        ctx.font = `${Math.floor(ts * 0.55)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('🪑', px + ts / 2, py + ts * 0.72);
-      }
-    }
+  // Walter: eats, puts the fork down, then stares down the hallway
+  const il = Game.inlaws, w = World.walter;
+  let pitch = 0.45 + Math.sin(clock * 6) * 0.04, yaw = 0, arm = -0.4 + Math.max(0, Math.sin(clock * 2.4)) * 0.7;
+  if (Game.phase === 'HALLWAY' && il.warning) { pitch = 0.15; arm = -0.6; }
+  if (Game.phase === 'HALLWAY' && il.lookingAtHallway) {
+    pitch = -0.05; arm = -0.6;
+    // Track the player with his head
+    const toP = Math.atan2(Game.player.z - w.group.position.z, -(Game.player.x - w.group.position.x));
+    yaw = Math.max(-0.7, Math.min(0.7, toP));
   }
+  const h = w.head;
+  h.rotation.z += (-pitch - h.rotation.z) * Math.min(1, dt * 8);
+  h.rotation.y += (yaw - h.rotation.y) * Math.min(1, dt * 6);
+  w.armR.rotation.z += (arm - w.armR.rotation.z) * Math.min(1, dt * 8);
+  // Gertrud chats away
+  World.gertrud.head.rotation.z = -0.15 + Math.sin(clock * 3.1) * 0.06;
+  World.gertrud.head.rotation.y = Math.sin(clock * 0.9) * 0.3;
+  World.gertrud.armR.rotation.z = -0.3 + Math.sin(clock * 2) * 0.3;
 
-  // Draw Cabinet Hotspot in Bathroom (x: 2, y: 1)
-  const cabPx = Game.originX + 2 * Game.tileSize;
-  const cabPy = Game.originY + 1 * Game.tileSize;
-  ctx.fillStyle = '#3b82f6';
-  ctx.font = `${Math.floor(Game.tileSize * 0.5)}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText('🪞', cabPx + Game.tileSize / 2, cabPy + Game.tileSize * 0.7);
-
-  // Draw Paper Holder Hotspot (x: 1, y: 2)
-  const papPx = Game.originX + 1 * Game.tileSize;
-  const papPy = Game.originY + 2 * Game.tileSize;
-  ctx.font = `${Math.floor(Game.tileSize * 0.5)}px sans-serif`;
-  ctx.fillText(Game.tasks.paperSolved ? '🧻' : '🗞️', papPx + Game.tileSize / 2, papPy + Game.tileSize * 0.7);
-
-  // Draw Hazards
-  Game.hazards.forEach(h => {
-    if (!h.triggered) {
-      const hx = Game.originX + h.x * Game.tileSize + Game.tileSize / 2;
-      const hy = Game.originY + h.y * Game.tileSize + Game.tileSize * 0.7;
-      ctx.font = `${Math.floor(Game.tileSize * 0.45)}px sans-serif`;
-      ctx.textAlign = 'center';
-      if (h.type === 'duck') ctx.fillText('🦆', hx, hy);
-      else if (h.type === 'can') ctx.fillText('🥫', hx, hy);
-      else if (h.type === 'soap') ctx.fillText('🧼', hx, hy);
-    }
-  });
-
-  // Draw In-Laws at the Dining Table (x: 14, y: 4)
-  const tablePx = Game.originX + 13.5 * Game.tileSize;
-  const tablePy = Game.originY + 3.5 * Game.tileSize;
-  ctx.fillStyle = '#92400e';
-  ctx.fillRect(tablePx, tablePy, Game.tileSize * 2, Game.tileSize * 1.5);
-  ctx.font = `${Math.floor(Game.tileSize * 0.55)}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText('🍗 🍷', tablePx + Game.tileSize, tablePy + Game.tileSize * 0.85);
-
-  // Walter & Gertrud Avatars
-  const il = Game.inlaws;
-  ctx.fillText(il.lookingAtHallway ? '👀' : (il.warning ? '🤨' : '👴'), tablePx + Game.tileSize * 0.5, tablePy + Game.tileSize * 0.2);
-  ctx.fillText('👵', tablePx + Game.tileSize * 1.5, tablePy + Game.tileSize * 0.2);
-
-  // Walter Vision Cone (same geometry as playerInVision); faint outline while he is about to look
-  if ((il.lookingAtHallway || il.warning) && Game.phase === 'HALLWAY') {
-    const eyeX = Game.originX + il.eyeX * Game.tileSize;
-    const eyeY = Game.originY + il.eyeY * Game.tileSize;
-    const seen = il.lookingAtHallway && playerInVision();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(eyeX, eyeY);
-    ctx.arc(eyeX, eyeY, Game.tileSize * il.visionRange, Math.PI - il.visionCone, Math.PI + il.visionCone);
-    ctx.closePath();
-    if (il.lookingAtHallway) {
-      ctx.fillStyle = seen ? 'rgba(239, 68, 68, 0.28)' : 'rgba(239, 68, 68, 0.16)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
-    } else {
-      ctx.setLineDash([6, 6]);
-      ctx.strokeStyle = `rgba(251, 191, 36, ${0.4 + 0.4 * Math.abs(Math.sin(Date.now() * 0.012))})`;
-    }
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
+  // Vision cone & screen vignette
+  let coneOpacity = 0, vig = 0, warnVig = false;
+  if (Game.phase === 'HALLWAY' && Game.state === 'PLAYING') {
+    if (il.warning) { coneOpacity = 0.12 + Math.sin(clock * 20) * 0.05; World.cone.material.color.setHex(0xeab308); vig = 0.35; warnVig = true; }
+    else if (il.lookingAtHallway) { coneOpacity = 0.22; World.cone.material.color.setHex(0xef4444); vig = playerInVision() ? 0.75 : 0.3; }
   }
+  World.cone.material.opacity += (coneOpacity - World.cone.material.opacity) * Math.min(1, dt * 10);
+  UI.vignette.style.opacity = vig;
+  UI.vignette.classList.toggle('warn', warnVig);
 
-  // Draw Sound Ripples
-  for (let i = Game.ripples.length - 1; i >= 0; i--) {
-    const r = Game.ripples[i];
-    ctx.save();
-    ctx.strokeStyle = r.color;
-    ctx.lineWidth = 2.5;
-    ctx.globalAlpha = r.alpha;
-    ctx.beginPath();
-    ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-
-    r.radius += 2.2;
-    r.alpha -= 0.025;
-    if (r.alpha <= 0) {
-      Game.ripples.splice(i, 1);
-    }
-  }
-
-  const p = Game.player;
-
-  // Planned route
-  if (p.path.length) {
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
-    p.path.forEach(n => {
-      ctx.beginPath();
-      ctx.arc(Game.originX + (n.x + 0.5) * Game.tileSize, Game.originY + (n.y + 0.5) * Game.tileSize, Game.tileSize * 0.08, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
-
-  // Render Player Character
-  const playerScreenX = Game.originX + (p.visualX + 0.5) * Game.tileSize;
-  const playerScreenY = Game.originY + (p.visualY + 0.5) * Game.tileSize;
-
-  ctx.save();
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath();
-  ctx.ellipse(playerScreenX, playerScreenY + Game.tileSize * 0.32, Game.tileSize * 0.28, Game.tileSize * 0.14, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Character Body (Ninja Guest in socks)
-  ctx.font = `${Math.floor(Game.tileSize * 0.65)}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(Game.isSneaking ? '🥷' : '🧍', playerScreenX, playerScreenY);
-
-  // Sneak aura / sweat bubble if close to caught
-  if (Game.suspicion > 60) {
-    ctx.font = `${Math.floor(Game.tileSize * 0.35)}px sans-serif`;
-    ctx.fillText('💦', playerScreenX + Game.tileSize * 0.3, playerScreenY - Game.tileSize * 0.35);
-  }
-  ctx.restore();
+  // Seat glow & candle flicker
+  World.seatGlow.material.opacity = Game.tasks.bathroomUnlocked ? 0.45 + Math.sin(clock * 4) * 0.25 : 0;
+  World.candle.intensity = 0.32 + Math.random() * 0.08;
 }
 
+
+// ==========================================
+// 11. GAME FLOW
+// ==========================================
 function triggerGameOver(reason) {
   Game.state = 'GAME_OVER';
+  clearMoveInput();
+  unlockPointer();
   UI.endTitle.textContent = "💥 Caught!";
   UI.endDesc.textContent = reason;
   UI.endStats.innerHTML = `
@@ -1890,6 +2391,8 @@ function triggerGameOver(reason) {
 function triggerVictory() {
   Game.state = 'VICTORY';
   Game.tasks.satAtTable = true;
+  clearMoveInput();
+  unlockPointer();
   updateTaskBadges();
 
   const elapsedSec = Math.round((Date.now() - Game.stats.startTime) / 1000);
@@ -1923,7 +2426,7 @@ function restartGame() {
   Game.suspicion = 0;
   Game.targetDb = 24;
   Game.currentDb = 24;
-  Game.isSneaking = false;
+  Game.shake = 0;
   Game.inventory = [];
   Game.selectedItemIndex = -1;
 
@@ -1937,21 +2440,15 @@ function restartGame() {
     satAtTable: false
   };
 
-  Game.player.x = 4;
-  Game.player.y = 5;
-  Game.player.visualX = 4;
-  Game.player.visualY = 5;
-  Game.player.targetTileX = 4;
-  Game.player.targetTileY = 5;
-  Game.player.moving = false;
-  Game.player.path = [];
-  Game.player.pendingInteract = null;
-  Game.player.stepsTaken = 0;
+  Object.assign(Game.player, {
+    x: START.gx * T, z: START.gy * T, yaw: START.yaw, pitch: -0.12,
+    gx: Math.floor(START.gx), gy: Math.floor(START.gy),
+    moving: false, stepAccum: 0, stepsTaken: 0, squeaksTriggered: 0
+  });
   Object.assign(Game.inlaws, { lookingAtHallway: false, warning: false, seenNotified: false, lookTimer: 0, lookInterval: 6.0 });
   Game.looted = {};
-  Game.ripples = [];
+  clearRipples();
   setSneak(false);
-  Game.player.squeaksTriggered = 0;
 
   Game.stats.startTime = Date.now();
   Game.stats.ducksStepped = 0;
@@ -1959,97 +2456,164 @@ function restartGame() {
   Game.stats.peakDecibel = 24;
 
   Game.hazards.forEach(h => h.triggered = false);
+  resetHazardMeshes();
 
   initTilemap();
+  Object.values(World.boards).forEach(b => b.material.emissive.setHex(0x000000));
+  World.doorOpen = 0;
+
   renderInventory();
   updateTaskBadges();
-  showDialogue("You stand in the silent bathroom. Tread carefully!");
+  showDialogue("You stand in the silent bathroom. Hold Shift to sneak!");
+  lockPointer();
 }
 
 
 // ==========================================
-// 10. INPUT & CONTROLS BINDINGS
+// 12. INPUT: POINTER LOCK, KEYS, TOUCH
 // ==========================================
+function isLocked() { return document.pointerLockElement === canvas; }
+function isPaused() { return !Game.started || (!IS_TOUCH && !isLocked()); }
+
+function lockPointer() {
+  if (IS_TOUCH) return;
+  try {
+    const r = canvas.requestPointerLock();
+    if (r && r.catch) r.catch(() => refreshOverlay());
+  } catch (e) {}
+}
+function unlockPointer() {
+  if (isLocked()) document.exitPointerLock();
+}
+
+function refreshOverlay() {
+  const show = Game.state === 'PLAYING' && isPaused();
+  UI.startOverlay.classList.toggle('hidden', !show);
+  if (show && Game.started) UI.startCta.textContent = IS_TOUCH ? 'Tap to continue' : 'Click to continue';
+}
+document.addEventListener('pointerlockchange', () => {
+  if (!isLocked()) clearMoveInput();
+  refreshOverlay();
+});
+document.addEventListener('pointerlockerror', refreshOverlay);
+
+UI.startOverlay.addEventListener('click', () => {
+  AudioEngine.init();
+  if (!Game.started) {
+    Game.started = true;
+    Game.stats.startTime = Date.now();
+    showDialogue("You stand in the silent bathroom. Walking on tiles is LOUD: hold Shift to sneak!", 4500);
+  }
+  if (IS_TOUCH) refreshOverlay();
+  else lockPointer();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isLocked() || Game.state !== 'PLAYING') return;
+  const p = Game.player;
+  p.yaw -= e.movementX * 0.0022;
+  p.pitch -= e.movementY * 0.0022;
+});
+
+canvas.addEventListener('mousedown', (e) => {
+  if (IS_TOUCH) return;
+  if (!isLocked()) { lockPointer(); return; }
+  if (e.button === 0) interactTarget();
+  else if (e.button === 2) testFloorboard();
+});
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
 function setSneak(on) {
   Game.isSneaking = on;
   UI.btnSneak.classList.toggle('active', on);
-  UI.sneakStatus.textContent = on ? "🤫 Sneak: ACTIVE (slow)" : "Walking";
+  UI.sneakStatus.textContent = on ? "🤫 Sneaking" : "Walking";
   UI.sneakStatus.classList.toggle('active', on);
 }
 
+function useSlot(idx) {
+  if (idx >= Game.inventory.length) return;
+  Game.selectedItemIndex = idx;
+  renderInventory();
+  const item = Game.inventory[idx];
+  if (item.id === ITEMS.SPRAY.id) {
+    sprayDeodorant();
+  } else {
+    showDialogue(`${item.name} selected: ${item.desc}`);
+  }
+}
+
+const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 window.addEventListener('keydown', (e) => {
   AudioEngine.init();
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') setSneak(true);
 
-  if (e.key === 'Shift') setSneak(true);
-
-  if (e.key === 'Escape' && Game.state === 'INSPECT') { closeModal(); return; }
+  if (Game.state === 'INSPECT') {
+    if (e.repeat) return;
+    if (e.code === 'Escape' || e.code === 'KeyE') { e.preventDefault(); closeModal(); }
+    const n = parseInt(e.key, 10);
+    if (n >= 1 && n <= 9) chooseModalOption(n - 1);
+    return;
+  }
   if (Game.state !== 'PLAYING') return;
 
-  let dx = 0;
-  let dy = 0;
-  const k = e.key.toLowerCase();
-  if (k === 'arrowup' || k === 'w') dy = -1;
-  else if (k === 'arrowdown' || k === 's') dy = 1;
-  else if (k === 'arrowleft' || k === 'a') dx = -1;
-  else if (k === 'arrowright' || k === 'd') dx = 1;
-
-  if (dx !== 0 || dy !== 0) {
-    e.preventDefault();
-    // One buffered step from where the player is heading
-    const p = Game.player;
-    p.pendingInteract = null;
-    p.path = [{ x: p.targetTileX + dx, y: p.targetTileY + dy }];
-  } else if (k === ' ') {
-    e.preventDefault();
-    Game.player.path = []; Game.player.pendingInteract = null; // freeze
-  } else if (k === 'e' && !Game.player.moving) {
-    interactNearby();
-  } else if (k === 'f') {
-    // Test the board in front of you (facing = last step direction)
-    const p = Game.player, f = p.facing;
-    testFloorboard(p.x + f.dx, p.y + f.dy);
-  }
+  if (MOVE_KEYS.includes(e.code)) { keys[e.code] = true; e.preventDefault(); }
+  if (isPaused()) return;
+  if (e.repeat) return;
+  if (e.code === 'KeyE') interactTarget();
+  else if (e.code === 'KeyF') testFloorboard();
+  else if (e.code === 'KeyC') setSneak(!Game.isSneaking);
+  else if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') useSlot(parseInt(e.code.slice(5), 10) - 1);
 });
 
 window.addEventListener('keyup', (e) => {
-  if (e.key === 'Shift') setSneak(false);
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') setSneak(false);
+  keys[e.code] = false;
 });
-window.addEventListener('blur', () => { if (Game.isSneaking) setSneak(false); });
+window.addEventListener('blur', () => { clearMoveInput(); if (Game.isSneaking) setSneak(false); });
 
-// Canvas Click / Tap Navigation & Interaction
+// ---- Touch: left half = joystick, right half = look ----
+const touch = { joyId: null, joyX: 0, joyY: 0, lookId: null, lookX: 0, lookY: 0 };
 canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
   AudioEngine.init();
   if (Game.state !== 'PLAYING') return;
-
-  const rect = canvas.getBoundingClientRect();
-  const clickX = e.clientX - rect.left;
-  const clickY = e.clientY - rect.top;
-
-  const gridX = Math.floor((clickX - Game.originX) / Game.tileSize);
-  const gridY = Math.floor((clickY - Game.originY) / Game.tileSize);
-
-  // Right-click, or tap in test mode: test floorboard tension
-  if (e.button === 2 || testMode) {
-    testFloorboard(gridX, gridY);
-    return;
+  if (e.clientX < window.innerWidth * 0.45 && touch.joyId === null) {
+    touch.joyId = e.pointerId; touch.joyX = e.clientX; touch.joyY = e.clientY;
+    UI.joyBase.style.left = e.clientX + 'px';
+    UI.joyBase.style.top = e.clientY + 'px';
+    UI.joyBase.style.display = 'block';
+    UI.joyKnob.style.transform = 'translate(0,0)';
+  } else if (touch.lookId === null) {
+    touch.lookId = e.pointerId; touch.lookX = e.clientX; touch.lookY = e.clientY;
   }
-
-  // Walk there (pathfinding) or walk to the hotspot and use it
-  handleTileTap(gridX, gridY);
 });
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch') return;
+  if (e.pointerId === touch.joyId) {
+    let dx = e.clientX - touch.joyX, dy = e.clientY - touch.joyY;
+    const d = Math.hypot(dx, dy), max = 50;
+    if (d > max) { dx = dx / d * max; dy = dy / d * max; }
+    UI.joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+    touchMove.x = dx / max; touchMove.y = dy / max;
+  } else if (e.pointerId === touch.lookId && Game.state === 'PLAYING') {
+    Game.player.yaw -= (e.clientX - touch.lookX) * 0.005;
+    Game.player.pitch -= (e.clientY - touch.lookY) * 0.005;
+    touch.lookX = e.clientX; touch.lookY = e.clientY;
+  }
+});
+function endTouch(e) {
+  if (e.pointerId === touch.joyId) {
+    touch.joyId = null; touchMove.x = touchMove.y = 0;
+    UI.joyBase.style.display = 'none';
+  }
+  if (e.pointerId === touch.lookId) touch.lookId = null;
+}
+canvas.addEventListener('pointerup', endTouch);
+canvas.addEventListener('pointercancel', endTouch);
 
-// Test-board toggle for touch screens
-let testMode = false;
-const btnTest = document.createElement('button');
-btnTest.className = 'btn-hud';
-btnTest.title = 'Test a neighbouring floorboard (right-click / F also work)';
-btnTest.innerHTML = '<span>🪵 Test</span>';
-btnTest.onclick = () => { testMode = !testMode; btnTest.classList.toggle('active', testMode); showDialogue(testMode ? "Tap a board next to you to test it." : "Test mode off."); };
-UI.btnSneak.after(btnTest);
-
-canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
-// UI Buttons
+// ---- HUD buttons ----
+UI.btnUse.onclick = () => { AudioEngine.init(); interactTarget(); };
+UI.btnTest.onclick = () => { AudioEngine.init(); if (Game.state === 'PLAYING') testFloorboard(); };
 UI.btnSneak.onclick = () => {
   AudioEngine.init();
   setSneak(!Game.isSneaking);
@@ -2059,11 +2623,7 @@ UI.btnMic.onclick = async () => {
   const active = await AudioEngine.toggleMic();
   UI.btnMic.classList.toggle('toggle-on', active);
   UI.btnMic.innerHTML = active ? '<span>🎤 Mic: ACTIVE</span>' : '<span>🎤 Mic: Off</span>';
-  if (active) {
-    showDialogue("Room microphone is live! Do not laugh or cough!");
-  } else {
-    showDialogue("Microphone disabled.");
-  }
+  showDialogue(active ? "Room microphone is live! Do not laugh or cough!" : "Microphone disabled.");
 };
 
 UI.btnSound.onclick = () => {
@@ -2072,6 +2632,7 @@ UI.btnSound.onclick = () => {
 };
 
 UI.btnHelp.onclick = () => {
+  if (Game.state !== 'PLAYING') return;
   openModal(
     '📖 Instructions: The Silent Bathroom',
     'Sunday dinner with the in-laws. Fix bathroom disasters and slip back to the table with zero shame!',
@@ -2079,19 +2640,21 @@ UI.btnHelp.onclick = () => {
       {
         title: 'Controls',
         icon: '⌨️',
-        desc: 'WASD / arrows or tap a tile to walk there. Tap objects to use them (E = use nearby). Shift / Sneak = slow but quiet. Space or tap yourself = stop.',
+        desc: IS_TOUCH
+          ? 'Left thumb: move. Right thumb: look. ✋ uses what the dot points at. 🤫 Sneak = slow but quiet.'
+          : 'WASD + mouse. E / click uses what the dot points at. Hold Shift (or C) to sneak. 1-3 use inventory items.',
         action: () => {}
       },
       {
         title: 'Sound Matrix',
         icon: '🪵',
-        desc: 'Hallway boards creak at different volumes. Test a neighbouring board first: right-click, F (in front of you) or the 🪵 Test button.',
+        desc: 'Every hallway board creaks differently — worn, darker boards are worse. Look at a board and press F (or 🪵 Test) to check it.',
         action: () => {}
       },
       {
         title: 'Avoid Eye Contact',
         icon: '👀',
-        desc: 'When Walter puts down his fork (🤨, dashed cone), stop! While he looks (red cone) don\'t move or make noise inside the cone. The hallway corners are outside it.',
+        desc: 'Walter faces the hallway. When he puts his fork down (yellow), stop! While he stares (red cone), don\'t move or make noise inside the cone. The corners are safe.',
         action: () => {}
       }
     ]
@@ -2101,25 +2664,19 @@ UI.btnHelp.onclick = () => {
 UI.modalCloseBtn.onclick = closeModal;
 UI.btnRestart.onclick = restartGame;
 
-// Inventory slot selection
 UI.slots.forEach((slot, idx) => {
-  slot.onclick = () => {
-    if (idx < Game.inventory.length) {
-      Game.selectedItemIndex = idx;
-      renderInventory();
-      const item = Game.inventory[idx];
-      if (item.id === ITEMS.SPRAY.id) {
-        sprayDeodorant();
-      } else {
-        showDialogue(`${item.name} selected: ${item.desc}`);
-      }
-    }
-  };
+  slot.onclick = () => useSlot(idx);
+});
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
 });
 
 
 // ==========================================
-// 11. MAIN GAME LOOP
+// 13. MAIN LOOP
 // ==========================================
 let lastTime = performance.now();
 
@@ -2128,22 +2685,34 @@ function gameLoop(now) {
   lastTime = now;
 
   updatePlayer(dt);
-  if (Game.state === 'PLAYING') {
+  if (Game.state === 'PLAYING' && !isPaused()) {
     updateDecibelSystem(dt);
     updateInlawsVision(dt);
     AudioEngine.updateMurmur(dt);
   }
+  updateHazards(dt);
+  updateRipples(dt);
+  updateVisuals(dt);
+  updateTargetUI();
 
-  drawGame();
+  renderer.render(scene, camera);
   requestAnimationFrame(gameLoop);
 }
 
 // Start
-resizeCanvas();
 initTilemap();
+buildWorld();
 renderInventory();
 updateTaskBadges();
-showDialogue("Welcome to the silent bathroom. Tread carefully!", 4000);
+if (IS_TOUCH) {
+  UI.startCta.textContent = 'Tap to play';
+  document.getElementById('controlsList').innerHTML =
+    '<li>Left thumb: move · Right thumb: look around</li>' +
+    '<li>🤫 Sneak button: slow but quiet — walking is LOUD</li>' +
+    '<li>✋ uses what the dot points at · 🪵 tests the board ahead</li>' +
+    '<li>Tap inventory items to use them</li>' +
+    '<li>When Walter looks up from his plate: freeze!</li>';
+}
 requestAnimationFrame(gameLoop);
 
 </script>
