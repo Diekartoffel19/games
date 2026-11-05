@@ -88,12 +88,11 @@ http://localhost:8000/
 ## 📁 Projektstruktur
 
 ```
-├── index.html            # Haupt-Arcade-Hub mit Tabs (Games, Tools, School), Suche & Sprachumschaltung
+├── index.html            # Haupt-Arcade-Hub mit Tabs (Spiele, Tools, Schule) & Suche
 ├── style.css             # Zentrales Stylesheet für Hub, Navigation & Responsive Grid
 ├── ideas.md              # Backlog & Notizen für neue Spiel-Ideen
 ├── src/
 │   ├── arcade-core.js    # Globaler Sound-Synthesizer, Highscore-Storage & Pop-Effekte
-│   ├── hub-en.js         # Englische Übersetzungen & Metadaten für den Hub
 │   └── favicon.ico       # Arcade-Favicon
 ├── games/                # Alle eigenständigen HTML5-Spiele (Englisch / Standard)
 ├── filetoaudio/          # Akustisches Datenmodem (Web Audio FSK / Reed-Solomon)
