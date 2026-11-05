@@ -455,7 +455,7 @@
   <div class="bottom-bar">
     <div id="taskPaper" class="task-badge">🧻 1. Fix paper shortage</div>
     <div id="taskPipe" class="task-badge">🔧 2. Muffle rattling pipes</div>
-    <div id="taskValve" class="task-badge">🧵 3. Restrain float valve</div>
+    <div id="taskValve" class="task-badge">🧵 3. Tie valve &amp; flush quietly</div>
     <div id="taskSpray" class="task-badge">🌸 4. Neutralize odor</div>
     <div id="taskEscape" class="task-badge">🚪 5. Escape to dining table</div>
 
@@ -856,8 +856,10 @@ const Game = {
     targetTileX: 4,
     targetTileY: 5,
     moving: false,
+    path: [],
+    pendingInteract: null,
     speed: 4.5,
-    facing: 'down',
+    facing: { dx: 0, dy: 1 },
     stepsTaken: 0,
     squeaksTriggered: 0
   },
@@ -888,12 +890,18 @@ const Game = {
     tableX: 13.5,
     tableY: 4.5,
     lookingAtHallway: false,
+    warning: false,
+    seenNotified: false,
     lookTimer: 0,
     lookInterval: 6.0,
     lookDuration: 2.8,
-    visionAngle: Math.PI,
-    visionCone: 0.85
+    warnDuration: 1.3,
+    eyeX: 14,
+    eyeY: 3.7,
+    visionRange: 6.5,
+    visionCone: 0.45
   },
+  looted: {},
 
   // Chaos hazards
   hazards: [
@@ -1018,7 +1026,14 @@ function openModal(title, desc, options) {
 
 function closeModal() {
   UI.modalOverlay.classList.remove('active');
-  Game.state = 'PLAYING';
+  // An option may have ended the game; don't resurrect it
+  if (Game.state === 'INSPECT') Game.state = 'PLAYING';
+}
+
+// Takes an item once per run (no infinite floss)
+function lootOnce(item, msg) {
+  if (Game.looted[item.id]) { showDialogue(`Already taken the ${item.name.toLowerCase()}.`); return; }
+  if (addItemToInventory(item)) { Game.looted[item.id] = true; showDialogue(msg); }
 }
 
 function addItemToInventory(item) {
@@ -1064,7 +1079,7 @@ function renderInventory() {
 function updateTaskBadges() {
   UI.tasks.paper.classList.toggle('done', Game.tasks.paperSolved);
   UI.tasks.pipe.classList.toggle('done', Game.tasks.pipeSilenced);
-  UI.tasks.valve.classList.toggle('done', Game.tasks.valveTied);
+  UI.tasks.valve.classList.toggle('done', Game.tasks.valveTied && Game.tasks.flushedSilently);
   UI.tasks.spray.classList.toggle('done', Game.tasks.odorNeutralized);
   UI.tasks.escape.classList.toggle('done', Game.tasks.satAtTable);
 }
@@ -1152,6 +1167,7 @@ function interactWithToilet() {
           Game.tasks.flushedSilently = true;
           addDecibels(12);
           showDialogue("Psssssssssh... Whisper quiet like a gentle summer breeze.");
+          updateTaskBadges();
         }
       }]
     );
@@ -1167,31 +1183,19 @@ function interactWithCabinet() {
         title: 'Take dental floss',
         icon: '🧵',
         desc: 'Extra strong waxed floss (Extremely useful!)',
-        action: () => {
-          if (addItemToInventory(ITEMS.FLOSS)) {
-            showDialogue("Dental floss stashed. MacGyver would be proud!");
-          }
-        }
+        action: () => lootOnce(ITEMS.FLOSS, "Dental floss stashed. MacGyver would be proud!")
       },
       {
         title: 'Emergency tissues',
         icon: '🧻',
         desc: '3-ply chamomile scent. Savior in the paper crisis!',
-        action: () => {
-          if (addItemToInventory(ITEMS.TISSUES)) {
-            showDialogue("Kleenex found! You are saved.");
-          }
-        }
+        action: () => lootOnce(ITEMS.TISSUES, "Kleenex found! You are saved.")
       },
       {
         title: 'Pine Needle Air Freshener',
         icon: '🌲',
         desc: 'Heavy aluminum canister with high-pressure nozzle.',
-        action: () => {
-          if (addItemToInventory(ITEMS.SPRAY)) {
-            showDialogue("Air freshener carefully slipped into inventory.");
-          }
-        }
+        action: () => lootOnce(ITEMS.SPRAY, "Air freshener slipped into inventory. Tap it in your inventory to spray.")
       }
     ]
   );
@@ -1249,11 +1253,7 @@ function interactWithSink() {
       title: 'Take old guest towel',
       icon: '🧽',
       desc: 'Hanging next to the sink. Perfect for dampening!',
-      action: () => {
-        if (addItemToInventory(ITEMS.SPONGE)) {
-          showDialogue("Guest towel stashed.");
-        }
-      }
+      action: () => lootOnce(ITEMS.SPONGE, "Guest towel stashed.")
     },
     {
       title: 'Tighten faucet to millimeter precision',
@@ -1295,12 +1295,13 @@ function addDecibels(amount) {
   }
 }
 
-function triggerAwkwardness(amount, quote = "") {
+function triggerAwkwardness(amount, quote = "", silent = false) {
+  if (Game.state === 'GAME_OVER' || Game.state === 'VICTORY') return;
   Game.suspicion = Math.min(100, Game.suspicion + amount);
   if (quote) {
     showDialogue(quote, 3800);
   }
-  AudioEngine.playTone(180, 0.4, 'sawtooth', 0.25);
+  if (!silent) AudioEngine.playTone(180, 0.4, 'sawtooth', 0.25);
 
   if (Game.suspicion >= 100) {
     triggerGameOver("In-Law Disaster! Walter yanked open the door: 'What have you been doing in here for 40 minutes?!'");
@@ -1363,7 +1364,7 @@ function updateDecibelSystem(dt) {
   UI.suspicionFill.style.width = `${Game.suspicion}%`;
   UI.suspicionPercent.textContent = `${Math.round(Game.suspicion)}%`;
 
-  if (Game.suspicion >= 100) {
+  if (Game.suspicion >= 100 && Game.state === 'PLAYING') {
     triggerGameOver("Busted! The entire family gathered right outside the bathroom door.");
   }
 }
@@ -1378,26 +1379,46 @@ function updateInlawsVision(dt) {
   const il = Game.inlaws;
   il.lookTimer += dt;
 
-  if (!il.lookingAtHallway) {
+  if (!il.lookingAtHallway && !il.warning) {
     if (il.lookTimer >= il.lookInterval) {
+      // Telegraph first so the player has time to stop
       il.lookTimer = 0;
+      il.warning = true;
+      showDialogue("🍴 Walter puts down his fork... FREEZE! (Space / tap yourself to stop)", 2000);
+      AudioEngine.playTone(330, 0.15, 'triangle', 0.12);
+    }
+  } else if (il.warning) {
+    if (il.lookTimer >= il.warnDuration) {
+      il.lookTimer = 0;
+      il.warning = false;
       il.lookingAtHallway = true;
-      showDialogue("👁️ Walter glances down the hallway! FREEZE!", 2200);
+      il.seenNotified = false;
+      showDialogue("👁️ Walter glances down the hallway! Hide in a corner or stand still!", 2200);
       AudioEngine.playTone(280, 0.25, 'triangle', 0.15);
     }
   } else {
     if (il.lookTimer >= il.lookDuration) {
       il.lookTimer = 0;
       il.lookingAtHallway = false;
+      il.lookInterval = 4.5 + Math.random() * 3.5;
       showDialogue("Walter takes another bite of roast...", 1800);
-    } else {
-      // If player moves or makes noise > 42 dB while Walter is looking down hallway
-      if (Game.player.moving || Game.currentDb > 42) {
-        triggerAwkwardness(35 * dt, "Walter is staring directly at you!");
-        createRipple(Game.player.x, Game.player.y, 75);
-      }
+    } else if (playerInVision() && (Game.player.moving || Game.currentDb > 42)) {
+      // Seen moving or heard: suspicion rises, quote and buzzer only once per look
+      triggerAwkwardness(35 * dt, il.seenNotified ? "" : "Walter is staring directly at you!", il.seenNotified);
+      if (!il.seenNotified) { il.seenNotified = true; AudioEngine.playTone(180, 0.4, 'sawtooth', 0.25); }
+      if (Math.random() < dt * 4) createRipple(Game.player.visualX, Game.player.visualY, 75);
     }
   }
+}
+
+// Is the player inside Walter's vision cone (grid units)?
+function playerInVision() {
+  const il = Game.inlaws, p = Game.player;
+  const dx = p.visualX + 0.5 - il.eyeX, dy = p.visualY + 0.5 - il.eyeY;
+  if (Math.hypot(dx, dy) > il.visionRange) return false;
+  let a = Math.atan2(dy, dx) - Math.PI;
+  a = Math.atan2(Math.sin(a), Math.cos(a));
+  return Math.abs(a) < il.visionCone;
 }
 
 
@@ -1405,8 +1426,10 @@ function updateInlawsVision(dt) {
 // 8. PLAYER MOVEMENT & SOUND MATRIX TILES
 // ==========================================
 function tryMovePlayer(targetX, targetY) {
-  if (Game.state !== 'PLAYING') return;
+  if (Game.state !== 'PLAYING' || Game.player.moving) return;
   if (targetX < 0 || targetX >= Game.gridW || targetY < 0 || targetY >= Game.gridH) return;
+  // Only single steps to a neighbouring tile (no teleporting across walls)
+  if (Math.abs(targetX - Game.player.x) + Math.abs(targetY - Game.player.y) !== 1) return;
 
   const tile = Game.tiles[targetY][targetX];
 
@@ -1427,9 +1450,15 @@ function tryMovePlayer(targetX, targetY) {
 
   // Bathroom Door Check
   if (tile.type === 'door') {
-    const allDone = Game.tasks.paperSolved && Game.tasks.pipeSilenced && Game.tasks.valveTied;
-    if (!allDone) {
-      showDialogue("Can't leave yet! Flush, pipes, and paper must be handled first!");
+    const t = Game.tasks;
+    const missing = [];
+    if (!t.paperSolved) missing.push('paper');
+    if (!t.pipeSilenced || !t.valveTied) missing.push('pipes & valve');
+    else if (!t.flushedSilently) missing.push('quiet flush');
+    if (!t.odorNeutralized) missing.push('odor');
+    if (missing.length) {
+      Game.player.path = []; Game.player.pendingInteract = null;
+      showDialogue("Can't leave yet! Still to do: " + missing.join(', ') + ".");
       return;
     }
     if (!Game.tasks.bathroomUnlocked) {
@@ -1451,6 +1480,7 @@ function tryMovePlayer(targetX, targetY) {
   Game.player.targetTileX = targetX;
   Game.player.targetTileY = targetY;
   Game.player.moving = true;
+  Game.player.facing = { dx: targetX - Game.player.x, dy: targetY - Game.player.y };
   Game.player.stepsTaken++;
 
   // Calculate Noise based on Tile surface & Sneak Mode
@@ -1500,10 +1530,111 @@ function tryMovePlayer(targetX, targetY) {
   });
 }
 
+// ---------- Hotspots & pathfinding ----------
+const HOTSPOTS = [
+  { x: 2, y: 2, open: () => interactWithToilet() },
+  { x: 2, y: 5, open: () => interactWithSink() },
+  { x: 2, y: 1, open: () => interactWithCabinet() },
+  { x: 1, y: 2, open: () => interactWithPaperHolder() }
+];
+const near = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by)) <= 1;
+
+function isWalkable(x, y) {
+  if (x < 0 || x >= Game.gridW || y < 0 || y >= Game.gridH) return false;
+  const t = Game.tiles[y][x].type;
+  if (t === 'door') return Game.tasks.bathroomUnlocked;
+  return t !== 'wall' && t !== 'bathtub' && t !== 'toilet' && t !== 'sink' && t !== 'table_chair';
+}
+
+// BFS from the player; goal(x, y) decides arrival. Final tile may be non-walkable
+// (door, chair) when allowGoalTile is set, so the last step triggers its interaction.
+function findPath(goal, allowGoalTile) {
+  const p = Game.player, W = Game.gridW;
+  const key = (x, y) => y * W + x;
+  const hazardAt = (x, y) => Game.hazards.some(h => !h.triggered && h.x === x && h.y === y);
+  for (const avoidHazards of [true, false]) {
+    const prev = new Map([[key(p.x, p.y), null]]);
+    const queue = [[p.x, p.y]];
+    while (queue.length) {
+      const [cx, cy] = queue.shift();
+      if (goal(cx, cy) && (cx !== p.x || cy !== p.y)) {
+        const path = [];
+        let k = key(cx, cy);
+        while (prev.get(k) !== null) { path.unshift({ x: k % W, y: Math.floor(k / W) }); k = prev.get(k); }
+        return path;
+      }
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx, ny = cy + dy, nk = key(nx, ny);
+        if (prev.has(nk) || nx < 0 || ny < 0 || nx >= W || ny >= Game.gridH) continue;
+        const isGoal = allowGoalTile && goal(nx, ny) && Game.tiles[ny][nx].type !== 'wall';
+        if (!isGoal && (!isWalkable(nx, ny) || (avoidHazards && hazardAt(nx, ny)))) continue;
+        prev.set(nk, key(cx, cy));
+        if (isGoal) { queue.unshift([nx, ny]); break; }
+        queue.push([nx, ny]);
+      }
+    }
+  }
+  return null;
+}
+
+function handleTileTap(gx, gy) {
+  const p = Game.player;
+  p.pendingInteract = null;
+  // Tap yourself = freeze
+  if (gx === p.x && gy === p.y) { p.path = []; return; }
+  const spot = HOTSPOTS.find(h => h.x === gx && h.y === gy);
+  if (spot) {
+    if (near(p.x, p.y, gx, gy) && !p.moving) { p.path = []; spot.open(); return; }
+    const path = findPath((x, y) => near(x, y, gx, gy) && isWalkable(x, y), false);
+    if (path) { p.path = path; p.pendingInteract = spot.open; }
+    return;
+  }
+  if (gx < 0 || gy < 0 || gx >= Game.gridW || gy >= Game.gridH) return;
+  const path = findPath((x, y) => x === gx && y === gy, true);
+  if (path) p.path = path;
+  else showDialogue("Can't get there from here.");
+}
+
+function interactNearby() {
+  const p = Game.player;
+  const spot = HOTSPOTS.find(h => near(p.x, p.y, h.x, h.y));
+  if (spot) spot.open();
+}
+
+function updatePlayer(dt) {
+  const p = Game.player;
+  p.speed = Game.isSneaking ? 2.4 : 4.5;
+  if (p.moving) {
+    const dx = p.targetTileX - p.visualX, dy = p.targetTileY - p.visualY;
+    const dist = Math.hypot(dx, dy), stepLen = p.speed * dt;
+    if (dist <= stepLen) {
+      p.visualX = p.x = p.targetTileX;
+      p.visualY = p.y = p.targetTileY;
+      p.moving = false;
+    } else {
+      p.visualX += dx / dist * stepLen;
+      p.visualY += dy / dist * stepLen;
+    }
+  }
+  if (!p.moving && Game.state === 'PLAYING') {
+    if (p.path.length) {
+      const n = p.path.shift();
+      tryMovePlayer(n.x, n.y);
+      if (!p.moving) p.path = []; // blocked or interaction opened
+    } else if (p.pendingInteract) {
+      const f = p.pendingInteract; p.pendingInteract = null; f();
+    }
+  }
+}
+
 function testFloorboard(x, y) {
   if (x < 0 || x >= Game.gridW || y < 0 || y >= Game.gridH) return;
   const tile = Game.tiles[y][x];
   if (tile.type === 'wood') {
+    if (!near(Game.player.x, Game.player.y, x, y)) {
+      showDialogue("Too far away. Stand next to a board to test it with your toe.");
+      return;
+    }
     tile.tested = true;
     AudioEngine.playTone(200 + tile.squeakFactor * 300, 0.08, 'triangle', 0.04);
     addDecibels(6);
@@ -1657,23 +1788,30 @@ function drawGame() {
   ctx.fillText('🍗 🍷', tablePx + Game.tileSize, tablePy + Game.tileSize * 0.85);
 
   // Walter & Gertrud Avatars
-  ctx.fillText(Game.inlaws.lookingAtHallway ? '👀' : '👴', tablePx + Game.tileSize * 0.5, tablePy + Game.tileSize * 0.2);
+  const il = Game.inlaws;
+  ctx.fillText(il.lookingAtHallway ? '👀' : (il.warning ? '🤨' : '👴'), tablePx + Game.tileSize * 0.5, tablePy + Game.tileSize * 0.2);
   ctx.fillText('👵', tablePx + Game.tileSize * 1.5, tablePy + Game.tileSize * 0.2);
 
-  // Walter Vision Cone (Sweeps into Hallway)
-  if (Game.inlaws.lookingAtHallway) {
-    const eyeX = tablePx + Game.tileSize * 0.5;
-    const eyeY = tablePy + Game.tileSize * 0.2;
+  // Walter Vision Cone (same geometry as playerInVision); faint outline while he is about to look
+  if ((il.lookingAtHallway || il.warning) && Game.phase === 'HALLWAY') {
+    const eyeX = Game.originX + il.eyeX * Game.tileSize;
+    const eyeY = Game.originY + il.eyeY * Game.tileSize;
+    const seen = il.lookingAtHallway && playerInVision();
 
     ctx.save();
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.18)';
     ctx.beginPath();
     ctx.moveTo(eyeX, eyeY);
-    ctx.arc(eyeX, eyeY, Game.tileSize * 6.5, Math.PI - 0.4, Math.PI + 0.4);
+    ctx.arc(eyeX, eyeY, Game.tileSize * il.visionRange, Math.PI - il.visionCone, Math.PI + il.visionCone);
     ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+    if (il.lookingAtHallway) {
+      ctx.fillStyle = seen ? 'rgba(239, 68, 68, 0.28)' : 'rgba(239, 68, 68, 0.16)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+    } else {
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = `rgba(251, 191, 36, ${0.4 + 0.4 * Math.abs(Math.sin(Date.now() * 0.012))})`;
+    }
+    ctx.lineWidth = 2;
     ctx.stroke();
     ctx.restore();
   }
@@ -1697,21 +1835,16 @@ function drawGame() {
     }
   }
 
-  // Interpolate Player visual movement
   const p = Game.player;
-  const dx = p.targetTileX - p.visualX;
-  const dy = p.targetTileY - p.visualY;
-  const dist = Math.sqrt(dx * dx + dy * dy);
 
-  if (dist > 0.02) {
-    p.visualX += (dx / dist) * p.speed * 0.016;
-    p.visualY += (dy / dist) * p.speed * 0.016;
-  } else {
-    p.visualX = p.targetTileX;
-    p.visualY = p.targetTileY;
-    p.x = p.targetTileX;
-    p.y = p.targetTileY;
-    p.moving = false;
+  // Planned route
+  if (p.path.length) {
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+    p.path.forEach(n => {
+      ctx.beginPath();
+      ctx.arc(Game.originX + (n.x + 0.5) * Game.tileSize, Game.originY + (n.y + 0.5) * Game.tileSize, Game.tileSize * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
   // Render Player Character
@@ -1774,10 +1907,12 @@ function triggerVictory() {
   AudioEngine.playTone(587, 0.2, 'sine', 0.2);
   setTimeout(() => AudioEngine.playTone(880, 0.4, 'sine', 0.2), 150);
 
-  // Sync to ArcadeCore
+  // Sync to ArcadeCore (keep the best run only)
   if (typeof ArcadeCore !== 'undefined' && ArcadeCore.saveScore) {
-    const score = Math.max(100, 2000 - elapsedSec * 15 - Game.stats.peakDecibel * 10);
-    ArcadeCore.saveScore('badezimmer', score);
+    const score = Math.max(100, Math.round(3000 - elapsedSec * 10 - Game.stats.peakDecibel * 8 - Game.suspicion * 10));
+    const best = Number(ArcadeCore.getScore && ArcadeCore.getScore('badezimmer')) || 0;
+    if (score > best) ArcadeCore.saveScore('badezimmer', score);
+    UI.endStats.innerHTML += `<br>• Score: <strong>${score}</strong>${score > best ? ' 🏆 New record!' : ` (Best ${best})`}`;
   }
 }
 
@@ -1809,7 +1944,13 @@ function restartGame() {
   Game.player.targetTileX = 4;
   Game.player.targetTileY = 5;
   Game.player.moving = false;
+  Game.player.path = [];
+  Game.player.pendingInteract = null;
   Game.player.stepsTaken = 0;
+  Object.assign(Game.inlaws, { lookingAtHallway: false, warning: false, seenNotified: false, lookTimer: 0, lookInterval: 6.0 });
+  Game.looted = {};
+  Game.ripples = [];
+  setSneak(false);
   Game.player.squeaksTriggered = 0;
 
   Game.stats.startTime = Date.now();
@@ -1829,39 +1970,51 @@ function restartGame() {
 // ==========================================
 // 10. INPUT & CONTROLS BINDINGS
 // ==========================================
+function setSneak(on) {
+  Game.isSneaking = on;
+  UI.btnSneak.classList.toggle('active', on);
+  UI.sneakStatus.textContent = on ? "🤫 Sneak: ACTIVE (slow)" : "Walking";
+  UI.sneakStatus.classList.toggle('active', on);
+}
+
 window.addEventListener('keydown', (e) => {
   AudioEngine.init();
 
-  if (e.key === 'Shift') {
-    Game.isSneaking = true;
-    UI.btnSneak.classList.add('active');
-    UI.sneakStatus.textContent = "🤫 Sneak: ACTIVE";
-    UI.sneakStatus.classList.add('active');
-  }
+  if (e.key === 'Shift') setSneak(true);
 
+  if (e.key === 'Escape' && Game.state === 'INSPECT') { closeModal(); return; }
   if (Game.state !== 'PLAYING') return;
 
   let dx = 0;
   let dy = 0;
-  if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') dy = -1;
-  else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') dy = 1;
-  else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') dx = -1;
-  else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') dx = 1;
+  const k = e.key.toLowerCase();
+  if (k === 'arrowup' || k === 'w') dy = -1;
+  else if (k === 'arrowdown' || k === 's') dy = 1;
+  else if (k === 'arrowleft' || k === 'a') dx = -1;
+  else if (k === 'arrowright' || k === 'd') dx = 1;
 
   if (dx !== 0 || dy !== 0) {
     e.preventDefault();
-    tryMovePlayer(Game.player.targetTileX + dx, Game.player.targetTileY + dy);
+    // One buffered step from where the player is heading
+    const p = Game.player;
+    p.pendingInteract = null;
+    p.path = [{ x: p.targetTileX + dx, y: p.targetTileY + dy }];
+  } else if (k === ' ') {
+    e.preventDefault();
+    Game.player.path = []; Game.player.pendingInteract = null; // freeze
+  } else if (k === 'e' && !Game.player.moving) {
+    interactNearby();
+  } else if (k === 'f') {
+    // Test the board in front of you (facing = last step direction)
+    const p = Game.player, f = p.facing;
+    testFloorboard(p.x + f.dx, p.y + f.dy);
   }
 });
 
 window.addEventListener('keyup', (e) => {
-  if (e.key === 'Shift') {
-    Game.isSneaking = false;
-    UI.btnSneak.classList.remove('active');
-    UI.sneakStatus.textContent = "Walking";
-    UI.sneakStatus.classList.remove('active');
-  }
+  if (e.key === 'Shift') setSneak(false);
 });
+window.addEventListener('blur', () => { if (Game.isSneaking) setSneak(false); });
 
 // Canvas Click / Tap Navigation & Interaction
 canvas.addEventListener('pointerdown', (e) => {
@@ -1875,37 +2028,31 @@ canvas.addEventListener('pointerdown', (e) => {
   const gridX = Math.floor((clickX - Game.originX) / Game.tileSize);
   const gridY = Math.floor((clickY - Game.originY) / Game.tileSize);
 
-  // Right-click or shift-click: Test floorboard tension
-  if (e.button === 2 || e.shiftKey) {
+  // Right-click, or tap in test mode: test floorboard tension
+  if (e.button === 2 || testMode) {
     testFloorboard(gridX, gridY);
     return;
   }
 
-  // Left click cabinet (x:2, y:1)
-  if (gridX === 2 && gridY === 1) {
-    interactWithCabinet();
-    return;
-  }
-
-  // Left click paper holder (x:1, y:2)
-  if (gridX === 1 && gridY === 2) {
-    interactWithPaperHolder();
-    return;
-  }
-
-  // Move towards clicked tile
-  tryMovePlayer(gridX, gridY);
+  // Walk there (pathfinding) or walk to the hotspot and use it
+  handleTileTap(gridX, gridY);
 });
+
+// Test-board toggle for touch screens
+let testMode = false;
+const btnTest = document.createElement('button');
+btnTest.className = 'btn-hud';
+btnTest.title = 'Test a neighbouring floorboard (right-click / F also work)';
+btnTest.innerHTML = '<span>🪵 Test</span>';
+btnTest.onclick = () => { testMode = !testMode; btnTest.classList.toggle('active', testMode); showDialogue(testMode ? "Tap a board next to you to test it." : "Test mode off."); };
+UI.btnSneak.after(btnTest);
 
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // UI Buttons
 UI.btnSneak.onclick = () => {
   AudioEngine.init();
-  Game.isSneaking = !Game.isSneaking;
-  UI.btnSneak.classList.toggle('active', Game.isSneaking);
-  UI.sneakStatus.textContent = Game.isSneaking ? "🤫 Sneak: ACTIVE" : "Walking";
-  UI.sneakStatus.classList.toggle('active', Game.isSneaking);
+  setSneak(!Game.isSneaking);
 };
 
 UI.btnMic.onclick = async () => {
@@ -1932,19 +2079,19 @@ UI.btnHelp.onclick = () => {
       {
         title: 'Controls',
         icon: '⌨️',
-        desc: 'WASD / Arrow keys or click to move. Hold Shift or tap Sneak to walk quietly.',
+        desc: 'WASD / arrows or tap a tile to walk there. Tap objects to use them (E = use nearby). Shift / Sneak = slow but quiet. Space or tap yourself = stop.',
         action: () => {}
       },
       {
         title: 'Sound Matrix',
         icon: '🪵',
-        desc: 'Floorboards in the hallway creak at different volumes. Right-click or Shift-click to test them first.',
+        desc: 'Hallway boards creak at different volumes. Test a neighbouring board first: right-click, F (in front of you) or the 🪵 Test button.',
         action: () => {}
       },
       {
         title: 'Avoid Eye Contact',
         icon: '👀',
-        desc: 'When Walter glances down the hallway: FREEZE instantly and make no sound!',
+        desc: 'When Walter puts down his fork (🤨, dashed cone), stop! While he looks (red cone) don\'t move or make noise inside the cone. The hallway corners are outside it.',
         action: () => {}
       }
     ]
@@ -1980,6 +2127,7 @@ function gameLoop(now) {
   const dt = Math.min(0.1, (now - lastTime) / 1000);
   lastTime = now;
 
+  updatePlayer(dt);
   if (Game.state === 'PLAYING') {
     updateDecibelSystem(dt);
     updateInlawsVision(dt);

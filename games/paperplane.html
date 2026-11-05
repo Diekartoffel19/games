@@ -50,6 +50,8 @@
   #alt .track { position: relative; width: 100%; height: 100%; background: rgba(120,90,50,0.15); border-radius: 6px; }
   #alt .pad { position: absolute; left: -4px; right: -4px; height: 3px; background: #2fa36b; }
   #alt .mark { position: absolute; left: -6px; right: -6px; height: 6px; border-radius: 3px; background: #c0392b; transform: translateY(50%); }
+  #hint { left: 50%; top: 30%; transform: translateX(-50%); font-weight: 800; font-size: 1rem; padding: 6px 14px; opacity: 0; transition: opacity 0.25s; white-space: nowrap; }
+  #hint.bad { color: #c0392b; } #hint.good { color: #2fa36b; }
   #msg { left: 50%; top: 22%; transform: translateX(-50%); font-weight: 900; font-size: 1.3rem; color: #7a4a12; text-shadow: 0 1px 0 #fff; opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
   #overlay { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(60, 40, 20, 0.35); backdrop-filter: blur(3px); }
   #overlay .card { padding: 24px 28px; text-align: center; max-width: min(420px, calc(100vw - 32px)); box-sizing: border-box; }
@@ -77,6 +79,7 @@
     <a class="btn" href="../index.html" title="Back to the game collection">&lt; Arcade</a>
     <button class="btn" id="invBtn" title="Invert pitch">Inv: Off</button>
     <button class="btn" id="muteBtn" title="Mute">🔊</button>
+    <button class="btn" id="pauseBtn" title="Pause (P / Esc)">⏸</button>
     <button class="btn" id="resetBtn" title="Restart (R)">R</button>
   </div>
 </div>
@@ -85,8 +88,9 @@
   <div class="bar" id="speed"><i></i></div>
   Flap stamina
   <div class="bar" id="stamina"><i></i></div>
-  <div id="help">W/S pitch · A/D bank · Space boost · R restart</div>
+  <div id="help">W/S pitch · A/D bank · Space boost · P pause · R restart</div>
 </div>
+<div id="hint" class="ui panel"></div>
 <div id="alt" class="ui panel"><div class="track"><div class="pad"></div><div class="mark"></div></div></div>
 <div id="msg" class="ui"></div>
 <div id="stick" class="ui"><div id="knob"></div></div>
@@ -95,7 +99,7 @@
   <div class="card panel">
     <h1 id="ovTitle">Paper Plane Glider</h1>
     <div class="stars" id="ovStars"></div>
-    <p id="ovText">Glide through the living room, ride warm air over the radiator and coffee, avoid fans and doors, collect golden rings and land gently on the notebook pad at the far desk.<br><br>Land slow (&lt; 27 km/h) and level.</p>
+    <p id="ovText">Glide through the living room, ride warm air over the radiator and coffee, avoid fans and doors, collect golden rings and land gently on the notebook pad at the far desk.<br><br>Chain rings in a row for a combo. Land slow (&lt; 27 km/h), level and close to the centre of the pad.</p>
     <button class="btn" id="ovBtn">Throw the plane</button>
   </div>
 </div>
@@ -120,12 +124,13 @@
   scene.background = new THREE.Color(0xf3e6d3);
   scene.fog = new THREE.Fog(0xf3e6d3, 30, 75);
   const camera = new THREE.PerspectiveCamera(65, 1, 0.05, 200);
+  let baseFov = 65;
 
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    camera.fov = w < h ? 80 : 65;
+    baseFov = camera.fov = w < h ? 80 : 65;
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize);
@@ -281,10 +286,17 @@
   // ---------- Rings ----------
   const ringSpots = [[0, 5.4, -6], [1.5, 4.3, -13], [-4.5, 5.8, -21], [-2, 4.2, -26], [-1, 3.2, -30], [-1.5, 4.4, -35], [3, 5.2, -41], [1, 4.0, -47], [2.5, 3.5, -52], [0.5, 3.4, -59]];
   const rings = ringSpots.map(([x, y, z]) => {
-    const m = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.09, 6, 16), M.gold);
+    const mat = M.gold.clone(); mat.transparent = true;
+    const m = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.09, 6, 16), mat);
     m.position.set(x, y, z); m.castShadow = true; scene.add(m);
-    return { m, taken: false };
+    return { m, mat, taken: false, missed: false };
   });
+  function styleRing(r, missed) {
+    r.missed = missed;
+    r.mat.color.setHex(missed ? 0x9a8a70 : 0xf0b429);
+    r.mat.emissiveIntensity = missed ? 0.05 : 0.4;
+    r.mat.opacity = missed ? 0.45 : 1;
+  }
 
   // ---------- Paper plane (BufferGeometry dart) ----------
   function makePlane() {
@@ -308,6 +320,26 @@
   }
   const plane = makePlane();
   scene.add(plane);
+
+  // ---------- Wingtip trails ----------
+  const TRAIL_N = 48, tips = [new THREE.Vector3(-0.75, 0.06, 0.45), new THREE.Vector3(0.75, 0.06, 0.45)], tipW = new THREE.Vector3();
+  const trails = tips.map(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false }));
+    line.frustumCulled = false; line.visible = false; scene.add(line);
+    return line;
+  });
+  function updateTrails(fill) {
+    plane.updateMatrixWorld();
+    trails.forEach((tr, i) => {
+      const a = tr.geometry.attributes.position.array;
+      plane.localToWorld(tipW.copy(tips[i]));
+      if (fill) { for (let k = 0; k < TRAIL_N; k++) tipW.toArray(a, k * 3); }
+      else { a.copyWithin(3, 0, (TRAIL_N - 1) * 3); tipW.toArray(a, 0); }
+      tr.geometry.attributes.position.needsUpdate = true;
+    });
+  }
 
   // ---------- Audio ----------
   let actx = null, wind = null, rumble = null;
@@ -363,7 +395,7 @@
     s.connect(f); f.connect(g); g.connect(ctx.destination); s.start(t, Math.random()); s.stop(t + dur);
   }
   const sfx = {
-    chime() { tone(1318, 0.5, 'sine', 0.18); tone(1976, 0.6, 'triangle', 0.1, 0.06); },
+    chime(k) { const m = Math.pow(1.06, Math.min(12, k || 0)); tone(1318 * m, 0.5, 'sine', 0.18); tone(1976 * m, 0.6, 'triangle', 0.1, 0.06); },
     crumple() { for (let i = 0; i < 14; i++) burst(i * 0.035 + Math.random() * 0.02, 0.06 + Math.random() * 0.05, 1500 + Math.random() * 3500, 0.35); },
     thud() { const o = tone(110, 0.35, 'sine', 0.35); if (o) o.frequency.exponentialRampToValueAtTime(45, actx.currentTime + 0.3); burst(0, 0.12, 500, 0.15); },
     fanfare() { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.45, 'triangle', 0.18, 0.3 + i * 0.13)); tone(1318, 0.9, 'sine', 0.12, 0.85); },
@@ -383,15 +415,18 @@
   syncMute();
   muteBtn.onclick = (e) => { if (AC && AC.toggleMute) AC.toggleMute(); syncMute(); e.currentTarget.blur(); };
   $('resetBtn').onclick = (e) => { e.currentTarget.blur(); start(); };
+  $('pauseBtn').onclick = (e) => { e.currentTarget.blur(); togglePause(); };
 
   window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyR') start();
+    if ((e.code === 'KeyP' || e.code === 'Escape') && !e.repeat) togglePause();
     if ((e.code === 'Enter' || e.code === 'Space') && state !== 'fly' && overlayReady) start();
   });
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'fly') togglePause(); });
 
   const touch = { x: 0, y: 0, id: null, boost: false };
   const stick = $('stick'), knob = $('knob');
@@ -426,19 +461,34 @@
   // ---------- Game state ----------
   const P = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), speed: 0, vy: 0, yaw: 0, pitch: 0, roll: 0, stamina: 1, stalled: false, spin: 0 };
   let state = 'menu', overlayReady = true, time = 0, ringCount = 0, score = 0, crashT = 0, msgT = 0, inThermal = 0, flapCd = 0;
+  let combo = 0, bestCombo = 0, ringPts = 0, boosting = false, hintTxt = '', hintGood = false;
   const camPos = new THREE.Vector3(), camRoll = { v: 0 };
   const fwd = new THREE.Vector3(), ray = new THREE.Raycaster();
+  const getBest = () => { try { return Number(AC && AC.getScore && AC.getScore('paperplane')) || 0; } catch (e) { return 0; } };
+  if (getBest()) $('ovText').innerHTML += `<br><b>Best ${getBest()}</b>`;
 
-  function showMsg(t) { const m = $('msg'); m.textContent = t; m.style.opacity = 1; msgT = 1.4; }
+  function showMsg(t, hold) { const m = $('msg'); m.textContent = t; m.style.opacity = 1; msgT = hold ? Infinity : 1.4; }
+
+  function togglePause() {
+    if (state === 'fly') {
+      state = 'pause'; for (const k in keys) keys[k] = false;
+      setLoop(wind, 0); setLoop(rumble, 0);
+      showMsg('Paused · P to resume', true); $('pauseBtn').textContent = '▶';
+    } else if (state === 'pause') {
+      state = 'fly'; clock.getDelta(); msgT = 0.01; $('pauseBtn').textContent = '⏸';
+    }
+  }
 
   function start() {
     audio(); startLoops();
     Object.assign(P, { speed: 9, vy: 0, yaw: 0, pitch: -0.05, roll: 0, stamina: 1, stalled: false, spin: 0 });
     P.pos.set(0, 6, 3);
     plane.scale.setScalar(0.55); plane.visible = true;
-    rings.forEach((r) => { r.taken = false; r.m.visible = true; r.m.scale.setScalar(1); });
-    time = 0; ringCount = 0; score = 0; state = 'fly'; overlayReady = false;
+    rings.forEach((r) => { r.taken = false; r.m.visible = true; r.m.scale.setScalar(1); styleRing(r, false); });
+    time = 0; ringCount = 0; score = 0; combo = 0; bestCombo = 0; ringPts = 0; hintTxt = ''; state = 'fly'; overlayReady = false;
+    $('pauseBtn').textContent = '⏸';
     camPos.set(0, 7.5, 8);
+    plane.position.copy(P.pos); plane.rotation.set(P.pitch, P.yaw, P.roll); updateTrails(true);
     $('overlay').style.display = 'none';
     showMsg('Glide!');
   }
@@ -462,11 +512,14 @@
     setLoop(wind, 0); setLoop(rumble, 0);
     const timeBonus = Math.max(0, Math.round(3000 - time * 45));
     const landBonus = 1000 + Math.round((SAFE_LAND - P.speed) * 100);
-    score = ringCount * 100 + timeBonus + landBonus;
-    endScreen(true, '', timeBonus, landBonus);
+    // Accuracy: 1 at the pad centre, 0 at the edge
+    const acc = 1 - Math.min(1, Math.hypot((P.pos.x - PAD.x) / PAD.hw, (P.pos.z - PAD.z) / PAD.hd));
+    const accBonus = Math.round(acc * 500);
+    score = ringPts + timeBonus + landBonus + accBonus;
+    endScreen(true, '', timeBonus, landBonus, accBonus);
   }
 
-  function endScreen(win, reason, timeBonus, landBonus) {
+  function endScreen(win, reason, timeBonus, landBonus, accBonus) {
     setTimeout(() => {
       overlayReady = true;
       $('overlay').style.display = 'grid';
@@ -481,15 +534,16 @@
         } catch (e) {}
         $('ovTitle').textContent = 'Perfect touchdown!';
         $('ovStars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
-        $('ovText').innerHTML = `Rings ${ringCount}/${rings.length} × 100<br>Time ${time.toFixed(1)}s bonus +${timeBonus}<br>Landing bonus +${landBonus}<br><b>Score ${score}</b>${best ? ` · Best ${Math.max(best, score)}` : ''}`;
+        $('ovText').innerHTML = `Rings ${ringCount}/${rings.length} · best combo x${bestCombo} +${ringPts}<br>Time ${time.toFixed(1)}s bonus +${timeBonus}<br>Landing bonus +${landBonus}<br>${accBonus >= 400 ? 'Bullseye! ' : ''}Accuracy bonus +${accBonus}<br><b>Score ${score}</b>${best ? ` · Best ${Math.max(best, score)}` : ''}`;
       } else {
         $('ovTitle').textContent = 'Crumpled!';
         $('ovStars').textContent = '';
-        $('ovText').innerHTML = `${reason}<br>Rings ${ringCount}/${rings.length} · ${time.toFixed(1)}s<br>Press R or tap to retry.`;
+        $('ovText').innerHTML = `${reason}<br>Rings ${ringCount}/${rings.length} · best combo x${bestCombo} · ${time.toFixed(1)}s<br>Press R or tap to retry.`;
       }
     }, win ? 900 : 1100);
   }
-  $('ovBtn').onclick = (e) => { e.currentTarget.blur(); start(); };
+  $('ovBtn').onclick = (e) => { e.stopPropagation(); e.currentTarget.blur(); start(); };
+  $('overlay').addEventListener('click', () => { if (overlayReady && state !== 'fly') start(); });
 
   // ---------- Physics step ----------
   function step(dt) {
@@ -517,7 +571,8 @@
     const sinP = Math.sin(P.pitch), cosP = Math.cos(P.pitch);
     P.speed += (-G * sinP - DRAG_C * P.speed * P.speed) * dt;
     flapCd -= dt;
-    if (inp.boost && P.stamina > 0.01) {
+    boosting = inp.boost && P.stamina > 0.01;
+    if (boosting) {
       P.speed += 5.5 * dt; P.stamina = Math.max(0, P.stamina - dt * 0.3);
       if (flapCd <= 0) { sfx.flap(); flapCd = 0.18; }
     } else P.stamina = Math.min(1, P.stamina + dt * 0.12);
@@ -556,6 +611,17 @@
       return crash(P.speed >= SAFE_LAND ? 'Too fast for the desk pad — slow down before touchdown.' : 'Nose-dived into the notebook — level out first.');
     }
 
+    // Approach coaching near the desk
+    const toPad = P.pos.z - PAD.z;
+    hintTxt = '';
+    if (toPad > 0 && toPad < 14) {
+      hintGood = false;
+      if (Math.abs(P.pos.x - PAD.x) > PAD.hw) hintTxt = (P.pos.x > PAD.x ? '◀ ' : '') + 'Line up with the pad' + (P.pos.x < PAD.x ? ' ▶' : '');
+      else if (P.speed >= SAFE_LAND) hintTxt = 'Too fast · pull up to bleed speed';
+      else if (P.pitch < -LAND_PITCH * 0.8) hintTxt = 'Level out!';
+      else { hintTxt = 'Good approach · touch down'; hintGood = true; }
+    }
+
     // Forward raycast against furniture
     if (stepLen > 0) {
       ray.set(P.pos, P.vel.clone().normalize()); ray.far = stepLen + 0.12;
@@ -570,9 +636,19 @@
     for (const r of rings) {
       if (r.taken) continue;
       const dz = Math.abs(P.pos.z - r.m.position.z), dr = Math.hypot(P.pos.x - r.m.position.x, P.pos.y - r.m.position.y);
-      if (dz < 0.45 && dr < 1.0) { r.taken = true; ringCount++; P.speed = Math.min(22, P.speed + 3); P.stamina = Math.min(1, P.stamina + 0.15); sfx.chime(); showMsg('+100 · Boost!'); }
+      if (dz < 0.45 && dr < 1.0) {
+        r.taken = true; ringCount++; combo++; bestCombo = Math.max(bestCombo, combo);
+        const pts = 100 * combo; ringPts += pts;
+        P.speed = Math.min(22, P.speed + 3); P.stamina = Math.min(1, P.stamina + 0.15);
+        sfx.chime(combo - 1); showMsg(combo > 1 ? `+${pts} · Combo x${combo}!` : '+100 · Boost!');
+      } else if (!r.missed && P.pos.z < r.m.position.z - 1.2) {
+        // Flew past it: ring dims and the combo breaks (still collectible later)
+        styleRing(r, true);
+        if (combo > 1) showMsg('Combo lost');
+        combo = 0;
+      }
     }
-    score = ringCount * 100;
+    score = ringPts;
 
     // Audio mapping
     setLoop(wind, Math.min(0.32, 0.02 + P.speed * 0.016 + turb * 0.1), 250 + P.speed * 90 + turb * 400);
@@ -590,9 +666,16 @@
     // World animation
     for (const f of fans) f.blades.rotation.y += dt * 7;
     doors.forEach((d, i) => { d.rotation.y = d.userData.base + Math.sin(t * 0.7 + i) * 0.12; });
+    const next = rings.find((r) => !r.taken && !r.missed);
     rings.forEach((r, i) => {
       r.m.rotation.z = t * 0.6 + i;
       if (r.taken && r.m.visible) { r.m.scale.multiplyScalar(1 + dt * 6); if (r.m.scale.x > 2.2) r.m.visible = false; }
+      else if (!r.taken && !r.missed) {
+        // The next ring to fly through glows and pulses
+        const s = r === next ? 1 + 0.08 * Math.sin(t * 5) : 1;
+        r.m.scale.setScalar(s);
+        r.mat.emissiveIntensity = r === next ? 0.6 + 0.4 * Math.sin(t * 5) ** 2 : 0.4;
+      }
     });
     padRings.forEach((r, i) => { const s = 1 + 0.08 * Math.sin(t * 3 - i); r.scale.set(s, s, 1); r.material.opacity = 0.45 + 0.35 * Math.sin(t * 3 - i) ** 2; });
     for (const th of thermals) {
@@ -614,6 +697,8 @@
       plane.rotation.z += crashT * 14; plane.rotation.x += crashT * 6;
       if (P.pos.y > 0.15) P.pos.y = Math.max(0.15, P.pos.y - dt * 3 * crashT * 3);
     }
+    if (state === 'fly') updateTrails(false);
+    trails.forEach((tr) => { tr.visible = state !== 'menu'; tr.material.color.setHex(boosting && state === 'fly' ? 0x9fd3ff : 0xffffff); });
 
     // Chase camera with roll lag
     forward(fwd);
@@ -629,23 +714,31 @@
     camera.lookAt(lookAt);
     camRoll.v += (P.roll * 0.45 - camRoll.v) * Math.min(1, dt * 2.5);
     camera.rotateZ(camRoll.v);
+    // Speed feel: FOV widens with speed and while flapping
+    const fovT = baseFov + (state === 'fly' ? Math.max(0, P.speed - 9) * 0.8 + (boosting ? 4 : 0) : 0);
+    if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
 
     // HUD
-    $('score').textContent = score;
-    $('rings').textContent = ringCount + '/' + rings.length;
-    $('time').textContent = time.toFixed(1) + 's';
-    const kmh = Math.round(P.speed * 3.6);
-    $('spdTxt').textContent = kmh;
-    const sb = document.querySelector('#speed i');
-    sb.style.width = Math.min(100, P.speed / 22 * 100) + '%';
-    sb.style.background = P.speed < MIN_SPEED + 0.6 ? '#c0392b' : P.speed < SAFE_LAND ? '#2fa36b' : '#e0a12b';
-    document.querySelector('#stamina i').style.width = (P.stamina * 100) + '%';
-    document.querySelector('#alt .mark').style.bottom = Math.max(0, Math.min(100, P.pos.y / ROOM.y * 100)) + '%';
-    document.querySelector('#alt .pad').style.bottom = (PAD.y / ROOM.y * 100) + '%';
+    hud.score.textContent = score;
+    hud.rings.textContent = ringCount + '/' + rings.length + (combo > 1 ? ' x' + combo : '');
+    hud.time.textContent = time.toFixed(1) + 's';
+    hud.spd.textContent = Math.round(P.speed * 3.6);
+    hud.sb.style.width = Math.min(100, P.speed / 22 * 100) + '%';
+    hud.sb.style.background = P.speed < MIN_SPEED + 0.6 ? '#c0392b' : P.speed < SAFE_LAND ? '#2fa36b' : '#e0a12b';
+    hud.st.style.width = (P.stamina * 100) + '%';
+    hud.mark.style.bottom = Math.max(0, Math.min(100, P.pos.y / ROOM.y * 100)) + '%';
+    const showHint = state === 'fly' && hintTxt;
+    if (showHint) { hud.hint.textContent = hintTxt; hud.hint.className = 'ui panel ' + (hintGood ? 'good' : 'bad'); }
+    hud.hint.style.opacity = showHint ? 1 : 0;
     if (msgT > 0) { msgT -= dt; if (msgT <= 0) $('msg').style.opacity = 0; }
 
     renderer.render(scene, camera);
   }
+  const hud = {
+    score: $('score'), rings: $('rings'), time: $('time'), spd: $('spdTxt'), hint: $('hint'),
+    sb: document.querySelector('#speed i'), st: document.querySelector('#stamina i'), mark: document.querySelector('#alt .mark')
+  };
+  document.querySelector('#alt .pad').style.bottom = (PAD.y / ROOM.y * 100) + '%';
   P.pos.set(0, 6, 3);
   frame();
 })();

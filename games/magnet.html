@@ -174,6 +174,7 @@
       <a href="../index.html" class="btn-hud">← Hub</a>
       <button id="muteBtn" class="btn-hud" type="button">🔊 Sound</button>
       <button id="restartBtn" class="btn-hud" type="button">🔄 Reset (R)</button>
+      <button id="skipBtn" class="btn-hud" type="button" hidden>⏭ Skip sector (K)</button>
     </div>
 
     <div class="stats-bar">
@@ -188,6 +189,10 @@
       <div class="stat-box">
         <span class="stat-label">Energy Cells</span>
         <span class="stat-val gold" id="hudCells">0 / 3</span>
+      </div>
+      <div class="stat-box" title="Laser shields: a laser bounces you up instead of resetting the sector">
+        <span class="stat-label">Shields</span>
+        <span class="stat-val" id="hudShields">🛡️🛡️</span>
       </div>
       <div class="stat-box">
         <span class="stat-label">Score</span>
@@ -263,7 +268,7 @@
     const LEVELS = [
       {
         title: 'Sector 1: Repulsion Launch',
-        hint: 'Press SPACE / CLICK near the red coil: Same poles (🔴+🔴) launch you high into the air!',
+        hint: 'Same poles repel! Flip to 🔵, roll onto the red coil, then flip back to 🔴 for a super-jump. Steer right in the air!',
         start: { x: 90, y: 490 },
         goal: { x: 890, y: 210 },
         walls: [
@@ -285,8 +290,8 @@
       },
       {
         title: 'Sector 2: Ceiling Attraction',
-        hint: 'Opposite poles (🔴 attracts to 🔵) let you hang from the blue ceiling coils across the lasers!',
-        start: { x: 80, y: 480 },
+        hint: 'Roll onto the blue coil as 🔴, flip to 🔵 to launch, then cling to the red ceiling coils (opposites attract)!',
+        start: { x: 60, y: 480 },
         goal: { x: 910, y: 480 },
         walls: [
           { x: 0, y: 530, w: 220, h: 70 },
@@ -297,9 +302,10 @@
           { x: 220, y: 575, w: 560, h: 25 }
         ],
         magnets: [
-          { x: 310, y: 85, r: 28, pole: -1, strength: 1.3 },
-          { x: 500, y: 85, r: 28, pole: -1, strength: 1.3 },
-          { x: 690, y: 85, r: 28, pole: -1, strength: 1.3 }
+          { x: 175, y: 530, r: 26, pole: -1, strength: 1.2 },
+          { x: 310, y: 85, r: 28, pole: 1, strength: 1.3 },
+          { x: 500, y: 85, r: 28, pole: 1, strength: 1.3 },
+          { x: 690, y: 85, r: 28, pole: 1, strength: 1.3 }
         ],
         scraps: [],
         cells: [
@@ -392,8 +398,8 @@
       },
       {
         title: 'Sector 6: Polarity Panic Finale',
-        hint: 'Master attraction, repulsion, and flying scrap darts all at once!',
-        start: { x: 75, y: 480 },
+        hint: 'Launch from the blue coil, then chain attraction and repulsion. Watch the paperclips!',
+        start: { x: 60, y: 480 },
         goal: { x: 920, y: 130 },
         walls: [
           { x: 0, y: 530, w: 180, h: 70 },
@@ -405,6 +411,7 @@
           { x: 180, y: 575, w: 640, h: 25 }
         ],
         magnets: [
+          { x: 150, y: 530, r: 26, pole: -1, strength: 1.2 },
           { x: 240, y: 120, r: 28, pole: -1, strength: 1.35 },
           { x: 405, y: 390, r: 26, pole: 1, strength: 1.3 },
           { x: 645, y: 260, r: 26, pole: -1, strength: 1.35 },
@@ -428,6 +435,22 @@
     let score = 0;
     let levelScore = 0;
     let collectedCells = 0;
+    let shields = 0;
+    let levelDeaths = 0;
+    const MAX_SHIELDS = 2;
+    const SKIP_AFTER = 5;
+
+    // Physics tuning (verified with a headless solver: every sector is solvable)
+    const PHYS = {
+      gravity: 600,
+      groundAcc: 1300, airAcc: 850, airCap: 360,   // air control stops adding speed above airCap
+      groundDrag: 0.90, airDrag: 0.99, vyDrag: 0.99, maxSpeed: 760,
+      magK: 1700, magR: 300, magMinD: 30,          // linear falloff: strong enough to cling/hover
+      pulse: 620, pulseR: 170, pulseLift: 0.4,     // flip super-jump, biased upward
+      clipK: 600, clipR: 220,
+      zap: 680                                     // laser bounce speed while shields last
+    };
+    const magForce = (d, s) => d >= PHYS.magR ? 0 : s * PHYS.magK * (1 - Math.max(PHYS.magMinD, d) / PHYS.magR);
 
     const player = {
       x: 90,
@@ -440,6 +463,7 @@
       grounded: false
     };
 
+    const skipBtn = document.getElementById('skipBtn');
     let currentLevel = null;
     let activeScraps = [];
     let activeCells = [];
@@ -510,6 +534,7 @@
 
       collectedCells = 0;
       levelScore = 0;
+      shields = MAX_SHIELDS;
       particles = [];
       updateHud();
     }
@@ -527,12 +552,13 @@
         const dx = player.x - m.x;
         const dy = player.y - m.y;
         const dist = Math.hypot(dx, dy);
-        if (dist < 160 && m.pole === player.pole) {
-          const boost = (1 - dist / 160) * 340;
-          const nx = dx / (dist || 1);
-          const ny = dy / (dist || 1);
-          player.vx += nx * boost;
-          player.vy += ny * boost;
+        if (dist < PHYS.pulseR && m.pole === player.pole) {
+          const boost = PHYS.pulse * (0.5 + 0.5 * (1 - dist / PHYS.pulseR));
+          let nx = dx / (dist || 1);
+          let ny = dy / (dist || 1) - PHYS.pulseLift;
+          const nl = Math.hypot(nx, ny);
+          player.vx += nx / nl * boost;
+          player.vy += ny / nl * boost;
         }
       }
 
@@ -584,6 +610,8 @@
         poleEl.className = 'stat-val';
       }
       document.getElementById('hudCells').textContent = `${collectedCells} / ${activeCells.length}`;
+      document.getElementById('hudShields').textContent = '🛡️'.repeat(shields) || '—';
+      skipBtn.hidden = !(state === 'PLAYING' && levelDeaths >= SKIP_AFTER);
       document.getElementById('hudScore').textContent = (score + levelScore).toLocaleString('en-US');
       document.getElementById('hudBest').textContent = bestScore.toLocaleString('en-US');
     }
@@ -602,6 +630,7 @@
       if (e.code === 'KeyR' && !e.repeat) {
         loadLevel(levelIdx);
       }
+      if (e.code === 'KeyK' && !e.repeat && !skipBtn.hidden) skipLevel();
     });
     window.addEventListener('keyup', (e) => {
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
@@ -634,7 +663,14 @@
     btnNeutral.addEventListener('pointerup', () => { setNeutralPole(false); });
     btnNeutral.addEventListener('pointerleave', () => { setNeutralPole(false); });
     document.getElementById('btnFlip').addEventListener('click', (e) => { e.stopPropagation(); flipPolarity(); });
-    document.getElementById('restartBtn').addEventListener('click', (e) => { e.stopPropagation(); loadLevel(levelIdx); });
+    document.getElementById('restartBtn').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); loadLevel(levelIdx); });
+    skipBtn.addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); skipLevel(); });
+    function skipLevel() {
+      // Fallback so nobody gets stuck: next sector, no clear bonus
+      floatingTexts.push({ x: VW / 2, y: VH * 0.35, text: `⏭ Skipped sector ${levelIdx + 1}`, color: '#94a3b8', size: 22, life: 1.6 });
+      levelDeaths = 0;
+      loadLevel(levelIdx + 1);
+    }
 
     document.getElementById('startBtn').addEventListener('click', () => {
       document.getElementById('modal').hidden = true;
@@ -677,7 +713,11 @@
         size: 20,
         life: 1.2
       });
+      levelDeaths++;
       loadLevel(levelIdx);
+      if (levelDeaths === SKIP_AFTER) {
+        floatingTexts.push({ x: VW / 2, y: VH * 0.45, text: 'Stuck? ⏭ Skip sector is now available (K)', color: '#94a3b8', size: 18, life: 2.5 });
+      }
     }
 
     function completeLevel() {
@@ -697,6 +737,7 @@
         size: 24,
         life: 1.8
       });
+      levelDeaths = 0;
       loadLevel(levelIdx + 1);
     }
 
@@ -706,32 +747,31 @@
       lastTime = now;
 
       if (state === 'PLAYING' && currentLevel) {
-        const moveAccel = 680;
-        if (keys.left) player.vx -= moveAccel * dt;
-        if (keys.right) player.vx += moveAccel * dt;
+        // Grounded = on a wall top or on top of a coil (set by last frame's collisions)
+        const onGround = player.grounded;
+        const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+        if (dir && (onGround || dir * player.vx < PHYS.airCap)) {
+          player.vx += dir * (onGround ? PHYS.groundAcc : PHYS.airAcc) * dt;
+        }
 
-        player.vy += 690 * dt;
+        player.vy += PHYS.gravity * dt;
 
         if (player.pole !== 0) {
           for (const m of currentLevel.magnets) {
             const dx = player.x - m.x;
             const dy = player.y - m.y;
             const dist = Math.hypot(dx, dy);
-            if (dist < 380 && dist > 6) {
-              const sign = player.pole * m.pole;
-              const clampedDist = Math.max(48, dist);
-              const forceMag = (sign * m.strength * 2800000) / (clampedDist * clampedDist);
-              const nx = dx / dist;
-              const ny = dy / dist;
-              player.vx += nx * forceMag * dt;
-              player.vy += ny * forceMag * dt;
+            if (dist > 6) {
+              const forceMag = magForce(dist, player.pole * m.pole * m.strength);
+              player.vx += dx / dist * forceMag * dt;
+              player.vy += dy / dist * forceMag * dt;
             }
           }
         }
 
-        player.vx *= Math.pow(0.88, dt * 60);
-        player.vy *= Math.pow(0.985, dt * 60);
-        const maxSpd = 680;
+        player.vx *= Math.pow(onGround ? PHYS.groundDrag : PHYS.airDrag, dt * 60);
+        player.vy *= Math.pow(PHYS.vyDrag, dt * 60);
+        const maxSpd = PHYS.maxSpeed;
         const curSpd = Math.hypot(player.vx, player.vy);
         if (curSpd > maxSpd) {
           player.vx = (player.vx / curSpd) * maxSpd;
@@ -770,6 +810,7 @@
               player.vx -= 1.2 * vn * nx;
               player.vy -= 1.2 * vn * ny;
             }
+            if (ny < -0.5) player.grounded = true;
           }
         }
 
@@ -780,6 +821,17 @@
             player.y + player.r > hz.y &&
             player.y - player.r < hz.y + hz.h
           ) {
+            if (shields > 0) {
+              // Shield absorbs the hit and zaps you back up
+              shields--;
+              player.y = hz.y - player.r - 1;
+              player.vy = -PHYS.zap;
+              if (window.ArcadeCore) ArcadeCore.hit();
+              floatingTexts.push({ x: player.x, y: player.y - 24, text: `🛡️ ZAP! ${shields} left`, color: '#fbbf24', size: 18, life: 1 });
+              for (let i = 0; i < 12; i++) particles.push({ x: player.x, y: hz.y, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 260, color: '#fbbf24', size: 3, life: 0.4 });
+              updateHud();
+              continue;
+            }
             triggerPlayerDeath('⚡ LASER SHORT-CIRCUIT!');
             requestAnimationFrame(update);
             return;
@@ -791,9 +843,9 @@
           const dy = player.y - s.y;
           const dist = Math.hypot(dx, dy);
 
-          if (player.pole !== 0 && dist < 310 && dist > 5) {
+          if (player.pole !== 0 && dist < PHYS.clipR && dist > 5) {
             const attractSign = -(player.pole * s.pole);
-            const f = (attractSign * 1450000) / Math.max(2200, dist * dist);
+            const f = attractSign * PHYS.clipK * (1 - dist / PHYS.clipR);
             s.vx += (dx / dist) * f * dt;
             s.vy += (dy / dist) * f * dt;
           }
@@ -883,8 +935,8 @@
         if (player.pole !== 0) {
           for (const m of currentLevel.magnets) {
             const dist = Math.hypot(player.x - m.x, player.y - m.y);
-            if (dist < 380) {
-              const alpha = (1 - dist / 380) * 0.65;
+            if (dist < PHYS.magR) {
+              const alpha = (1 - dist / PHYS.magR) * 0.65;
               const isRepel = player.pole * m.pole > 0;
               ctx.strokeStyle = isRepel
                 ? `rgba(251, 191, 36, ${alpha})`
