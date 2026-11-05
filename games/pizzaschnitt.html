@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Pizza Precision Cut — Pixel-Cut Showdown</title>
+  <meta name="description" content="2-player duel: cut the pizza in exactly 50/50 with a single slice. Whoever is less accurate pays the bill!">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+  <script src="../src/arcade-core.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #2a1810; color: #fff7ed;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; user-select: none; touch-action: none; }
+    #c { display: block; width: 100%; height: 100%; }
+    .hud { position: fixed; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 10; }
+    .btn-hud { background: rgba(30,15,8,.85); border: 1px solid rgba(255,255,255,.2); color: #fff7ed; padding: 8px 14px;
+      border-radius: 10px; font-weight: 700; font-size: .85rem; cursor: pointer; text-decoration: none; }
+    .btn-hud:hover { background: rgba(60,30,15,.95); }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    <a href="../index.html" class="btn-hud">← Hub</a>
+    <button id="muteBtn" class="btn-hud" type="button">🔊 Sound</button>
+  </div>
+  <canvas id="c"></canvas>
+
+<script>
+(() => {
+  const GAME_KEY = 'pizzaschnitt';
+  const AC = () => window.ArcadeCore;
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (pizza) buildPizzaGeometry();
+  }
+
+  const muteBtn = document.getElementById('muteBtn');
+  const updMute = () => { muteBtn.textContent = (AC() && AC().isMuted()) ? '🔇 Muted' : '🔊 Sound'; };
+  muteBtn.onclick = () => { if (AC()) AC().toggleMute(); updMute(); };
+  updMute();
+
+  const ROUNDS = 5, TIME_LIMIT = 10;
+  const TOPS = [
+    { name: 'Salami', col: '#b91c1c', r: 15, w: 3 },
+    { name: 'Mushroom', col: '#d6c9b0', r: 12, w: 2 },
+    { name: 'Cheese', col: '#fde047', r: 9, w: 1 },
+    { name: 'Olive', col: '#1f2937', r: 8, w: 1.5 },
+  ];
+  const PCOL = ['#ef4444', '#3b82f6'];
+  const PNAME = ['Player 1', 'Player 2'];
+  const PKEY = ['A', 'L'];
+
+  let state = 'menu';     // menu | cut | reveal | final
+  let round = 0, wins = [0, 0], totalDev = [0, 0];
+  let pizza = null, players = null, timeLeft = 0, revealInfo = null, bestAvg = Number(AC() ? AC().getScore(GAME_KEY) : 0) || 0;
+
+  // --- geometry helpers ---
+  function polyArea(p) { let a = 0; for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i].x * q.y - q.x * p[i].y; } return Math.abs(a) / 2; }
+  // Sutherland-Hodgman against half-plane: keep points where cross(b-a, p-a) >= 0
+  function clipHalf(poly, a, b) {
+    const side = p => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const P = poly[i], Q = poly[(i + 1) % poly.length];
+      const sp = side(P), sq = side(Q);
+      if (sp >= 0) out.push(P);
+      if ((sp >= 0) !== (sq >= 0)) { const t = sp / (sp - sq); out.push({ x: P.x + (Q.x - P.x) * t, y: P.y + (Q.y - P.y) * t }); }
+    }
+    return out;
+  }
+  function inPoly(p, poly) {
+    let c = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      if (((poly[i].y > p.y) !== (poly[j].y > p.y)) && (p.x < (poly[j].x - poly[i].x) * (p.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x)) c = !c;
+    }
+    return c;
+  }
+
+  // --- pizza ---
+  const SHAPES = ['Round', 'Hexagon', 'Star', 'Triangle', 'Oval', 'Diamond'];
+  function shapeUnit(kind) {
+    const pts = [];
+    if (kind === 'Round') for (let i = 0; i < 80; i++) { const a = i / 80 * Math.PI * 2; pts.push([Math.cos(a), Math.sin(a)]); }
+    else if (kind === 'Oval') for (let i = 0; i < 80; i++) { const a = i / 80 * Math.PI * 2; pts.push([Math.cos(a) * 1.35, Math.sin(a) * .78]); }
+    else if (kind === 'Hexagon') for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; pts.push([Math.cos(a), Math.sin(a)]); }
+    else if (kind === 'Triangle') for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2 - Math.PI / 2; pts.push([Math.cos(a) * 1.1, Math.sin(a) * 1.1 + .2]); }
+    else if (kind === 'Diamond') for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2; pts.push([Math.cos(a) * 1.25, Math.sin(a) * .95]); }
+    else for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2 - Math.PI / 2, r = i % 2 ? .5 : 1.1; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+    return pts;
+  }
+
+  function newPizza() {
+    const kind = round === 0 ? 'Round' : SHAPES[1 + Math.floor(Math.random() * (SHAPES.length - 1))];
+    pizza = { kind, unit: shapeUnit(kind), tops: [], poly: [], per: [], total: 0 };
+    // toppings in unit-space (stable under resize)
+    const n = 22 + Math.floor(Math.random() * 18) + round * 3;
+    let guard = 0;
+    const unitPoly = pizza.unit.map(([x, y]) => ({ x: x * .88, y: y * .88 }));
+    while (pizza.tops.length < n && guard++ < 4000) {
+      const x = (Math.random() * 2.8 - 1.4), y = (Math.random() * 2.4 - 1.2);
+      if (inPoly({ x, y }, unitPoly)) pizza.tops.push({ ux: x, uy: y, t: TOPS[Math.floor(Math.random() * TOPS.length)], rot: Math.random() * 6.28 });
+    }
+    buildPizzaGeometry();
+  }
+
+  function buildPizzaGeometry() {
+    const R = Math.min(W * .30, H * .36);
+    pizza.cx = W / 2; pizza.cy = H / 2 + 14; pizza.R = R;
+    pizza.poly = pizza.unit.map(([x, y]) => ({ x: pizza.cx + x * R, y: pizza.cy + y * R }));
+    pizza.area = polyArea(pizza.poly);
+    pizza.tops.forEach(o => { o.x = pizza.cx + o.ux * R; o.y = pizza.cy + o.uy * R; });
+    pizza.W = pizza.tops.reduce((s, o) => s + o.t.w, 0);
+    const per = [0]; let tot = 0;
+    for (let i = 0; i < pizza.poly.length; i++) { const a = pizza.poly[i], b = pizza.poly[(i + 1) % pizza.poly.length]; tot += Math.hypot(b.x - a.x, b.y - a.y); per.push(tot); }
+    pizza.per = per; pizza.perim = tot;
+  }
+  function perimPoint(t) {
+    t = ((t % 1) + 1) % 1; const d = t * pizza.perim, per = pizza.per;
+    let i = 0; while (i < per.length - 2 && per[i + 1] < d) i++;
+    const a = pizza.poly[i], b = pizza.poly[(i + 1) % pizza.poly.length];
+    const f = (d - per[i]) / (per[i + 1] - per[i] || 1);
+    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+  }
+
+  function evalCut(a, b) {
+    const half = clipHalf(pizza.poly, a, b);
+    const areaFrac = half.length > 2 ? polyArea(half) / pizza.area : 0;
+    let wl = 0;
+    for (const o of pizza.tops) { if ((b.x - a.x) * (o.y - a.y) - (b.y - a.y) * (o.x - a.x) >= 0) wl += o.t.w; }
+    const frac = 0.5 * areaFrac + 0.5 * (wl / pizza.W);
+    return { frac, left: frac * 100, right: (1 - frac) * 100, dev: Math.abs(frac - .5) * 100, areaFrac, wl };
+  }
+
+  // --- round flow ---
+  function startRound() {
+    newPizza();
+    const spd = .22 + round * .035;
+    players = [0, 1].map(i => ({
+      phase: 0, t0: Math.random(), t1: 0, spd: spd * (i ? 1.07 : 1) * (Math.random() < .5 ? 1 : -1), a: null, b: null, res: null
+    }));
+    timeLeft = TIME_LIMIT; state = 'cut';
+  }
+  function press(i) {
+    if (state !== 'cut') return;
+    const p = players[i];
+    if (p.phase === 0) { p.a = perimPoint(p.t0); p.t1 = p.t0 + .5 * (Math.random() < .5 ? 1 : -1) + (Math.random() - .5) * .3; p.phase = 1; if (AC()) AC().playTone(520, .06, 'triangle', .12); }
+    else if (p.phase === 1) { lockEnd(p); if (AC()) AC().playTone(720, .08, 'triangle', .14); }
+    if (players.every(q => q.phase === 2)) finishRound();
+  }
+  function lockEnd(p) { p.b = perimPoint(p.t1); p.phase = 2; }
+  function finishRound() {
+    for (const p of players) {
+      if (p.phase === 0) { p.a = perimPoint(p.t0); p.phase = 1; p.t1 = p.t0 + .5; }
+      if (p.phase === 1) lockEnd(p);
+      p.res = evalCut(p.a, p.b);
+    }
+    const d0 = players[0].res.dev, d1 = players[1].res.dev;
+    let win = -1;
+    if (Math.abs(d0 - d1) > .005) win = d0 < d1 ? 0 : 1;
+    if (win >= 0) wins[win]++;
+    totalDev[0] += d0; totalDev[1] += d1;
+    revealInfo = { win, t: 0 };
+    state = 'reveal';
+    if (AC()) { if (Math.min(d0, d1) < 1) AC().powerup(); else AC().coin(); }
+  }
+  function advance() {
+    if (state === 'menu') { round = 0; wins = [0, 0]; totalDev = [0, 0]; startRound(); }
+    else if (state === 'reveal') { round++; if (round >= ROUNDS) endGame(); else startRound(); }
+    else if (state === 'final') state = 'menu';
+  }
+  function endGame() {
+    state = 'final';
+    const avg = Math.min(totalDev[0], totalDev[1]) / ROUNDS;
+    const score = Math.max(0, Math.round(1000 - avg * 100));
+    if (score > bestAvg) { bestAvg = score; if (AC()) AC().saveScore(GAME_KEY, score); }
+    if (AC()) AC().gameOver();
+  }
+
+  // --- input ---
+  addEventListener('keydown', e => {
+    if (e.repeat) return;
+    const k = e.key.toLowerCase();
+    if (k === 'a') { if (state === 'cut') press(0); }
+    else if (k === 'l') { if (state === 'cut') press(1); }
+    else if (k === ' ' || k === 'enter') { e.preventDefault(); if (state !== 'cut') advance(); }
+    else if (k === 'escape') location.href = '../index.html';
+  });
+  cv.addEventListener('pointerdown', e => {
+    if (state === 'cut') press(e.clientX < W / 2 ? 0 : 1);
+    else advance();
+  });
+
+  // --- update ---
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    if (state === 'cut') {
+      timeLeft -= dt;
+      for (const p of players) {
+        if (p.phase === 0) p.t0 += p.spd * dt;
+        else if (p.phase === 1) p.t1 += p.spd * 1.25 * dt;
+      }
+      if (timeLeft <= 0) finishRound();
+    } else if (state === 'reveal') revealInfo.t += dt;
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // --- drawing ---
+  function text(s, x, y, size, col, align = 'center', weight = 800) {
+    ctx.font = `${weight} ${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.fillStyle = col; ctx.fillText(s, x, y);
+  }
+  function tracePoly(poly) { ctx.beginPath(); poly.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); }
+
+  function drawTable() {
+    const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#3b2314'); g.addColorStop(1, '#22120a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,.04)'; ctx.lineWidth = 2;
+    for (let y = 30; y < H; y += 46) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y + 8); ctx.stroke(); }
+  }
+  function drawPizza(reveal) {
+    const P = pizza;
+    // shadow
+    ctx.save(); ctx.translate(6, 10); tracePoly(P.poly); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fill(); ctx.restore();
+    // crust
+    tracePoly(P.poly); ctx.lineJoin = 'round'; ctx.lineWidth = 26; ctx.strokeStyle = '#c98a3a'; ctx.stroke();
+    ctx.lineWidth = 18; ctx.strokeStyle = '#e0a552'; ctx.stroke();
+    // cheese/sauce
+    tracePoly(P.poly); ctx.fillStyle = '#f2c14e'; ctx.fill();
+    ctx.save(); tracePoly(P.poly); ctx.clip();
+    ctx.fillStyle = 'rgba(220,90,40,.28)';
+    for (let i = 0; i < 30; i++) { const a = i * 2.4, r = (i * 37 % 100) / 100 * P.R; ctx.beginPath(); ctx.arc(P.cx + Math.cos(a) * r, P.cy + Math.sin(a) * r * .8, 14 + (i % 4) * 6, 0, 6.3); ctx.fill(); }
+    ctx.restore();
+    // toppings
+    for (const o of P.tops) {
+      ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot);
+      ctx.fillStyle = o.t.col; ctx.beginPath();
+      if (o.t.name === 'Cheese') ctx.rect(-o.t.r, -o.t.r * .7, o.t.r * 2, o.t.r * 1.4); else ctx.arc(0, 0, o.t.r, 0, 6.3);
+      ctx.fill();
+      if (o.t.name === 'Salami') { ctx.fillStyle = 'rgba(255,230,200,.5)'; ctx.beginPath(); ctx.arc(-4, -3, 2.5, 0, 6.3); ctx.arc(4, 4, 2, 0, 6.3); ctx.fill(); }
+      if (o.t.name === 'Olive') { ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(0, 0, 2.6, 0, 6.3); ctx.fill(); }
+      ctx.restore();
+    }
+  }
+  function drawCut(p, i, glow) {
+    if (!p.a || !p.b) return;
+    const dx = p.b.x - p.a.x, dy = p.b.y - p.a.y, len = Math.hypot(dx, dy) || 1;
+    ctx.save(); ctx.lineCap = 'round';
+    ctx.strokeStyle = PCOL[i]; ctx.lineWidth = 4; ctx.shadowColor = PCOL[i]; ctx.shadowBlur = glow ? 14 : 0;
+    ctx.beginPath(); ctx.moveTo(p.a.x - dx / len * 18, p.a.y - dy / len * 18); ctx.lineTo(p.b.x + dx / len * 18, p.b.y + dy / len * 18); ctx.stroke();
+    ctx.restore();
+  }
+  function drawMarker(pt, col, label) {
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, 12, 0, 6.3); ctx.fillStyle = col; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+    if (label) text(label, pt.x, pt.y + 5, 13, '#fff');
+  }
+
+  function draw() {
+    drawTable();
+    if (state === 'menu') {
+      text('🍕 Pizza Precision Cut', W / 2, H * .24, Math.min(46, W / 14), '#fff7ed');
+      text('Pixel-Cut Showdown · 2 Players · 1 Keyboard', W / 2, H * .24 + 34, 17, '#fdba74', 'center', 600);
+      const lines = [
+        'Two markers travel around the edge of the pizza.',
+        `Press your key to set the start point – then again for the end point.`,
+        'The two halves should be exactly 50 / 50 (area and toppings each count for half).',
+        'Salami weighs 3, Mushroom 2, Olive 1.5, Cheese 1. After 10 s you cut blind!',
+      ];
+      lines.forEach((l, i) => text(l, W / 2, H * .38 + i * 28, Math.min(17, W / 26), '#ffedd5', 'center', 600));
+      text(`Player 1: Key  [ A ]  or left half of the screen`, W / 2, H * .60, 19, PCOL[0]);
+      text(`Player 2: Key  [ L ]  or right half of the screen`, W / 2, H * .60 + 32, 19, PCOL[1]);
+      text('▶ Space / Tap to start', W / 2, H * .80, 24, '#fde047');
+      if (bestAvg) text(`Best score: ${bestAvg}`, W / 2, H * .80 + 34, 15, '#a8a29e', 'center', 600);
+      return;
+    }
+    if (state === 'final') {
+      const w = wins[0] === wins[1] ? -1 : (wins[0] > wins[1] ? 0 : 1);
+      text(w < 0 ? '🤝 A draw!' : `🏆 ${PNAME[w]} wins!`, W / 2, H * .25, Math.min(48, W / 12), w < 0 ? '#fde047' : PCOL[w]);
+      text(`${wins[0]} : ${wins[1]} Rounds`, W / 2, H * .25 + 44, 26, '#fff7ed');
+      [0, 1].forEach(i => text(`${PNAME[i]}: Avg. deviation ${(totalDev[i] / ROUNDS).toFixed(2)} %`, W / 2, H * .5 + i * 34, 20, PCOL[i], 'center', 700));
+      if (w >= 0) text(`${PNAME[1 - w]} pays the bill! 💸`, W / 2, H * .5 + 90, 22, '#fdba74');
+      text('Space for main menu', W / 2, H * .82, 20, '#fde047');
+      return;
+    }
+
+    drawPizza(state === 'reveal');
+    // HUD
+    text(`Round ${round + 1} / ${ROUNDS} · ${pizza.kind}`, W / 2, 34, 20, '#fff7ed');
+    text(`${PNAME[0]}: ${wins[0]}`, 24, H - 24, 20, PCOL[0], 'left');
+    text(`${PNAME[1]}: ${wins[1]}`, W - 24, H - 24, 20, PCOL[1], 'right');
+
+    if (state === 'cut') {
+      const f = Math.max(0, timeLeft / TIME_LIMIT);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(W / 2 - 150, 48, 300, 10);
+      ctx.fillStyle = f < .3 ? '#ef4444' : '#fde047'; ctx.fillRect(W / 2 - 150, 48, 300 * f, 10);
+      players.forEach((p, i) => {
+        if (p.phase >= 1) drawMarker(p.a, PCOL[i], i + 1 + '');
+        if (p.phase === 0) drawMarker(perimPoint(p.t0), PCOL[i], PKEY[i]);
+        if (p.phase === 1) {
+          const e = perimPoint(p.t1);
+          ctx.setLineDash([8, 8]); ctx.strokeStyle = PCOL[i]; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(p.a.x, p.a.y); ctx.lineTo(e.x, e.y); ctx.stroke(); ctx.setLineDash([]);
+          drawMarker(e, PCOL[i], PKEY[i]);
+        }
+        if (p.phase === 2) drawCut(p, i, false);
+        const msg = p.phase === 0 ? `[${PKEY[i]}] Set start` : p.phase === 1 ? `[${PKEY[i]}] Set end` : '✓ cut';
+        text(msg, i ? W - 24 : 24, 34, 18, PCOL[i], i ? 'right' : 'left');
+      });
+    } else if (state === 'reveal') {
+      const k = Math.min(1, revealInfo.t / .5);
+      players.forEach((p, i) => drawCut(p, i, true));
+      const bw = Math.min(250, W * .4);
+      players.forEach((p, i) => {
+        const x = i ? W - 24 - bw : 24, y = 70;
+        ctx.fillStyle = 'rgba(20,10,5,.82)'; ctx.fillRect(x, y, bw, 120);
+        ctx.strokeStyle = PCOL[i]; ctx.lineWidth = 3; ctx.strokeRect(x, y, bw, 120);
+        text(PNAME[i], x + bw / 2, y + 26, 18, PCOL[i]);
+        text(`${(p.res.left * k + 50 * (1 - k)).toFixed(2)} / ${(p.res.right * k + 50 * (1 - k)).toFixed(2)} %`, x + bw / 2, y + 62, 24, '#fff7ed');
+        text(`Deviation ${p.res.dev.toFixed(2)} %`, x + bw / 2, y + 92, 16, p.res.dev < 1 ? '#4ade80' : '#fdba74', 'center', 700);
+        text(p.res.dev < .3 ? 'PERFECT! 🤌' : p.res.dev < 1.5 ? 'Strong!' : p.res.dev < 5 ? 'Meh…' : 'Ouch!', x + bw / 2, y + 112, 14, '#d6d3d1', 'center', 700);
+      });
+      const w = revealInfo.win;
+      text(w < 0 ? 'Tie!' : `${PNAME[w]} wins the round!`, W / 2, H - 70, 28, w < 0 ? '#fde047' : PCOL[w]);
+      text(round + 1 >= ROUNDS ? 'Space: Final result' : 'Space: next pizza', W / 2, H - 38, 17, '#fde047');
+    }
+  }
+
+  addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

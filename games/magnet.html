@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Magnet Puzzler: Polarity Panic — Coulomb Physics Platformer</title>
+  <meta name="description" content="You are a magnet! Switch between PLUS (Red) and MINUS (Blue) to cling to ceilings, launch across laser chasms, and repel flying scrap paperclips!">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+  <script src="../src/arcade-core.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #060913;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none; -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hud-top {
+      position: fixed;
+      top: 10px; left: 12px; right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 20;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .hud-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+    }
+    .btn-hud {
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #f8fafc;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      backdrop-filter: blur(8px);
+    }
+    .btn-hud:hover { background: rgba(30, 41, 59, 0.95); }
+
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 7px 14px;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+      flex-wrap: wrap;
+    }
+    .stat-box { display: flex; flex-direction: column; min-width: 64px; }
+    .stat-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; font-weight: 700; }
+    .stat-val { font-size: 1.02rem; font-weight: 800; color: #f8fafc; font-variant-numeric: tabular-nums; }
+    .stat-val.gold { color: #fbbf24; }
+    .stat-val.cyan { color: #38bdf8; }
+    .stat-val.red { color: #fb7185; }
+
+    .controls-bar {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      padding: 8px 12px;
+      border-radius: 16px;
+      z-index: 25;
+      backdrop-filter: blur(8px);
+      max-width: 96vw;
+    }
+    .ctrl-btn {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #f8fafc;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 0.85rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .ctrl-btn:active { transform: scale(0.96); }
+    .ctrl-btn.pole-red {
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      border-color: #fca5a5;
+    }
+    .ctrl-btn.pole-blue {
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      border-color: #93c5fd;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 10, 18, 0.86);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+    }
+    .modal-backdrop[hidden] { display: none; }
+    .modal-card {
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 20px;
+      max-width: 530px;
+      width: 100%;
+      padding: 26px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
+      text-align: center;
+    }
+    .modal-card h1 {
+      margin: 0 0 8px;
+      font-size: 1.85rem;
+      font-weight: 900;
+      background: linear-gradient(90deg, #ef4444, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .modal-sub {
+      color: #94a3b8;
+      font-size: 0.93rem;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #ef4444);
+      color: #ffffff;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hud-top">
+    <div class="hud-left">
+      <a href="../index.html" class="btn-hud">← Hub</a>
+      <button id="muteBtn" class="btn-hud" type="button">🔊 Sound</button>
+      <button id="restartBtn" class="btn-hud" type="button">🔄 Reset (R)</button>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat-box">
+        <span class="stat-label">Sector</span>
+        <span class="stat-val cyan" id="hudLevel">Level 1</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Polarity</span>
+        <span class="stat-val red" id="hudPole">🔴 PLUS (+)</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Energy Cells</span>
+        <span class="stat-val gold" id="hudCells">0 / 3</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Score</span>
+        <span class="stat-val gold" id="hudScore">0</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Best</span>
+        <span class="stat-val gold" id="hudBest">0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls-bar">
+    <button class="ctrl-btn" id="btnLeft" type="button">◀ Left (A)</button>
+    <button class="ctrl-btn pole-red" id="btnFlip" type="button">🧲 FLIP POLE (Space / Click)</button>
+    <button class="ctrl-btn" id="btnNeutral" type="button">⚪ Neutral (S)</button>
+    <button class="ctrl-btn" id="btnRight" type="button">Right (D) ▶</button>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="modal-backdrop" id="modal">
+    <div class="modal-card">
+      <div style="font-size:3rem; margin-bottom:4px;" id="modalEmoji">🧲⚡</div>
+      <h1 id="modalTitle">Magnet Puzzler: Polarity Panic</h1>
+      <p class="modal-sub" id="modalDesc">
+        You are a high-powered electromagnet!<br><br>
+        <b>Same poles repel</b> (🔴↔🔴 / 🔵↔🔵) — use this for massive super-jumps!<br>
+        <b>Opposite poles attract</b> (🔴→🔵) — cling to ceilings or swing across laser pits!<br>
+        <b>Beware of scrap paperclips 📎:</b> Wrong polarity pulls sharp metal darts straight into your face!
+      </p>
+      <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:14px;">
+        Controls: <b>A / D / Arrows</b> Roll &bull; <b>SPACE / W / CLICK</b> Flip Pole (+ / -) &bull; <b>S / SHIFT</b> Field Off
+      </div>
+      <button class="btn-primary" id="startBtn" type="button">🧲 Activate Magnetic Field!</button>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const GAME_KEY = 'magnet';
+
+    const VW = 1000;
+    const VH = 600;
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const muteBtn = document.getElementById('muteBtn');
+    function updateMuteUi() {
+      const m = window.ArcadeCore && ArcadeCore.isMuted();
+      muteBtn.textContent = m ? '🔇 Muted' : '🔊 Sound';
+    }
+    muteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.ArcadeCore) ArcadeCore.toggleMute();
+      updateMuteUi();
+    });
+    updateMuteUi();
+
+    let bestScore = Number(window.ArcadeCore ? ArcadeCore.getScore(GAME_KEY) : localStorage.getItem('mag_best')) || 0;
+
+    const LEVELS = [
+      {
+        title: 'Sector 1: Repulsion Launch',
+        hint: 'Press SPACE / CLICK near the red coil: Same poles (🔴+🔴) launch you high into the air!',
+        start: { x: 90, y: 490 },
+        goal: { x: 890, y: 210 },
+        walls: [
+          { x: 0, y: 530, w: 460, h: 70 },
+          { x: 560, y: 270, w: 440, h: 330 }
+        ],
+        hazards: [
+          { x: 460, y: 575, w: 100, h: 25 }
+        ],
+        magnets: [
+          { x: 370, y: 530, r: 30, pole: 1, strength: 1.25 }
+        ],
+        scraps: [],
+        cells: [
+          { x: 370, y: 360 },
+          { x: 480, y: 220 },
+          { x: 720, y: 220 }
+        ]
+      },
+      {
+        title: 'Sector 2: Ceiling Attraction',
+        hint: 'Opposite poles (🔴 attracts to 🔵) let you hang from the blue ceiling coils across the lasers!',
+        start: { x: 80, y: 480 },
+        goal: { x: 910, y: 480 },
+        walls: [
+          { x: 0, y: 530, w: 220, h: 70 },
+          { x: 780, y: 530, w: 220, h: 70 },
+          { x: 180, y: 40, w: 640, h: 45 }
+        ],
+        hazards: [
+          { x: 220, y: 575, w: 560, h: 25 }
+        ],
+        magnets: [
+          { x: 310, y: 85, r: 28, pole: -1, strength: 1.3 },
+          { x: 500, y: 85, r: 28, pole: -1, strength: 1.3 },
+          { x: 690, y: 85, r: 28, pole: -1, strength: 1.3 }
+        ],
+        scraps: [],
+        cells: [
+          { x: 310, y: 200 },
+          { x: 500, y: 180 },
+          { x: 690, y: 200 }
+        ]
+      },
+      {
+        title: 'Sector 3: Paperclip Ambush',
+        hint: 'WARNING! Loose metal paperclips 📎 have their own polarity! Match their color to repel them!',
+        start: { x: 80, y: 480 },
+        goal: { x: 910, y: 480 },
+        walls: [
+          { x: 0, y: 530, w: 1000, h: 70 },
+          { x: 380, y: 320, w: 240, h: 35 }
+        ],
+        hazards: [],
+        magnets: [
+          { x: 260, y: 530, r: 26, pole: 1, strength: 1.15 },
+          { x: 740, y: 530, r: 26, pole: -1, strength: 1.15 }
+        ],
+        scraps: [
+          { x: 450, y: 270, pole: -1 },
+          { x: 550, y: 270, pole: 1 },
+          { x: 650, y: 470, pole: -1 }
+        ],
+        cells: [
+          { x: 260, y: 340 },
+          { x: 500, y: 250 },
+          { x: 740, y: 340 }
+        ]
+      },
+      {
+        title: 'Sector 4: Alternating Slingshot',
+        hint: 'Flip between 🔴 PLUS and 🔵 MINUS mid-air to slingshot from coil to coil!',
+        start: { x: 80, y: 480 },
+        goal: { x: 910, y: 150 },
+        walls: [
+          { x: 0, y: 530, w: 200, h: 70 },
+          { x: 800, y: 210, w: 200, h: 390 }
+        ],
+        hazards: [
+          { x: 200, y: 575, w: 600, h: 25 }
+        ],
+        magnets: [
+          { x: 260, y: 450, r: 28, pole: 1, strength: 1.35 },
+          { x: 460, y: 330, r: 28, pole: -1, strength: 1.35 },
+          { x: 660, y: 210, r: 28, pole: 1, strength: 1.35 }
+        ],
+        scraps: [
+          { x: 520, y: 160, pole: -1 }
+        ],
+        cells: [
+          { x: 260, y: 340 },
+          { x: 460, y: 220 },
+          { x: 660, y: 110 }
+        ]
+      },
+      {
+        title: 'Sector 5: The Magnetic Cage',
+        hint: 'Use S (Neutral) to drop cleanly through the vertical gap, then fire the super-catapult!',
+        start: { x: 90, y: 140 },
+        goal: { x: 900, y: 140 },
+        walls: [
+          { x: 0, y: 200, w: 240, h: 35 },
+          { x: 380, y: 0, w: 40, h: 370 },
+          { x: 600, y: 200, w: 40, h: 400 },
+          { x: 760, y: 200, w: 240, h: 35 },
+          { x: 0, y: 540, w: 1000, h: 60 }
+        ],
+        hazards: [
+          { x: 380, y: 370, w: 40, h: 25 },
+          { x: 600, y: 175, w: 40, h: 25 }
+        ],
+        magnets: [
+          { x: 280, y: 540, r: 30, pole: 1, strength: 1.35 },
+          { x: 500, y: 540, r: 32, pole: -1, strength: 1.55 },
+          { x: 700, y: 80, r: 30, pole: 1, strength: 1.35 }
+        ],
+        scraps: [
+          { x: 490, y: 440, pole: 1 },
+          { x: 720, y: 380, pole: -1 }
+        ],
+        cells: [
+          { x: 290, y: 420 },
+          { x: 500, y: 470 },
+          { x: 680, y: 140 }
+        ]
+      },
+      {
+        title: 'Sector 6: Polarity Panic Finale',
+        hint: 'Master attraction, repulsion, and flying scrap darts all at once!',
+        start: { x: 75, y: 480 },
+        goal: { x: 920, y: 130 },
+        walls: [
+          { x: 0, y: 530, w: 180, h: 70 },
+          { x: 340, y: 390, w: 130, h: 28 },
+          { x: 580, y: 260, w: 130, h: 28 },
+          { x: 820, y: 190, w: 180, h: 410 }
+        ],
+        hazards: [
+          { x: 180, y: 575, w: 640, h: 25 }
+        ],
+        magnets: [
+          { x: 240, y: 120, r: 28, pole: -1, strength: 1.35 },
+          { x: 405, y: 390, r: 26, pole: 1, strength: 1.3 },
+          { x: 645, y: 260, r: 26, pole: -1, strength: 1.35 },
+          { x: 760, y: 80, r: 28, pole: 1, strength: 1.35 }
+        ],
+        scraps: [
+          { x: 390, y: 280, pole: -1 },
+          { x: 635, y: 160, pole: 1 },
+          { x: 780, y: 140, pole: -1 }
+        ],
+        cells: [
+          { x: 240, y: 240 },
+          { x: 405, y: 290 },
+          { x: 645, y: 140 }
+        ]
+      }
+    ];
+
+    let state = 'MENU';
+    let levelIdx = 0;
+    let score = 0;
+    let levelScore = 0;
+    let collectedCells = 0;
+
+    const player = {
+      x: 90,
+      y: 490,
+      vx: 0,
+      vy: 0,
+      r: 20,
+      pole: 1,
+      lastActivePole: 1,
+      grounded: false
+    };
+
+    let currentLevel = null;
+    let activeScraps = [];
+    let activeCells = [];
+    let particles = [];
+    let floatingTexts = [];
+
+    function generateProceduralLevel(idx) {
+      const n = idx + 1;
+      const magnets = [];
+      const scraps = [];
+      const cells = [];
+      for (let i = 0; i < 4; i++) {
+        const mx = 220 + i * 175;
+        const my = i % 2 === 0 ? 460 - (i * 40) : 110 + (i * 30);
+        const pole = (i + idx) % 2 === 0 ? 1 : -1;
+        magnets.push({ x: mx, y: my, r: 28, pole, strength: 1.35 });
+        cells.push({ x: mx, y: Math.max(120, Math.min(460, my + (pole > 0 ? -90 : 90))) });
+        if (i > 0) {
+          scraps.push({ x: mx - 60, y: 280 + (i % 2) * 80, pole: -pole });
+        }
+      }
+      return {
+        title: `Endless Sector #${n}`,
+        hint: 'Procedural high-voltage sector! Time your polarity flips for maximum momentum!',
+        start: { x: 80, y: 480 },
+        goal: { x: 910, y: 170 },
+        walls: [
+          { x: 0, y: 530, w: 180, h: 70 },
+          { x: 820, y: 230, w: 180, h: 370 }
+        ],
+        hazards: [
+          { x: 180, y: 575, w: 640, h: 25 }
+        ],
+        magnets,
+        scraps,
+        cells: cells.slice(0, 3)
+      };
+    }
+
+    function loadLevel(idx) {
+      levelIdx = idx;
+      const template = idx < LEVELS.length ? LEVELS[idx] : generateProceduralLevel(idx);
+      currentLevel = template;
+
+      player.x = template.start.x;
+      player.y = template.start.y;
+      player.vx = 0;
+      player.vy = 0;
+      player.pole = 1;
+      player.lastActivePole = 1;
+
+      activeScraps = template.scraps.map(s => ({
+        x: s.x,
+        y: s.y,
+        vx: 0,
+        vy: 0,
+        r: 13,
+        pole: s.pole,
+        angle: 0
+      }));
+
+      activeCells = template.cells.map(c => ({
+        x: c.x,
+        y: c.y,
+        r: 14,
+        taken: false
+      }));
+
+      collectedCells = 0;
+      levelScore = 0;
+      particles = [];
+      updateHud();
+    }
+
+    function flipPolarity() {
+      if (state !== 'PLAYING') return;
+      if (player.pole === 0) {
+        player.pole = -player.lastActivePole;
+      } else {
+        player.pole = -player.pole;
+      }
+      player.lastActivePole = player.pole;
+
+      for (const m of currentLevel.magnets) {
+        const dx = player.x - m.x;
+        const dy = player.y - m.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 160 && m.pole === player.pole) {
+          const boost = (1 - dist / 160) * 340;
+          const nx = dx / (dist || 1);
+          const ny = dy / (dist || 1);
+          player.vx += nx * boost;
+          player.vy += ny * boost;
+        }
+      }
+
+      const pColor = player.pole === 1 ? '#ef4444' : '#3b82f6';
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        particles.push({
+          x: player.x,
+          y: player.y,
+          vx: Math.cos(a) * 140,
+          vy: Math.sin(a) * 140,
+          color: pColor,
+          size: 3.5,
+          life: 0.35
+        });
+      }
+
+      if (window.ArcadeCore) {
+        ArcadeCore.playTone(player.pole === 1 ? 520 : 380, 0.08, 'triangle', 0.14);
+      }
+      updateHud();
+    }
+
+    function setNeutralPole(active) {
+      if (state !== 'PLAYING') return;
+      if (active) {
+        if (player.pole !== 0) player.lastActivePole = player.pole;
+        player.pole = 0;
+      } else {
+        if (player.pole === 0) player.pole = player.lastActivePole;
+      }
+      updateHud();
+    }
+
+    function updateHud() {
+      document.getElementById('hudLevel').textContent = `Level ${levelIdx + 1}`;
+      const poleEl = document.getElementById('hudPole');
+      const flipBtn = document.getElementById('btnFlip');
+      if (player.pole === 1) {
+        poleEl.textContent = '🔴 PLUS (+)';
+        poleEl.className = 'stat-val red';
+        flipBtn.className = 'ctrl-btn pole-red';
+      } else if (player.pole === -1) {
+        poleEl.textContent = '🔵 MINUS (-)';
+        poleEl.className = 'stat-val cyan';
+        flipBtn.className = 'ctrl-btn pole-blue';
+      } else {
+        poleEl.textContent = '⚪ NEUTRAL';
+        poleEl.className = 'stat-val';
+      }
+      document.getElementById('hudCells').textContent = `${collectedCells} / ${activeCells.length}`;
+      document.getElementById('hudScore').textContent = (score + levelScore).toLocaleString('en-US');
+      document.getElementById('hudBest').textContent = bestScore.toLocaleString('en-US');
+    }
+
+    const keys = { left: false, right: false };
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+      if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        if (!e.repeat) flipPolarity();
+      }
+      if (e.code === 'KeyS' || e.code === 'ArrowDown' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        setNeutralPole(true);
+      }
+      if (e.code === 'KeyR' && !e.repeat) {
+        loadLevel(levelIdx);
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        setNeutralPole(false);
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      keys.left = false;
+      keys.right = false;
+      setNeutralPole(false);
+    });
+
+    canvas.addEventListener('pointerdown', () => {
+      if (state === 'PLAYING') flipPolarity();
+    });
+
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    const btnNeutral = document.getElementById('btnNeutral');
+    btnLeft.addEventListener('pointerdown', (e) => { e.stopPropagation(); keys.left = true; });
+    btnLeft.addEventListener('pointerup', () => { keys.left = false; });
+    btnLeft.addEventListener('pointerleave', () => { keys.left = false; });
+    btnRight.addEventListener('pointerdown', (e) => { e.stopPropagation(); keys.right = true; });
+    btnRight.addEventListener('pointerup', () => { keys.right = false; });
+    btnRight.addEventListener('pointerleave', () => { keys.right = false; });
+    btnNeutral.addEventListener('pointerdown', (e) => { e.stopPropagation(); setNeutralPole(true); });
+    btnNeutral.addEventListener('pointerup', () => { setNeutralPole(false); });
+    btnNeutral.addEventListener('pointerleave', () => { setNeutralPole(false); });
+    document.getElementById('btnFlip').addEventListener('click', (e) => { e.stopPropagation(); flipPolarity(); });
+    document.getElementById('restartBtn').addEventListener('click', (e) => { e.stopPropagation(); loadLevel(levelIdx); });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      document.getElementById('modal').hidden = true;
+      state = 'PLAYING';
+      loadLevel(0);
+    });
+
+    function resolveCircleRect(circle, rect) {
+      const closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.w));
+      const closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.h));
+      const dx = circle.x - closestX;
+      const dy = circle.y - closestY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < circle.r * circle.r) {
+        const dist = Math.sqrt(distSq) || 0.001;
+        const overlap = circle.r - dist;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        circle.x += nx * overlap;
+        circle.y += ny * overlap;
+
+        const vn = circle.vx * nx + circle.vy * ny;
+        if (vn < 0) {
+          circle.vx -= (1 + 0.15) * vn * nx;
+          circle.vy -= (1 + 0.15) * vn * ny;
+        }
+        if (ny < -0.5) circle.grounded = true;
+        return true;
+      }
+      return false;
+    }
+
+    function triggerPlayerDeath(reason) {
+      if (window.ArcadeCore) ArcadeCore.hit();
+      floatingTexts.push({
+        x: player.x,
+        y: player.y - 20,
+        text: reason,
+        color: '#fb7185',
+        size: 20,
+        life: 1.2
+      });
+      loadLevel(levelIdx);
+    }
+
+    function completeLevel() {
+      const bonus = 500 + collectedCells * 250;
+      score += levelScore + bonus;
+      if (score > bestScore) {
+        bestScore = score;
+        if (window.ArcadeCore) ArcadeCore.saveScore(GAME_KEY, bestScore);
+        try { localStorage.setItem('mag_best', String(bestScore)); } catch (e) {}
+      }
+      if (window.ArcadeCore) ArcadeCore.powerup();
+      floatingTexts.push({
+        x: VW / 2,
+        y: VH * 0.35,
+        text: `⚡ SECTOR ${levelIdx + 1} CLEARED! +${bonus} BONUS!`,
+        color: '#4ade80',
+        size: 24,
+        life: 1.8
+      });
+      loadLevel(levelIdx + 1);
+    }
+
+    let lastTime = performance.now();
+    function update(now) {
+      const dt = Math.min(0.04, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (state === 'PLAYING' && currentLevel) {
+        const moveAccel = 680;
+        if (keys.left) player.vx -= moveAccel * dt;
+        if (keys.right) player.vx += moveAccel * dt;
+
+        player.vy += 690 * dt;
+
+        if (player.pole !== 0) {
+          for (const m of currentLevel.magnets) {
+            const dx = player.x - m.x;
+            const dy = player.y - m.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 380 && dist > 6) {
+              const sign = player.pole * m.pole;
+              const clampedDist = Math.max(48, dist);
+              const forceMag = (sign * m.strength * 2800000) / (clampedDist * clampedDist);
+              const nx = dx / dist;
+              const ny = dy / dist;
+              player.vx += nx * forceMag * dt;
+              player.vy += ny * forceMag * dt;
+            }
+          }
+        }
+
+        player.vx *= Math.pow(0.88, dt * 60);
+        player.vy *= Math.pow(0.985, dt * 60);
+        const maxSpd = 680;
+        const curSpd = Math.hypot(player.vx, player.vy);
+        if (curSpd > maxSpd) {
+          player.vx = (player.vx / curSpd) * maxSpd;
+          player.vy = (player.vy / curSpd) * maxSpd;
+        }
+
+        player.x += player.vx * dt;
+        player.y += player.vy * dt;
+        player.grounded = false;
+
+        if (player.x < player.r) { player.x = player.r; player.vx = Math.abs(player.vx) * 0.4; }
+        if (player.x > VW - player.r) { player.x = VW - player.r; player.vx = -Math.abs(player.vx) * 0.4; }
+        if (player.y < player.r) { player.y = player.r; player.vy = Math.abs(player.vy) * 0.3; }
+        if (player.y > VH + 40) {
+          triggerPlayerDeath('💥 FELL INTO THE ABYSS!');
+          requestAnimationFrame(update);
+          return;
+        }
+
+        for (const w of currentLevel.walls) {
+          resolveCircleRect(player, w);
+        }
+
+        for (const m of currentLevel.magnets) {
+          const dx = player.x - m.x;
+          const dy = player.y - m.y;
+          const dist = Math.hypot(dx, dy);
+          const minDist = player.r + m.r;
+          if (dist < minDist) {
+            const nx = dx / (dist || 1);
+            const ny = dy / (dist || 1);
+            player.x = m.x + nx * minDist;
+            player.y = m.y + ny * minDist;
+            const vn = player.vx * nx + player.vy * ny;
+            if (vn < 0) {
+              player.vx -= 1.2 * vn * nx;
+              player.vy -= 1.2 * vn * ny;
+            }
+          }
+        }
+
+        for (const hz of currentLevel.hazards) {
+          if (
+            player.x + player.r > hz.x &&
+            player.x - player.r < hz.x + hz.w &&
+            player.y + player.r > hz.y &&
+            player.y - player.r < hz.y + hz.h
+          ) {
+            triggerPlayerDeath('⚡ LASER SHORT-CIRCUIT!');
+            requestAnimationFrame(update);
+            return;
+          }
+        }
+
+        for (const s of activeScraps) {
+          const dx = player.x - s.x;
+          const dy = player.y - s.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (player.pole !== 0 && dist < 310 && dist > 5) {
+            const attractSign = -(player.pole * s.pole);
+            const f = (attractSign * 1450000) / Math.max(2200, dist * dist);
+            s.vx += (dx / dist) * f * dt;
+            s.vy += (dy / dist) * f * dt;
+          }
+
+          s.vx *= Math.pow(0.92, dt * 60);
+          s.vy *= Math.pow(0.92, dt * 60);
+          s.x += s.vx * dt;
+          s.y += s.vy * dt;
+          s.angle += (s.vx * 0.02) * dt * 60;
+
+          for (const w of currentLevel.walls) {
+            resolveCircleRect(s, w);
+          }
+
+          if (dist < player.r + s.r - 3) {
+            triggerPlayerDeath('📎 PAPERCLIP TO THE FACE!');
+            requestAnimationFrame(update);
+            return;
+          }
+        }
+
+        for (const c of activeCells) {
+          if (!c.taken && Math.hypot(player.x - c.x, player.y - c.y) < player.r + c.r) {
+            c.taken = true;
+            collectedCells++;
+            levelScore += 250;
+            if (window.ArcadeCore) ArcadeCore.coin();
+            floatingTexts.push({
+              x: c.x,
+              y: c.y - 15,
+              text: '+250 ⚡',
+              color: '#fbbf24',
+              size: 18,
+              life: 0.9
+            });
+            updateHud();
+          }
+        }
+
+        const g = currentLevel.goal;
+        if (Math.hypot(player.x - g.x, player.y - g.y) < player.r + 26) {
+          completeLevel();
+        }
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.y -= 35 * dt;
+        ft.life -= dt;
+        if (ft.life <= 0) floatingTexts.splice(i, 1);
+      }
+
+      draw(now);
+      requestAnimationFrame(update);
+    }
+
+    function draw(now) {
+      ctx.fillStyle = '#060913';
+      ctx.fillRect(0, 0, width, height);
+
+      const scale = Math.min(width / VW, height / VH);
+      const offX = (width - VW * scale) / 2;
+      const offY = (height - VH * scale) / 2;
+
+      ctx.save();
+      ctx.translate(offX, offY);
+      ctx.scale(scale, scale);
+
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.05)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= VW; x += 50) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, VH); ctx.stroke();
+      }
+      for (let y = 0; y <= VH; y += 50) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(VW, y); ctx.stroke();
+      }
+
+      if (currentLevel) {
+        if (player.pole !== 0) {
+          for (const m of currentLevel.magnets) {
+            const dist = Math.hypot(player.x - m.x, player.y - m.y);
+            if (dist < 380) {
+              const alpha = (1 - dist / 380) * 0.65;
+              const isRepel = player.pole * m.pole > 0;
+              ctx.strokeStyle = isRepel
+                ? `rgba(251, 191, 36, ${alpha})`
+                : `rgba(56, 189, 248, ${alpha})`;
+              ctx.lineWidth = 2.5;
+              ctx.setLineDash(isRepel ? [6, 6] : [10, 4]);
+              ctx.beginPath();
+              ctx.moveTo(player.x, player.y);
+              ctx.lineTo(m.x, m.y);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+          }
+        }
+
+        for (const w of currentLevel.walls) {
+          ctx.fillStyle = '#1e293b';
+          ctx.strokeStyle = '#475569';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.roundRect(w.x, w.y, w.w, w.h, 6);
+          ctx.fill();
+          ctx.stroke();
+        }
+
+        for (const hz of currentLevel.hazards) {
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.28)';
+          ctx.fillRect(hz.x, hz.y, hz.w, hz.h);
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          for (let lx = hz.x; lx < hz.x + hz.w; lx += 14) {
+            ctx.moveTo(lx, hz.y + hz.h);
+            ctx.lineTo(lx + 7, hz.y + 3);
+            ctx.lineTo(lx + 14, hz.y + hz.h);
+          }
+          ctx.stroke();
+        }
+
+        for (const m of currentLevel.magnets) {
+          const isRed = m.pole === 1;
+          const baseColor = isRed ? '#ef4444' : '#3b82f6';
+          const borderColor = isRed ? '#fca5a5' : '#93c5fd';
+
+          const pulseR = m.r + 12 + Math.sin(now * 0.006) * 8;
+          ctx.strokeStyle = isRed ? 'rgba(239, 68, 68, 0.25)' : 'rgba(59, 130, 246, 0.25)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(m.x, m.y, pulseR, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = baseColor;
+          ctx.strokeStyle = borderColor;
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.font = '900 22px system-ui, sans-serif';
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(isRed ? '+' : '−', m.x, m.y + 1);
+        }
+
+        for (const c of activeCells) {
+          if (c.taken) continue;
+          const bob = Math.sin(now * 0.005 + c.x) * 4;
+          ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+          ctx.beginPath();
+          ctx.arc(c.x, c.y + bob, c.r + 5, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.font = '24px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('⚡', c.x, c.y + bob);
+        }
+
+        for (const s of activeScraps) {
+          const isRed = s.pole === 1;
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate(s.angle);
+          ctx.fillStyle = isRed ? '#991b1b' : '#1e3a8a';
+          ctx.strokeStyle = isRed ? '#f87171' : '#60a5fa';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, s.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.font = '18px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('📎', 0, 0);
+          ctx.restore();
+        }
+
+        const g = currentLevel.goal;
+        const gGrad = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, 34);
+        gGrad.addColorStop(0, '#4ade80');
+        gGrad.addColorStop(0.6, 'rgba(16, 185, 129, 0.4)');
+        gGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+        ctx.fillStyle = gGrad;
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, 34, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, 22 + Math.sin(now * 0.008) * 3, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.font = '800 12px system-ui, sans-serif';
+        ctx.fillStyle = '#bbf7d0';
+        ctx.textAlign = 'center';
+        ctx.fillText('EXIT', g.x, g.y + 1);
+
+        ctx.textBaseline = 'alphabetic';
+        ctx.textAlign = 'center';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(6, 9, 19, 0.9)';
+        ctx.font = '900 18px system-ui, sans-serif';
+        ctx.strokeText(currentLevel.title, VW / 2, 66);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(currentLevel.title, VW / 2, 66);
+        ctx.font = '700 13px system-ui, sans-serif';
+        ctx.strokeText(currentLevel.hint, VW / 2, 88);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(currentLevel.hint, VW / 2, 88);
+      }
+
+      const pColor = player.pole === 1 ? '#ef4444' : (player.pole === -1 ? '#3b82f6' : '#64748b');
+      const pBorder = player.pole === 1 ? '#fecaca' : (player.pole === -1 ? '#bfdbfe' : '#cbd5e1');
+
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      ctx.fillStyle = pColor;
+      ctx.strokeStyle = pBorder;
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = pColor;
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.arc(0, 0, player.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(player.pole === 1 ? '🧲+' : (player.pole === -1 ? '🧲−' : '⚪'), 0, 1);
+      ctx.restore();
+
+      for (const p of particles) {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.textAlign = 'center';
+      for (const ft of floatingTexts) {
+        ctx.save();
+        ctx.font = `900 ${ft.size}px system-ui, sans-serif`;
+        ctx.fillStyle = '#000';
+        ctx.fillText(ft.text, ft.x + 2, ft.y + 2);
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    loadLevel(0);
+    requestAnimationFrame(update);
+  })();
+  </script>
+</body>
+</html>
