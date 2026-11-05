@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Kuh auf Ski — Die Alpenabfahrt</title>
+<meta name="description" content="Eine Kuh, zwei Ski, keine Bremse: Rase die Alpen hinunter, fahre Slalom, spring über Schanzen, mach Muh-Tricks und erschrecke Touristen!">
+<meta name="theme-color" content="#a9d6f5">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#eaf6ff; color:#123; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas { position:fixed; inset:0; width:100%; height:100%; touch-action:none; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:4px; min-height:36px; touch-action:manipulation; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#0359; z-index:5; padding:16px; }
+.overlay.hide { display:none; }
+.card { background:#fff; color:#123; border-radius:18px; padding:20px 26px; max-width:420px; text-align:center; box-shadow:0 8px 0 #0004; border:4px solid #d52b1e; }
+.card h1 { margin:0 0 6px; font-size:30px; }
+.card p { margin:8px 0; line-height:1.4; }
+button { font:inherit; font-weight:800; font-size:20px; color:#fff; background:linear-gradient(#e63a2c,#a81a10); border:0; border-radius:12px; padding:12px 28px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #6d0f08; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #6d0f08; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<canvas id="c"></canvas>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🐄 Kuh auf Ski</h1>
+  <p>Berta hat die Weide satt und fährt jetzt Weltcup. Bremsen hat sie nie gelernt.</p>
+  <p><b>Steuern:</b> Maus, Finger oder ← →.<br><b>In der Luft:</b> Tippen oder Leertaste für einen Muh-Salto.</p>
+  <p>🔔 einsammeln · 🚩 durchs Tor fahren · 🧀 Turbo · 🌲⛄ ausweichen.<br>Touristen 🤳 geben Bonus, wenn du knapp an ihnen vorbeirast.</p>
+  <button id="go">Muuuh!</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle"></h1>
+  <p id="otext"></p>
+  <button id="again">Nochmal rauf</button>
+</div></div>
+<script>
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+let W, H, dpr;
+function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+addEventListener("resize", resize); resize();
+
+const rnd = (a, b) => a + Math.random() * (b - a);
+const CRASH = ["MUUUUH!", "Berta ist okay. Der Baum nicht.", "Das gibt Milchshake.", "Die Skischule ist entsetzt."];
+const TOURIST = ["Ein Foto! Wow!", "Oh mein Gott, eine Kuh!", "Ist das normal hier?", "Sehr authentisch!"];
+const TRICKS = ["Muh-Salto!", "Doppel-Euter!", "Der Fliegende Käse!", "Alpen-Rolle!", "Heilige Kuh!"];
+let best = Number(ArcadeCore.getScore("kuhski")) || 0;
+let state = "menu", cow, things, trail, parts, floats, score, bells, lives, speed, dist, spawnD, turbo, invuln, shake, targetX, keys = {}, crashT, crashMsg, flakes = [], gateIdx;
+
+for (let i = 0; i < 60; i++) flakes.push({ x: Math.random(), y: Math.random(), s: rnd(1, 3) });
+
+function reset() {
+  cow = { x: W / 2, vx: 0, z: 0, vz: 0, rot: 0, tricks: 0 };
+  targetX = W / 2; things = []; trail = []; parts = []; floats = [];
+  score = 0; bells = 0; lives = 3; speed = 300; dist = 0; spawnD = 500; turbo = 0; invuln = 0; shake = 0; crashT = 0; gateIdx = 0;
+}
+const COW_Y = () => H * 0.3;
+function moo(p = 1) {
+  ArcadeCore.playTone(150 * p, 0.45, "sawtooth", 0.13);
+  setTimeout(() => ArcadeCore.playTone(115 * p, 0.45, "sawtooth", 0.13), 170);
+}
+function yodel() { [392, 659, 392, 784, 523].forEach((f, i) => setTimeout(() => ArcadeCore.playTone(f, 0.13, "triangle", 0.14), i * 110)); }
+function float(x, y, s, col) { floats.push({ x, y, s, col: col || "#123", t: 1.2 }); }
+function burst(x, y, col, n) { for (let i = 0; i < n; i++) { const a = rnd(0, 6.28), s = rnd(60, 260); parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: rnd(0.3, 0.8), col }); } }
+
+function spawn() {
+  const lvl = Math.min(dist / 12000, 1);
+  const y = H + 80;
+  const r = Math.random();
+  const margin = 50, rx = () => rnd(margin, W - margin);
+  if (r < 0.14) {
+    const gap = Math.max(130, 210 - lvl * 70), gx = rnd(margin + gap / 2, W - margin - gap / 2);
+    things.push({ k: "gate", x: gx, y, gap });
+  } else if (r < 0.25) things.push({ k: "ramp", x: rx(), y, w: 90 });
+  else if (r < 0.48) {
+    const x = rx(); for (let i = 0; i < 4; i++) things.push({ k: "bell", x: x + Math.sin(i) * 26, y: y + i * 55 });
+  } else if (r < 0.53) things.push({ k: "cheese", x: rx(), y });
+  else if (r < 0.65) things.push({ k: "tourist", x: rx(), y, vx: rnd(-1, 1) < 0 ? -30 : 30, near: false });
+  else {
+    const n = 1 + (Math.random() < 0.25 + lvl * 0.5 ? 1 : 0);
+    for (let i = 0; i < n; i++) things.push({ k: "hazard", e: ["🌲", "🌲", "⛄", "🪨", "🌲"][Math.floor(Math.random() * 5)], x: rx(), y: y + i * 40 });
+  }
+  spawnD = rnd(170, 300) - lvl * 60;
+}
+function crash(what) {
+  if (invuln > 0) return;
+  lives--; shake = 0.6; turbo = 0; invuln = 2; crashT = 1;
+  crashMsg = CRASH[Math.floor(Math.random() * CRASH.length)];
+  speed = Math.max(280, speed * 0.72);
+  burst(cow.x, COW_Y(), "#fff", 30); burst(cow.x, COW_Y(), "#222", 12);
+  moo(0.8); ArcadeCore.hit();
+  if (lives <= 0) end();
+}
+function end() {
+  state = "over"; score = Math.floor(score);
+  const rec = score > best;
+  if (rec) { best = score; ArcadeCore.saveScore("kuhski", best); }
+  ArcadeCore.gameOver();
+  $("otitle").textContent = rec ? "Neuer Weltrekord! 🏆" : "Berta muss in den Stall 🐄";
+  $("otext").textContent = Math.floor(dist / 10) + " m gefahren, " + bells + " Glocken. Punkte: " + score + " · Rekord: " + best + ". " + (score > 5000 ? "Die Schweiz bietet dir den Pass an." : "Der Bauer ist trotzdem stolz.");
+  setTimeout(() => $("over").classList.remove("hide"), 800);
+}
+
+let last = 0;
+function loop(ts) {
+  const dt = Math.min((ts - last) / 1000 || 0, 0.05); last = ts;
+  if (state === "play") update(dt);
+  else if (state === "over") { parts.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.t -= dt; }); parts = parts.filter(p => p.t > 0); cow.rot += dt * 8; }
+  draw(ts / 1000);
+  requestAnimationFrame(loop);
+}
+function update(dt) {
+  if (keys.left) targetX -= 620 * dt;
+  if (keys.right) targetX += 620 * dt;
+  targetX = Math.max(30, Math.min(W - 30, targetX));
+  const steer = cow.z > 0 ? 3.5 : 9;
+  const prevX = cow.x;
+  cow.x += (targetX - cow.x) * Math.min(1, steer * dt);
+  cow.vx = (cow.x - prevX) / (dt || 1);
+  const sp = speed + (turbo > 0 ? 300 : 0);
+  dist += sp * dt; score += sp * dt * 0.02;
+  speed = Math.min(800, speed + dt * 6);
+  turbo = Math.max(0, turbo - dt); invuln = Math.max(0, invuln - dt); shake = Math.max(0, shake - dt); crashT = Math.max(0, crashT - dt);
+  // Sprung
+  if (cow.z > 0 || cow.vz > 0) {
+    cow.vz -= 1000 * dt; cow.z += cow.vz * dt;
+    if (cow.spin) cow.rot += dt * 20;
+    if (cow.spin && cow.rot >= 6.283 * cow.spin) cow.rot = 6.283 * cow.spin;
+    if (cow.z <= 0) {
+      cow.z = 0; cow.vz = 0;
+      const clean = !cow.spin || cow.rot >= 6.283 * cow.spin - 0.02;
+      if (cow.tricks > 0 && clean) {
+        const pts = 150 * cow.tricks * cow.tricks; score += pts;
+        float(cow.x, COW_Y() - 60, TRICKS[Math.min(cow.tricks - 1, TRICKS.length - 1)] + " +" + pts, "#d52b1e"); yodel();
+      } else if (cow.tricks > 0) { float(cow.x, COW_Y() - 60, "Bauchlandung!", "#555"); crash(); }
+      cow.tricks = 0; cow.spin = 0; cow.rot = 0;
+    }
+  }
+  if (cow.z <= 0 && Math.random() < 0.8) trail.push({ x: cow.x, y: COW_Y() + 18 });
+  const dy = sp * dt;
+  trail.forEach(p => p.y -= dy); trail = trail.filter(p => p.y > -10);
+  spawnD -= dy; if (spawnD <= 0) spawn();
+  const cy = COW_Y();
+  for (const t of things) {
+    const py = t.y; t.y -= dy;
+    if (t.k === "tourist") { t.x += t.vx * dt; if (t.x < 30 || t.x > W - 30) t.vx *= -1; }
+    if (t.gone) continue;
+    const dx = Math.abs(t.x - cow.x), passing = py >= cy && t.y < cy, close = Math.abs(t.y - cy) < 34;
+    if (t.k === "gate" && passing) {
+      t.gone = true;
+      if (cow.z <= 0 && dx < t.gap / 2) { gateIdx++; const pts = 50 + gateIdx * 10; score += pts; float(cow.x, cy - 50, "Tor! +" + pts, "#d52b1e"); ArcadeCore.coin(); }
+      else gateIdx = 0;
+    } else if (t.k === "ramp" && close && dx < t.w / 2 + 10 && cow.z <= 0) {
+      t.gone = true; cow.vz = 560 + speed * 0.25; cow.z = 1; moo(1.2);
+    } else if (t.k === "bell" && close && dx < 40 && cow.z < 70) {
+      t.gone = true; bells++; score += 15; ArcadeCore.playTone(rnd(1100, 1400), 0.12, "sine", 0.14);
+    } else if (t.k === "cheese" && close && dx < 42 && cow.z < 70) {
+      t.gone = true; turbo = 3.2; float(cow.x, cy - 50, "KÄSE-TURBO!", "#e89b00"); ArcadeCore.powerup();
+    } else if (t.k === "hazard" && close && dx < 32 && cow.z < 55) {
+      t.gone = true; burst(t.x, t.y, "#3b7", 16); crash();
+    } else if (t.k === "tourist") {
+      if (close && dx < 26 && cow.z < 55) { t.gone = true; float(t.x, cy - 50, "Das Handy ist hin!", "#555"); crash(); }
+      else if (passing && dx < 90 && !t.near) {
+        t.near = true; score += 100; float(t.x, cy - 40, TOURIST[Math.floor(Math.random() * TOURIST.length)] + " +100", "#06c"); t.fl = 0.3;
+      }
+    }
+    if (t.fl > 0) t.fl -= dt;
+  }
+  things = things.filter(t => t.y > -100 && !(t.gone && t.k !== "gate" && t.k !== "ramp" && t.k !== "tourist"));
+  parts.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.t -= dt; }); parts = parts.filter(p => p.t > 0);
+  floats.forEach(f => { f.t -= dt; f.y -= 40 * dt; }); floats = floats.filter(f => f.t > 0);
+}
+function draw(time) {
+  ctx.save();
+  if (shake > 0) ctx.translate(rnd(-1, 1) * 22 * shake, rnd(-1, 1) * 22 * shake);
+  ctx.fillStyle = "#f2f9ff"; ctx.fillRect(-30, -30, W + 60, H + 60);
+  // Rillen im Schnee
+  ctx.strokeStyle = "#dcebf7"; ctx.lineWidth = 2;
+  const off = dist % 90;
+  for (let y = -off; y < H + 90; y += 90) { ctx.beginPath(); ctx.moveTo(0, y); ctx.quadraticCurveTo(W / 2, y + 30, W, y); ctx.stroke(); }
+  // Skispur
+  ctx.fillStyle = "#c7dcec";
+  for (const p of trail) { ctx.fillRect(p.x - 9, p.y, 3, 7); ctx.fillRect(p.x + 7, p.y, 3, 7); }
+  const items = things.slice().sort((a, b) => a.y - b.y);
+  for (const t of items) {
+    if (t.k === "gate") {
+      ctx.strokeStyle = t.gone ? "#ccc" : "#d52b1e"; ctx.setLineDash([6, 8]); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(t.x - t.gap / 2, t.y); ctx.lineTo(t.x + t.gap / 2, t.y); ctx.stroke(); ctx.setLineDash([]);
+      emoji("🚩", t.x - t.gap / 2, t.y - 16, 36); emoji("🚩", t.x + t.gap / 2, t.y - 16, 36);
+    } else if (t.k === "ramp") {
+      ctx.fillStyle = "#6db3e8"; ctx.beginPath(); ctx.moveTo(t.x - t.w / 2, t.y + 22); ctx.lineTo(t.x + t.w / 2, t.y + 22); ctx.lineTo(t.x + t.w / 2 - 12, t.y - 22); ctx.lineTo(t.x - t.w / 2 + 12, t.y - 22); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = "900 15px Trebuchet MS"; ctx.textAlign = "center"; ctx.fillText("▲ ▲", t.x, t.y + 5);
+    } else if (!t.gone) {
+      if (t.k === "bell") emoji("🔔", t.x, t.y, 30, Math.sin(time * 8 + t.y) * 0.25);
+      if (t.k === "cheese") emoji("🧀", t.x, t.y, 40, Math.sin(time * 4) * 0.2);
+      if (t.k === "hazard") emoji(t.e, t.x, t.y - 16, 56);
+      if (t.k === "tourist") { emoji("🧍", t.x, t.y - 8, 44); emoji(t.near ? "😱" : "🤳", t.x + 22, t.y - 26, 22); }
+    }
+  }
+  drawCow();
+  for (const p of parts) { ctx.globalAlpha = Math.min(1, p.t * 2); ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, 5, 5); }
+  ctx.globalAlpha = 1;
+  for (const f of floats) { ctx.globalAlpha = Math.min(1, f.t); text(f.s, f.x, f.y, 20, f.col); }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#fff";
+  for (const f of flakes) {
+    const fx = (f.x * W + Math.sin(time + f.y * 9) * 18) % W, fy = (f.y * H - time * 50 * f.s - dist * 0.05 * f.s) % H;
+    ctx.beginPath(); ctx.arc(fx, fy < 0 ? fy + H : fy, f.s, 0, 6.3); ctx.fill();
+  }
+  ctx.restore();
+  // HUD
+  text(Math.floor(score) + " Pkt.", W - 16, 26, 22, "#123", "right");
+  text("🔔 " + bells + "   " + Math.floor(dist / 10) + " m", W - 16, 54, 16, "#123", "right");
+  text("🐄".repeat(Math.max(lives, 0)), W / 2, 26, 20, "#123");
+  text(Math.round((speed + (turbo > 0 ? 300 : 0)) * 0.22) + " km/h", W / 2, 54, 15, turbo > 0 ? "#e85d00" : "#456");
+  if (crashT > 0) text(crashMsg, W / 2, H * 0.65, Math.min(W / (crashMsg.length * 0.6), 34), "#d52b1e");
+}
+function drawCow() {
+  const x = cow.x, y = COW_Y() - cow.z * 0.5;
+  if (cow.z > 0) { ctx.fillStyle = "#0002"; ctx.beginPath(); ctx.ellipse(cow.x, COW_Y() + 24, 28 - Math.min(cow.z / 16, 16), 8, 0, 0, 6.3); ctx.fill(); }
+  if (invuln > 0 && Math.floor(invuln * 10) % 2) ctx.globalAlpha = 0.45;
+  const scale = 1 + cow.z / 400;
+  ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+  ctx.rotate(cow.rot + Math.max(-0.45, Math.min(0.45, (cow.vx || 0) / 1400)));
+  // Ski
+  ctx.fillStyle = "#d52b1e";
+  ctx.fillRect(-20, -8, 7, 46); ctx.fillRect(13, -8, 7, 46);
+  // Körper
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#222"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.ellipse(0, 4, 22, 25, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#222";
+  ctx.beginPath(); ctx.ellipse(-9, 8, 7, 9, 0.4, 0, 6.3); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(11, -1, 6, 5, 0, 0, 6.3); ctx.fill();
+  ctx.fillStyle = "#ffb3c7"; ctx.beginPath(); ctx.arc(-5, 25, 6, 0, 6.3); ctx.arc(5, 25, 6, 0, 6.3); ctx.fill();
+  // Kopf
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(0, -24, 17, 15, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#ffb3c7"; ctx.beginPath(); ctx.ellipse(0, -16, 12, 7, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(-4, -16, 1.8, 0, 6.3); ctx.arc(4, -16, 1.8, 0, 6.3); ctx.fill();
+  // Skibrille
+  ctx.fillStyle = "#0ad"; ctx.fillRect(-13, -32, 26, 9); ctx.strokeRect(-13, -32, 26, 9);
+  // Hörner
+  ctx.fillStyle = "#c9a26b";
+  ctx.beginPath(); ctx.moveTo(-13, -36); ctx.lineTo(-20, -48); ctx.lineTo(-7, -38); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(13, -36); ctx.lineTo(20, -48); ctx.lineTo(7, -38); ctx.fill();
+  emoji("🔔", 0, -3, 15);
+  if (turbo > 0) emoji("🔥", 0, 44 + Math.sin(performance.now() / 40) * 3, 26);
+  ctx.restore(); ctx.globalAlpha = 1;
+}
+function emoji(s, x, y, size, rot = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+  ctx.font = size + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000";
+  ctx.fillText(s, 0, 0); ctx.restore();
+}
+function text(s, x, y, size, col, align = "center") {
+  ctx.font = "900 " + size + "px Trebuchet MS"; ctx.textAlign = align; ctx.textBaseline = "middle";
+  ctx.lineWidth = size / 4; ctx.strokeStyle = "#fffc"; ctx.lineJoin = "round"; ctx.strokeText(s, x, y);
+  ctx.fillStyle = col; ctx.fillText(s, x, y);
+}
+function trick() {
+  if (state !== "play" || cow.z <= 0) return;
+  cow.tricks++; cow.spin = (cow.spin || 0) + 1; moo(1.3);
+}
+cv.addEventListener("pointerdown", e => { targetX = e.clientX; trick(); });
+addEventListener("pointermove", e => { if (e.pointerType === "mouse" || e.buttons) targetX = e.clientX; });
+addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft" || e.key === "a") keys.left = true;
+  if (e.key === "ArrowRight" || e.key === "d") keys.right = true;
+  if (e.code === "Space" && state === "play") { e.preventDefault(); trick(); }
+});
+addEventListener("keyup", e => {
+  if (e.key === "ArrowLeft" || e.key === "a") keys.left = false;
+  if (e.key === "ArrowRight" || e.key === "d") keys.right = false;
+});
+function start() {
+  reset(); state = "play"; moo();
+  $("menu").classList.add("hide"); $("over").classList.add("hide");
+}
+$("go").onclick = start; $("again").onclick = start;
+reset(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

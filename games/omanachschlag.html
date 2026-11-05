@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Omas Nachschlag — Du bist ja so dünn!</title>
+<meta name="description" content="Oma füllt deinen Teller immer wieder auf. Iss, bis du platzt, oder schmuggle das Essen heimlich zum Hund und in Opas offenen Mund. Lass dich bloß nicht erwischen!">
+<meta name="theme-color" content="#7a4b2a">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#7a4b2a; color:#fff4d6; font-family:Georgia,"Trebuchet MS",serif; }
+canvas { position:fixed; inset:0; width:100%; height:100%; touch-action:none; cursor:grab; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff4d6; text-decoration:none; font:700 14px "Trebuchet MS",sans-serif; background:rgba(0,0,0,.55); border:1px solid rgba(255,244,214,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:4px; min-height:36px; touch-action:manipulation; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000a; z-index:5; padding:16px; }
+.overlay.hide { display:none; }
+.card { background:#fff4d6; color:#4a2c16; border-radius:18px; padding:20px 26px; max-width:440px; text-align:center; box-shadow:0 8px 0 #0006; border:3px double #a9744a; }
+.card h1 { margin:0 0 6px; font-size:30px; }
+.card p { margin:8px 0; line-height:1.4; }
+button { font:800 20px "Trebuchet MS",sans-serif; color:#fff; background:linear-gradient(#c5692f,#8a4315); border:0; border-radius:12px; padding:12px 28px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #52260a; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #52260a; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<canvas id="c"></canvas>
+<div class="overlay" id="menu"><div class="card">
+  <h1>👵 Omas Nachschlag</h1>
+  <p>Sonntagsessen bei Oma. Sie findet, du bist <b>viel zu dünn</b>, und füllt jedes Mal nach, wenn sie sich umdreht.</p>
+  <p><b>Tippe</b> auf Essen, um es zu essen. Dein Bauch hat aber Grenzen.<br><b>Ziehe</b> es zu 🐕 Waldi, in Opas offenen Mund 👴 oder in den 🌿 Gummibaum.</p>
+  <p>Schmuggle nur, wenn Oma nicht hinschaut. Liegen mehr als <b>8 Portionen</b> auf dem Teller, ist sie beleidigt.</p>
+  <button id="go">Ja, Oma, ich hab Hunger</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle"></h1>
+  <p id="otext"></p>
+  <button id="again">Nochmal zu Oma</button>
+</div></div>
+<script>
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+let W, H, S, dpr;
+function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; S = Math.min(W, H * 0.8); cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+addEventListener("resize", resize); resize();
+
+const rnd = (a, b) => a + Math.random() * (b - a);
+const COURSES = [
+  { name: "Suppe", foods: ["🍲"], fill: 7 },
+  { name: "Braten", foods: ["🍖", "🥔"], fill: 9 },
+  { name: "Knödel", foods: ["🥟", "🥔", "🥦"], fill: 10 },
+  { name: "Torte", foods: ["🍰", "🧁"], fill: 13 },
+  { name: "„Nur noch ein Häppchen“", foods: ["🍖", "🍰", "🥟", "🍲"], fill: 12 }
+];
+const LOOKS_PER_COURSE = 4;
+const MAX_PLATE = 8, MAX_STRIKES = 3;
+const REFILL = ["Du bist ja so dünn!", "Nimm noch was, Schatz!", "Ist doch nur ein Löffelchen!", "Früher hatten wir gar nichts!", "Schmeckt's dir etwa nicht?", "Das ist fast nur Luft!", "Der Hans hat immer drei Teller gegessen."];
+const CAUGHT = ["WAS MACHST DU DA?!", "Ich hab Augen im Hinterkopf!", "Das hab ich gesehen, Freundchen!", "Das arme Essen! Der Krieg!"];
+const PRAISE = ["Braves Kind! Hier, noch mehr.", "Na also, geht doch!", "So ein guter Esser!"];
+const HIDES = () => [
+  { id: "dog", label: "🐕", x: W * 0.17, y: H * 0.86, cap: 5, regen: 3.5, n: 0, t: 0, full: "Waldi rülpst. Er kann nicht mehr." },
+  { id: "opa", label: "👴", x: W * 0.85, y: H * 0.52, cap: 4, regen: 5, n: 0, t: 0, full: "Opa kaut im Schlaf. Mund voll." },
+  { id: "plant", label: "🌿", x: W * 0.85, y: H * 0.85, cap: 3, regen: 7, n: 0, t: 0, full: "Der Gummibaum ist überdüngt." }
+];
+
+let best = Number(ArcadeCore.getScore("omanachschlag")) || 0;
+let state = "menu", plate, hides, belly, strikes, score, course, looks, phase, phaseT, oma, drag, floats, shake, swallow, ended, msg, msgT, smuggled, eaten;
+
+function reset() {
+  plate = []; hides = HIDES(); belly = 15; strikes = 0; score = 0; course = 0; looks = 0;
+  phase = "back"; phaseT = 3; drag = null; floats = []; shake = 0; swallow = 0; ended = false; msg = "Greif zu, Schatz!"; msgT = 2; smuggled = 0; eaten = 0;
+  addFood(3);
+}
+function plateSpot(i) {
+  const a = i * 2.4, r = S * 0.033 * Math.sqrt(i + 0.5) * 1.6;
+  return { x: W / 2 + Math.cos(a) * r * 1.5, y: H * 0.72 + Math.sin(a) * r * 0.7 };
+}
+function addFood(n) {
+  const c = COURSES[course];
+  for (let i = 0; i < n; i++) plate.push({ e: c.foods[Math.floor(Math.random() * c.foods.length)], fill: c.fill, pop: 0.3, spot: Math.random() * 1e6 });
+  layout();
+}
+function layout() { plate.forEach((f, i) => { const p = plateSpot(i); f.x = p.x; f.y = p.y; }); }
+function say(s) { msg = s; msgT = 1.8; }
+function float(x, y, s, col) { floats.push({ x, y, s, col: col || "#ffe27a", t: 1 }); }
+function strike(why) {
+  strikes++; shake = 0.5; say(why); ArcadeCore.hit();
+  if (strikes >= MAX_STRIKES) finish("enterbt");
+}
+function finish(kind) {
+  if (ended) return; ended = true; state = "over";
+  const won = kind === "win";
+  if (won) score += 500 + (MAX_STRIKES - strikes) * 200;
+  const rec = score > best;
+  if (rec) { best = score; ArcadeCore.saveScore("omanachschlag", best); }
+  won ? ArcadeCore.powerup() : ArcadeCore.gameOver();
+  $("otitle").textContent = won ? "Geschafft! 🥡" : kind === "geplatzt" ? "GEPLATZT! 🎈" : "ENTERBT! 📜";
+  $("otext").textContent = (won ? "Oma ist glücklich. Zum Abschied bekommst du drei Tupperdosen und einen Zwanziger." : kind === "geplatzt" ? "Oma schaut auf die Reste an der Tapete: „Hat's wenigstens geschmeckt?“" : "Das Testament wird geändert. Der Hund erbt jetzt alles. Er ist auch dicker.") + " Gegessen: " + eaten + ", geschmuggelt: " + smuggled + ". Punkte: " + score + " · Rekord: " + best + (rec ? " 🏆" : "");
+  setTimeout(() => $("over").classList.remove("hide"), 700);
+}
+function eat(i) {
+  const f = plate[i]; plate.splice(i, 1); layout();
+  belly += f.fill; eaten++; score += 10; swallow = 0.25;
+  float(W / 2, H * 0.48, "+" + f.fill + " Bauch", "#ffb37a");
+  ArcadeCore.playTone(rnd(150, 230), 0.09, "triangle", 0.2);
+  if (belly > 80) { say("Uuuuff..."); ArcadeCore.playTone(70, 0.3, "sawtooth", 0.2); }
+  if (belly >= 100) finish("geplatzt");
+}
+function hideFood(h) {
+  h.n++; h.t = h.regen; smuggled++;
+  const pts = 25 + course * 5; score += pts;
+  float(h.x, h.y - 40, "+" + pts + " 🤫");
+  ArcadeCore.pop(h.id === "dog" ? 0.7 : 1.1);
+}
+function setPhase(p, t) { phase = p; phaseT = t; }
+function omaTurnsAround() {
+  const c = course;
+  if (plate.length === 0) { score += 40; float(W / 2, H * 0.6, "+40 Leerer Teller!"); say(PRAISE[Math.floor(Math.random() * PRAISE.length)]); }
+  else say(REFILL[Math.floor(Math.random() * REFILL.length)]);
+  const n = 2 + c + (plate.length === 0 ? 1 : 0);
+  addFood(n); ArcadeCore.playTone(300, 0.1, "sine", 0.15);
+  if (drag) { caughtDrag(); }
+  if (plate.length > MAX_PLATE) {
+    strike("Schmeckt dir mein Essen etwa NICHT?!");
+    plate.splice(MAX_PLATE - 2); layout();
+  }
+}
+function caughtDrag() {
+  drag = null; float(W / 2, H * 0.45, "ERWISCHT!", "#ff5a5a");
+  strike(CAUGHT[Math.floor(Math.random() * CAUGHT.length)]);
+}
+
+let last = 0;
+function loop(ts) {
+  const dt = Math.min((ts - last) / 1000 || 0, 0.05); last = ts;
+  if (state === "play") update(dt);
+  draw(ts / 1000);
+  requestAnimationFrame(loop);
+}
+function update(dt) {
+  phaseT -= dt;
+  if (phase === "back" && phaseT <= 0) { setPhase("warn", Math.max(0.45, 0.85 - course * 0.09)); ArcadeCore.playTone(660, 0.18, "sine", 0.12); }
+  else if (phase === "warn" && phaseT <= 0) {
+    setPhase("look", rnd(1.3, 2.1)); omaTurnsAround();
+  } else if (phase === "look" && phaseT <= 0 && state === "play") {
+    looks++;
+    if (looks >= LOOKS_PER_COURSE) {
+      looks = 0; course++;
+      if (course >= COURSES.length) return finish("win");
+      say("Und jetzt: " + COURSES[course].name + "!"); ArcadeCore.coin();
+    }
+    setPhase("back", rnd(2.6, 4.2) - course * 0.2);
+  }
+  belly = Math.max(0, belly - dt * 1.6);
+  for (const h of hides) if (h.n > 0 && (h.t -= dt) <= 0) { h.n--; h.t = h.regen; }
+  for (const f of plate) f.pop = Math.max(0, f.pop - dt);
+  floats.forEach(f => { f.t -= dt; f.y -= 45 * dt; }); floats = floats.filter(f => f.t > 0);
+  shake = Math.max(0, shake - dt); swallow = Math.max(0, swallow - dt);
+  if (msgT > 0) msgT -= dt;
+}
+
+function draw(t) {
+  ctx.save();
+  if (shake > 0) ctx.translate(rnd(-1, 1) * 30 * shake, rnd(-1, 1) * 30 * shake);
+  // Tapete
+  ctx.fillStyle = "#c9a26b"; ctx.fillRect(-40, -40, W + 80, H + 80);
+  ctx.fillStyle = "#b98f58";
+  for (let x = 0; x < W + 50; x += 48) for (let y = 0; y < H * 0.6; y += 48) { ctx.beginPath(); ctx.arc(x + ((y / 48) & 1 ? 24 : 0), y, 6, 0, 6.3); ctx.fill(); }
+  // Kreuzstich-Bild
+  ctx.fillStyle = "#5b3a1e"; ctx.fillRect(W * 0.1, H * 0.14, S * 0.2, S * 0.14);
+  ctx.fillStyle = "#fff4d6"; ctx.fillRect(W * 0.1 + 6, H * 0.14 + 6, S * 0.2 - 12, S * 0.14 - 12);
+  ctx.fillStyle = "#8a2020"; ctx.font = "700 " + S * 0.022 + "px Georgia"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("Iss was!", W * 0.1 + S * 0.1, H * 0.14 + S * 0.07);
+  // Herd
+  ctx.fillStyle = "#e8e4d8"; ctx.fillRect(W / 2 - S * 0.3, H * 0.28, S * 0.6, H * 0.26);
+  ctx.fillStyle = "#555"; ctx.fillRect(W / 2 - S * 0.22, H * 0.36, S * 0.44, H * 0.15);
+  emoji("🍳", W / 2 + S * 0.2, H * 0.26, S * 0.07);
+  emoji("🍲", W / 2 - S * 0.2, H * 0.26, S * 0.07);
+  drawOma(t);
+  // Tisch
+  ctx.fillStyle = "#7a4b2a"; ctx.fillRect(-40, H * 0.58, W + 80, H);
+  ctx.fillStyle = "#faf3e0"; ctx.fillRect(-40, H * 0.56, W + 80, H * 0.34);
+  ctx.fillStyle = "#d9534f";
+  for (let x = 0; x < W + 40; x += 40) ctx.fillRect(x, H * 0.9, 20, 8);
+  // Teller
+  const over = plate.length >= MAX_PLATE - 1;
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = over ? "#d11" : "#a9c"; ctx.lineWidth = over ? 6 : 4;
+  ctx.beginPath(); ctx.ellipse(W / 2, H * 0.72, S * 0.27, S * 0.13, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+  for (const f of plate) if (f !== (drag && drag.f)) emoji(f.e, f.x, f.y, S * 0.085 * (1 + f.pop));
+  // Verstecke
+  for (const h of hides) {
+    let e = h.label, size = S * 0.15;
+    const hot = drag && hit(h);
+    if (h.id === "opa") { emoji("🪑", h.x, h.y + S * 0.08, S * 0.2); e = h.n >= h.cap ? "😵" : "😮"; size = S * 0.12; label("z z z", h.x + S * 0.08, h.y - S * 0.08 + Math.sin(t * 2) * 5, S * 0.03); }
+    if (hot) { ctx.strokeStyle = h.n >= h.cap ? "#d11" : "#2d2"; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(h.x, h.y, S * 0.1, 0, 6.3); ctx.stroke(); }
+    emoji(e, h.x, h.y, size * (1 + h.n * 0.05));
+    for (let i = 0; i < h.cap; i++) { ctx.fillStyle = i < h.n ? "#d94" : "#0003"; ctx.fillRect(h.x - h.cap * 7 + i * 14, h.y + S * 0.08, 11, 8); }
+  }
+  if (drag) emoji(drag.f.e, drag.x, drag.y, S * 0.1);
+  for (const f of floats) { ctx.globalAlpha = Math.min(1, f.t * 2); label(f.s, f.x, f.y, S * 0.04, f.col); }
+  ctx.globalAlpha = 1;
+  // Bauch
+  const bw = Math.min(W * 0.5, 280), bx = W / 2 - bw / 2, by = H - 34;
+  ctx.fillStyle = "#0007"; ctx.fillRect(bx, by, bw, 18);
+  ctx.fillStyle = belly > 80 ? "#e33" : belly > 55 ? "#ea3" : "#6c4"; ctx.fillRect(bx, by, bw * Math.min(1, belly / 100), 18);
+  label(swallow > 0 ? "😋" : belly > 80 ? "🤢" : "🍽️ Bauch", W / 2, by + 9, 14);
+  // HUD
+  label(score + " Pkt.", W - 65, 26, 20, "#ffe27a");
+  label("❤️".repeat(Math.max(0, MAX_STRIKES - strikes)) + "🖤".repeat(Math.min(MAX_STRIKES, strikes)), W - 65, 54, 16);
+  label((COURSES[course] ? COURSES[course].name : "") + " · " + plate.length + "/" + MAX_PLATE, W / 2, 26, Math.min(S * 0.04, 22));
+  if (msgT > 0) {
+    const fs = Math.min(W / (msg.length * 0.56), S * 0.045);
+    ctx.font = "700 " + fs + "px Georgia";
+    const tw = ctx.measureText(msg).width;
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2 - 14, H * 0.07, tw + 28, fs * 1.8, 12); ctx.fill();
+    ctx.fillStyle = "#4a2c16"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(msg, W / 2, H * 0.07 + fs * 0.9);
+  }
+  ctx.restore();
+}
+function drawOma(t) {
+  const x = W / 2, y = H * 0.4, r = S * 0.09;
+  ctx.fillStyle = "#8e6aa8"; ctx.beginPath(); ctx.ellipse(x, y + r * 1.8, r * 1.3, r * 1.5, 0, 0, 6.3); ctx.fill();
+  if (phase === "back") {
+    ctx.fillStyle = "#ddd"; ctx.beginPath(); ctx.arc(x + Math.sin(t * 3) * 4, y, r, 0, 6.3); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + Math.sin(t * 3) * 4, y - r * 0.8, r * 0.4, 0, 6.3); ctx.fill();
+    label("♪", x + r * 1.4, y - r + Math.sin(t * 4) * 8, S * 0.04);
+  } else if (phase === "warn") {
+    emoji("👵", x, y, r * 2.2, Math.sin(t * 40) * 0.1);
+    label("❗", x, y - r * 1.5, S * 0.08, "#ff3030");
+  } else {
+    emoji("👵", x, y, r * 2.4);
+    ctx.fillStyle = "rgba(255,60,60,.14)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(0, H); ctx.lineTo(W, H); ctx.fill();
+    label("👀", x, y - r * 1.5, S * 0.06);
+  }
+}
+function emoji(s, x, y, size, rot = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+  ctx.font = size + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000";
+  ctx.fillText(s, 0, 0); ctx.restore();
+}
+function label(s, x, y, size, col = "#fff") {
+  ctx.font = "900 " + size + "px Trebuchet MS"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineWidth = size / 5; ctx.strokeStyle = "#0009"; ctx.lineJoin = "round"; ctx.strokeText(s, x, y);
+  ctx.fillStyle = col; ctx.fillText(s, x, y);
+}
+function hit(h) { return Math.hypot(drag.x - h.x, drag.y - h.y) < S * 0.12; }
+
+const pick = (x, y) => {
+  let bi = -1, bd = S * 0.07;
+  plate.forEach((f, i) => { const d = Math.hypot(f.x - x, f.y - y); if (d < bd) { bd = d; bi = i; } });
+  return bi;
+};
+cv.addEventListener("pointerdown", e => {
+  if (state !== "play") return;
+  const i = pick(e.clientX, e.clientY);
+  if (i < 0) return;
+  drag = { f: plate[i], x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false };
+});
+addEventListener("pointermove", e => {
+  if (!drag || state !== "play") return;
+  drag.x = e.clientX; drag.y = e.clientY;
+  if (Math.hypot(drag.x - drag.sx, drag.y - drag.sy) > 14) drag.moved = true;
+  if (drag.moved && phase === "look") caughtDrag();
+});
+addEventListener("pointerup", () => {
+  if (!drag || state !== "play") { drag = null; return; }
+  const d = drag; const i = plate.indexOf(d.f);
+  if (i < 0) { drag = null; return; }
+  if (!d.moved) { drag = null; eat(i); return; }
+  const h = hides.find(hit);
+  drag = null;
+  if (!h) return;
+  if (h.n >= h.cap) { say(h.full); ArcadeCore.playTone(110, 0.15, "square", 0.12); return; }
+  plate.splice(i, 1); layout(); hideFood(h);
+});
+addEventListener("resize", () => { if (state !== "menu" && hides) { const fresh = HIDES(); hides.forEach((h, i) => { h.x = fresh[i].x; h.y = fresh[i].y; }); layout(); } });
+
+function start() {
+  reset(); state = "play";
+  $("menu").classList.add("hide"); $("over").classList.add("hide");
+}
+$("go").onclick = start; $("again").onclick = start;
+reset(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

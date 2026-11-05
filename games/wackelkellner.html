@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Wackel-Kellner — Bitte nichts fallen lassen</title>
+<meta name="description" content="Balanciere immer höhere Geschirrtürme durchs Restaurant. Hunde, Bananenschalen und Kleinkinder wollen dich aufhalten. Der Chef zählt jeden Teller!">
+<meta name="theme-color" content="#2a1a3e">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#2a1a3e; color:#fff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas { position:fixed; inset:0; width:100%; height:100%; touch-action:none; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:4px; min-height:36px; touch-action:manipulation; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000a; z-index:5; padding:16px; }
+.overlay.hide { display:none; }
+.card { background:#fff; color:#2a1a3e; border-radius:18px; padding:20px 26px; max-width:420px; text-align:center; box-shadow:0 8px 0 #0006; }
+.card h1 { margin:0 0 6px; font-size:30px; }
+.card p { margin:8px 0; line-height:1.4; }
+button { font:inherit; font-weight:800; font-size:20px; color:#fff; background:linear-gradient(#7b4fd0,#4c2a94); border:0; border-radius:12px; padding:12px 28px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #2b1560; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #2b1560; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<canvas id="c"></canvas>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🍽️ Wackel-Kellner</h1>
+  <p>Dein erster Tag. Dein Tablett ist instabil und du auch. Bring jede Bestellung zum Tisch.</p>
+  <p><b>Steuern:</b> ← → oder linke/rechte Bildschirmseite halten. Damit kippst du das Tablett.</p>
+  <p>Achte auf die <b>Warnungen</b>: Dann kommt gleich ein Stoß von dieser Seite. Gegenhalten! Gläser rutschen am schnellsten.</p>
+  <p style="font-size:13px;opacity:.7">Mehr als 8 zerbrochene Teile und der Chef schmeißt dich raus.</p>
+  <button id="go">Kommt sofort!</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle">Gefeuert!</h1>
+  <p id="otext"></p>
+  <button id="again">Neuer Job</button>
+</div></div>
+<script>
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+let W, H, dpr;
+function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+addEventListener("resize", resize); resize();
+
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pickOf = a => a[Math.floor(Math.random() * a.length)];
+const TYPES = [
+  { e: "🍽️", w: 74, h: 16, mu: 0.42, pts: 10 },
+  { e: "🥘", w: 62, h: 26, mu: 0.36, pts: 15 },
+  { e: "🍝", w: 52, h: 36, mu: 0.32, pts: 20 },
+  { e: "🍺", w: 34, h: 40, mu: 0.24, pts: 25 },
+  { e: "🍰", w: 40, h: 30, mu: 0.26, pts: 25 },
+  { e: "🥂", w: 26, h: 42, mu: 0.19, pts: 40 }
+];
+const EVENTS = [
+  { txt: "🐕 Hund!", sound: "wuff" }, { txt: "🍌 Banane!", sound: "slip" }, { txt: "👶 Kleinkind!", sound: "wah" },
+  { txt: "🚪 Türe auf!", sound: "bang" }, { txt: "🤳 Influencer!", sound: "click" }, { txt: "🤧 Gast niest!", sound: "ha" }
+];
+const GUESTS = ["🧔", "👩", "👨‍🦳", "👩‍🦰", "🧑‍🎤", "👴"];
+const THANKS = ["Na endlich!", "Das hab ich nicht bestellt.", "Trinkgeld? Haha.", "Super, danke!", "Ist das vegan?", "Bravo, Junge!"];
+const BROKE = ["KLIRR!", "Das zieh ich dir ab!", "Der Chef hat's gesehen.", "Scherben bringen Glück. Nicht.", "NEIN! Das gute Geschirr!"];
+
+const MAX_BROKEN = 8, TRAY_W = 170, WALK_LEN = 2300;
+let best = Number(ArcadeCore.getScore("wackelkellner")) || 0;
+let state = "menu", stack, debris, parts, floats, tilt, tiltV, order, score, broken, delivered, walked, speed, evT, warn, kick, keys = {}, ptr = 0, bubble, bubbleT, arrive, shake, gust, steps, guest;
+
+function reset() {
+  score = 0; broken = 0; delivered = 0; debris = []; parts = []; floats = []; shake = 0; bubble = ""; bubbleT = 0;
+  newOrder();
+}
+function newOrder() {
+  order = delivered + 1;
+  const n = Math.min(3 + Math.floor(delivered * 0.8), 11);
+  const unlocked = Math.min(TYPES.length, 2 + delivered);
+  stack = [];
+  for (let i = 0; i < n; i++) {
+    const pool = TYPES.slice(0, unlocked).filter(t => !stack.length || t.w <= stack[stack.length - 1].type.w + 14);
+    stack.push({ type: pickOf(pool.length ? pool : TYPES.slice(0, 1)), off: 0, v: 0 });
+  }
+  stack.sort((a, b) => b.type.w - a.type.w);
+  tilt = 0; tiltV = 0; walked = 0; speed = 210 + Math.min(delivered * 8, 90);
+  evT = rnd(2.0, 3.2); warn = null; kick = 0; arrive = 0; gust = 0; steps = 0; guest = pickOf(GUESTS);
+  say("Bestellung " + order + ": " + n + " Teile!");
+}
+function say(s) { bubble = s; bubbleT = 1.8; }
+function float(x, y, s, col) { floats.push({ x, y, s, col: col || "#ffe066", t: 1.2 }); }
+function tone(k) {
+  const P = ArcadeCore.playTone;
+  if (k === "wuff") { P(170, 0.1, "sawtooth", 0.2); setTimeout(() => P(140, 0.12, "sawtooth", 0.2), 130); }
+  else if (k === "slip") { P(800, 0.2, "sine", 0.12); setTimeout(() => P(300, 0.2, "sine", 0.12), 90); }
+  else if (k === "wah") { P(600, 0.3, "triangle", 0.12); setTimeout(() => P(480, 0.3, "triangle", 0.12), 200); }
+  else if (k === "bang") ArcadeCore.hit();
+  else if (k === "click") P(1500, 0.05, "square", 0.1);
+  else P(900, 0.12, "sawtooth", 0.12);
+}
+function shatter(i) {
+  const cx = W * 0.42, h = trayY();
+  let yy = 0;
+  for (let k = 0; k < i; k++) yy += stack[k].type.h;
+  const lost = stack.splice(i);
+  for (const it of lost) {
+    broken++;
+    const dir = Math.sign(it.off || tilt || 1);
+    debris.push({ e: it.type.e, x: cx + (it.x || 0), y: h - yy, vx: dir * rnd(70, 260) + Math.sin(tilt) * 200, vy: rnd(-260, -80), r: 0, vr: rnd(-9, 9) });
+    yy += it.type.h;
+  }
+  say(pickOf(BROKE)); shake = 0.3;
+  if (broken >= MAX_BROKEN) over();
+}
+function over() {
+  state = "over";
+  const rec = score > best;
+  if (rec) { best = score; ArcadeCore.saveScore("wackelkellner", best); }
+  ArcadeCore.gameOver();
+  $("otitle").textContent = rec ? "Gefeuert, aber Rekord! 🏆" : "Gefeuert! 🧾";
+  $("otext").textContent = delivered + " Bestellungen, " + broken + " Scherbenhaufen. Trinkgeld: " + score + " CHF · Rekord: " + best + " CHF. " + (delivered >= 6 ? "Der Chef weint. Vor Rührung, sagt er." : "Dein Lohn wurde mit den Tellern verrechnet.");
+  setTimeout(() => $("over").classList.remove("hide"), 900);
+}
+function deliver() {
+  const n = stack.length; let tips = 0;
+  for (const it of stack) tips += it.type.pts;
+  const perfect = n > 0 && broken === 0;
+  tips = Math.round(tips * (1 + delivered * 0.1));
+  if (n === 0) { say("Wo ist mein Essen?!"); }
+  else {
+    score += tips; say(pickOf(THANKS));
+    float(W * 0.42, trayY() - 80, "+" + tips + " CHF" + (perfect ? " 🌟" : ""));
+    ArcadeCore.coin();
+  }
+  delivered++;
+  stack = [];
+  arrive = 1.3;
+}
+const trayY = () => H * 0.42;
+
+let last = 0;
+function loop(ts) {
+  const dt = Math.min((ts - last) / 1000 || 0, 0.05); last = ts;
+  if (state === "play") update(dt);
+  stepDebris(dt);
+  draw(ts / 1000);
+  requestAnimationFrame(loop);
+}
+function stepDebris(dt) {
+  const floor = H * 0.83;
+  for (const d of debris) {
+    d.vy += 1300 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.r += d.vr * dt;
+    if (d.y > floor) {
+      for (let i = 0; i < 12; i++) parts.push({ x: d.x, y: floor, vx: rnd(-220, 220), vy: rnd(-360, -60), t: rnd(0.3, 0.8) });
+      float(d.x, floor - 40, "💥", "#fff");
+      ArcadeCore.explosion(); ArcadeCore.playTone(rnd(1800, 2600), 0.15, "square", 0.05);
+      d.dead = true;
+    }
+  }
+  debris = debris.filter(d => !d.dead);
+  for (const p of parts) { p.vy += 900 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.t -= dt; }
+  parts = parts.filter(p => p.t > 0);
+  floats.forEach(f => { f.t -= dt; f.y -= 45 * dt; }); floats = floats.filter(f => f.t > 0);
+  shake = Math.max(0, shake - dt); if (bubbleT > 0) bubbleT -= dt;
+}
+function update(dt) {
+  if (arrive > 0) {
+    arrive -= dt;
+    if (arrive <= 0 && state === "play") newOrder();
+    return;
+  }
+  walked += speed * dt; steps += dt * speed / 42;
+  if (walked >= WALK_LEN) return deliver();
+  // Tablett: umgekehrtes Pendel, je höher der Turm, desto instabiler
+  const input = (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + ptr;
+  const unstable = 1.0 + stack.length * 0.2;
+  const stepJolt = Math.sin(steps * Math.PI) * 0.35;
+  tiltV += (tilt * unstable * 4 + input * 4.4 + stepJolt + rnd(-0.5, 0.5) + kick) * dt;
+  tiltV *= Math.pow(0.28, dt);
+  tilt += tiltV * dt;
+  if (Math.abs(tilt) > 0.7) { tilt = Math.sign(tilt) * 0.7; tiltV *= -0.3; }
+  kick = Math.max(0, Math.abs(kick) - dt * 30) * Math.sign(kick);
+  // Ereignisse: erst Warnung, dann Stoß
+  if (warn) {
+    warn.t -= dt;
+    if (warn.t <= 0) {
+      kick = warn.side * (5 + Math.min(delivered, 8) * 0.4); tone(warn.ev.sound); shake = 0.18; warn = null;
+      evT = Math.max(1.4, rnd(2.6, 4) - delivered * 0.15);
+    }
+  } else if ((evT -= dt) <= 0 && walked < WALK_LEN - 300) {
+    warn = { side: Math.random() < 0.5 ? -1 : 1, ev: pickOf(EVENTS), t: Math.max(0.55, 1 - delivered * 0.05) };
+  }
+  // Teile rutschen: Haftreibung, dann Gleiten relativ zum Teil darunter
+  const G = 620, a = Math.sin(tilt) * G + Math.sin(steps * Math.PI) * 7;
+  let x = 0;
+  for (let i = 0; i < stack.length; i++) {
+    const it = stack[i], mu = it.type.mu * G * 0.6;
+    if (it.v === 0 && Math.abs(a) < mu) { /* haftet */ }
+    else {
+      const prev = it.v;
+      it.v += (a - Math.sign(it.v || a) * mu) * dt;
+      if (prev !== 0 && Math.sign(prev) !== Math.sign(it.v)) it.v = 0;
+      it.off += it.v * dt;
+    }
+    x += it.off; it.x = x;
+    const below = i === 0 ? TRAY_W : stack[i - 1].type.w;
+    if (Math.abs(it.off) > (below + it.type.w) * 0.42 && !(i === 0 && Math.abs(it.off) < TRAY_W / 2)) { shatter(i); break; }
+    if (i === 0 && Math.abs(it.off) > TRAY_W / 2) { shatter(0); break; }
+  }
+}
+function draw(t) {
+  ctx.save();
+  if (shake > 0) ctx.translate(rnd(-1, 1) * 30 * shake, rnd(-1, 1) * 30 * shake);
+  // Restaurant
+  ctx.fillStyle = "#3b2455"; ctx.fillRect(-40, -40, W + 80, H + 80);
+  const scroll = walked;
+  ctx.fillStyle = "#4b2f6c";
+  const sw = 150;
+  for (let x = -(scroll * 0.4 % sw) - sw; x < W + sw; x += sw) ctx.fillRect(x, 0, sw / 2, H * 0.83);
+  // Fenster und Lampen
+  for (let x = -(scroll * 0.7 % 420) - 420; x < W + 420; x += 420) {
+    ctx.fillStyle = "#ffd98a"; ctx.fillRect(x + 150, 0, 3, H * 0.13);
+    emoji("💡", x + 151, H * 0.15, 28);
+    ctx.fillStyle = "#1d3557"; ctx.fillRect(x + 40, H * 0.26, 90, H * 0.3);
+    emoji("🌙", x + 85, H * 0.34, 28);
+  }
+  ctx.fillStyle = "#6d4c2f"; ctx.fillRect(-40, H * 0.83, W + 80, H);
+  ctx.fillStyle = "#5b3e25";
+  for (let x = -(scroll % 80) - 80; x < W + 80; x += 80) ctx.fillRect(x, H * 0.83, 4, H);
+  // Tisch mit Gast am Ziel
+  const tableX = W * 0.42 + (WALK_LEN - walked) + 140;
+  if (tableX < W + 200) {
+    ctx.fillStyle = "#fff"; ctx.fillRect(tableX - 80, H * 0.62, 160, 14);
+    ctx.fillStyle = "#6d4c2f"; ctx.fillRect(tableX - 70, H * 0.635, 10, H * 0.2); ctx.fillRect(tableX + 60, H * 0.635, 10, H * 0.2);
+    emoji(guest, tableX + 40, H * 0.55, 62);
+    if (arrive > 0) emoji("🍽️", tableX - 30, H * 0.605, 34);
+  }
+  drawWaiter(t);
+  // Hindernis-Warnung
+  if (warn) {
+    const x = warn.side > 0 ? W - 60 : 60, blink = Math.floor(t * 12) % 2;
+    if (blink) { ctx.fillStyle = "rgba(255,60,60,.22)"; ctx.fillRect(warn.side > 0 ? W * 0.72 : 0, 0, W * 0.28, H); }
+    label(warn.side > 0 ? "⬅️" : "➡️", x, H * 0.46, 46);
+    label(warn.ev.txt, Math.max(90, Math.min(W - 90, x + (warn.side > 0 ? -30 : 30))), H * 0.36, Math.min(W * 0.05, 24), "#ffe066");
+  }
+  for (const d of debris) emoji(d.e, d.x, d.y, 34, d.r);
+  ctx.fillStyle = "#e7f6ff";
+  for (const p of parts) { ctx.globalAlpha = Math.min(1, p.t * 2); ctx.fillRect(p.x, p.y, 5, 5); }
+  ctx.globalAlpha = 1;
+  for (const f of floats) { ctx.globalAlpha = Math.min(1, f.t); label(f.s, f.x, f.y, 26, f.col); }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  // HUD
+  label(score + " CHF", W - 70, 26, 22, "#ffe066");
+  label("💥 " + broken + "/" + MAX_BROKEN, W - 70, 56, 16, broken >= MAX_BROKEN - 2 ? "#ff6b6b" : "#fff");
+  const barW = Math.min(W * 0.34, 240), bx = W / 2 - barW / 2;
+  ctx.fillStyle = "#0007"; ctx.fillRect(bx, 18, barW, 10);
+  ctx.fillStyle = "#6fd"; ctx.fillRect(bx, 18, barW * Math.min(1, walked / WALK_LEN), 10);
+  label("🚶 → 🍽️ Tisch " + order, W / 2, 42, 14);
+  if (bubbleT > 0) label(bubble, W / 2, H * 0.14, Math.min(W / (bubble.length * 0.6), 28));
+  // Touch-Hinweis
+  ctx.fillStyle = ptr < 0 ? "#fff3" : "#fff1"; ctx.fillRect(0, H - 70, W / 2 - 3, 70);
+  ctx.fillStyle = ptr > 0 ? "#fff3" : "#fff1"; ctx.fillRect(W / 2 + 3, H - 70, W / 2 - 3, 70);
+  label("◀", W * 0.25, H - 35, 28); label("▶", W * 0.75, H - 35, 28);
+}
+function drawWaiter(t) {
+  const x = W * 0.42, floor = H * 0.83, hipY = H * 0.63, ty = trayY();
+  const sw = arrive > 0 ? 0 : Math.sin(steps * Math.PI);
+  ctx.lineCap = "round"; ctx.strokeStyle = "#111"; ctx.lineWidth = 15;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x, hipY); ctx.lineTo(x + s * sw * 34, floor - 6); ctx.stroke(); }
+  ctx.fillStyle = "#fff"; ctx.fillRect(x - 26, ty + 66, 52, hipY - ty - 58);
+  ctx.fillStyle = "#111"; ctx.fillRect(x - 26, hipY - 26, 52, 34);
+  ctx.fillStyle = "#c1121f"; ctx.beginPath(); ctx.moveTo(x, ty + 62); ctx.lineTo(x - 11, ty + 54); ctx.lineTo(x - 11, ty + 70); ctx.fill(); ctx.beginPath(); ctx.moveTo(x, ty + 62); ctx.lineTo(x + 11, ty + 54); ctx.lineTo(x + 11, ty + 70); ctx.fill();
+  // Arm zum Tablett
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 12;
+  ctx.beginPath(); ctx.moveTo(x + 22, ty + 72); ctx.lineTo(x + 50, ty + 34); ctx.lineTo(x, ty + 2); ctx.stroke();
+  const danger = Math.abs(tilt) > 0.3;
+  emoji(danger ? "😱" : stack.length > 5 ? "😬" : "🙂", x, ty + 42, 46);
+  ctx.save(); ctx.translate(x, ty); ctx.rotate(tilt);
+  ctx.fillStyle = "#c0c5cc"; ctx.fillRect(-TRAY_W / 2, -5, TRAY_W, 9);
+  let y = -5;
+  for (const it of stack) {
+    const h = it.type.h, cx = it.x || 0;
+    emoji(it.type.e, cx, y - h / 2, Math.max(it.type.w, it.type.h) * 1.1);
+    y -= h;
+  }
+  ctx.restore();
+}
+function emoji(s, x, y, size, rot = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+  ctx.font = size + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000";
+  ctx.fillText(s, 0, 0); ctx.restore();
+}
+function label(s, x, y, size, col = "#fff") {
+  ctx.font = "900 " + size + "px Trebuchet MS"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineWidth = size / 5; ctx.strokeStyle = "#000a"; ctx.lineJoin = "round"; ctx.strokeText(s, x, y);
+  ctx.fillStyle = col; ctx.fillText(s, x, y);
+}
+cv.addEventListener("pointerdown", e => { ptr = e.clientX < W / 2 ? -1 : 1; });
+addEventListener("pointermove", e => { if (e.buttons && ptr !== 0) ptr = e.clientX < W / 2 ? -1 : 1; });
+addEventListener("pointerup", () => { ptr = 0; });
+addEventListener("pointercancel", () => { ptr = 0; });
+addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft" || e.key === "a") keys.left = true;
+  if (e.key === "ArrowRight" || e.key === "d") keys.right = true;
+});
+addEventListener("keyup", e => {
+  if (e.key === "ArrowLeft" || e.key === "a") keys.left = false;
+  if (e.key === "ArrowRight" || e.key === "d") keys.right = false;
+});
+function start() {
+  reset(); state = "play";
+  $("menu").classList.add("hide"); $("over").classList.add("hide");
+}
+$("go").onclick = start; $("again").onclick = start;
+reset(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

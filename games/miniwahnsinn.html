@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Mini-Wahnsinn — 13 Spiele, 3 Sekunden, null Würde</title>
+<meta name="description" content="Blitz-Minispiele im Sekundentakt: Hose zu, Mücke klatschen, Furz verhalten und bloß nicht den roten Knopf drücken. Es wird immer schneller!">
+<meta name="theme-color" content="#ff3d81">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#ff3d81; color:#fff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas { position:fixed; inset:0; width:100%; height:100%; touch-action:none; cursor:pointer; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:4px; min-height:36px; touch-action:manipulation; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000a; z-index:5; padding:16px; }
+.overlay.hide { display:none; }
+.card { background:#fff8e1; color:#34113f; border-radius:18px; padding:20px 26px; max-width:420px; text-align:center; box-shadow:0 8px 0 #0006; transform:rotate(-1deg); }
+.card h1 { margin:0 0 6px; font-size:30px; }
+.card p { margin:8px 0; line-height:1.4; }
+button { font:inherit; font-weight:800; font-size:20px; color:#fff; background:linear-gradient(#ff3d81,#b5125a); border:0; border-radius:12px; padding:12px 28px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #6d0a36; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #6d0a36; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<canvas id="c"></canvas>
+<div class="overlay" id="menu"><div class="card">
+  <h1>⚡ Mini-Wahnsinn</h1>
+  <p>Du bekommst <b>ein Wort</b> als Anleitung und <b>ein paar Sekunden</b> Zeit. Dann kommt schon das nächste Spiel.</p>
+  <p>Vier Fehler und du bist raus. Alle vier Runden wird alles schneller.</p>
+  <p style="font-size:13px;opacity:.7">Nur Maus oder Finger. Kein Nachdenken nötig, ausdrücklich unerwünscht.</p>
+  <button id="go">Los, schnell!</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle">Vorbei!</h1>
+  <p id="otext"></p>
+  <button id="again">Nochmal</button>
+</div></div>
+<script>
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+let W, H, S, dpr;
+function resize() { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; S = Math.min(W, H); cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+addEventListener("resize", resize); resize();
+
+const rnd = (a, b) => a + Math.random() * (b - a);
+const dist = (a, b, c, d) => Math.hypot(a - c, b - d);
+const LOSE = ["Peinlich.", "Deine Mutter schaut zu.", "Das war nichts.", "Autsch.", "Hast du geblinzelt?", "Oh nein. Oh doch."];
+const WIN = ["Geil!", "Sauber!", "Genie!", "Nobelpreis!", "Hammer!", "Wahnsinn!"];
+let best = Number(ArcadeCore.getScore("miniwahnsinn")) || 0;
+let state = "menu", cleared, lives, bag, m, timer, dur, phaseT, resultWin, resultMsg, px = 0, py = 0, down = false;
+
+function emoji(s, x, y, size, rot = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+  ctx.font = size + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000";
+  ctx.fillText(s, 0, 0); ctx.restore();
+}
+function label(s, x, y, size, col = "#fff") {
+  ctx.font = "900 " + size + "px Trebuchet MS"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineWidth = size / 5; ctx.strokeStyle = "#0009"; ctx.lineJoin = "round"; ctx.strokeText(s, x, y);
+  ctx.fillStyle = col; ctx.fillText(s, x, y);
+}
+function fart(len = 0.5) {
+  for (let i = 0; i < 6; i++) setTimeout(() => ArcadeCore.playTone(rnd(55, 95), 0.1, "sawtooth", 0.22), i * len * 160);
+}
+
+// Jedes Spiel: title, bg, time (Sekunden), survive (Sieg, wenn Zeit abläuft), Handler und draw(t)
+const GAMES = [
+  d => { // Kerzen
+    const n = 3 + Math.min(d, 4); let out = 0, taps = 0, puff = 0;
+    return { title: "PUSTEN!", hint: "Wild tippen", bg: "#6b3fa0", time: 4,
+      down() { taps++; puff = 0.2; ArcadeCore.playTone(rnd(500, 900), 0.05, "triangle", 0.08); if (taps % 2 === 0) { out++; ArcadeCore.pop(1.3); if (out >= n) win(); } },
+      update(dt) { puff -= dt; },
+      draw() {
+        ctx.fillStyle = "#f7c6d9"; ctx.fillRect(W / 2 - S * 0.35, H * 0.55, S * 0.7, S * 0.25);
+        ctx.fillStyle = "#ff77a8"; ctx.fillRect(W / 2 - S * 0.35, H * 0.55, S * 0.7, S * 0.05);
+        for (let i = 0; i < n; i++) {
+          const x = W / 2 - S * 0.3 + (S * 0.6) * (n > 1 ? i / (n - 1) : 0.5);
+          ctx.fillStyle = "#fff"; ctx.fillRect(x - 6, H * 0.55 - S * 0.1, 12, S * 0.1);
+          if (i >= out) emoji("🔥", x, H * 0.55 - S * 0.13 + Math.sin(performance.now() / 70 + i) * 3, S * 0.07);
+          else emoji("💨", x, H * 0.55 - S * 0.14, S * 0.05);
+        }
+        if (puff > 0) emoji("😤", W / 2, H * 0.28, S * 0.2);
+        else emoji("🥴", W / 2, H * 0.28, S * 0.17);
+      } };
+  },
+  d => { // Toast fangen
+    const x0 = rnd(W * 0.2, W * 0.8); let y = -40, rot = 0, plate = W / 2;
+    const fall = (H * 0.78) / (2.0 * Math.pow(0.9, d));
+    return { title: "FANG DEN TOAST!", hint: "Teller bewegen", bg: "#2c8c99", time: 3,
+      update(dt, t) {
+        plate = px || W / 2; y += fall * dt; rot += dt * 7;
+        const x = x0 + Math.sin(t * 3) * S * 0.12;
+        this.tx = x;
+        if (y >= H * 0.78) { if (Math.abs(x - plate) < S * 0.14) win(); else lose("Marmeladenseite unten. Natürlich."); }
+      },
+      draw() {
+        emoji("🍽️", plate, H * 0.82, S * 0.2);
+        emoji("🥪", this.tx || x0, y, S * 0.12, rot);
+      } };
+  },
+  d => { // Stecker ziehen
+    const sx = W * 0.25, sy = H * 0.5; let x = sx + S * 0.1, y = sy, held = false, smoke = 0;
+    return { title: "STECKER ZIEHEN!", hint: "Ziehen, es brennt", bg: "#8c3b2e", time: 3,
+      down() { held = dist(px, py, x, y) < S * 0.2; },
+      move() { if (held) { x = px; y = py; if (dist(x, y, sx, sy) > S * 0.42) win(); } },
+      update(dt) { smoke += dt; },
+      draw() {
+        ctx.fillStyle = "#eee"; ctx.fillRect(sx - S * 0.05, sy - S * 0.08, S * 0.1, S * 0.16);
+        ctx.strokeStyle = "#222"; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(x, y);
+        ctx.quadraticCurveTo((x + W * 0.8) / 2, H * 0.95, W * 0.8, H * 0.6); ctx.stroke();
+        ctx.fillStyle = "#222"; ctx.fillRect(x - S * 0.04, y - S * 0.04, S * 0.08, S * 0.08);
+        emoji("🔌", x, y, S * 0.08);
+        emoji("🧇", W * 0.8, H * 0.5, S * 0.18);
+        emoji("🔥", W * 0.8 + Math.sin(smoke * 11) * 8, H * 0.37, S * 0.12 + smoke * 12);
+      } };
+  },
+  d => { // Nicht drücken
+    let bx = W / 2, by = H * 0.55, r = S * 0.17;
+    const talk = ["Drück mich.", "Nur ganz kurz!", "Niemand schaut.", "Es gibt Kuchen!", "Feigling."];
+    return { title: "NICHT DRÜCKEN!", hint: "Finger weg!", bg: "#22223b", time: 3.2, survive: true,
+      down() { if (dist(px, py, bx, by) < r) { ArcadeCore.explosion(); lose("Du hattest EINE Aufgabe."); } },
+      update(dt, t) {
+        r = S * 0.17 + Math.sin(t * 9) * S * 0.015 + t * S * 0.02;
+        bx += (px - bx) * dt * 0.8; by += (py - by) * dt * 0.8;
+      },
+      draw(t) {
+        ctx.fillStyle = "#700"; ctx.beginPath(); ctx.arc(bx, by + 10, r, 0, 6.3); ctx.fill();
+        ctx.fillStyle = "#e11"; ctx.beginPath(); ctx.arc(bx, by, r, 0, 6.3); ctx.fill();
+        label(talk[Math.floor(t * 1.7) % talk.length], bx, by, S * 0.05);
+      } };
+  },
+  d => { // Mücke
+    let x = W / 2, y = H / 2, a = 0; const r = S * Math.max(0.07, 0.13 - d * 0.01), sp = S * (0.7 + d * 0.15);
+    return { title: "KLATSCH DIE MÜCKE!", hint: "Treffen!", bg: "#415a28", time: 4,
+      down() {
+        if (dist(px, py, x, y) < r) { ArcadeCore.hit(); win(); }
+        else ArcadeCore.playTone(90, 0.08, "square", 0.15);
+      },
+      update(dt) {
+        a += rnd(-5, 5) * dt * 4; x += Math.cos(a) * sp * dt; y += Math.sin(a) * sp * dt;
+        if (x < 40 || x > W - 40) { a = Math.PI - a; x = Math.max(40, Math.min(W - 40, x)); }
+        if (y < 90 || y > H - 40) { a = -a; y = Math.max(90, Math.min(H - 40, y)); }
+        if (Math.random() < dt * 8) ArcadeCore.playTone(rnd(800, 1100), 0.06, "sawtooth", 0.015);
+      },
+      draw() {
+        emoji("🦟", x, y, S * 0.1, Math.sin(a) * 0.4);
+        if (down) emoji("🖐️", px, py, S * 0.16);
+      } };
+  },
+  d => { // Nase bohren
+    let t0 = 0, hold = 0;
+    const pos = () => ({ x: W / 2 + Math.sin(t0 * (2 + d * 0.3)) * S * 0.28, y: H * 0.5 + Math.cos(t0 * 1.7) * S * 0.14 });
+    return { title: "NASE BOHREN!", hint: "Finger rein", bg: "#d4a373", time: 4,
+      update(dt) {
+        t0 += dt; const p = pos();
+        if (dist(px, py, p.x, p.y + S * 0.04) < S * 0.06) { hold += dt; if (hold > 0.15) win(); } else hold = 0;
+      },
+      draw() {
+        const p = pos();
+        emoji("👃", p.x, p.y, S * 0.3);
+        emoji("👆", px, py + S * 0.05, S * 0.11);
+        if (hold > 0) label("🟢", p.x, p.y - S * 0.2, S * 0.05);
+      } };
+  },
+  d => { // Wecker
+    const list = []; const n = 3 + Math.min(d, 4);
+    for (let i = 0; i < n; i++) list.push({ x: rnd(S * 0.1, W - S * 0.1), y: rnd(H * 0.22, H * 0.88), on: true });
+    return { title: "WECKER AUS!", hint: "Alle antippen", bg: "#355070", time: 4,
+      down() {
+        for (const w of list) if (w.on && dist(px, py, w.x, w.y) < S * 0.1) { w.on = false; ArcadeCore.pop(); break; }
+        if (list.every(w => !w.on)) win();
+      },
+      update(dt) { if (Math.random() < dt * 14) ArcadeCore.playTone(1800, 0.03, "square", 0.02); },
+      draw(t) {
+        for (const w of list) emoji(w.on ? "⏰" : "😴", w.x + (w.on ? Math.sin(t * 70) * 4 : 0), w.y, S * 0.13, w.on ? Math.sin(t * 50) * 0.2 : 0);
+      } };
+  },
+  d => { // Hose zu
+    const x = W / 2, bot = H * 0.8, top = H * 0.38; let y = bot, held = false;
+    return { title: "HOSE ZU!", hint: "Reißverschluss hoch", bg: "#577590", time: 2.6,
+      down() { held = dist(px, py, x, y) < S * 0.14; },
+      move() { if (held) { const ny = Math.max(top, Math.min(y, py)); if (ny < y) { y = ny; if (Math.random() < 0.5) ArcadeCore.playTone(rnd(1000, 1600), 0.02, "square", 0.04); } if (y <= top + 2) win(); } },
+      draw() {
+        ctx.fillStyle = "#274060"; ctx.fillRect(x - S * 0.28, top - S * 0.05, S * 0.56, bot - top + S * 0.25);
+        ctx.fillStyle = "#ffd6e0"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - S * 0.07, top); ctx.lineTo(x + S * 0.07, top); ctx.fill();
+        if (y > top + (bot - top) * 0.35) emoji("🦆", x, top + (y - top) * 0.35, S * 0.07);
+        ctx.fillStyle = "#ddd"; ctx.fillRect(x - 4, y, 8, bot - y);
+        ctx.fillStyle = "#ffc300"; ctx.fillRect(x - S * 0.04, y - S * 0.03, S * 0.08, S * 0.08);
+      } };
+  },
+  d => { // Katze
+    let amount = 0, lx = null; const need = S * (3 + d * 0.3);
+    return { title: "STREICHELN!", hint: "Hin und her rubbeln", bg: "#a4508b", time: 3.5,
+      move() {
+        if (down && dist(px, py, W / 2, H * 0.55) < S * 0.4 && lx !== null) { amount += Math.abs(px - lx); if (Math.random() < 0.2) ArcadeCore.playTone(rnd(60, 80), 0.1, "triangle", 0.15); }
+        lx = px;
+        if (amount >= need) win();
+      },
+      draw(t) {
+        const f = amount / need;
+        emoji(f > 0.6 ? "😻" : "😾", W / 2 + Math.sin(t * 40) * f * 6, H * 0.55, S * (0.3 + f * 0.12));
+        ctx.fillStyle = "#0005"; ctx.fillRect(W / 2 - S * 0.3, H * 0.86, S * 0.6, 14);
+        ctx.fillStyle = "#ffe066"; ctx.fillRect(W / 2 - S * 0.3, H * 0.86, S * 0.6 * Math.min(1, f), 14);
+      } };
+  },
+  d => { // Brot schmieren
+    const cols = 6, rows = 5, done = new Set(); const size = S * 0.6, x0 = W / 2 - size / 2, y0 = H * 0.55 - size / 2;
+    const paint = () => {
+      if (!down) return;
+      const c = Math.floor((px - x0) / (size / cols)), r = Math.floor((py - y0) / (size / rows));
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (c + a >= 0 && c + a < cols && r + b >= 0 && r + b < rows) done.add((c + a) + "," + (r + b));
+      if (done.size >= cols * rows * 0.9) win();
+    };
+    return { title: "NUTELLA DRAUF!", hint: "Ganz verschmieren", bg: "#bc6c25", time: 3,
+      down: paint, move: paint,
+      draw() {
+        ctx.fillStyle = "#f2d091"; ctx.fillRect(x0, y0, size, size);
+        ctx.fillStyle = "#4e2a12";
+        for (const k of done) { const [c, r] = k.split(",").map(Number); ctx.fillRect(x0 + c * size / cols, y0 + r * size / rows, size / cols + 1, size / rows + 1); }
+        emoji("🔪", px, py, S * 0.12);
+      } };
+  },
+  d => { // Falsches Gesicht
+    const n = Math.min(3 + Math.floor(d / 2), 6), odd = Math.floor(Math.random() * n * n), cell = Math.min(W * 0.9, H * 0.68) / n;
+    const x0 = W / 2 - cell * n / 2, y0 = H * 0.6 - cell * n / 2;
+    return { title: "WER IST FALSCH?", hint: "Den Komischen antippen", bg: "#3a7d44", time: 3.5,
+      down() {
+        const c = Math.floor((px - x0) / cell), r = Math.floor((py - y0) / cell);
+        if (c < 0 || r < 0 || c >= n || r >= n) return;
+        if (r * n + c === odd) win(); else lose("Das war Günther. Günther ist unschuldig.");
+      },
+      draw() {
+        for (let i = 0; i < n * n; i++) emoji(i === odd ? "🙃" : "🙂", x0 + (i % n + 0.5) * cell, y0 + (Math.floor(i / n) + 0.5) * cell, cell * 0.75);
+      } };
+  },
+  d => { // Furz verhalten
+    let grace = 1, wob = 0;
+    return { title: "HALT DEN FURZ!", hint: "Gedrückt halten", bg: "#6a994e", time: 3, survive: true,
+      up() { fart(); lose("Im Aufzug. Mit deinem Chef."); },
+      update(dt) {
+        wob += dt; if (!down) { grace -= dt; if (grace <= 0) { fart(); lose("Zu spät. Es ist draußen."); } }
+      },
+      draw(t) {
+        const shake = down ? Math.sin(t * 60) * (2 + wob * 5) : 0;
+        emoji(down ? "😣" : "😮", W / 2 + shake, H * 0.45, S * 0.28);
+        emoji("🛗", W * 0.12, H * 0.8, S * 0.16);
+        label(down ? "Haaalten..." : "DRÜCKEN!", W / 2, H * 0.72, S * 0.07);
+      } };
+  },
+  d => { // Taube fotografieren
+    const fw = S * 0.3, fx = W / 2; let x = -60, y = H * 0.55; const v = (W + 120) / Math.max(1.2, 2.4 - d * 0.1);
+    return { title: "FOTO VON DER TAUBE!", hint: "Tippen, wenn sie im Rahmen ist", bg: "#4895ef", time: 3,
+      down() {
+        ArcadeCore.playTone(1400, 0.05, "square", 0.1);
+        if (Math.abs(x - fx) < fw / 2) win(); else lose("Foto von nichts. Sehr künstlerisch.");
+      },
+      update(dt, t) {
+        x += v * dt; y = H * 0.55 + Math.sin(t * 7) * S * 0.08;
+        if (x > W + 60) lose("Die Taube hat Termine.");
+      },
+      draw() {
+        emoji("🐦", x, y, S * 0.14);
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 6; ctx.setLineDash([24, 14]);
+        ctx.strokeRect(fx - fw / 2, H * 0.55 - fw / 2, fw, fw); ctx.setLineDash([]);
+      } };
+  }
+];
+
+function win() {
+  if (state !== "play") return;
+  cleared++; resultWin = true; resultMsg = WIN[Math.floor(Math.random() * WIN.length)];
+  state = "result"; phaseT = 0.75; ArcadeCore.coin();
+}
+function lose(msg) {
+  if (state !== "play") return;
+  lives--; resultWin = false; resultMsg = msg || LOSE[Math.floor(Math.random() * LOSE.length)];
+  state = "result"; phaseT = 1.1; ArcadeCore.hit();
+}
+function next() {
+  if (lives <= 0) return end();
+  if (!bag.length) { bag = GAMES.slice(); for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; } }
+  const level = Math.floor(cleared / 4);
+  m = bag.pop()(level);
+  dur = m.time * Math.pow(0.9, level); timer = 0;
+  state = "intro"; phaseT = Math.max(0.55, 1 - level * 0.06);
+  ArcadeCore.playTone(520 + level * 40, 0.1, "square", 0.08);
+}
+function end() {
+  state = "over";
+  const rec = cleared > best;
+  if (rec) { best = cleared; ArcadeCore.saveScore("miniwahnsinn", best); }
+  ArcadeCore.gameOver();
+  $("otitle").textContent = rec ? "Neuer Rekord! 🏆" : "Vorbei! 💀";
+  $("otext").textContent = cleared + " Spiele geschafft. Rekord: " + best + ". " + (cleared < 5 ? "Das üben wir noch." : cleared < 15 ? "Respektabel, für einen Menschen." : "Du brauchst dringend frische Luft.");
+  $("over").classList.remove("hide");
+}
+function start() {
+  cleared = 0; lives = 4; bag = [];
+  $("menu").classList.add("hide"); $("over").classList.add("hide");
+  next();
+}
+
+let last = 0;
+function loop(ts) {
+  const dt = Math.min((ts - last) / 1000 || 0, 0.05); last = ts;
+  if (state === "intro") { phaseT -= dt; if (phaseT <= 0) { state = "play"; timer = 0; } }
+  else if (state === "play") {
+    timer += dt;
+    if (m.update) m.update(dt, timer);
+    if (state === "play" && timer >= dur) { if (m.survive) win(); else lose(); }
+  } else if (state === "result") { phaseT -= dt; if (phaseT <= 0) next(); }
+  draw();
+  requestAnimationFrame(loop);
+}
+function draw() {
+  ctx.fillStyle = m ? m.bg : "#ff3d81"; ctx.fillRect(0, 0, W, H);
+  if (!m) return;
+  if (state !== "intro") m.draw(timer);
+  // Zündschnur als Zeitbalken
+  if (state === "play") {
+    const f = Math.max(0, 1 - timer / dur), bw = W - 60;
+    ctx.fillStyle = "#0006"; ctx.fillRect(30, H - 26, bw, 10);
+    ctx.fillStyle = f < 0.3 ? "#ff4040" : "#ffe066"; ctx.fillRect(30, H - 26, bw * f, 10);
+    emoji("🧨", 30 + bw * f, H - 22, 26, Math.sin(timer * 30) * 0.2);
+    label(m.title, W / 2, 80, Math.min(S * 0.075, 40));
+  }
+  label("❤️".repeat(Math.max(lives, 0)), W - 70, 30, 18);
+  label("" + cleared, W - 24, 62, 22, "#ffe066");
+  if (state === "intro") {
+    const z = 1 + Math.sin(performance.now() / 60) * 0.03;
+    ctx.save(); ctx.translate(W / 2, H * 0.45); ctx.scale(z, z);
+    label(m.title, 0, 0, Math.min(W / (m.title.length * 0.62), S * 0.13), "#ffe066");
+    label(m.hint, 0, S * 0.12, S * 0.05);
+    ctx.restore();
+  }
+  if (state === "result") {
+    ctx.fillStyle = resultWin ? "#1a9e4b88" : "#c0202088"; ctx.fillRect(0, 0, W, H);
+    emoji(resultWin ? "🤩" : "💥", W / 2, H * 0.4, S * 0.3);
+    label(resultMsg, W / 2, H * 0.62, Math.min(W / (resultMsg.length * 0.6), S * 0.07));
+  }
+}
+
+function setP(e) { px = e.clientX; py = e.clientY; }
+cv.addEventListener("pointerdown", e => { setP(e); down = true; if (state === "play" && m.down) m.down(); if (state === "play" && m.move) m.move(); });
+addEventListener("pointermove", e => { setP(e); if (state === "play" && m.move) m.move(); });
+addEventListener("pointerup", e => { setP(e); down = false; if (state === "play" && m.up) m.up(); });
+addEventListener("pointercancel", () => { down = false; if (state === "play" && m.up) m.up(); });
+$("go").onclick = start; $("again").onclick = start;
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
