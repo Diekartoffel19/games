@@ -54,6 +54,24 @@ button:active { transform:translateY(3px); box-shadow:0 1px 0 #6d0f08; }
 #mute:active { transform:none; }
 .float { position:absolute; transform:translate(-50%,-50%); font-size:20px; white-space:nowrap; will-change:transform; }
 #fallbackError a { color:#fff; }
+.btnrow { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+button.alt { background:linear-gradient(#ffd23a,#d99a00); color:#3a2500; box-shadow:0 4px 0 #8a5d00; }
+button.alt:active { box-shadow:0 1px 0 #8a5d00; }
+#shop .card { max-width:480px; width:100%; max-height:calc(100vh - 32px); overflow-y:auto; padding:16px 18px; }
+.wallet { font-size:22px; font-weight:900; color:#a86d00; margin:4px 0 10px; }
+.shead { text-align:left; font-weight:900; font-size:15px; color:#567; margin:12px 2px 6px; text-transform:uppercase; letter-spacing:.05em; }
+.urow { display:flex; align-items:center; gap:10px; text-align:left; background:#f2f7fc; border-radius:12px; padding:8px 10px; margin:6px 0; }
+.urow .ic { font-size:28px; width:36px; text-align:center; flex:none; }
+.urow .tx { flex:1; min-width:0; }
+.urow .tx b { display:block; font-size:16px; }
+.urow .tx small { display:block; font-size:13px; color:#567; line-height:1.3; }
+.pips { font-size:12px; letter-spacing:2px; color:#d52b1e; }
+.urow button { font-size:15px; padding:8px 12px; margin:0; flex:none; min-width:84px; box-shadow:0 3px 0 #6d0f08; }
+.urow button:disabled { background:#b9c4cf; box-shadow:0 3px 0 #8794a1; cursor:default; transform:none; }
+.urow button.own { background:linear-gradient(#3fbf6a,#23894a); box-shadow:0 3px 0 #14552c; }
+.urow button.own:disabled { background:linear-gradient(#3fbf6a,#23894a); box-shadow:0 3px 0 #14552c; opacity:.8; }
+.sw { display:inline-block; width:26px; height:26px; border-radius:50%; vertical-align:middle; border:2px solid #fff; box-shadow:0 0 0 1px #0003; }
+#earned { color:#a86d00; font-weight:800; }
 @media (max-width:520px) { #score { font-size:20px; top:54px; } #sub { top:80px; font-size:14px; } #combo { top:100px; } .card h1 { font-size:26px; } }
 </style>
 </head>
@@ -75,14 +93,26 @@ button:active { transform:translateY(3px); box-shadow:0 1px 0 #6d0f08; }
   <p>Berta hat die Weide satt und fährt jetzt Weltcup – diesmal in echt 3D. Bremsen hat sie immer noch nicht gelernt.</p>
   <p><b>Steuern:</b> Maus, Finger ziehen oder ← → / A D.<br><b>In der Luft:</b> Tippen oder Leertaste für einen Muh-Salto. Mehrmals = mehr Punkte, aber lande sauber!</p>
   <p>🔔 einsammeln · 🚩 durchs Tor fahren · 🌲⛄🪨 ausweichen.<br>🧀 Käse-Turbo walzt alles nieder · 🥛 Milchkanne = Extraleben.<br>Touristen 🤳 geben Bonus, wenn du knapp vorbeirast.</p>
+  <p>🔔 Glocken sind Geld: Im <b>Hofladen</b> kaufst du Upgrades und neue Ski.</p>
   <p style="font-size:13px;color:#567">P/Esc Pause · M Ton</p>
   <p class="best" id="menuBest"></p>
-  <button id="go">Muuuh!</button>
+  <div class="btnrow"><button id="go">Muuuh!</button><button id="shopBtn" class="alt">🛒 Hofladen</button></div>
 </div></div>
 <div class="overlay hide" id="over"><div class="card">
   <h1 id="otitle"></h1>
   <p id="otext"></p>
-  <button id="again">Nochmal rauf</button>
+  <p id="earned"></p>
+  <div class="btnrow"><button id="again">Nochmal rauf</button><button id="shopBtn2" class="alt">🛒 Hofladen</button></div>
+</div></div>
+<div class="overlay hide" id="shop"><div class="card">
+  <h1>🛒 Bauer Seppis Hofladen</h1>
+  <p style="margin:2px 0;font-size:14px;color:#567">Glocken 🔔 sammelst du auf der Piste. Alle 100 m gibt es 1 🔔 extra.</p>
+  <div class="wallet" id="wallet"></div>
+  <div class="shead">Upgrades</div>
+  <div id="upList"></div>
+  <div class="shead">Ausrüstung (Ski &amp; Schal)</div>
+  <div id="skinList"></div>
+  <button id="shopBack">Zurück</button>
 </div></div>
 <div id="fallbackError" style="display:none;position:fixed;inset:0;background:#123;color:#fff;z-index:99999;padding:30px;text-align:center;">
   <h2>🐄 Berta steckt im Lift fest</h2>
@@ -344,6 +374,7 @@ const M = {
   ramp: new THREE.MeshStandardMaterial({ color: "#7cc3f0", roughness: 0.3, flatShading: true }),
   skin: new THREE.MeshStandardMaterial({ color: "#f1c9a5", roughness: 0.7 }),
   phone: new THREE.MeshStandardMaterial({ color: "#222", emissive: "#ffffff", emissiveIntensity: 0 }),
+  gear: new THREE.MeshStandardMaterial({ color: "#d52b1e", roughness: 0.35, metalness: 0.1 }),
   steel: new THREE.MeshStandardMaterial({ color: "#d8dde4", roughness: 0.25, metalness: 0.8, emissive: "#334", emissiveIntensity: 0.3 }),
 };
 function mesh(geo, mat, x = 0, y = 0, z = 0, parent) {
@@ -362,8 +393,8 @@ let flame, scarfTail;
 {
   const g = cowModel;
   for (const sx of [-0.3, 0.3]) {
-    mesh(new THREE.BoxGeometry(0.16, 0.05, 2.3), M.red, sx, 0.03, 0.05, g);
-    const tip = mesh(new THREE.BoxGeometry(0.16, 0.05, 0.3), M.red, sx, 0.09, -1.18, g); tip.rotation.x = 0.5;
+    mesh(new THREE.BoxGeometry(0.16, 0.05, 2.3), M.gear, sx, 0.03, 0.05, g);
+    const tip = mesh(new THREE.BoxGeometry(0.16, 0.05, 0.3), M.gear, sx, 0.09, -1.18, g); tip.rotation.x = 0.5;
   }
   for (const [lx, lz] of [[-0.27, -0.45], [0.27, -0.45], [-0.27, 0.45], [0.27, 0.45]]) {
     mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.55, 8), M.white, lx, 0.36, lz, g);
@@ -386,8 +417,8 @@ let flame, scarfTail;
     const ear = mesh(sph(1, 8, 6), M.white, sx * 0.33, 0.12, 0.08, head); ear.scale.set(0.14, 0.05, 0.08); ear.rotation.z = sx * 0.3;
   }
   const bell = mesh(new THREE.CylinderGeometry(0.06, 0.12, 0.16, 10), M.gold, 0, 0.92, -0.75, g);
-  mesh(new THREE.TorusGeometry(0.24, 0.04, 6, 16), M.red, 0, 1.12, -0.62, g).rotation.x = 1.25;
-  scarfTail = mesh(new THREE.BoxGeometry(0.12, 0.03, 0.6), M.red, 0.15, 1.25, -0.3, g);
+  mesh(new THREE.TorusGeometry(0.24, 0.04, 6, 16), M.gear, 0, 1.12, -0.62, g).rotation.x = 1.25;
+  scarfTail = mesh(new THREE.BoxGeometry(0.12, 0.03, 0.6), M.gear, 0.15, 1.25, -0.3, g);
   flame = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.9, 10), new THREE.MeshBasicMaterial({ color: "#ff8a1a", transparent: true, opacity: 0.85 }));
   flame.rotation.x = Math.PI / 2; flame.position.set(0, 0.95, 1.3); flame.visible = false; g.add(flame);
   void gog; void bell;
@@ -496,10 +527,36 @@ function makeTourist() {
   return g;
 }
 
+// ---------- Hofladen (Speicher) ----------
+const SAVE_KEY = "kuhski3d_shop";
+const save = { bells: 0, up: {}, skins: ["rot"], skin: "rot" };
+try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); } catch (e) {}
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+const UPGRADES = [
+  { id: "leben",  ic: "🐄", name: "Dickes Fell",     desc: "+1 maximales Leben",                         cost: [120, 320] },
+  { id: "schild", ic: "🛡️", name: "Euter-Airbag",    desc: "Fängt pro Lauf einen Crash ab (je Stufe 1)", cost: [150, 380] },
+  { id: "ski",    ic: "🎿", name: "Rennski",         desc: "Lenkt schneller, am Boden und in der Luft",  cost: [50, 130, 260] },
+  { id: "turbo",  ic: "🧀", name: "Reifer Bergkäse", desc: "Käse-Turbo hält 1,2 s länger",               cost: [60, 160, 320] },
+  { id: "magnet", ic: "🧲", name: "Glocken-Magnet",  desc: "Zieht Glocken in der Nähe an",               cost: [80, 200, 400] },
+  { id: "gold",   ic: "💰", name: "Goldene Glocken", desc: "Glocken bringen +50 % mehr 🔔 und Punkte",   cost: [100, 260] },
+  { id: "start",  ic: "🚀", name: "Anschubser",      desc: "Startet jeden Lauf schneller",               cost: [70, 180] },
+];
+const SKINS = [
+  { id: "rot",     name: "Schweizer Rot",    col: "#d52b1e", cost: 0 },
+  { id: "blau",    name: "Gletscherblau",    col: "#1e8fd5", cost: 80 },
+  { id: "pink",    name: "Kaugummi-Pink",    col: "#ff4fa0", cost: 120 },
+  { id: "schwarz", name: "Nachtschwarz",     col: "#2a2a30", cost: 150 },
+  { id: "gold",    name: "Weltmeister-Gold", col: "#ffc531", cost: 300 },
+];
+const lvl = id => save.up[id] || 0;
+const maxLives = () => 3 + lvl("leben");
+const bellMult = () => 1 + 0.5 * lvl("gold");
+
 // ---------- Spielzustand ----------
 let best = Number(ArcadeCore.getScore(KEY)) || 0;
 let state = "menu";
 const cow = { x: 0, vx: 0, s: 0, air: 0, va: 0, rot: 0, spin: 0, tricks: 0, ramp: null, yaw: 0 };
+let shields = 0, earnedRun = 0;
 let things = [], floats = [], score, bells, lives, speed, spawnS, turbo, invuln, shake, targetX, keys = {}, crashT, gateIdx, overT = 0, nextMile, jumps;
 const MILES = ["Alpe Muh", "Käsehütte", "Glockenpass", "Euterjoch", "Gipfel der Weide", "Schweizer Grenze"];
 
@@ -516,7 +573,7 @@ function clearThings() { for (const t of things) disposeObj(t.obj); things = [];
 function reset() {
   clearThings();
   Object.assign(cow, { x: 0, vx: 0, s: 0, air: 0, va: 0, rot: 0, spin: 0, tricks: 0, ramp: null, yaw: 0 });
-  targetX = 0; score = 0; bells = 0; lives = 3; speed = 15; spawnS = 45; nextMile = 500; jumps = 0; turbo = 0; invuln = 0; shake = 0; crashT = 0; gateIdx = 0;
+  targetX = 0; score = 0; bells = 0; lives = maxLives(); shields = lvl("schild"); speed = 15 + 3 * lvl("start"); spawnS = 45; nextMile = 500; jumps = 0; turbo = 0; invuln = 0; shake = 0; crashT = 0; gateIdx = 0;
   terrainS0 = NaN; resetDeco(); resetTrail(); trailLastS = 0;
   cowModel.visible = true; cowFlip.rotation.set(0, 0, 0);
 }
@@ -544,7 +601,7 @@ function spawn(s) {
   const lvl = Math.min(cow.s / 1500, 1);
   const rx = () => rnd(-PW + 1.5, PW - 1.5);
   const gapS = rnd(13, 23) - lvl * 6;
-  if (lives < 3 && Math.random() < 0.03) {
+  if (lives < maxLives() && Math.random() < 0.03) {
     place({ k: "milk", x: rx(), s, h: 1.0, obj: makeMilk() });
     return gapS;
   }
@@ -591,6 +648,13 @@ function spawn(s) {
 
 function crash() {
   if (invuln > 0) return;
+  if (shields > 0) {
+    shields--; invuln = 1.5; shake = 0.35; crashT = 0.6;
+    $("crash").textContent = "Euter-Airbag! 🛡️";
+    emit(cow.x, cowY() + 1, -cow.s, "#ffb3c7", 30, 6);
+    ArcadeCore.powerup();
+    return;
+  }
   lives--; shake = 0.6; turbo = 0; invuln = 2; crashT = 1.2;
   const msg = pick(CRASH);
   $("crash").textContent = msg;
@@ -604,6 +668,9 @@ function end() {
   state = "over"; overT = 0; score = Math.floor(score);
   const rec = score > best;
   if (rec) { best = score; ArcadeCore.saveScore(KEY, best); }
+  earnedRun = Math.round(bells * bellMult()) + Math.floor(cow.s / 100);
+  save.bells += earnedRun; persist();
+  $("earned").textContent = "+" + earnedRun + " 🔔 für den Hofladen · Kasse: " + save.bells + " 🔔";
   ArcadeCore.gameOver();
   $("otitle").textContent = rec ? "Neuer Weltrekord! 🏆" : "Berta muss in den Stall 🐄";
   $("otext").textContent = Math.floor(cow.s) + " m gefahren, " + bells + " Glocken. Punkte: " + score + " · Rekord: " + best + ". " + (score > 5000 ? "Die Schweiz bietet dir den Pass an." : "Der Bauer ist trotzdem stolz.");
@@ -622,11 +689,12 @@ function land() {
 }
 
 function update(dt) {
-  if (keys.left) targetX -= 16 * dt;
-  if (keys.right) targetX += 16 * dt;
+  const kspd = 16 + 3 * lvl("ski");
+  if (keys.left) targetX -= kspd * dt;
+  if (keys.right) targetX += kspd * dt;
   targetX = clamp(targetX, -PW + 0.8, PW - 0.8);
   const airborne = cow.air > 0 || cow.va > 0 || cow.ramp;
-  const steer = airborne && !cow.ramp ? 3.5 : 9;
+  const steer = airborne && !cow.ramp ? 3.5 + lvl("ski") : 9 + 2 * lvl("ski");
   const prevX = cow.x;
   cow.x += (targetX - cow.x) * Math.min(1, steer * dt);
   cow.vx = (cow.x - prevX) / (dt || 1);
@@ -689,6 +757,14 @@ function update(dt) {
       t.obj.userData.phone.material.emissiveIntensity = d > 0 && d < 25 && Math.random() < 0.08 ? 4 : 0;
       if (t.panic > 0) { t.panic -= dt; t.obj.position.y += Math.abs(Math.sin(t.panic * 14)) * 0.5; }
     }
+    if (t.k === "bell" && !t.gone && lvl("magnet")) {
+      const d = t.s - cow.s, R = 2 + 2 * lvl("magnet");
+      if (d > -1 && d < 6 + 3 * lvl("magnet") && Math.abs(t.x - cow.x) < R) {
+        const k = Math.min(1, dt * (4 + 2 * lvl("magnet")));
+        t.x += (cow.x - t.x) * k; t.h += (cyA + 1 - t.h) * k;
+        t.obj.position.set(t.x, gh(t.x, t.s) + t.h, -t.s);
+      }
+    }
     if (t.k === "bell" && !t.gone) { t.obj.userData.inner.rotation.y += dt * 2.5; t.obj.userData.inner.rotation.z = Math.sin(performance.now() / 120 + t.s) * 0.25; }
     if ((t.k === "cheese" || t.k === "milk") && !t.gone) { t.obj.userData.inner.rotation.y += dt * 2; t.obj.position.y = gh(t.x, t.s) + 1 + Math.sin(performance.now() / 300) * 0.15; }
     if (t.fall !== undefined) { t.fall = Math.min(1.45, t.fall + dt * 6); t.pole.rotation.x = -t.fall; }
@@ -711,14 +787,14 @@ function update(dt) {
     } else if (t.k === "ramp" && !t.gone && !cow.ramp && onGround && cow.s >= t.s - t.len && prevS < t.s + t.len * 0.5 && dx < (t.small ? 1.2 : 1.5)) {
       t.gone = true; cow.ramp = t;
     } else if (t.k === "bell" && (Math.abs(t.s - cow.s) < 1.3 || passing) && dx < 1.3 && Math.abs(cyA + 1 - t.h) < 1.5) {
-      t.gone = true; t.obj.visible = false; bells++; score += 15;
+      t.gone = true; t.obj.visible = false; bells++; score += Math.round(15 * bellMult());
       emit(t.x, gh(t.x, t.s) + t.h, -t.s, "#ffd23a", 14, 4, 4, 0.5);
       ArcadeCore.playTone(rnd(1100, 1400), 0.12, "sine", 0.14);
     } else if (t.k === "cheese" && close && dx < 1.4 && cyA < 2) {
-      t.gone = true; t.obj.visible = false; turbo = 3.2;
+      t.gone = true; t.obj.visible = false; turbo = 3.2 + 1.2 * lvl("turbo");
       float(cow.x, cowY() + 2.6, cow.s, "KÄSE-TURBO! Alles platt!", "#e89b00"); ArcadeCore.powerup();
     } else if (t.k === "milk" && close && dx < 1.4 && cyA < 2) {
-      t.gone = true; t.obj.visible = false; lives = Math.min(3, lives + 1);
+      t.gone = true; t.obj.visible = false; lives = Math.min(maxLives(), lives + 1);
       emit(t.x, gh(t.x, t.s) + 1, -t.s, "#ffffff", 20, 4, 4, 0.6);
       float(cow.x, cowY() + 2.6, cow.s, "Frische Milch! +1 🐄", "#06c"); ArcadeCore.powerup();
     } else if (t.k === "hazard" && close && dx < t.r && cyA < (t.kind === "tree" ? 3.5 : 2)) {
@@ -815,7 +891,7 @@ function updateHud() {
   $("hud").style.visibility = state === "menu" ? "hidden" : "";
   $("score").textContent = Math.floor(score) + " Pkt.";
   $("sub").textContent = "🔔 " + bells + " · " + Math.floor(cow.s) + " m" + (best ? " · 🏆 " + best : "");
-  $("lives").textContent = "🐄".repeat(Math.max(lives, 0)) || "💀";
+  $("lives").textContent = ("🐄".repeat(Math.max(lives, 0)) || "💀") + "🛡️".repeat(Math.max(shields, 0));
   const sp = $("speed");
   sp.textContent = Math.round((speed + (turbo > 0 ? 12 : 0)) * 3.6) + " km/h" + (turbo > 0 ? " 🧀🔥" : "");
   sp.classList.toggle("turbo", turbo > 0);
@@ -887,6 +963,7 @@ addEventListener("keydown", e => {
   if (e.code === "Space" && (state === "play" || state === "pause")) { e.preventDefault(); if (!e.repeat) trick(); }
   if (k === "m" && !e.repeat) { ArcadeCore.toggleMute(); syncMute(); }
   if ((k === "p" || k === "escape") && !e.repeat && (state === "play" || state === "pause")) { e.preventDefault(); togglePause(); }
+  if (!$("shop").classList.contains("hide")) { if (k === "escape") closeShop(); return; }
   if ((k === "enter" || e.code === "Space") && !e.repeat && (state === "menu" || (state === "over" && !$("over").classList.contains("hide")))) { e.preventDefault(); start(); }
 });
 addEventListener("keyup", e => {
@@ -900,7 +977,64 @@ function start() {
   $("menu").classList.add("hide"); $("over").classList.add("hide");
 }
 $("go").onclick = start; $("again").onclick = start;
-$("menuBest").textContent = best ? "Rekord: " + best + " Pkt." : "";
+
+// ---------- Hofladen UI ----------
+function applySkin() {
+  const sk = SKINS.find(x => x.id === save.skin) || SKINS[0];
+  M.gear.color.set(sk.col);
+  M.gear.metalness = sk.id === "gold" ? 0.8 : 0.1;
+}
+let shopFrom = null;
+function openShop(from) {
+  shopFrom = from; $(from).classList.add("hide");
+  renderShop(); $("shop").classList.remove("hide");
+}
+function closeShop() {
+  $("shop").classList.add("hide");
+  if (shopFrom) $(shopFrom).classList.remove("hide");
+  $("menuBest").textContent = menuText();
+  $("earned").textContent = earnedRun ? "+" + earnedRun + " 🔔 für den Hofladen · Kasse: " + save.bells + " 🔔" : "";
+}
+function buyFx(ok) { if (ok) { ArcadeCore.coin(); moo(1.4); } else ArcadeCore.playTone(140, 0.2, "square", 0.1); }
+function renderShop() {
+  $("wallet").textContent = "Kasse: " + save.bells + " 🔔";
+  const ul = $("upList"); ul.innerHTML = "";
+  for (const u of UPGRADES) {
+    const l = lvl(u.id), max = u.cost.length, cost = u.cost[l];
+    const row = document.createElement("div"); row.className = "urow";
+    row.innerHTML = '<div class="ic">' + u.ic + '</div><div class="tx"><b>' + u.name + '</b><small>' + u.desc + '</small><span class="pips">' + "●".repeat(l) + "○".repeat(max - l) + '</span></div>';
+    const b = document.createElement("button");
+    if (l >= max) { b.textContent = "MAX"; b.disabled = true; }
+    else { b.textContent = cost + " 🔔"; b.disabled = save.bells < cost; }
+    b.onclick = () => {
+      if (l >= max || save.bells < cost) return buyFx(false);
+      save.bells -= cost; save.up[u.id] = l + 1; persist(); buyFx(true); renderShop();
+    };
+    row.appendChild(b); ul.appendChild(row);
+  }
+  const sl = $("skinList"); sl.innerHTML = "";
+  for (const sk of SKINS) {
+    const owned = save.skins.includes(sk.id), on = save.skin === sk.id;
+    const row = document.createElement("div"); row.className = "urow";
+    row.innerHTML = '<div class="ic"><span class="sw" style="background:' + sk.col + '"></span></div><div class="tx"><b>' + sk.name + '</b><small>' + (on ? "Ausgerüstet" : owned ? "Gekauft" : "Neue Farbe für Ski und Schal") + '</small></div>';
+    const b = document.createElement("button");
+    if (on) { b.textContent = "✓ An"; b.className = "own"; b.disabled = true; }
+    else if (owned) { b.textContent = "Anziehen"; b.className = "own"; }
+    else { b.textContent = sk.cost + " 🔔"; b.disabled = save.bells < sk.cost; }
+    b.onclick = () => {
+      if (!owned) { if (save.bells < sk.cost) return buyFx(false); save.bells -= sk.cost; save.skins.push(sk.id); buyFx(true); }
+      else ArcadeCore.playTone(660, 0.1, "triangle", 0.12);
+      save.skin = sk.id; persist(); applySkin(); renderShop();
+    };
+    row.appendChild(b); sl.appendChild(row);
+  }
+}
+const menuText = () => (best ? "Rekord: " + best + " Pkt. · " : "") + "Kasse: " + save.bells + " 🔔";
+$("shopBtn").onclick = () => openShop("menu");
+$("shopBtn2").onclick = () => openShop("over");
+$("shopBack").onclick = closeShop;
+applySkin();
+$("menuBest").textContent = menuText();
 
 reset();
 appStarted = true;
