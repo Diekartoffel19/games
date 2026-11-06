@@ -165,7 +165,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 12 | 🏗️ **Sky Tower 3D: Stack Master** | [`games/skytower.html`](games/skytower.html) | `skill` | Three.js | 3D-Block-Stapeln mit Kantenabschnitt |
 | 13 | 🏃‍♂️ **Mega Obby 3D: Sky Parkour** | [`games/obby.html`](games/obby.html) | `skill` | Three.js | 3D-Jump'n'Run mit 15 Plattform-Stages |
 | 14 | 🌀 **Cursed Dropper 3D** | [`games/dropper.html`](games/dropper.html) | `skill` | Three.js | 3D-Freifall-Tunnel, Backrooms & Wasser-Landing |
-| 15 | 🍉 **Suika Game 3D** | [`games/suika3d.html`](games/suika3d.html) | `puzzle` | Three.js | 3D-Kugel-Physik in Glasbox mit Orbit-Kamera |
+| 15 | 🍉 **Suika Game 3D: Teller-Wurf** | [`games/suika3d.html`](games/suika3d.html) | `puzzle` | Three.js | Parabolische Flugbahn auf Porzellanteller, Fruchtberg-Balance & Tellerrand-Absturz |
 | 16 | 🔮 **3D Marble Blast** | [`games/marble.html`](games/marble.html) | `physics` | Three.js + Cannon.js | Echte 3D-Rigid-Body-Murmelbahn & Booster |
 | 17 | 🏙️ **3D City Tycoon** | [`games/tycoon.html`](games/tycoon.html) | `puzzle` | Three.js | Isometrische 3D-Stadt, Raketenstarts & Drohnen |
 | 18 | 🛴 **Paris Protest 3D: Gen Z** | [`games/paris_protest.html`](games/paris_protest.html) | `racing` | Three.js | E-Scooter 3D-Fahrt durch Paris, Barrikaden |
