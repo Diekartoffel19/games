@@ -2,8 +2,8 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-2. **🧊 Bestehende 3D-Spiele (18 Spiele):** Alle im Repository bereits voll funktionsfähigen 3D-Titel.
-3. **⭐ Top 3D-Upgrade-Kandidaten (20 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
+2. **🧊 Bestehende 3D-Spiele (24 Spiele):** Alle im Repository bereits voll funktionsfähigen 3D-Titel.
+3. **⭐ Top 3D-Upgrade-Kandidaten (14 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 53 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
 ---
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (18 Spiele)
+## 🧊 Bestehende 3D-Spiele (24 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -169,23 +169,23 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 16 | 🔮 **3D Marble Blast** | [`games/marble.html`](games/marble.html) | `physics` | Three.js + Cannon.js | Echte 3D-Rigid-Body-Murmelbahn & Booster |
 | 17 | 🏙️ **3D City Tycoon** | [`games/tycoon.html`](games/tycoon.html) | `puzzle` | Three.js | Isometrische 3D-Stadt, Raketenstarts & Drohnen |
 | 18 | 🛴 **Paris Protest 3D: Gen Z** | [`games/paris_protest.html`](games/paris_protest.html) | `racing` | Three.js | E-Scooter 3D-Fahrt durch Paris, Barrikaden |
+| 19 | 💺 **Bürostuhl GP 3D** | [`games/buerostuhl.html`](games/buerostuhl.html) | `racing` | Three.js | Drehstuhl-Kart, CO₂-Boost, Drift, KI-Kollegen |
+| 20 | ⚙️ **Stillstand 3D** | [`games/superhot.html`](games/superhot.html) | `action` | Three.js | First-Person, Zeit läuft nur bei Bewegung |
+| 21 | ☠️ **Geisterkäpt'n 3D** | [`games/buckshot.html`](games/buckshot.html) | `action` | Three.js | Kajüten-Duell, Donnerbüchse, Items, KI |
+| 22 | 🪜 **Office Yeet 3D** | [`games/stair_yeet.html`](games/stair_yeet.html) | `physics` | Three.js | Eigene Verlet-Ragdoll, Brüche, Atrium-Sturz |
+| 23 | 🎯 **Panzer-Röntgen 3D** | [`games/ballistics.html`](games/ballistics.html) | `physics` | Three.js | Plattenneigung, Abpraller, Röntgen-Splitter |
+| 24 | 🕯️ **Wachsnacht 3D** | [`games/fnaf.html`](games/fnaf.html) | `action` | Three.js | Echte 3D-CCTV-Kameras, Figuren nur unbeobachtet |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
 ---
 
-## ⭐ Kuratierte 3D-Upgrade-Kandidaten (20 Spiele)
+## ⭐ Kuratierte 3D-Upgrade-Kandidaten (14 Spiele)
 
-Diese 20 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von einem Umstieg auf 3D** (bessere Physik, räumliche Immersion, First-Person-Perspektive oder echtes Ragdoll):
+Diese 14 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von einem Umstieg auf 3D** (bessere Physik, räumliche Immersion, First-Person-Perspektive oder echtes Ragdoll):
 
 | # | Spiel | Aktuelle Datei | Warum 3D massiven Mehrwert bringt | Geplantes 3D-Konzept |
 |---|-------|----------------|------------------------------------|----------------------|
-| 1 | 🪑 **Bürostuhl GP** | [`games/buerostuhl.html`](games/buerostuhl.html) | Driften mit CO2-Löscher verlangt 3D-Renngefühl | Low-Poly Großraumbüro, Schreibtisch-Tunnels, Mario-Kart-Chase-Cam |
-| 2 | 🎯 **SUPERHOT 2D** | [`games/superhot.html`](games/superhot.html) | Das Original ist eine 3D-Ikone; 2D schränkt Ausweichen ein | First-Person, weiße Räume, rote polygonale Gegner, 3D-Kugelausweichen |
-| 3 | 🎲 **Buckshot Roulette** | [`games/buckshot.html`](games/buckshot.html) | Lebt von klaustrophobischer Tisch-Gegenüberstellung | Düsterer 3D-Kellerraum, 12-Gauge-Schrotflinte in Händen, Dealer-Animation |
-| 4 | 🩸 **Office Yeet: Ragdoll Dismount** | [`games/stair_yeet.html`](games/stair_yeet.html) | Ragdoll-Treppenstürze sind in 3D unendlich spektakulärer | 3D-Treppenhaus mit Cannon.js Ragdoll, Knochenbruch-X-Ray-Cam |
-| 5 | 🛡️ **Panzer-Querschnitt: Ballistik** | [`games/ballistics.html`](games/ballistics.html) | Panzerungswinkel & Abpraller sind dreidimensional | 3D-Röntgen-Trefferkamera (War Thunder Style) mit Schrapnell-Kegeln |
-| 6 | 🤖 **Five Nights at Faz-Byte's** | [`games/fnaf.html`](games/fnaf.html) | Echter Grusel erfordert 3D-Kopfumdrehen & Tiefenräume | 3D-Sicherheitsbüro mit 360°-Look, Hallenbeleuchtung, Schatten an Türen |
 | 7 | 🛒 **Einkaufswagen-Rallye** | [`games/einkaufswagen.html`](games/einkaufswagen.html) | Supermarkt-Gänge & Regale leben von 3D-Zerstörung | Driften durch 3D-Supermarktgänge, umstürzende Dosen-Pyramiden |
 | 8 | 🪟 **Fensterputzer 9000** | [`games/fensterputzer.html`](games/fensterputzer.html) | Höhenangst & Wolkenkratzer-Tiefe wirken nur in 3D | Gondel vor spiegelnder 3D-Fassade, Blick in die Straßenschlucht |
 | 9 | 🧳 **Koffer-Stapler Extreme** | [`games/kofferstapler.html`](games/kofferstapler.html) | Raumfüllendes Packen im Flugzeugbauch ist 3D-Jenga | 3D-Frachtraum, Koffer mit Cannon.js-Physik präzise in 3 Achsen stapeln |
