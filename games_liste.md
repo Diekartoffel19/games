@@ -171,7 +171,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 18 | 🛴 **Paris Protest 3D: Gen Z** | [`games/paris_protest.html`](games/paris_protest.html) | `racing` | Three.js | E-Scooter 3D-Fahrt durch Paris, Barrikaden |
 | 19 | 💺 **Bürostuhl GP 3D** | [`games/buerostuhl.html`](games/buerostuhl.html) | `racing` | Three.js | Drehstuhl-Kart, CO₂-Boost, Drift, KI-Kollegen |
 | 20 | ⚙️ **Stillstand 3D** | [`games/superhot.html`](games/superhot.html) | `action` | Three.js | First-Person, Zeit läuft nur bei Bewegung |
-| 21 | ☠️ **Geisterkäpt'n 3D** | [`games/buckshot.html`](games/buckshot.html) | `action` | Three.js | Kajüten-Duell, Donnerbüchse, Items, KI |
+| 21 | ☠️ **Geisterkäpt'n 3D** | [`games/buckshot.html`](games/buckshot.html) | `action` | Three.js | Kajüten-Duell, 9 Items (Klau, Umpolen, Elixier), Bloom-Post-FX, Doppelt-oder-nichts |
 | 22 | 🪜 **Office Yeet 3D** | [`games/stair_yeet.html`](games/stair_yeet.html) | `physics` | Three.js | Eigene Verlet-Ragdoll, Brüche, Atrium-Sturz |
 | 23 | 🎯 **Panzer-Röntgen 3D** | [`games/ballistics.html`](games/ballistics.html) | `physics` | Three.js | Plattenneigung, Abpraller, Röntgen-Splitter |
 | 24 | 🕯️ **Wachsnacht 3D** | [`games/fnaf.html`](games/fnaf.html) | `action` | Three.js | Echte 3D-CCTV-Kameras, Figuren nur unbeobachtet |
