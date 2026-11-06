@@ -4,6 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Insel-Schmiede 3D</title>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) {
+    if (msg) document.getElementById('fallbackMsg').textContent = msg;
+    fb.style.display = 'block';
+  }
+};
+window.addEventListener('error', function(e) {
+  if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar'));
+});
+setTimeout(function() {
+  if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).');
+}, 8000);
+</script>
 <style>
   :root {
     --panel: rgba(18, 32, 40, 0.82);
@@ -52,6 +70,11 @@
 </style>
 </head>
 <body>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#0d1b2a;color:#fff;z-index:99999;padding:30px;font-family:sans-serif;text-align:center;">
+  <h2 style="color:#ff6b6b;margin-top:20vh">Fehler beim Laden</h2>
+  <p id="fallbackMsg">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#7fd36b;font-weight:bold;text-decoration:none;border:1px solid #7fd36b;padding:8px 16px;border-radius:8px;display:inline-block;margin-top:12px">← Zurück zum Hub</a></p>
+</div>
 <div id="ui">
   <a href="../index.html" class="back">← Zurück zum Hub</a>
   <h1>🏝️ Insel-Schmiede <button id="toggleUi">☰</button></h1>
@@ -129,7 +152,13 @@ function makeNoise(seed) {
 }
 
 // ---------- Renderer / Scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (err) {
+  if (window.showErrorNotice) window.showErrorNotice('WebGL wird nicht unterstützt oder ist blockiert.');
+  throw err;
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -259,29 +288,31 @@ function normalYAt(x, z) {
 }
 
 // ---------- Water ----------
-const WATER_SEG = 140;
+const WATER_SEG = 60;
 const waterGeo = new THREE.PlaneGeometry(700, 700, WATER_SEG, WATER_SEG);
 waterGeo.rotateX(-Math.PI / 2);
-const wPos = waterGeo.attributes.position;
-const wBase = Float32Array.from(wPos.array);
+const waterUniforms = { uTime: { value: 0 } };
 const waterMat = new THREE.MeshPhysicalMaterial({
   color: 0x2b8cc4, transparent: true, opacity: 0.76, roughness: 0.12, metalness: 0.05,
   clearcoat: 1, clearcoatRoughness: 0.1, depthWrite: false
 });
+waterMat.onBeforeCompile = shader => {
+  shader.uniforms.uTime = waterUniforms.uTime;
+  shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader;
+  shader.vertexShader = shader.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>
+     float wave = sin(position.x * 0.08 + uTime * 1.2) * 0.22 + sin(position.z * 0.11 + uTime * 0.9) * 0.18 + sin((position.x + position.z) * 0.045 + uTime * 0.6) * 0.14;
+     transformed.y += wave;`
+  );
+};
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.receiveShadow = true;
 water.renderOrder = 1;
 scene.add(water);
 
 function animateWater(t) {
-  const a = wPos.array;
-  for (let i = 0; i < a.length; i += 3) {
-    const x = wBase[i], z = wBase[i + 2];
-    a[i + 1] = Math.sin(x * 0.08 + t * 1.2) * 0.22 + Math.sin(z * 0.11 + t * 0.9) * 0.18
-             + Math.sin((x + z) * 0.045 + t * 0.6) * 0.14;
-  }
-  wPos.needsUpdate = true;
-  waterGeo.computeVertexNormals();
+  waterUniforms.uTime.value = t;
 }
 
 // ---------- Trees (InstancedMesh) ----------
@@ -514,11 +545,29 @@ function pickTerrain() {
 // ---------- Input ----------
 let painting = null, spaceDown = false, camMode = false;
 
+// Undo history
+const undoStack = [];
+function pushUndo() {
+  if (undoStack.length >= 20) undoStack.shift();
+  undoStack.push(H.slice());
+}
+function undo() {
+  if (!undoStack.length) return;
+  const prev = undoStack.pop();
+  H.set(prev);
+  for (let i = 0; i < N * N; i++) tPos.setY(i, H[i]);
+  tPos.needsUpdate = true;
+  terrainGeo.computeVertexNormals();
+  updateColors(0, SEG, 0, SEG);
+  terrainGeo.computeBoundingSphere();
+}
+
 canvas.addEventListener('pointerdown', e => {
   const nav = camMode || spaceDown || e.pointerType === 'touch' && !e.isPrimary;
   controls.enableRotate = nav;
   controls.enablePan = nav;
   if (nav) { painting = null; return; }
+  pushUndo();
   updateMouse(e);
   if (e.button === 0) painting = e.shiftKey ? 'lower' : mode;
   else if (e.button === 2) painting = 'lower';
@@ -550,6 +599,8 @@ controls.enablePan = false;
 
 // ---------- UI ----------
 const $ = id => document.getElementById(id);
+document.querySelectorAll('button').forEach(btn => btn.addEventListener('click', e => e.currentTarget.blur()));
+
 const modeBtns = document.querySelectorAll('[data-mode]');
 function setMode(m) {
   mode = m;
@@ -567,6 +618,47 @@ $('radius').addEventListener('input', e => setRadius(e.target.value));
 $('strength').addEventListener('input', e => { brush.strength = +e.target.value; $('strengthVal').textContent = e.target.value; });
 $('toggleUi').addEventListener('click', () => $('ui').classList.toggle('collapsed'));
 
+function saveIsland() {
+  try {
+    const i16 = new Int16Array(H.length);
+    for (let i = 0; i < H.length; i++) i16[i] = Math.round(H[i] * 100);
+    const bytes = new Uint8Array(i16.buffer);
+    let bin = '';
+    const chunk = 8192;
+    for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    const treeData = trees.slice(0, 1500).map(t => [Math.round(t.x * 10) / 10, Math.round(t.z * 10) / 10, Math.round(t.s * 100) / 100]);
+    localStorage.setItem('terraform_island', JSON.stringify({ h: btoa(bin), trees: treeData, seed: currentSeed }));
+  } catch (err) {}
+}
+
+function loadIsland() {
+  try {
+    const raw = localStorage.getItem('terraform_island');
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data.h) return false;
+    const bin = atob(data.h);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const i16 = new Int16Array(bytes.buffer);
+    if (i16.length !== H.length) return false;
+    for (let i = 0; i < H.length; i++) H[i] = i16[i] / 100;
+    for (let i = 0; i < N * N; i++) tPos.setY(i, H[i]);
+    tPos.needsUpdate = true;
+    terrainGeo.computeVertexNormals();
+    updateColors(0, SEG, 0, SEG);
+    terrainGeo.computeBoundingSphere();
+    clearTrees();
+    if (Array.isArray(data.trees)) {
+      for (const [x, z, s] of data.trees) spawnTree(x, z, s);
+    }
+    if (data.seed) currentSeed = data.seed;
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 let currentSeed = START_SEED;
 function resetIsland(seed) {
   currentSeed = seed;
@@ -574,12 +666,21 @@ function resetIsland(seed) {
   clearTrees();
   initialForest();
 }
-$('reset').addEventListener('click', () => resetIsland(currentSeed));
-$('newIsland').addEventListener('click', () => resetIsland((Math.random() * 1e9) | 0));
+$('reset').addEventListener('click', e => {
+  e.currentTarget.blur();
+  try { localStorage.removeItem('terraform_island'); } catch (err) {}
+  resetIsland(currentSeed);
+});
+$('newIsland').addEventListener('click', e => {
+  e.currentTarget.blur();
+  try { localStorage.removeItem('terraform_island'); } catch (err) {}
+  resetIsland((Math.random() * 1e9) | 0);
+});
 
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
-  if (e.code === 'Space') { spaceDown = true; e.preventDefault(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+  else if (e.code === 'Space') { spaceDown = true; e.preventDefault(); }
   else if (e.key === '1') setMode('raise');
   else if (e.key === '2') setMode('lower');
   else if (e.key === '3') setMode('smooth');
@@ -589,6 +690,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { if (e.code === 'Space') spaceDown = false; });
 window.addEventListener('blur', () => { spaceDown = false; painting = null; });
+window.addEventListener('beforeunload', saveIsland);
 
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -597,9 +699,9 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- Loop ----------
-resetIsland(START_SEED);
+if (!loadIsland()) resetIsland(START_SEED);
 const clock = new THREE.Clock();
-let time = 0, uiAcc = 0;
+let time = 0, uiAcc = 0, saveAcc = 0;
 
 function loop() {
   requestAnimationFrame(loop);
@@ -622,10 +724,17 @@ function loop() {
     $('growing').textContent = trees.reduce((n, t) => n + (t.s < 1 && !t.dying ? 1 : 0), 0);
   }
 
+  saveAcc += dt;
+  if (saveAcc > 10) {
+    saveAcc = 0;
+    saveIsland();
+  }
+
   controls.update();
   renderer.render(scene, camera);
 }
 loop();
+appStarted = true;
 </script>
 </body>
 </html>

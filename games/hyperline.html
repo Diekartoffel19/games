@@ -4,6 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hyperline AG – Anti-Gravity Racer</title>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('loading');
+  if (fb) {
+    fb.innerHTML = '<div style="text-align:center"><div style="color:#ff3b5c;font-size:24px;margin-bottom:12px">FEHLER BEIM LADEN</div><div style="font-size:14px;letter-spacing:2px;color:#aaa;margin-bottom:20px">' + (msg || '3D-Engine oder CDN nicht erreichbar.') + '</div><a href="../index.html" style="color:var(--cyan,#00e5ff);font-weight:700;text-decoration:none;border:1px solid var(--cyan,#00e5ff);padding:10px 20px;letter-spacing:2px">← ZURÜCK ZUM HUB</a></div>';
+  }
+};
+window.addEventListener('error', function(e) {
+  if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar'));
+});
+setTimeout(function() {
+  if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).');
+}, 8000);
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
@@ -94,10 +111,23 @@
     #speedo { min-width:0; width:200px; } #spd { font-size:40px; }
     #count { font-size:100px; } #msg { font-size:30px; }
   }
+  #touch { position:fixed; inset:auto 0 0 0; height:180px; pointer-events:none; z-index:25; }
+  #touch button { position:absolute; bottom:16px; width:68px; height:68px; border-radius:50%; border:2px solid rgba(0,229,255,0.4); background:rgba(6,10,24,0.65);
+    color:#e6f6ff; font-family:inherit; font-size:12px; font-weight:900; pointer-events:auto; touch-action:none; }
+  #touch button.on { background:rgba(0,229,255,0.35); border-color:var(--cyan); box-shadow:0 0 12px var(--cyan); }
 </style>
 </head>
 <body>
 <div id="loading">LADE STRECKE …</div>
+<div id="touch" class="hidden">
+  <button data-k="left" style="left:16px;bottom:16px">◀</button>
+  <button data-k="right" style="left:92px;bottom:16px">▶</button>
+  <button data-k="abL" style="left:16px;bottom:90px">Q-AIR</button>
+  <button data-k="abR" style="left:92px;bottom:90px">E-AIR</button>
+  <button data-k="boost" style="right:92px;bottom:16px">BOOST</button>
+  <button data-k="up" style="right:16px;bottom:90px">GAS</button>
+  <button data-k="down" style="right:16px;bottom:16px">BREMS</button>
+</div>
 
 <div id="hud" class="hidden">
   <div id="tl" class="panel">
@@ -223,7 +253,13 @@ const fmt = t => {
 // ============================================================
 //  RENDERER / SCENE / POST
 // ============================================================
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+} catch (err) {
+  if (window.showErrorNotice) window.showErrorNotice('WebGL wird nicht unterstützt oder ist blockiert.');
+  throw err;
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -537,11 +573,12 @@ const skyGroup = new THREE.Group(); scene.add(skyGroup);
 //  SCHIFF
 // ============================================================
 const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 1.6, 2.6), side: THREE.DoubleSide });
-function makeShip() {
+function makeShip(isGhost = false) {
   const root = new THREE.Group(), vis = new THREE.Group(); root.add(vis);
-  const hullMat = new THREE.MeshStandardMaterial({ color: 0xe8edf5, metalness: 0.45, roughness: 0.32 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1b2030, metalness: 0.7, roughness: 0.4 });
-  const accMat = new THREE.MeshStandardMaterial({ color: 0xff2b6a, emissive: 0xff2b6a, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.4 });
+  const ghostMat = isGhost ? new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35 }) : null;
+  const hullMat = isGhost ? ghostMat : new THREE.MeshStandardMaterial({ color: 0xe8edf5, metalness: 0.45, roughness: 0.32 });
+  const darkMat = isGhost ? ghostMat : new THREE.MeshStandardMaterial({ color: 0x1b2030, metalness: 0.7, roughness: 0.4 });
+  const accMat = isGhost ? ghostMat : new THREE.MeshStandardMaterial({ color: 0xff2b6a, emissive: 0xff2b6a, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.4 });
   const hg = new THREE.BoxGeometry(1.8, 0.55, 4.6, 1, 1, 6), pa = hg.attributes.position;
   for (let i = 0; i < pa.count; i++) {      // spitze Nase nach -Z
     const t = (pa.getZ(i) + 2.3) / 4.6;
@@ -555,16 +592,24 @@ function makeShip() {
   for (const sx of [-1, 1]) {
     const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.85, 1.1), accMat); fin.position.set(sx * 2.15, 0.32, 1.25); fin.rotation.x = -0.25; vis.add(fin);
     const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.42, 1.9, 16).rotateX(Math.PI / 2), darkMat); eng.position.set(sx * 0.95, 0.06, 1.75); vis.add(eng);
-    const glow = new THREE.Mesh(new THREE.CircleGeometry(0.36, 20), glowMat); glow.position.set(sx * 0.95, 0.06, 2.71); vis.add(glow);
+    if (!isGhost) {
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(0.36, 20), glowMat); glow.position.set(sx * 0.95, 0.06, 2.71); vis.add(glow);
+    }
   }
-  const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.55, 20, 12),
-    new THREE.MeshStandardMaterial({ color: 0x08243a, emissive: 0x00406a, emissiveIntensity: 0.7, metalness: 0.9, roughness: 0.08 }));
+  const cockpitMat = isGhost ? ghostMat : new THREE.MeshStandardMaterial({ color: 0x08243a, emissive: 0x00406a, emissiveIntensity: 0.7, metalness: 0.9, roughness: 0.08 });
+  const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.55, 20, 12), cockpitMat);
   cockpit.scale.set(0.75, 0.55, 1.7); cockpit.position.set(0, 0.3, -0.35); vis.add(cockpit);
-  const light = new THREE.PointLight(0x00e5ff, 30, 16, 2); light.position.set(0, -0.8, 0.4); root.add(light);
+  let light = null;
+  if (!isGhost) {
+    light = new THREE.PointLight(0x00e5ff, 30, 16, 2); light.position.set(0, -0.8, 0.4); root.add(light);
+  } else {
+    root.visible = false;
+  }
   scene.add(root);
   return { root, vis, light, nozzles: [new V3(-0.95, 0.06, 2.8), new V3(0.95, 0.06, 2.8)] };
 }
-const ship = makeShip();
+const ship = makeShip(false);
+const ghostShip = makeShip(true);
 
 // ============================================================
 //  PARTIKEL (Triebwerksschweif + Funken)
@@ -624,8 +669,12 @@ const sfx = {
   init() {
     if (this.ctx) { this.ctx.resume(); return; }
     try {
+      const saved = localStorage.getItem('hyperline_muted');
+      if (saved !== null) this.muted = saved === '1';
+    } catch (e) {}
+    try {
       const C = window.AudioContext || window.webkitAudioContext; const ctx = this.ctx = new C();
-      this.master = ctx.createGain(); this.master.gain.value = 0.3; this.master.connect(ctx.destination);
+      this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.3; this.master.connect(ctx.destination);
       this.o1 = ctx.createOscillator(); this.o1.type = 'sawtooth';
       this.o2 = ctx.createOscillator(); this.o2.type = 'square';
       const g2 = ctx.createGain(); g2.gain.value = 0.35;
@@ -662,8 +711,13 @@ const sfx = {
     o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.5);
     this.noise(0.5, 2500, 0.25);
   },
-  toggleMute() { this.muted = !this.muted; if (this.master) this.master.gain.value = this.muted ? 0 : 0.3; }
+  toggleMute() {
+    this.muted = !this.muted;
+    if (this.master) this.master.gain.value = this.muted ? 0 : 0.3;
+    try { localStorage.setItem('hyperline_muted', this.muted ? '1' : '0'); } catch (e) {}
+  }
 };
+try { sfx.muted = localStorage.getItem('hyperline_muted') === '1'; } catch (e) {}
 
 // ============================================================
 //  SCHIFFS-STATE & HOVER-PHYSIK
@@ -694,7 +748,7 @@ function nearestIdx(p, start, win) {
 const ray = new THREE.Raycaster();
 const CORNERS = [[-1.1, 1.9], [1.1, 1.9], [-1.1, -1.9], [1.1, -1.9]];   // [rechts, vorwärts]
 const _r = new V3(), _o = new V3(), _n = new V3(), _nAcc = new V3(), _down = new V3(), _newUp = new V3(), _tmp = new V3(), _tmp2 = new V3();
-const _qa = new THREE.Quaternion();
+const _qa = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 
 function physicsStep(dt, ctl) {
   const f = S.fwd, u = S.up;
@@ -813,6 +867,17 @@ function respawn() {
 //  INPUT
 // ============================================================
 const keys = {};
+const touchInput = { up: false, down: false, left: false, right: false, abL: false, abR: false, boost: false };
+for (const btn of document.querySelectorAll('#touch button')) {
+  const k = btn.dataset.k;
+  const on = e => { e.preventDefault(); sfx.init(); touchInput[k] = true; btn.classList.add('on'); };
+  const off = e => { e.preventDefault(); touchInput[k] = false; btn.classList.remove('on'); };
+  btn.addEventListener('pointerdown', on);
+  btn.addEventListener('pointerup', off);
+  btn.addEventListener('pointercancel', off);
+  btn.addEventListener('pointerleave', off);
+}
+
 addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
@@ -825,9 +890,13 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'race' && !paused) togglePause(); });
 const readCtl = () => ({
-  up: keys.KeyW || keys.ArrowUp, down: keys.KeyS || keys.ArrowDown,
-  left: keys.KeyA || keys.ArrowLeft, right: keys.KeyD || keys.ArrowRight,
-  abL: keys.KeyQ, abR: keys.KeyE, boost: keys.Space,
+  up: keys.KeyW || keys.ArrowUp || touchInput.up,
+  down: keys.KeyS || keys.ArrowDown || touchInput.down,
+  left: keys.KeyA || keys.ArrowLeft || touchInput.left,
+  right: keys.KeyD || keys.ArrowRight || touchInput.right,
+  abL: keys.KeyQ || touchInput.abL,
+  abR: keys.KeyE || touchInput.abR,
+  boost: keys.Space || touchInput.boost,
 });
 function autoCtl() {            // Autopilot nach Zieleinlauf
   _r.crossVectors(S.fwd, S.up).normalize();
@@ -914,13 +983,24 @@ function updateHUD() {
 // ============================================================
 let state = 'menu', paused = false, cd = 0, lastCd = 0, clock = 0, menuAng = 0, fovKick = 0, camInit = false;
 
+let bestGhost = null;
+try {
+  const gRaw = localStorage.getItem('hyperline_ghost');
+  if (gRaw) bestGhost = JSON.parse(gRaw);
+} catch (e) {}
+let curLapGhost = [];
+let ghostAcc = 0;
+
 function refreshMenuRecords() {
   $('menuRec').innerHTML = `BESTE RUNDE <b>${fmt(bestLap)}</b> &nbsp;·&nbsp; BESTES RENNEN <b>${fmt(bestTotal)}</b>`;
 }
 function resetRace() {
   Object.assign(S, { lap: 1, nextCp: 1, raceTime: 0, lapStart: 0, lapTimes: [], energy: 100, boostT: 0, boostHeld: false });
-  placeShip(N - 6, 0);
+  placeShip(0, 0);
   PADS.forEach(p => p.cd = 0);
+  curLapGhost = [];
+  ghostAcc = 0;
+  if (ghostShip) ghostShip.root.visible = false;
 }
 function startRace() {
   sfx.init();
@@ -928,11 +1008,12 @@ function startRace() {
   state = 'countdown'; cd = 3.999; lastCd = 4; paused = false;
   ['menu', 'end', 'pause'].forEach(id => $(id).classList.add('hidden'));
   $('hud').classList.remove('hidden');
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) $('touch').classList.remove('hidden');
   document.activeElement && document.activeElement.blur();
 }
 function toMenu() {
   state = 'menu'; paused = false;
-  ['end', 'pause', 'hud'].forEach(id => $(id).classList.add('hidden'));
+  ['end', 'pause', 'hud', 'touch'].forEach(id => $(id).classList.add('hidden'));
   $('menu').classList.remove('hidden');
   resetRace(); refreshMenuRecords();
 }
@@ -940,6 +1021,8 @@ function togglePause() {
   if (state !== 'race' && state !== 'countdown') return;
   paused = !paused;
   $('pause').classList.toggle('hidden', !paused);
+  if (paused) $('touch').classList.add('hidden');
+  else if ('ontouchstart' in window || navigator.maxTouchPoints > 0) $('touch').classList.remove('hidden');
   if (sfx.ctx) paused ? sfx.ctx.suspend() : sfx.ctx.resume();
 }
 function updateProgress() {
@@ -951,7 +1034,15 @@ function completeLap() {
   const lt = S.raceTime - S.lapStart;
   S.lapStart = S.raceTime; S.lapTimes.push(lt); S.nextCp = 1;
   const delta = bestLap != null ? lt - bestLap : null;
-  if (bestLap == null || lt < bestLap) { bestLap = lt; store.set('hyperline_bestLap', lt); }
+  if (bestLap == null || lt < bestLap) {
+    bestLap = lt; store.set('hyperline_bestLap', lt);
+    if (curLapGhost.length > 5) {
+      bestGhost = curLapGhost.slice();
+      try { localStorage.setItem('hyperline_ghost', JSON.stringify(bestGhost)); } catch (e) {}
+    }
+  }
+  curLapGhost = [];
+  ghostAcc = 0;
   S.lap++;
   const dHtml = delta != null ? `<small class="${delta < 0 ? 'neg' : 'pos'}">${delta < 0 ? '−' : '+'}${Math.abs(delta).toFixed(3)}</small>` : `<small>${fmt(lt)}</small>`;
   if (S.lap > CFG.laps) finishRace(dHtml);
@@ -959,6 +1050,8 @@ function completeLap() {
 }
 function finishRace(dHtml) {
   state = 'finished';
+  $('touch').classList.add('hidden');
+  if (ghostShip) ghostShip.root.visible = false;
   const total = S.raceTime;
   let rec = '';
   if (bestTotal == null || total < bestTotal) { bestTotal = total; store.set('hyperline_bestTotal', total); rec = '★ NEUER STRECKENREKORD ★'; }
@@ -1049,7 +1142,44 @@ function update(dt) {
   for (let k = 0; k < SUB; k++) physicsStep(dt / SUB, ctl);
   S.speed = S.vel.length();
 
-  if (state === 'race') { S.raceTime += dt; checkPads(dt); updateProgress(); }
+  if (state === 'race') {
+    S.raceTime += dt;
+    checkPads(dt);
+    updateProgress();
+    ghostAcc += dt;
+    if (ghostAcc >= 0.08) {
+      ghostAcc = 0;
+      const q = ship.root.quaternion;
+      curLapGhost.push([
+        Math.round(S.pos.x * 10) / 10, Math.round(S.pos.y * 10) / 10, Math.round(S.pos.z * 10) / 10,
+        Math.round(q.x * 1000) / 1000, Math.round(q.y * 1000) / 1000, Math.round(q.z * 1000) / 1000, Math.round(q.w * 1000) / 1000,
+        Math.round(S.roll * 100) / 100, Math.round(S.pitch * 100) / 100
+      ]);
+    }
+  }
+
+  // --- Ghost-Playback
+  if (state === 'race' && bestGhost && bestGhost.length > 1) {
+    const lapTime = S.raceTime - S.lapStart;
+    const gIdx = Math.floor(lapTime / 0.08);
+    if (gIdx < bestGhost.length - 1) {
+      const g0 = bestGhost[gIdx], g1 = bestGhost[gIdx + 1];
+      const frac = (lapTime - gIdx * 0.08) / 0.08;
+      ghostShip.root.visible = true;
+      ghostShip.root.position.set(
+        g0[0] + (g1[0] - g0[0]) * frac,
+        g0[1] + (g1[1] - g0[1]) * frac,
+        g0[2] + (g1[2] - g0[2]) * frac
+      );
+      _q.set(g0[3], g0[4], g0[5], g0[6]).slerp(_q2.set(g1[3], g1[4], g1[5], g1[6]), frac);
+      ghostShip.root.quaternion.copy(_q);
+      ghostShip.vis.rotation.set(g0[8] + (g1[8] - g0[8]) * frac, 0, g0[7] + (g1[7] - g0[7]) * frac);
+    } else {
+      ghostShip.root.visible = false;
+    }
+  } else if (ghostShip) {
+    ghostShip.root.visible = false;
+  }
 
   // --- Schiff-Transform + Banking/Roll
   _r.crossVectors(S.fwd, S.up).normalize();
@@ -1123,6 +1253,7 @@ refreshMenuRecords();
 $('loading').classList.add('hidden');
 $('menu').classList.remove('hidden');
 requestAnimationFrame(frame);
+appStarted = true;
 </script>
 </body>
 </html>

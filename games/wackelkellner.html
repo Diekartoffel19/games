@@ -105,7 +105,8 @@ function tone(k) {
   else P(900, 0.12, "sawtooth", 0.12);
 }
 function shatter(i) {
-  const cx = W * 0.42, h = trayY();
+  const cx = W * 0.42, h = trayY(), s = Math.min(1, H / 760);
+  const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
   let yy = 0;
   for (let k = 0; k < i; k++) yy += stack[k].type.h;
   const lost = stack.splice(i);
@@ -114,7 +115,10 @@ function shatter(i) {
   for (const it of lost) {
     broken++; orderBroken++;
     const dir = Math.sign(it.off || tilt || 1);
-    debris.push({ e: it.type.e, x: cx + (it.x || 0), y: h - yy, vx: dir * rnd(70, 260) + Math.sin(tilt) * 200, vy: rnd(-260, -80), r: 0, vr: rnd(-9, 9) });
+    const localX = (it.x || 0) * s, localY = (-yy - it.type.h / 2) * s;
+    const worldX = cx + (localX * cosT - localY * sinT);
+    const worldY = h + (localX * sinT + localY * cosT);
+    debris.push({ e: it.type.e, x: worldX, y: worldY, vx: dir * rnd(70, 260) + Math.sin(tilt) * 200, vy: rnd(-260, -80), r: 0, vr: rnd(-9, 9) });
     yy += it.type.h;
   }
   say(pickOf(BROKE)); shake = 0.3;
@@ -143,8 +147,8 @@ function deliver() {
     float(W * 0.42, trayY() - 80, "+" + tips + " CHF" + (perfect ? " 🌟" : ""));
     if (perfect && broken > 0) { broken--; float(W * 0.42, trayY() - 120, "Chef verzeiht 1 💥", "#6fd"); }
     ArcadeCore.coin();
+    delivered++;
   }
-  delivered++;
   stack = [];
   arrive = 1.3;
 }
@@ -241,9 +245,15 @@ function update(dt) {
 }
 function draw(t) {
   ctx.save();
+  const s = Math.min(1, H / 760);
+  let stackH = 0;
+  if (stack) { for (const it of stack) stackH += it.type.h * s; }
+  const topY = trayY() - stackH;
+  const camY = Math.max(0, Math.min(H * 0.25, 75 - topY));
+  if (camY > 0) ctx.translate(0, camY);
   if (shake > 0) ctx.translate(rnd(-1, 1) * 30 * shake, rnd(-1, 1) * 30 * shake);
   // Restaurant
-  ctx.fillStyle = "#3b2455"; ctx.fillRect(-40, -40, W + 80, H + 80);
+  ctx.fillStyle = "#3b2455"; ctx.fillRect(-40, -120, W + 80, H + 240);
   const scroll = walked;
   ctx.fillStyle = "#4b2f6c";
   const sw = 150;
@@ -315,7 +325,8 @@ function drawWaiter(t) {
   const danger = Math.abs(tilt) > 0.3;
   emoji(danger ? "😱" : stack.length > 5 ? "😬" : "🙂", x, ty + 42, 46);
   const hop = bumpT > 0 ? -Math.sin(bumpT / 0.35 * Math.PI) * 14 : 0;
-  ctx.save(); ctx.translate(x, ty + hop); ctx.rotate(tilt);
+  const s = Math.min(1, H / 760);
+  ctx.save(); ctx.translate(x, ty + hop); ctx.scale(s, s); ctx.rotate(tilt);
   ctx.fillStyle = "#c0c5cc"; ctx.fillRect(-TRAY_W / 2, -5, TRAY_W, 9);
   let y = -5;
   for (const it of stack) {

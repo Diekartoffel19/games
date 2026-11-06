@@ -4,6 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Valet Parking: Full Contact 3D</title>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) {
+    if (msg) document.getElementById('fallbackMsg').textContent = msg;
+    fb.style.display = 'block';
+  }
+};
+window.addEventListener('error', function(e) {
+  if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar'));
+});
+setTimeout(function() {
+  if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).');
+}, 8000);
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Monoton&family=Barlow+Condensed:wght@500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -112,12 +130,17 @@
   #touch button.on { background:rgba(255,207,74,.35); border-color:var(--gold); }
   @media (max-width:760px) {
     #tr { min-width:0; } #dmg { font-size:32px; } #timer { font-size:38px; } #carname { font-size:18px; }
-    #tc { top:auto; bottom:190px; } #keys { display:none; } #minimap { top:250px; bottom:auto; width:150px; height:100px; } #bl { bottom:170px; } #park { bottom:170px; min-width:0; }
+    #tc { top:auto; bottom:190px; } #keys { display:none; } #minimap { top:155px; left:16px; right:auto; bottom:auto; width:140px; height:94px; } #bl { bottom:170px; } #park { bottom:170px; min-width:0; }
     #say { top:auto; bottom:260px; font-size:18px; }
   }
 </style>
 </head>
 <body>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#07040f;color:#fff;z-index:99999;padding:30px;font-family:'Barlow Condensed',sans-serif;text-align:center;">
+  <h2 style="color:#ff3b4a;margin-top:20vh;font-size:36px">FEHLER BEIM LADEN</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:var(--gold);font-weight:bold;text-decoration:none;border:1px solid var(--gold);padding:10px 20px;display:inline-block;margin-top:12px;font-size:18px">← ZURÜCK ZUM HUB</a></p>
+</div>
 <canvas id="gl"></canvas>
 <div id="flash"></div>
 
@@ -278,16 +301,22 @@ const LEVELS = [
     bay: ['vip', 0], mass: 1300, power: 14, grip: 1.12, vmax: 48,
     quote: '„Das ist ein Prototyp. Einzelstück. VIP-Bucht ganz links außen. Mein Algorithmus gibt Ihnen 12 % Erfolgschance. Überraschen Sie mich."',
     lines: ['FEHLER 404: STOSSSTANGE!', 'DAS WAR NICHT IM MODELL!', 'MEINE AKTIONÄRE!', 'INAKZEPTABEL!', 'KALIBRIERUNG FEHLGESCHLAGEN!'] },
-  { name: 'Der Baron', guest: 'Baron von Goldstein', emoji: '👑', car: "Phantom d'Or", style: 'sedan', color: 0xd9a63a, gold: true, value: 3500000, pot: 300000, time: 60,
+  { name: 'Der Baron', guest: 'Baron von Goldstein', emoji: '👑', car: "Phantom d'Or", style: 'sedan', color: 0xd9a63a, gold: true, value: 3500000, pot: 300000, time: 55,
     bay: ['r1', 10], mass: 2500, power: 7.5, grip: 0.98, vmax: 34,
     quote: '„Der Phantom ist mit echtem Blattgold lackiert. Reihe A, Platz 11 – genau in der Mitte, damit ich ihn von der Suite aus sehe. Ich beobachte Sie, junger Mann."',
     lines: ['MEIN BLATTGOLD!', 'SIE SIND ENTLASSEN!', 'SKANDALÖS!', 'HÄNDE WEG, BAUER!', 'DAS KOSTET SIE IHR LEBEN... SGEHALT!'] },
 ];
-const ROWNAME = { vip: 'VIP-Streifen', r1: 'Reihe A', r2: 'Reihe B', r3: 'Reihe C' };
+const ROWNAME = { vip: 'VIP-Streifen', r1: 'Reihe A', r2: 'Reihe B' };
 
 // ====================== Renderer ======================
 const canvas = $('gl');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (err) {
+  if (window.showErrorNotice) window.showErrorNotice('WebGL wird nicht unterstützt oder ist blockiert.');
+  throw err;
+}
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -300,7 +329,7 @@ const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 90
 camera.position.set(0, 30, 40);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.55, 0.8);
+const bloom = new UnrealBloomPass(new THREE.Vector2(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2)), 0.9, 0.55, 0.8);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -308,6 +337,7 @@ const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+  bloom.resolution.set(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2));
 });
 
 scene.add(new THREE.HemisphereLight(0x6a58b0, 0x201418, 0.75));
@@ -513,7 +543,7 @@ function lightPool(x, z, r, color, op = 0.35) {
 lightPool(0, -34, 12, 0xffc070, 0.32);
 
 // Parking slots
-const SLOTS = { vip: [], r1: [], r2: [], r3: [] };
+const SLOTS = { vip: [], r1: [], r2: [] };
 for (let i = 0; i < 10; i++) SLOTS.vip.push({ x: -29.7 + i * 6.6, z: -20.5, a: Math.PI / 2, w: 2.6, l: 6.6, tolX: 0.55, tolZ: 1.05, kind: 'vip' });
 // Rows have a driving aisle on BOTH sides, so every occupant can be shoved out front or back.
 const ROW_Z = { r1: -10, r2: 1.6 };
@@ -959,9 +989,10 @@ function onImpact(A, B, j, cx, cz, nx, nz) {
   }
 }
 
+let targetIntruder = null;
 function clearLevel() {
   for (const b of dyn) disposeCar(b.car);
-  dyn = []; player = null; clearSkids();
+  dyn = []; player = null; targetIntruder = null; clearSkids();
 }
 const PARK_COLORS = [0x111114, 0xe9e7e2, 0x9aa0a8, 0x0d2a6b, 0x7a0d12, 0x1f5f3a, 0x3b1a5a, 0x0b4f5c, 0xc77a12, 0x2b2b30, 0x5a5f68, 0xb0122a, 0x1a3f8f];
 function loadLevel(i) {
@@ -981,6 +1012,7 @@ function loadLevel(i) {
       const x = sl.x + Math.cos(sl.a) * lat + Math.sin(sl.a) * lon, z = sl.z - Math.sin(sl.a) * lat + Math.cos(sl.a) * lon;
       const value = Math.round((60 + rnd() * 340) * 1000);
       const b = makeBody(x, z, a, 1500 + rnd() * 400, car, value);
+      if (sl === baySlot) targetIntruder = b;
       dyn.push(b);
     }
   }
@@ -1194,7 +1226,14 @@ addEventListener('keydown', e => {
   if (e.code === 'Enter' && state === 'brief') startCount();
 });
 addEventListener('keyup', e => { if (KEYMAP[e.code]) input[KEYMAP[e.code]] = false; if (e.code === 'KeyH') horn(false); });
-addEventListener('blur', () => { for (const k in input) input[k] = false; horn(false); });
+addEventListener('blur', () => {
+  for (const k in input) input[k] = false;
+  horn(false);
+  if (state === 'play') { state = 'pause'; show('pause'); }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state === 'play') { state = 'pause'; show('pause'); }
+});
 for (const btn of document.querySelectorAll('#touch button')) {
   const k = btn.dataset.k;
   const on = e => { e.preventDefault(); initAudio(); input[k] = true; btn.classList.add('on'); };
@@ -1308,6 +1347,11 @@ function drawMinimap() {
     const s = b === player ? 1.35 : 1;
     mctx.fillRect(-b.hx * k * s, -b.hz * k * s, b.hx * 2 * k * s, b.hz * 2 * k * s);
     if (b === player) { mctx.fillStyle = '#fff'; mctx.fillRect(-b.hx * k, b.hz * k * 0.6, b.hx * 2 * k, 2); }
+    if (b === targetIntruder) {
+      mctx.strokeStyle = '#ff3b4a';
+      mctx.lineWidth = 2;
+      mctx.strokeRect(-b.hx * k - 2, -b.hz * k - 2, b.hx * 2 * k + 4, b.hz * 2 * k + 4);
+    }
     mctx.restore();
   }
 }
@@ -1375,6 +1419,7 @@ function frame(now) {
 loadLevel(0);
 buildMenu(); show('menu');
 requestAnimationFrame(frame);
+appStarted = true;
 </script>
 </body>
 </html>

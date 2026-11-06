@@ -4,6 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hover Courier</title>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) {
+    if (msg) document.getElementById('fallbackMsg').textContent = msg;
+    fb.style.display = 'block';
+  }
+};
+window.addEventListener('error', function(e) {
+  if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar'));
+});
+setTimeout(function() {
+  if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).');
+}, 8000);
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
@@ -85,9 +103,26 @@
     #radar { width:120px; height:120px; } #spd { font-size:36px; } #timer { font-size:32px; } #deliv { font-size:24px; }
     #keys { display:none; } #tc { top:auto; bottom:110px; }
   }
+  #touch { position:fixed; inset:auto 0 0 0; height:180px; pointer-events:none; z-index:25; }
+  #touch button { position:absolute; bottom:16px; width:70px; height:70px; border-radius:50%; border:2px solid rgba(0,229,255,0.4); background:rgba(6,8,22,0.65);
+    color:#e6f6ff; font-family:inherit; font-size:13px; font-weight:900; pointer-events:auto; touch-action:none; }
+  #touch button.on { background:rgba(0,229,255,0.35); border-color:var(--cyan); box-shadow:0 0 12px var(--cyan); }
 </style>
 </head>
 <body>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#05030c;color:#fff;z-index:99999;padding:30px;font-family:'Orbitron',sans-serif;text-align:center;">
+  <h2 style="color:#ff3047;margin-top:20vh">SYSTEMFEHLER</h2>
+  <p id="fallbackMsg" style="margin:16px 0">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#00e5ff;font-weight:bold;text-decoration:none;border:1px solid #00e5ff;padding:8px 16px;display:inline-block;margin-top:12px">← ZURÜCK ZUM HUB</a></p>
+</div>
+<div id="touch" class="hidden">
+  <button data-k="left" style="left:16px">◀</button>
+  <button data-k="right" style="left:96px">▶</button>
+  <button data-k="drift" style="right:176px">DRIFT</button>
+  <button data-k="boost" style="right:96px">TURBO</button>
+  <button data-k="up" style="right:16px;bottom:94px">GAS</button>
+  <button data-k="down" style="right:16px;bottom:16px">BREMS</button>
+</div>
 
 <div id="hud" class="hidden">
   <div class="panel" id="tl">
@@ -190,7 +225,13 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
 
 // ================= Renderer / scene =================
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+} catch (err) {
+  if (window.showErrorNotice) window.showErrorNotice('WebGL wird nicht unterstützt oder ist blockiert.');
+  throw err;
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -760,8 +801,12 @@ const Audio = {
   init() {
     if (this.ctx) { this.ctx.resume(); return; }
     try {
+      const saved = localStorage.getItem('hovercourier_muted');
+      if (saved !== null) this.muted = saved === '1';
+    } catch(e) {}
+    try {
       const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      this.master = ctx.createGain(); this.master.gain.value = 0.55; this.master.connect(ctx.destination);
+      this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.55; this.master.connect(ctx.destination);
       const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       this.noiseBuf = noiseBuf;
@@ -816,11 +861,26 @@ const Audio = {
   chime() { [660, 880, 1320, 1760].forEach((f, i) => this.beep(f, 0.3, 'triangle', 0.14, i * 0.07)); },
   alarm() { this.beep(880, 0.16, 'square', 0.09); this.beep(620, 0.16, 'square', 0.09, 0.18); },
   tick() { this.beep(1200, 0.05, 'square', 0.06); },
-  setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : 0.55; },
+  setMuted(m) {
+    this.muted = !!m;
+    if (this.master) this.master.gain.value = this.muted ? 0 : 0.55;
+    try { localStorage.setItem('hovercourier_muted', this.muted ? '1' : '0'); } catch(e) {}
+  },
 };
+try { Audio.muted = localStorage.getItem('hovercourier_muted') === '1'; } catch(e) {}
 
 // ================= Input =================
 const keys = {};
+const touchInput = { left: false, right: false, up: false, down: false, drift: false, boost: false };
+for (const btn of document.querySelectorAll('#touch button')) {
+  const k = btn.dataset.k;
+  const on = e => { e.preventDefault(); Audio.init(); touchInput[k] = true; btn.classList.add('on'); };
+  const off = e => { e.preventDefault(); touchInput[k] = false; btn.classList.remove('on'); };
+  btn.addEventListener('pointerdown', on);
+  btn.addEventListener('pointerup', off);
+  btn.addEventListener('pointercancel', off);
+  btn.addEventListener('pointerleave', off);
+}
 addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (keys[e.code]) return;
@@ -869,9 +929,9 @@ function spawnTarget() {
     const lane = (Math.random() * 2 - 1) * 6;
     const alongX = Math.random() < 0.5;
     const x = alongX ? along : roadPos(k) + lane, z = alongX ? roadPos(k) + lane : along;
-    const d = Math.hypot(x - state.pos.x, z - state.pos.z);
-    if ((d < minD && tries < 300) || !freeSpot(x, z, 3.5)) continue;
-    state.target.set(x, 0, z); state.targetDist0 = d;
+    const manhattan = Math.abs(x - state.pos.x) + Math.abs(z - state.pos.z);
+    if ((manhattan < minD && tries < 300) || !freeSpot(x, z, 3.5)) continue;
+    state.target.set(x, 0, z); state.targetDist0 = manhattan;
     beacon.position.set(x, 0, z);
     return;
   }
@@ -888,10 +948,12 @@ function startGame() {
   spawnTarget();
   camPos.set(0, 5, -10);
   ui.menu.classList.add('hidden'); ui.over.classList.add('hidden'); ui.pause.classList.add('hidden'); ui.hud.classList.remove('hidden');
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.getElementById('touch').classList.remove('hidden');
   flash('LIEFERUNG STARTEN!', '#ff2bd6');
 }
 function gameOver() {
   state.mode = 'over';
+  document.getElementById('touch').classList.add('hidden');
   if (state.score > best) { best = state.score; try { localStorage.setItem('hovercourier_best', best); } catch (e) {} ui.overSub.textContent = 'NEUER REKORD! Die Stadt kennt deinen Namen.'; }
   else ui.overSub.textContent = 'Die Zeit ist abgelaufen. Das Paket bleibt liegen.';
   ui.fScore.textContent = state.score; ui.fDeliv.textContent = state.delivered;
@@ -903,6 +965,11 @@ function togglePause() {
   if (state.mode !== 'play') return;
   state.paused = !state.paused;
   ui.pause.classList.toggle('hidden', !state.paused);
+  if (state.paused) {
+    document.getElementById('touch').classList.add('hidden');
+  } else if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    document.getElementById('touch').classList.remove('hidden');
+  }
 }
 document.getElementById('startBtn').onclick = startGame;
 document.getElementById('restartBtn').onclick = startGame;
@@ -918,12 +985,14 @@ const raycaster = new THREE.Raycaster();
 const DOWN = new THREE.Vector3(0, -1, 0);
 const rayOrigin = new THREE.Vector3();
 
+let driftTimer = null;
+
 function physics(dt, t) {
   const S = state;
   const engineOn = S.overheat <= 0;
-  const inThrottle = K('KeyW', 'ArrowUp'), inBrake = K('KeyS', 'ArrowDown');
-  const steer = (K('KeyA', 'ArrowLeft') ? 1 : 0) - (K('KeyD', 'ArrowRight') ? 1 : 0);
-  const inDrift = K('Space'), inBoost = K('ShiftLeft', 'ShiftRight', 'KeyE');
+  const inThrottle = K('KeyW', 'ArrowUp') || touchInput.up, inBrake = K('KeyS', 'ArrowDown') || touchInput.down;
+  const steer = ((K('KeyA', 'ArrowLeft') || touchInput.left) ? 1 : 0) - ((K('KeyD', 'ArrowRight') || touchInput.right) ? 1 : 0);
+  const inDrift = K('Space') || touchInput.drift, inBoost = K('ShiftLeft', 'ShiftRight', 'KeyE') || touchInput.boost;
 
   const fx = Math.sin(S.yaw), fz = Math.cos(S.yaw);
   const rx = -Math.cos(S.yaw), rz = Math.sin(S.yaw);
@@ -983,10 +1052,20 @@ function physics(dt, t) {
     vf = Math.sign(vf || 1) * Math.sqrt(Math.max(0, sp * sp - vl * vl)) + bonus;
     if (bonus > 2) { flash('DRIFT-BOOST!', '#ffb020', 0.8); Audio.beep(520, 0.12, 'sawtooth', 0.08); Audio.beep(780, 0.15, 'sawtooth', 0.08, 0.08); }
     const pts = Math.round(S.driftPts);
-    if (pts > 5) { S.score += pts; ui.drift.textContent = 'DRIFT +' + pts; ui.drift.style.opacity = 1; setTimeout(() => (ui.drift.style.opacity = 0), 900); }
+    if (pts > 5) {
+      S.score += pts;
+      ui.drift.textContent = 'DRIFT +' + pts;
+      ui.drift.style.opacity = 1;
+      if (driftTimer) clearTimeout(driftTimer);
+      driftTimer = setTimeout(() => (ui.drift.style.opacity = 0), 900);
+    }
     S.driftTime = 0; S.driftPts = 0;
   }
-  if (drifting && S.driftPts > 5) { ui.drift.textContent = 'DRIFT ' + Math.round(S.driftPts); ui.drift.style.opacity = 1; }
+  if (drifting && S.driftPts > 5) {
+    if (driftTimer) clearTimeout(driftTimer);
+    ui.drift.textContent = 'DRIFT ' + Math.round(S.driftPts);
+    ui.drift.style.opacity = 1;
+  }
   S.drifting = drifting;
   S.driftAudio = drifting ? clamp(driftAngle * 2.5, 0, 1) * clamp(speed0 / 25, 0, 1) : 0;
 
@@ -1033,11 +1112,8 @@ function physics(dt, t) {
     S.yawRate *= 0.5;
   }
 
-  // --- hover: downward raycast + spring-damper ---
-  rayOrigin.set(S.pos.x, S.pos.y + 2, S.pos.z);
-  raycaster.set(rayOrigin, DOWN); raycaster.far = 20;
-  const hit = raycaster.intersectObject(ground, false)[0];
-  const groundY = hit ? hit.point.y : 0;
+  // --- hover: spring-damper over flat ground ---
+  const groundY = 0;
   const targetH = engineOn ? HOVER_H + Math.sin(t * 2.3) * 0.06 : 0.6 + Math.random() * 0.08;
   const h = S.pos.y - groundY;
   S.vy += (SPRING_K * (targetH - h) - SPRING_D * S.vy) * dt;
@@ -1264,6 +1340,7 @@ function frame() {
   composer.render();
 }
 frame();
+appStarted = true;
 
 // ================= Resize =================
 addEventListener('resize', () => {

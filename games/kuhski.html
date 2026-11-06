@@ -70,6 +70,7 @@ function burst(x, y, col, n) { for (let i = 0; i < n; i++) { const a = rnd(0, 6.
 
 function spawn() {
   const lvl = Math.min(dist / 12000, 1);
+  const hScale = Math.max(0.5, H / 800);
   const y = H + 80;
   const r = Math.random();
   const margin = 50, rx = () => rnd(margin, W - margin);
@@ -78,14 +79,14 @@ function spawn() {
     things.push({ k: "gate", x: gx, y, gap });
   } else if (r < 0.25) things.push({ k: "ramp", x: rx(), y, w: 90 });
   else if (r < 0.48) {
-    const x = rx(); for (let i = 0; i < 4; i++) things.push({ k: "bell", x: x + Math.sin(i) * 26, y: y + i * 55 });
+    const x = rx(); for (let i = 0; i < 4; i++) things.push({ k: "bell", x: x + Math.sin(i) * 26, y: y + i * 55 * hScale });
   } else if (r < 0.53) things.push({ k: "cheese", x: rx(), y });
   else if (r < 0.65) things.push({ k: "tourist", x: rx(), y, vx: rnd(-1, 1) < 0 ? -30 : 30, near: false });
   else {
     const n = 1 + (Math.random() < 0.25 + lvl * 0.5 ? 1 : 0);
-    for (let i = 0; i < n; i++) things.push({ k: "hazard", e: ["🌲", "🌲", "⛄", "🪨", "🌲"][Math.floor(Math.random() * 5)], x: rx(), y: y + i * 40 });
+    for (let i = 0; i < n; i++) things.push({ k: "hazard", e: ["🌲", "🌲", "⛄", "🪨", "🌲"][Math.floor(Math.random() * 5)], x: rx(), y: y + i * 40 * hScale });
   }
-  spawnD = rnd(170, 300) - lvl * 60;
+  spawnD = (rnd(170, 300) - lvl * 60) * hScale;
 }
 function crash(what) {
   if (invuln > 0) return;
@@ -142,7 +143,8 @@ function update(dt) {
     }
   }
   if (cow.z <= 0 && Math.random() < 0.8) trail.push({ x: cow.x, y: COW_Y() + 18 });
-  const dy = sp * dt;
+  const hScale = Math.max(0.5, H / 800);
+  const dy = sp * hScale * dt;
   trail.forEach(p => p.y -= dy); trail = trail.filter(p => p.y > -10);
   spawnD -= dy; if (spawnD <= 0) spawn();
   const cy = COW_Y();
@@ -209,10 +211,15 @@ function draw(time) {
   ctx.globalAlpha = 1;
   ctx.fillStyle = "#fff";
   for (const f of flakes) {
-    const fx = (f.x * W + Math.sin(time + f.y * 9) * 18) % W, fy = (f.y * H - time * 50 * f.s - dist * 0.05 * f.s) % H;
+    const fx = (((f.x * W + Math.sin(time + f.y * 9) * 18) % W) + W) % W, fy = (f.y * H - time * 50 * f.s - dist * 0.05 * f.s) % H;
     ctx.beginPath(); ctx.arc(fx, fy < 0 ? fy + H : fy, f.s, 0, 6.3); ctx.fill();
   }
   ctx.restore();
+  if (state === "pause") {
+    ctx.fillStyle = "#0008"; ctx.fillRect(0, 0, W, H);
+    text("⏸ Pause", W / 2, H * 0.4, 44, "#fff");
+    text("P / Esc / Tippen = weiter", W / 2, H * 0.4 + 46, 18, "#fff");
+  }
   // HUD
   text(Math.floor(score) + " Pkt.", W - 16, 26, 22, "#123", "right");
   text("🔔 " + bells + "   " + Math.floor(dist / 10) + " m", W - 16, 54, 16, "#123", "right");
@@ -265,16 +272,38 @@ function trick() {
   if (state !== "play" || cow.z <= 0) return;
   cow.tricks++; cow.spin = (cow.spin || 0) + 1; moo(1.3);
 }
-cv.addEventListener("pointerdown", e => { targetX = e.clientX; trick(); });
+function togglePause() {
+  if (state === "play") { state = "pause"; keys = {}; }
+  else if (state === "pause") { state = "play"; last = performance.now(); }
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden && state === "play") togglePause(); });
+addEventListener("blur", () => { keys = {}; });
+let ptrDownTime = 0, ptrDownX = 0, ptrDownY = 0;
+cv.addEventListener("pointerdown", e => {
+  if (state === "pause") { togglePause(); return; }
+  targetX = e.clientX;
+  ptrDownTime = performance.now();
+  ptrDownX = e.clientX;
+  ptrDownY = e.clientY;
+});
 addEventListener("pointermove", e => { if (e.pointerType === "mouse" || e.buttons) targetX = e.clientX; });
+addEventListener("pointerup", e => {
+  const dt = performance.now() - ptrDownTime;
+  const distMoved = Math.hypot(e.clientX - ptrDownX, e.clientY - ptrDownY);
+  if (dt < 200 && distMoved < 10) trick();
+});
 addEventListener("keydown", e => {
-  if (e.key === "ArrowLeft" || e.key === "a") keys.left = true;
-  if (e.key === "ArrowRight" || e.key === "d") keys.right = true;
+  const k = e.key.toLowerCase();
+  if (k === "arrowleft" || k === "a") keys.left = true;
+  if (k === "arrowright" || k === "d") keys.right = true;
   if (e.code === "Space" && state === "play") { e.preventDefault(); trick(); }
+  if ((k === "p" || k === "escape") && !e.repeat && (state === "play" || state === "pause")) { e.preventDefault(); togglePause(); }
+  if ((k === "enter" || (k === " " && (state === "menu" || state === "over"))) && !e.repeat && (state === "menu" || (state === "over" && !$("over").classList.contains("hide")))) { e.preventDefault(); start(); }
 });
 addEventListener("keyup", e => {
-  if (e.key === "ArrowLeft" || e.key === "a") keys.left = false;
-  if (e.key === "ArrowRight" || e.key === "d") keys.right = false;
+  const k = e.key.toLowerCase();
+  if (k === "arrowleft" || k === "a") keys.left = false;
+  if (k === "arrowright" || k === "d") keys.right = false;
 });
 function start() {
   reset(); state = "play"; moo();

@@ -4,6 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Extrem-Bügeln 3D</title>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) {
+    if (msg) document.getElementById('fallbackMsg').textContent = msg;
+    fb.style.display = 'block';
+  }
+};
+window.addEventListener('error', function(e) {
+  if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar'));
+});
+setTimeout(function() {
+  if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).');
+}, 8000);
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;800;900&display=swap" rel="stylesheet">
 <style>
@@ -89,10 +107,27 @@
   #rshirt { width:240px; height:284px; background:repeating-linear-gradient(45deg,#2b2d33 0 10px,#26282d 10px 20px); }
   @media (max-width:700px) { #result .card { grid-template-columns:1fr; } #rshirt { margin:0 auto; } #shirtbox { transform:scale(.7); transform-origin:bottom right; } }
 
+  #touch { position:fixed; inset:auto 0 0 0; height:160px; pointer-events:none; z-index:20; }
+  #touch button { position:absolute; width:64px; height:64px; border-radius:50%; border:2px solid var(--hi); background:rgba(10,11,14,0.7);
+    color:var(--txt); font-family:inherit; font-size:12px; font-weight:800; pointer-events:auto; touch-action:none; }
+  #touch button.on { background:rgba(255,106,26,0.4); border-color:var(--hi2); }
   @keyframes blink { 50% { opacity:0; } }
 </style>
 </head>
 <body>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#0b0a0c;color:#fff;z-index:99999;padding:30px;font-family:'Barlow Condensed',sans-serif;text-align:center;">
+  <h2 style="color:#ff3b4a;margin-top:20vh;font-size:36px">FEHLER BEIM LADEN</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:var(--hi);font-weight:bold;text-decoration:none;border:1px solid var(--hi);padding:10px 20px;display:inline-block;margin-top:12px;font-size:18px">← ZURÜCK ZUM HUB</a></p>
+</div>
+<div id="touch" class="hidden">
+  <button data-k="left" style="left:12px;bottom:12px">◀</button>
+  <button data-k="right" style="left:82px;bottom:12px">▶</button>
+  <button data-k="dn" style="left:12px;bottom:82px">HOCH</button>
+  <button data-k="up" style="left:82px;bottom:82px">RUNTER</button>
+  <button data-k="brake" style="left:152px;bottom:12px">BREMS</button>
+  <button data-k="chute" style="left:152px;bottom:82px">SCHIRM</button>
+</div>
 <canvas id="gl"></canvas>
 <div id="fx"></div>
 
@@ -214,7 +249,13 @@ const store = {
 
 // ====================== Renderer ======================
 const canvas = document.getElementById('gl');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+} catch (err) {
+  if (window.showErrorNotice) window.showErrorNotice('WebGL wird nicht unterstützt oder ist blockiert.');
+  throw err;
+}
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 const scene = new THREE.Scene();
@@ -837,7 +878,9 @@ function disposeGroup(g) {
   g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); });
   while (g.children.length) g.remove(g.children[0]);
 }
+let currentLoadedLevel = -1;
 function loadLevel(i) {
+  currentLoadedLevel = i;
   levelIdx = i; L = LEVELS[i];
   disposeGroup(levelGroup); bombs.length = 0;
   if (L.id === 'fjord') L.boxes.length = 1; // Kajüte wird in build() neu ergänzt
@@ -890,7 +933,12 @@ const clock = new THREE.Clock();
 function startRun() {
   initAudio();
   S.runId = (S.runId || 0) + 1;
-  loadLevel(levelIdx);
+  if (currentLoadedLevel !== levelIdx) {
+    loadLevel(levelIdx);
+  } else {
+    for (const b of bombs) levelGroup.remove(b.m);
+    bombs.length = 0;
+  }
   const st0 = L.start;
   S.pos.set(st0.x, st0.y, st0.z); S.prev.copy(S.pos); S.yaw = st0.yaw; S.pitch = st0.pitch; S.speed = st0.speed; S.bank = 0;
   S.mode = 'suit'; S.openT = 0; S.t = 0; S.count = 3.2; S.state = 'count'; S.shake = 0; S.gust.set(0, 0, 0); S.gustT = 5; S.gustLeft = 0; S.turb = 0;
@@ -900,6 +948,7 @@ function startRun() {
   tool.heat = 1; tool.can = 100; tool.ironing = false; tool.spraying = false; sprayP.length = 0; steamP.length = 0;
   toastFlags = {};
   show('hud'); hide('menu'); hide('result'); hide('pause');
+  if (isTouch) show('touch');
   camera.position.copy(S.pos).add(new THREE.Vector3(0, 3, 8));
 }
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
@@ -954,22 +1003,56 @@ function showResult(kind, reason, zone, s, score, best, isBest) {
   document.getElementById('r6').textContent = best + (isBest ? '  NEU!' : '');
   const rc = document.getElementById('rshirt'); drawShirtTo(rc.getContext('2d'), rc.width, rc.height, false, false);
   document.getElementById('nextbtn').style.display = levelIdx < LEVELS.length - 1 ? '' : 'none';
-  show('result'); hide('hud');
+  show('result'); hide('hud'); hide('touch');
 }
 function toMenu() {
   S.runId = (S.runId || 0) + 1;
-  S.state = 'menu'; hide('hud'); hide('result'); hide('pause'); show('menu'); hide('count'); renderLevelCards();
-  loadLevel(levelIdx); canopy.visible = false;
+  S.state = 'menu'; hide('hud'); hide('result'); hide('pause'); hide('touch'); show('menu'); hide('count'); renderLevelCards();
+  if (currentLoadedLevel !== levelIdx) loadLevel(levelIdx);
+  canopy.visible = false;
   const st0 = L.start; S.pos.set(st0.x, st0.y, st0.z); S.yaw = 0; S.pitch = -0.3; S.bank = 0;
+}
+
+// ====================== Touch Input ======================
+const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+const touchInput = { left: false, right: false, up: false, dn: false, brake: false, chute: false };
+const touchBox = document.getElementById('touch');
+if (touchBox) {
+  const setTouchKey = (btn, on) => {
+    const k = btn.dataset.k;
+    if (!k) return;
+    if (k === 'chute') {
+      if (on) deployChute();
+    } else {
+      touchInput[k] = on;
+    }
+    btn.classList.toggle('on', on);
+  };
+  touchBox.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      initAudio();
+      btn.setPointerCapture(e.pointerId);
+      setTouchKey(btn, true);
+    });
+    btn.addEventListener('pointerup', e => {
+      e.preventDefault();
+      setTouchKey(btn, false);
+    });
+    btn.addEventListener('pointercancel', e => {
+      e.preventDefault();
+      setTouchKey(btn, false);
+    });
+  });
 }
 
 // ====================== Flight ======================
 const G = 9.81, KD = 0.0012, KI = 800, STALL = 15;
 const fwd = new THREE.Vector3(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 function updateFlight(dt) {
-  const up = (keys.KeyW || keys.ArrowUp) ? 1 : 0, dn = (keys.KeyS || keys.ArrowDown) ? 1 : 0;
-  const lt = (keys.KeyA || keys.ArrowLeft) ? 1 : 0, rt = (keys.KeyD || keys.ArrowRight) ? 1 : 0;
-  const brake = keys.ShiftLeft || keys.ShiftRight;
+  const up = (keys.KeyW || keys.ArrowUp || touchInput.up) ? 1 : 0, dn = (keys.KeyS || keys.ArrowDown || touchInput.dn) ? 1 : 0;
+  const lt = (keys.KeyA || keys.ArrowLeft || touchInput.left) ? 1 : 0, rt = (keys.KeyD || keys.ArrowRight || touchInput.right) ? 1 : 0;
+  const brake = keys.ShiftLeft || keys.ShiftRight || touchInput.brake;
   const turn = lt - rt;
   S.prev.copy(S.pos);
   let lift = L.updraft(S.pos.x, S.pos.y, S.pos.z, S.agl);
@@ -1243,27 +1326,51 @@ function frame() {
   sky.position.copy(camera.position);
   sun.target.position.copy(S.pos); sun.position.copy(S.pos).add(tmp2.set(...L.sunDir).normalize().multiplyScalar(500));
 
-  uploadShirtTex();
-  drawShirtTo(pctx, PW, PH, tool.view, true);
+  if (S.state === 'count' || S.state === 'play' || S.state === 'paused') {
+    uploadShirtTex();
+    drawShirtTo(pctx, PW, PH, tool.view, true);
+  }
   updateAudio();
   renderer.render(scene, camera);
 }
 
 // ====================== Input & UI ======================
+let prePauseState = 'play';
+function pauseGame() {
+  if (S.state === 'play' || S.state === 'count') {
+    prePauseState = S.state;
+    S.state = 'paused';
+    hide('touch');
+    show('pause');
+  }
+}
+function resume() {
+  hide('pause');
+  S.state = prePauseState || 'play';
+  if (isTouch && (S.state === 'play' || S.state === 'count')) show('touch');
+}
+
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
-  if (S.state === 'play') {
+  if (S.state === 'play' || S.state === 'count') {
     if (e.code === 'KeyF') deployChute();
     if (e.code === 'KeyC') S.camMode = (S.camMode + 1) % 2;
-    if (e.code === 'Escape') { S.state = 'paused'; show('pause'); }
+    if (e.code === 'Escape') pauseGame();
   } else if (S.state === 'paused' && e.code === 'Escape') resume();
   if (e.code === 'KeyR' && S.state !== 'menu') startRun();
   if (e.code === 'Enter' && S.state === 'menu') startRun();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; tool.ironing = false; tool.spraying = false; });
-function resume() { hide('pause'); S.state = 'play'; }
+addEventListener('blur', () => {
+  for (const k in keys) keys[k] = false;
+  for (const k in touchInput) touchInput[k] = false;
+  tool.ironing = false; tool.spraying = false;
+  pauseGame();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseGame();
+});
 $('startbtn').onclick = startRun;
 $('resumebtn').onclick = resume;
 $('pmenubtn').onclick = toMenu;
@@ -1285,6 +1392,7 @@ loadLevel(0);
 resetShirt(0.3);
 renderLevelCards();
 frame();
+appStarted = true;
 </script>
 </body>
 </html>
