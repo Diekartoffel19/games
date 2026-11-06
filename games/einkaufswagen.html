@@ -1,1162 +1,766 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Shopping Cart Rally — Supermarket Derby</title>
-  <meta name="description" content="Steer an overloaded shopping cart with a sticking wheel through endless supermarket aisles! Smash through ravioli pyramids, collect bottle-deposit vouchers and survive the slow-mo ragdoll crash.">
-  <link rel="stylesheet" href="../style.css">
-  <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
-  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
-  <script src="../src/arcade-core.js"></script>
-  <style>
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body {
-      margin: 0; padding: 0;
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: #0b0f19;
-      color: #f8fafc;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      user-select: none; -webkit-user-select: none;
-      touch-action: none;
-    }
-
-    #gameCanvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-
-    /* Top HUD */
-    .hud-top {
-      position: fixed;
-      top: 12px; left: 12px; right: 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      pointer-events: none;
-      z-index: 20;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .hud-left, .hud-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      pointer-events: auto;
-    }
-    .btn-hud {
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: #f8fafc;
-      padding: 8px 14px;
-      border-radius: 10px;
-      font-weight: 700;
-      font-size: 0.85rem;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      backdrop-filter: blur(8px);
-      transition: transform 0.15s, background 0.15s;
-    }
-    .btn-hud:hover { background: rgba(30, 41, 59, 0.95); transform: translateY(-1px); }
-
-    .stats-bar {
-      display: flex;
-      gap: 10px;
-      background: rgba(15, 23, 42, 0.88);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      padding: 8px 14px;
-      border-radius: 12px;
-      backdrop-filter: blur(8px);
-      pointer-events: auto;
-      flex-wrap: wrap;
-    }
-    .stat-box {
-      display: flex;
-      flex-direction: column;
-      min-width: 68px;
-    }
-    .stat-label {
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #94a3b8;
-      font-weight: 700;
-    }
-    .stat-val {
-      font-size: 1.05rem;
-      font-weight: 800;
-      color: #f8fafc;
-      font-variant-numeric: tabular-nums;
-    }
-    .stat-val.gold { color: #fbbf24; }
-    .stat-val.cyan { color: #38bdf8; }
-    .stat-val.red { color: #f87171; }
-
-    /* Wonky Wheel Indicator */
-    .wheel-widget {
-      position: fixed;
-      bottom: 20px; left: 20px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 14px;
-      padding: 10px 14px;
-      z-index: 20;
-      pointer-events: auto;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.45);
-    }
-    .wheel-title {
-      font-size: 0.75rem;
-      color: #cbd5e1;
-      font-weight: 700;
-    }
-    .wheel-status {
-      font-size: 0.85rem;
-      font-weight: 800;
-      color: #4ade80;
-    }
-    .wheel-status.jammed {
-      color: #fb7185;
-      animation: pulseWarn 0.35s infinite alternate;
-    }
-    @keyframes pulseWarn {
-      from { opacity: 0.6; transform: scale(0.98); }
-      to { opacity: 1; transform: scale(1.04); }
-    }
-
-    /* Overlay Modals */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(6, 9, 15, 0.82);
-      backdrop-filter: blur(8px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 50;
-      padding: 16px;
-    }
-    .modal-backdrop[hidden] { display: none; }
-    .modal-card {
-      background: linear-gradient(145deg, #1e293b, #0f172a);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 20px;
-      max-width: 540px;
-      width: 100%;
-      padding: 26px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
-      text-align: center;
-    }
-    .modal-card h1 {
-      margin: 0 0 8px;
-      font-size: 1.85rem;
-      font-weight: 900;
-      background: linear-gradient(90deg, #fbbf24, #f97316, #ef4444);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .modal-sub {
-      color: #94a3b8;
-      font-size: 0.95rem;
-      line-height: 1.5;
-      margin-bottom: 18px;
-    }
-    .shop-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 10px;
-      margin: 16px 0 20px;
-      text-align: left;
-    }
-    .shop-item {
-      background: rgba(15, 23, 42, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 10px 12px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 6px;
-    }
-    .shop-item-title {
-      font-weight: 800;
-      font-size: 0.85rem;
-      color: #f1f5f9;
-    }
-    .shop-item-desc {
-      font-size: 0.74rem;
-      color: #94a3b8;
-    }
-    .btn-buy {
-      background: #334155;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: #fbbf24;
-      padding: 6px 10px;
-      border-radius: 8px;
-      font-weight: 800;
-      font-size: 0.78rem;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .btn-buy:hover:not(:disabled) { background: #475569; }
-    .btn-buy:disabled { opacity: 0.45; cursor: not-allowed; }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #f59e0b, #ea580c);
-      color: #ffffff;
-      border: none;
-      padding: 14px 28px;
-      border-radius: 12px;
-      font-size: 1.05rem;
-      font-weight: 900;
-      cursor: pointer;
-      box-shadow: 0 6px 20px rgba(234, 88, 12, 0.45);
-      transition: transform 0.15s, box-shadow 0.15s;
-      width: 100%;
-    }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(234, 88, 12, 0.6); }
-
-    /* Touch Controls */
-    .touch-controls {
-      position: fixed;
-      bottom: 18px; right: 18px;
-      display: none;
-      gap: 10px;
-      z-index: 25;
-    }
-    @media (max-width: 820px), (pointer: coarse) {
-      .touch-controls { display: flex; }
-    }
-    .touch-btn {
-      width: 60px; height: 60px;
-      border-radius: 16px;
-      background: rgba(15, 23, 42, 0.85);
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      color: #fff;
-      font-size: 1.4rem;
-      font-weight: 900;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-    }
-    .touch-btn:active { background: #f59e0b; transform: scale(0.95); }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Einkaufswagen-Rallye 3D</title>
+<meta name="description" content="Drifte mit einem klemmenden Einkaufswagen durch 3D-Supermarktgänge, reiß Dosen-Pyramiden um, sammle Pfandbons und schaff die Einkaufsliste bis zur Kasse.">
+<meta name="theme-color" content="#20303a">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) { if (msg) document.getElementById('fallbackMsg').textContent = msg; fb.style.display = 'block'; }
+};
+window.addEventListener('error', function(e) { if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar')); });
+setTimeout(function() { if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).'); }, 8000);
+</script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#20303a; color:#fff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; min-height:36px; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#0008; z-index:20; padding:16px; overflow:auto; }
+.overlay.hide { display:none; }
+.card { background:#fffdf4; color:#20303a; border-radius:16px; padding:20px 24px; max-width:520px; width:100%; text-align:center; box-shadow:0 8px 0 #0006; border:4px solid #e2001a; }
+.card h1 { margin:0 0 6px; font-size:28px; }
+.card p { margin:8px 0; line-height:1.4; font-size:15px; }
+.best { color:#e2001a; font-weight:800; }
+button { font:inherit; font-weight:800; font-size:19px; color:#fff; background:linear-gradient(#ff3b3b,#c00012); border:0; border-radius:12px; padding:11px 26px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #6a000a; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #6a000a; }
+button:disabled { filter:grayscale(1); opacity:.6; cursor:default; }
+.shop { display:grid; gap:6px; margin:10px 0; text-align:left; }
+.shop .row { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#f1ead2; border-radius:10px; padding:6px 10px; font-size:14px; }
+.shop .row button { font-size:13px; padding:6px 10px; margin:0; box-shadow:0 2px 0 #6a000a; white-space:nowrap; }
+#hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+.t { position:absolute; font-weight:800; text-shadow:0 2px 0 #000a, 0 0 6px #0008; }
+#score { top:12px; right:16px; font-size:32px; }
+#time { top:52px; right:16px; font-size:20px; }
+#money { top:78px; right:16px; font-size:16px; color:#ffe36a; }
+#list { top:54px; left:12px; font-size:24px; background:#0006; border-radius:10px; padding:4px 10px; letter-spacing:4px; }
+#hpWrap, #tbWrap { left:50%; transform:translateX(-50%); width:min(300px,64vw); height:14px; border:2px solid #fff; border-radius:8px; background:#0007; overflow:hidden; }
+#hpWrap { bottom:44px; } #tbWrap { bottom:20px; }
+#hp { height:100%; background:linear-gradient(90deg,#ff3b3b,#ffd23a,#5fe36a); width:100%; }
+#tb { height:100%; background:linear-gradient(90deg,#3ad1ff,#b06bff); width:100%; }
+#speed { bottom:18px; left:16px; font-size:22px; }
+#jam { top:30%; left:50%; transform:translateX(-50%); font-size:24px; color:#ffd23a; display:none; text-align:center; }
+#banner { top:40%; left:50%; transform:translate(-50%,-50%); font-size:46px; text-align:center; white-space:nowrap; opacity:0; transition:opacity .2s; }
+#banner.show { opacity:1; }
+#pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; font-size:34px; background:#0006; pointer-events:auto; }
+#pause span { font-size:15px; margin-top:6px; }
+#touch { position:fixed; inset:auto 0 0 0; height:140px; z-index:15; display:none; pointer-events:none; }
+#touch .b { position:absolute; bottom:70px; width:70px; height:70px; border-radius:50%; background:#fff3; border:2px solid #fff8; color:#fff; font-size:26px; display:flex; align-items:center; justify-content:center; pointer-events:auto; touch-action:none; }
+#touch .b.on { background:#fff7; }
+</style>
 </head>
 <body>
+<a class="back" href="../index.html">← Hub</a>
+<canvas id="gl"></canvas>
+<div id="hud">
+  <div id="score" class="t">0</div>
+  <div id="time" class="t">1:40</div>
+  <div id="money" class="t">0 € Pfand</div>
+  <div id="list" class="t"></div>
+  <div id="hpWrap" class="t"><div id="hp"></div></div>
+  <div id="tbWrap" class="t"><div id="tb"></div></div>
+  <div id="speed" class="t">0 km/h</div>
+  <div id="jam" class="t">🛞 VORDERRAD KLEMMT!<br><span style="font-size:16px">Leertaste / 🔧 hämmern zum Rütteln</span></div>
+  <div id="banner" class="t"></div>
+  <div id="pause"><b>⏸ Durchsage</b><span>P / Esc / Tippen = weiter</span></div>
+</div>
+<div id="touch">
+  <div class="b" id="tL" style="left:14px">◀</div>
+  <div class="b" id="tR" style="left:96px">▶</div>
+  <div class="b" id="tS" style="left:55px;bottom:0">▼</div>
+  <div class="b" id="tG" style="right:96px">▲</div>
+  <div class="b" id="tB" style="right:14px">🚀</div>
+  <div class="b" id="tJ" style="right:55px;bottom:0">🔧</div>
+</div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🛒 Einkaufswagen-Rallye 3D</h1>
+  <p>Samstag, 19:52. Acht Minuten bis Ladenschluss – und dein Wagen hat <b>das</b> Vorderrad. Hol alles von der Einkaufsliste und rolle durch die Kasse.</p>
+  <p><b>Schieben:</b> W/↑ · <b>Bremsen/Zurück:</b> S/↓ · <b>Lenken:</b> A/D ←→<br><b>🚀 Turbo:</b> Shift · <b>🔧 Rad rütteln:</b> Leertaste</p>
+  <p>Dosen-Pyramiden geben Punkte, Regale kosten Lack. Pfützen sind glatt, Kunden beschweren sich.</p>
+  <div class="shop" id="shop"></div>
+  <p class="best" id="menuBest"></p>
+  <button id="go">Wagen schnappen!</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle"></h1>
+  <p id="otext"></p>
+  <button id="again">Zurück zum Eingang</button>
+</div></div>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#20303a;color:#fff;z-index:99999;padding:30px;text-align:center;">
+  <h2>🛒 Der Wagen klemmt komplett</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#8fd">Zurück zum Hub</a></p>
+</div>
 
-  <div class="hud-top">
-    <div class="hud-left">
-      <a href="../index.html" class="btn-hud">← Hub</a>
-      <button id="muteBtn" class="btn-hud" type="button">🔊 Sound</button>
-    </div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
 
-    <div class="stats-bar">
-      <div class="stat-box">
-        <span class="stat-label">Distance</span>
-        <span class="stat-val cyan" id="hudDist">0 m</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">Chaos Score</span>
-        <span class="stat-val" id="hudScore">0</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">Deposit Vouchers</span>
-        <span class="stat-val gold" id="hudCoins">0 €</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">Cart HP</span>
-        <span class="stat-val red" id="hudHp">100%</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">Best</span>
-        <span class="stat-val gold" id="hudBest">0</span>
-      </div>
-    </div>
-  </div>
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const KEY = 'einkaufswagen', ROUND = 100;
+const ls = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, String(v)); } catch (e) {} };
+const up = { wd40: +ls('ek_up_wd40', 0), armor: +ls('ek_up_armor', 0), boost: +ls('ek_up_boost', 0) };
+let money = +ls('ek_pfand', 0);
+let best = Number(ArcadeCore.getScore(KEY)) || 0;
 
-  <div class="wheel-widget" id="wheelWidget">
-    <div style="font-size:1.6rem;" id="wheelIcon">🛒</div>
-    <div>
-      <div class="wheel-title">FRONT WHEEL STATUS (SPACE = KICK)</div>
-      <div class="wheel-status" id="wheelStatus">Tracking Straight (All 4 Wheels OK)</div>
-    </div>
-  </div>
+// ---------- Renderer ----------
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2a3842);
+scene.fog = new THREE.Fog(0x2a3842, 30, 85);
+const camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.1, 200);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8478, 1.5));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 60 });
+sun.shadow.bias = -0.0006;
+scene.add(sun, sun.target);
 
-  <div class="touch-controls">
-    <button class="touch-btn" id="btnLeft" aria-label="Left">◀</button>
-    <button class="touch-btn" id="btnKick" aria-label="Kick wheel">👟</button>
-    <button class="touch-btn" id="btnRight" aria-label="Right">▶</button>
-  </div>
+function canvasTex(w, h, draw, rx, ry) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  if (rx) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry || rx); }
+  return t;
+}
+const lam = (o) => new THREE.MeshLambertMaterial(o);
+const std = (o) => new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.6, metalness: 0.1 }, o));
 
-  <canvas id="gameCanvas"></canvas>
+// ---------- Halle ----------
+const HX = 29, HZ = 42;
+const floorTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = '#e9e6dc'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#d9d4c6'; g.fillRect(0, 0, w / 2, h / 2); g.fillRect(w / 2, h / 2, w / 2, h / 2);
+  g.strokeStyle = '#bdb6a4'; g.lineWidth = 2; g.strokeRect(0, 0, w / 2, h / 2); g.strokeRect(w / 2, h / 2, w / 2, h / 2);
+}, HX, HZ);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(HX * 2, HZ * 2), std({ map: floorTex, roughness: 0.35 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const wallMat = lam({ color: 0xd8e3e6 });
+for (const [w, d, x, z] of [[HX * 2, 0.4, 0, -HZ], [HX * 2, 0.4, 0, HZ], [0.4, HZ * 2, -HX, 0], [0.4, HZ * 2, HX, 0]]) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 6, d), wallMat); m.position.set(x, 3, z); m.receiveShadow = true; scene.add(m);
+}
+// Wand-Werbung
+const adTex = canvasTex(1024, 128, (g, w, h) => {
+  g.fillStyle = '#e2001a'; g.fillRect(0, 0, w, h); g.fillStyle = '#ffde00'; g.font = 'bold 74px Trebuchet MS'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('SUPERSPAR · ALLES MUSS RAUS · 19:59', w / 2, h / 2);
+});
+for (const [x, z, ry] of [[0, -HZ + 0.25, 0], [0, HZ - 0.25, Math.PI], [-HX + 0.25, 0, Math.PI / 2], [HX - 0.25, 0, -Math.PI / 2]]) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(30, 3.75), lam({ map: adTex })); m.position.set(x, 4.2, z); m.rotation.y = ry; scene.add(m);
+}
 
-  <!-- Start / Crash / Upgrade Modal -->
-  <div class="modal-backdrop" id="modal">
-    <div class="modal-card">
-      <div style="font-size:3rem; margin-bottom:4px;" id="modalEmoji">🛒💥</div>
-      <h1 id="modalTitle">Einkaufswagen-Rallye</h1>
-      <p class="modal-sub" id="modalDesc">
-        Steer your overloaded shopping cart down the endless supermarket aisle!
-        One wheel keeps jamming and pulls to the side. Smash <b>ravioli pyramids</b> for combo points, dodge <b>grannies &amp; concrete pillars</b> and kick the wheel with <b>SPACE</b>!
-      </p>
-
-      <div class="shop-grid" id="shopGrid">
-        <div class="shop-item">
-          <div>
-            <div class="shop-item-title">🧴 WD-40 Rust Remover</div>
-            <div class="shop-item-desc" id="descWd40">Fewer wheel jams &amp; smoother counter-steering</div>
-          </div>
-          <button class="btn-buy" id="buyWd40">Buy (15 €)</button>
-        </div>
-        <div class="shop-item">
-          <div>
-            <div class="shop-item-title">🛡️ Titanium Basket</div>
-            <div class="shop-item-desc" id="descArmor">+35% cart durability against concrete pillars</div>
-          </div>
-          <button class="btn-buy" id="buyArmor">Buy (20 €)</button>
-        </div>
-        <div class="shop-item">
-          <div>
-            <div class="shop-item-title">⚡ Energy-Booster</div>
-            <div class="shop-item-desc" id="descBoost">Longer invincible turbo rush</div>
-          </div>
-          <button class="btn-buy" id="buyBoost">Buy (25 €)</button>
-        </div>
-      </div>
-
-      <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:14px;">
-        Controls: <b>A / D</b> or <b>◀ / ▶</b> to steer &bull; <b>SPACE / W</b> to kick the wheel free (wheelie)
-      </div>
-
-      <button class="btn-primary" id="startBtn">🛒 Dive into the aisle!</button>
-    </div>
-  </div>
-
-  <script>
-  (() => {
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-
-    const GAME_KEY = 'einkaufswagen';
-    let width = window.innerWidth;
-    let height = window.innerHeight;
-
-    function resize() {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = width;
-      canvas.height = height;
+// ---------- Regale ----------
+const solids = []; // AABBs {x0,x1,z0,z1}
+function productTex(seed) {
+  return canvasTex(512, 256, (g, w, h) => {
+    g.fillStyle = '#c8ccd0'; g.fillRect(0, 0, w, h);
+    const pal = ['#e2001a', '#ffde00', '#0a7cff', '#2fb24c', '#ff8a00', '#ffffff', '#7a3cff', '#5a3215', '#ff5fa2'];
+    for (let r = 0; r < 4; r++) {
+      const y0 = r * 64; let x = 4;
+      g.fillStyle = '#7d848c'; g.fillRect(0, y0 + 58, w, 6);
+      while (x < w - 10) {
+        const pw = 14 + ((seed * 31 + x * 7 + r * 13) % 22), ph = 26 + ((seed * 17 + x) % 26);
+        g.fillStyle = pal[(seed + x + r * 3) % pal.length]; g.fillRect(x, y0 + 58 - ph, pw, ph);
+        g.fillStyle = '#ffffff88'; g.fillRect(x + 2, y0 + 58 - ph + 5, pw - 4, 5);
+        g.fillStyle = '#00000022'; g.fillRect(x + pw - 3, y0 + 58 - ph, 3, ph);
+        x += pw + 2;
+      }
+      g.fillStyle = '#ffde00'; for (let px = 30; px < w; px += 120) g.fillRect(px, y0 + 58, 22, 6);
     }
-    window.addEventListener('resize', resize);
-    resize();
+  });
+}
+const pTex = [0, 1, 2, 3].map(i => productTex(i * 7 + 3));
+const shelfTop = lam({ color: 0x8e959c });
+const shelfEnd = lam({ color: 0xe2001a });
+const SHELF_X = [-18, -9, 0, 9, 18], BLOCKS = [[-31, -7], [7, 31]];
+let si = 0;
+for (const sx of SHELF_X) for (const [z0, z1] of BLOCKS) {
+  const len = z1 - z0;
+  const t = pTex[si++ % 4].clone(); t.needsUpdate = true; t.wrapS = THREE.RepeatWrapping; t.repeat.set(len / 5, 1);
+  const side = lam({ map: t });
+  const m = new THREE.Mesh(new THREE.BoxGeometry(2, 2.4, len), [side, side, shelfTop, shelfTop, shelfEnd, shelfEnd]);
+  m.position.set(sx, 1.2, (z0 + z1) / 2); m.castShadow = m.receiveShadow = true; scene.add(m);
+  solids.push({ x0: sx - 1, x1: sx + 1, z0, z1 });
+}
+// Gangschilder
+const AISLE_X = [-23.5, -13.5, -4.5, 4.5, 13.5, 23.5];
+const AISLE_NAMES = ['Konserven', 'Süßes', 'Drogerie', 'Molkerei', 'Backwaren', 'Getränke'];
+AISLE_X.forEach((ax, i) => {
+  const tex = canvasTex(256, 96, (g, w, h) => { g.fillStyle = '#0a4d8c'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 28px Trebuchet MS'; g.fillText('GANG ' + (i + 1), w / 2, 36); g.font = '24px Trebuchet MS'; g.fillText(AISLE_NAMES[i], w / 2, 74); });
+  for (const z of [-19, 19]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1), lam({ map: tex, side: THREE.DoubleSide })); m.position.set(ax, 4.2, z); scene.add(m); }
+});
+// Deckenlampen
+const lampMat = new THREE.MeshBasicMaterial({ color: 0xfafcff });
+for (const ax of AISLE_X) for (let z = -36; z <= 36; z += 8) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 3), lampMat); m.position.set(ax, 5.6, z); scene.add(m); }
+// Kassen
+const KASSE_Z = -37;
+const counterMat = lam({ color: 0x3b4650 }), beltMat = lam({ color: 0x15181b });
+for (const kx of [-20, -10, 0, 10, 20]) {
+  const c = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1, 4), counterMat); c.position.set(kx, 0.5, KASSE_Z); c.castShadow = true; scene.add(c);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 3.6), beltMat); b.position.set(kx, 1.03, KASSE_Z); scene.add(b);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2), counterMat); pole.position.set(kx, 2.1, KASSE_Z - 1.6); scene.add(pole);
+  const num = canvasTex(64, 64, (g) => { g.fillStyle = '#2fb24c'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill(); g.fillStyle = '#fff'; g.font = 'bold 36px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String((kx + 20) / 10 + 1), 32, 34); });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: num })); s.position.set(kx, 3.3, KASSE_Z - 1.6); s.scale.setScalar(0.7); scene.add(s);
+  solids.push({ x0: kx - 0.6, x1: kx + 0.6, z0: KASSE_Z - 2, z1: KASSE_Z + 2 });
+}
 
-    // Persistent Upgrades & Coins
-    let pfandEuros = Number(localStorage.getItem('ek_pfand') || 0);
-    let bestScore = Number(window.ArcadeCore ? ArcadeCore.getScore(GAME_KEY) : localStorage.getItem('ek_best')) || 0;
-    let upgrades = {
-      wd40: Number(localStorage.getItem('ek_up_wd40') || 0),
-      armor: Number(localStorage.getItem('ek_up_armor') || 0),
-      boost: Number(localStorage.getItem('ek_up_boost') || 0)
-    };
-
-    function saveProgress() {
-      try {
-        localStorage.setItem('ek_pfand', String(pfandEuros));
-        localStorage.setItem('ek_up_wd40', String(upgrades.wd40));
-        localStorage.setItem('ek_up_armor', String(upgrades.armor));
-        localStorage.setItem('ek_up_boost', String(upgrades.boost));
-      } catch (e) {}
-    }
-
-    // Input state
-    const keys = { left: false, right: false };
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
-      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
-        e.preventDefault();
-        kickWheel();
+// ---------- Dosen-Pyramiden ----------
+const canGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.36, 14);
+const metal = std({ color: 0xc9ced3, metalness: 0.8, roughness: 0.3 });
+const canMats = [['RAVIOLI', '#d4141c', '#ffde00'], ['ERBSEN', '#2b9a3e', '#fff'], ['MAIS', '#ffcc00', '#174f9c'], ['BOHNEN', '#7a3d14', '#ffde00']].map(([t, bg, fg]) => {
+  const tex = canvasTex(128, 64, (g, w, h) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.fillStyle = fg; g.font = 'bold 22px Trebuchet MS'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, w / 2, h / 2); g.fillRect(0, 4, w, 3); g.fillRect(0, h - 7, w, 3); });
+  return [std({ map: tex, metalness: 0.3, roughness: 0.45 }), metal, metal];
+});
+const pyramids = [], cans = [];
+function buildPyramids() {
+  for (const c of cans) scene.remove(c.m);
+  cans.length = 0; pyramids.length = 0;
+  const spots = [];
+  let tries = 0;
+  while (spots.length < 13 && tries++ < 400) {
+    const ax = AISLE_X[Math.floor(Math.random() * AISLE_X.length)] + rnd(-1.2, 1.2);
+    const z = Math.random() < 0.2 ? rnd(-4, 4) : rnd(-30, 30);
+    if (Math.abs(ax) < 6 && z > 28) continue;
+    if (spots.some(s => Math.hypot(s.x - ax, s.z - z) < 7)) continue;
+    spots.push({ x: ax, z });
+  }
+  spots.forEach((s, pi) => {
+    const mats = canMats[pi % canMats.length];
+    const p = { x: s.x, z: s.z, fallen: false, cans: [] };
+    const layers = [3, 2, 1];
+    layers.forEach((n, L) => {
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        const m = new THREE.Mesh(canGeo, mats);
+        m.position.set(s.x + (i - (n - 1) / 2) * 0.36, 0.18 + L * 0.36, s.z + (j - (n - 1) / 2) * 0.36);
+        m.castShadow = true; scene.add(m);
+        const c = { m, vx: 0, vy: 0, vz: 0, wx: 0, wz: 0, dyn: false, p };
+        cans.push(c); p.cans.push(c);
       }
     });
-    window.addEventListener('keyup', (e) => {
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
-    });
+    pyramids.push(p);
+  });
+}
 
-    const btnLeft = document.getElementById('btnLeft');
-    const btnRight = document.getElementById('btnRight');
-    const btnKick = document.getElementById('btnKick');
-    btnLeft.addEventListener('pointerdown', () => keys.left = true);
-    btnLeft.addEventListener('pointerup', () => keys.left = false);
-    btnLeft.addEventListener('pointerleave', () => keys.left = false);
-    btnRight.addEventListener('pointerdown', () => keys.right = true);
-    btnRight.addEventListener('pointerup', () => keys.right = false);
-    btnRight.addEventListener('pointerleave', () => keys.right = false);
-    btnKick.addEventListener('pointerdown', () => kickWheel());
-
-    // Mute handling
-    const muteBtn = document.getElementById('muteBtn');
-    function updateMuteUi() {
-      const m = window.ArcadeCore && ArcadeCore.isMuted();
-      muteBtn.textContent = m ? '🔇 Muted' : '🔊 Sound';
+// ---------- Pfandbons, Pfützen, Einkaufsliste ----------
+const bonTex = canvasTex(128, 72, (g, w, h) => { g.fillStyle = '#fff6b0'; g.fillRect(0, 0, w, h); g.strokeStyle = '#c99d00'; g.lineWidth = 4; g.strokeRect(3, 3, w - 6, h - 6); g.fillStyle = '#333'; g.font = 'bold 20px monospace'; g.textAlign = 'center'; g.fillText('PFAND', w / 2, 30); g.fillText('1,00 €', w / 2, 56); });
+const bonMat = new THREE.MeshBasicMaterial({ map: bonTex, side: THREE.DoubleSide });
+const bons = [];
+for (let i = 0; i < 22; i++) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), bonMat);
+  scene.add(m); bons.push({ m, t: 0 });
+}
+function placeBon(b) { b.m.position.set(AISLE_X[Math.floor(Math.random() * 6)] + rnd(-1.5, 1.5), 0.9, rnd(-33, 33)); b.m.visible = true; b.t = 0; }
+const puddles = [];
+const puddleMat = new THREE.MeshStandardMaterial({ color: 0x6fc4ff, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0.2 });
+const signMat = lam({ color: 0xffd400 });
+for (let i = 0; i < 7; i++) {
+  const r = rnd(1.2, 2);
+  const m = new THREE.Mesh(new THREE.CircleGeometry(r, 24), puddleMat); m.rotation.x = -Math.PI / 2; scene.add(m);
+  const sign = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 4, 1, true), signMat); scene.add(sign);
+  puddles.push({ m, sign, r, x: 0, z: 0 });
+}
+function placePuddles() {
+  for (const p of puddles) {
+    p.x = AISLE_X[Math.floor(Math.random() * 6)] + rnd(-1, 1); p.z = Math.random() < 0.3 ? rnd(-4, 4) : rnd(-30, 30);
+    p.m.position.set(p.x, 0.012, p.z); p.sign.position.set(p.x + p.r * 0.7, 0.45, p.z + p.r * 0.5); p.sign.rotation.set(0, rnd(0, 3), 0);
+  }
+}
+const ITEMS = ['🍌', '🧀', '🥛', '🍞', '🍫', '🧻', '🥚', '🍕', '☕', '🧴'];
+const itemTex = {};
+for (const e of ITEMS) itemTex[e] = canvasTex(128, 128, (g, w, h) => { g.font = '96px "Segoe UI Emoji","Apple Color Emoji",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(e, w / 2, h / 2 + 6); });
+const listItems = [];
+const ringGeo = new THREE.TorusGeometry(0.75, 0.07, 8, 32);
+function placeList() {
+  for (const it of listItems) { scene.remove(it.s); scene.remove(it.r); }
+  listItems.length = 0;
+  const pool = [...ITEMS].sort(() => Math.random() - 0.5).slice(0, 5);
+  pool.forEach((e, i) => {
+    let x, z, ok = false, k = 0;
+    while (!ok && k++ < 100) {
+      const sx = SHELF_X[Math.floor(Math.random() * 5)];
+      x = sx + (Math.random() < 0.5 ? -1.7 : 1.7); z = rnd(-29, 29);
+      if (Math.abs(z) < 8) continue;
+      ok = !listItems.some(o => Math.hypot(o.x - x, o.z - z) < 10) && Math.hypot(x, z - 36) > 12;
     }
-    muteBtn.addEventListener('click', () => {
-      if (window.ArcadeCore) ArcadeCore.toggleMute();
-      updateMuteUi();
-    });
-    updateMuteUi();
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemTex[e], depthTest: true })); s.scale.setScalar(1.2); s.position.set(x, 1.4, z); scene.add(s);
+    const r = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0x5cff8a })); r.rotation.x = Math.PI / 2; r.position.set(x, 0.05, z); scene.add(r);
+    listItems.push({ e, x, z, s, r, got: false });
+  });
+}
 
-    // Game State
-    let state = 'MENU'; // MENU, PLAYING, RAGDOLL
-    let dist = 0;
-    let chaosScore = 0;
-    let combo = 1;
-    let comboTimer = 0;
-    let speed = 380;
-    let aisleScroll = 0;
-    let slowMoFactor = 1.0;
-    let ragdollTimer = 0;
+// ---------- Kunden ----------
+function makePerson(shirt, pants) {
+  const g = new THREE.Group();
+  const skin = lam({ color: 0xf1c7a0 });
+  const legM = lam({ color: pants }), shirtM = lam({ color: shirt });
+  const parts = {};
+  parts.legL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.8, 0.2), legM); parts.legL.position.set(-0.12, 0.4, 0);
+  parts.legR = parts.legL.clone(); parts.legR.position.x = 0.12;
+  parts.torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.28), shirtM); parts.torso.position.y = 1.12;
+  parts.head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), skin); parts.head.position.y = 1.62;
+  parts.armL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.6, 0.14), shirtM); parts.armL.position.set(-0.33, 1.15, 0);
+  parts.armR = parts.armL.clone(); parts.armR.position.x = 0.33;
+  for (const k in parts) { parts[k].castShadow = true; g.add(parts[k]); }
+  g.userData.parts = parts;
+  return g;
+}
+const shoppers = [];
+for (let i = 0; i < 7; i++) {
+  const m = makePerson([0x4a7bd1, 0x9c3c3c, 0x3f8f4f, 0xd18a2a, 0x8a4ad1, 0x666666, 0xd14a8a][i], [0x2a3550, 0x333333, 0x5a4630][i % 3]);
+  scene.add(m);
+  shoppers.push({ m, x: 0, z: 0, dir: 1, sp: rnd(0.8, 1.5), down: 0, ax: 0, phase: rnd(0, 6) });
+}
+function placeShoppers() {
+  for (const s of shoppers) { s.ax = AISLE_X[Math.floor(Math.random() * 6)] + rnd(-0.8, 0.8); s.x = s.ax; s.z = rnd(-28, 28); s.dir = Math.random() < 0.5 ? 1 : -1; s.down = 0; s.m.rotation.set(0, 0, 0); }
+}
 
-    const cart = {
-      x: 0,
-      y: 0,
-      vx: 0,
-      angle: 0,
-      angVel: 0,
-      hp: 100,
-      maxHp: 100,
-      wheelieTime: 0,
-      turboTime: 0,
-      wonkyDir: 0, // -1 left jam, +1 right jam, 0 ok
-      wonkyTimer: 0,
-      nextJamCooldown: 3.5,
-      groceries: 12
-    };
+// ---------- Wagen + Spieler ----------
+const cart = new THREE.Group(); scene.add(cart);
+const gridTex = canvasTex(64, 64, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#d6dde3'; g.lineWidth = 5; for (let i = 0; i <= w; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); } });
+gridTex.wrapS = gridTex.wrapT = THREE.RepeatWrapping;
+const gridMat = new THREE.MeshStandardMaterial({ map: gridTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, metalness: 0.7, roughness: 0.3 });
+const basket = new THREE.Group(); basket.position.y = 0.95; cart.add(basket);
+const BW = 0.85, BL = 1.25, BH = 0.6;
+for (const [w, h, x, y, z, ry, rx] of [[BL, BH, BW / 2, 0, 0, Math.PI / 2, 0], [BL, BH, -BW / 2, 0, 0, Math.PI / 2, 0], [BW, BH, 0, 0, BL / 2, 0, 0], [BW, BH, 0, 0, -BL / 2, 0, 0], [BW, BL, 0, -BH / 2, 0, 0, Math.PI / 2]]) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), gridMat); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); m.castShadow = true; basket.add(m);
+}
+const frameMat = std({ color: 0xb9c2c9, metalness: 0.8, roughness: 0.3 });
+const redMat = std({ color: 0xe2001a });
+const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, BW + 0.1, 8), redMat); handle.rotation.z = Math.PI / 2; handle.position.set(0, 1.4, BL / 2 + 0.12); cart.add(handle);
+for (const sx of [-1, 1]) {
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, BL + 0.2), frameMat); rail.position.set(sx * BW * 0.4, 0.3, 0); cart.add(rail);
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.1, 0.04), frameMat); post.position.set(sx * BW * 0.4, 0.75, BL / 2 + 0.05); post.rotation.x = -0.2; cart.add(post);
+}
+const wheels = [];
+const wheelGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12); wheelGeo.rotateZ(Math.PI / 2);
+const wheelMat = lam({ color: 0x222222 });
+for (const [x, z] of [[-0.35, -0.55], [0.35, -0.55], [-0.35, 0.55], [0.35, 0.55]]) {
+  const piv = new THREE.Group(); piv.position.set(x, 0.09, z); cart.add(piv);
+  const w = new THREE.Mesh(wheelGeo, wheelMat); w.position.z = 0.04; piv.add(w); wheels.push({ piv, w });
+}
+const loot = new THREE.Group(); basket.add(loot);
+const lootColors = [0xffde00, 0xffffff, 0x8a4a1a, 0x2fb24c, 0xff8a00];
+const driver = makePerson(0xe2001a, 0x2a3550); cart.add(driver);
+driver.position.set(0, 0, BL / 2 + 0.55);
+{ const P = driver.userData.parts; P.armL.rotation.x = P.armR.rotation.x = 1.1; P.armL.position.set(-0.3, 1.32, -0.22); P.armR.position.set(0.3, 1.32, -0.22); P.torso.rotation.x = -0.15; }
+const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 12), new THREE.MeshBasicMaterial({ color: 0x5cff8a })); arrow.geometry.rotateX(Math.PI / 2); scene.add(arrow);
 
-    const ragdoll = {
-      active: false,
-      x: 0, y: 0,
-      vx: 0, vy: 0,
-      rot: 0, vrot: 0,
-      limbs: []
-    };
+// ---------- Partikel ----------
+const sparkGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+const sparks = [];
+for (let i = 0; i < 80; i++) { const m = new THREE.Mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: 0xffffff })); m.visible = false; scene.add(m); sparks.push({ m, vx: 0, vy: 0, vz: 0, life: 0 }); }
+let sparkI = 0;
+function burst(x, y, z, color, n, sp) {
+  for (let i = 0; i < n; i++) { const s = sparks[sparkI++ % sparks.length]; s.m.visible = true; s.m.material.color.setHex(color); s.m.position.set(x, y, z); s.vx = rnd(-sp, sp); s.vy = rnd(1, sp * 1.4); s.vz = rnd(-sp, sp); s.life = rnd(0.4, 0.9); }
+}
 
-    let obstacles = [];
-    let particles = [];
-    let floatingTexts = [];
-    let spawnTimer = 0;
+// ---------- Audio ----------
+let actx = null;
+function audio() { try { actx = ArcadeCore.getAudioContext(); if (actx && actx.state === 'suspended') actx.resume(); } catch (e) {} }
+function noise(dur, freq, gain, q = 1) {
+  if (!actx || ArcadeCore.isMuted()) return;
+  const n = actx.sampleRate * dur, b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = actx.createBufferSource(); s.buffer = b;
+  const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+  const g = actx.createGain(); g.gain.value = gain;
+  s.connect(f); f.connect(g); g.connect(actx.destination); s.start();
+}
+const sfx = {
+  can() { noise(0.12, rnd(2500, 4200), 0.25, 6); },
+  crash() { noise(0.35, 300, 0.6, 0.7); ArcadeCore.hit(); },
+  squeak() { ArcadeCore.playTone(rnd(1400, 1900), 0.07, 'square', 0.04); },
+  bon() { ArcadeCore.coin(); },
+  item() { ArcadeCore.powerup(); },
+  ouch() { ArcadeCore.playTone(320, 0.18, 'sawtooth', 0.1); ArcadeCore.playTone(240, 0.25, 'sawtooth', 0.08); }
+};
 
-    function addFloatingText(x, y, text, color = '#fbbf24', size = 20) {
-      floatingTexts.push({ x, y, text, color, size, life: 1.1, maxLife: 1.1 });
+// ---------- Zustand ----------
+const keys = {}, touch = {};
+let touchMode = false, state = 'menu', prevState = 'play';
+const P = { x: 4.5, z: 36, h: Math.PI, vx: 0, vz: 0, hp: 100, maxHp: 100, turbo: 0, turboMax: 3.5, jam: 0, jamDir: 0, jamHits: 0, jamCd: 5 };
+let score = 0, timeLeft = ROUND, now = 0, shake = 0, slowmo = 1, combo = 0, comboT = 0, bannerT = 0, crashT = 0, earned = 0;
+let ragdoll = [];
+function banner(html, dur = 1.4) { $('banner').innerHTML = html; $('banner').classList.add('show'); bannerT = dur; }
+
+function resetGame() {
+  P.x = 4.5; P.z = 36; P.h = Math.PI; P.vx = P.vz = 0;
+  P.maxHp = 100 + up.armor * 35; P.hp = P.maxHp;
+  P.turboMax = 3.5 + up.boost * 1.2; P.turbo = P.turboMax;
+  P.jam = 0; P.jamHits = 0; P.jamCd = 3.5 + up.wd40 * 0.8 + rnd(0, 3);
+  score = 0; timeLeft = ROUND; combo = 0; earned = 0; slowmo = 1; crashT = 0;
+  for (const r of ragdoll) scene.remove(r.m);
+  ragdoll = [];
+  if (!cart.children.includes(driver)) cart.add(driver);
+  driver.visible = true; cart.rotation.set(0, 0, 0); cart.position.y = 0;
+  while (loot.children.length) loot.remove(loot.children[0]);
+  buildPyramids(); placePuddles(); placeList(); placeShoppers();
+  bons.forEach(placeBon);
+  state = 'play';
+  banner('Liste abarbeiten!<br><span style="font-size:22px">' + listItems.map(i => i.e).join(' ') + '</span>', 2);
+}
+
+function collideCircle(o, r, bounce) {
+  let hit = 0;
+  for (const b of solids) {
+    const cx = clamp(o.x, b.x0, b.x1), cz = clamp(o.z, b.z0, b.z1);
+    const dx = o.x - cx, dz = o.z - cz, d2 = dx * dx + dz * dz;
+    if (d2 < r * r) {
+      let nx, nz, d = Math.sqrt(d2);
+      if (d < 1e-5) { nx = 0; nz = 1; d = 0; } else { nx = dx / d; nz = dz / d; }
+      o.x += nx * (r - d); o.z += nz * (r - d);
+      const vn = o.vx * nx + o.vz * nz;
+      if (vn < 0) { o.vx -= (1 + bounce) * vn * nx; o.vz -= (1 + bounce) * vn * nz; hit = Math.max(hit, -vn); }
     }
+  }
+  if (o.x < -HX + r) { o.x = -HX + r; hit = Math.max(hit, -o.vx); o.vx = Math.abs(o.vx) * bounce; }
+  if (o.x > HX - r) { o.x = HX - r; hit = Math.max(hit, o.vx); o.vx = -Math.abs(o.vx) * bounce; }
+  if (o.z < -HZ + r) { o.z = -HZ + r; hit = Math.max(hit, -o.vz); o.vz = Math.abs(o.vz) * bounce; }
+  if (o.z > HZ - r) { o.z = HZ - r; hit = Math.max(hit, o.vz); o.vz = -Math.abs(o.vz) * bounce; }
+  return hit;
+}
 
-    function spawnGroceriesBurst(x, y, count, baseVy = -220) {
-      const emojis = ['🍉', '🥫', '🥚', '🧻', '🍕', '🍾', '🧀', '🥦', '🧃'];
-      for (let i = 0; i < count; i++) {
-        const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
-        const spd = 120 + Math.random() * 340;
-        particles.push({
-          type: 'emoji',
-          emoji: emojis[Math.floor(Math.random() * emojis.length)],
-          x: x + (Math.random() - 0.5) * 30,
-          y: y + (Math.random() - 0.5) * 30,
-          vx: Math.cos(ang) * spd,
-          vy: Math.sin(ang) * spd + baseVy * 0.4,
-          rot: Math.random() * Math.PI * 2,
-          vrot: (Math.random() - 0.5) * 14,
-          size: 20 + Math.random() * 10,
-          life: 1.4 + Math.random() * 0.7
-        });
+function addScore(n, x, z) { score += Math.round(n); }
+function damage(n) {
+  if (state !== 'play') return;
+  P.hp -= n * (1 - up.armor * 0.06);
+  shake = Math.min(1.2, shake + n * 0.04);
+  if (P.hp <= 0) { P.hp = 0; startCrash(); }
+}
+
+function startCrash() {
+  state = 'crash'; crashT = 0; slowmo = 0.28;
+  sfx.crash(); ArcadeCore.explosion();
+  banner('💥 TOTALSCHADEN!', 2.5);
+  driver.updateMatrixWorld(true);
+  const sp = Math.hypot(P.vx, P.vz);
+  for (const k in driver.userData.parts) {
+    const part = driver.userData.parts[k];
+    const m = part.clone(); m.material = part.material;
+    part.getWorldPosition(m.position); part.getWorldQuaternion(m.quaternion);
+    scene.add(m);
+    ragdoll.push({ m, vx: P.vx * 1.2 + rnd(-2, 2), vy: rnd(4, 8) + sp * 0.3, vz: P.vz * 1.2 + rnd(-2, 2), wx: rnd(-10, 10), wy: rnd(-6, 6), wz: rnd(-10, 10), cart: false });
+  }
+  driver.visible = false;
+  ragdoll.push({ m: cart, vx: P.vx * 0.5, vy: 4, vz: P.vz * 0.5, wx: rnd(-5, 5), wy: rnd(-3, 3), wz: rnd(-6, 6), cart: true });
+}
+
+function finish(atKasse) {
+  if (state !== 'play' && state !== 'crash') return;
+  const was = state; state = 'done';
+  let bonus = 0, lines = [];
+  const got = listItems.filter(i => i.got).length;
+  if (atKasse) { bonus = 500 + Math.round(timeLeft * 15) + Math.round(P.hp * 2); lines.push('Kassenbonus: <b>+' + bonus + '</b>'); }
+  score += bonus;
+  money += earned; lsSet('ek_pfand', money);
+  let rec = false;
+  if (score > best) { best = score; ArcadeCore.saveScore(KEY, best); rec = true; }
+  if (atKasse) ArcadeCore.powerup(); else ArcadeCore.gameOver();
+  const title = atKasse ? '🧾 Bezahlt! Schönen Feierabend!' : was === 'crash' ? '🚑 Ab in die Notaufnahme' : '🔒 Laden geschlossen';
+  setTimeout(() => {
+    $('otitle').textContent = title;
+    $('otext').innerHTML = `Liste: ${got}/5 · ${lines.join('')}<br>Punkte: <b>${score}</b>${rec ? ' <span class="best">NEUER REKORD!</span>' : ''}<br>Pfand eingesammelt: ${earned} € (Konto ${money} €)<br>Rekord: ${best}`;
+    $('over').classList.remove('hide');
+  }, was === 'crash' ? 300 : 900);
+}
+
+// ---------- Update ----------
+function stepCart(dt) {
+  const thr = (keys['w'] || keys['arrowup'] || touch.g ? 1 : 0) - (keys['s'] || keys['arrowdown'] || touch.s ? 1 : 0);
+  let steer = (keys['a'] || keys['arrowleft'] || touch.l ? 1 : 0) - (keys['d'] || keys['arrowright'] || touch.r ? 1 : 0);
+  const boosting = (keys['shift'] || touch.b) && P.turbo > 0 && thr > 0;
+  const fx = Math.sin(P.h), fz = Math.cos(P.h);
+  let fwd = P.vx * fx + P.vz * fz, lat = P.vx * fz - P.vz * fx;
+  const speed = Math.hypot(P.vx, P.vz);
+  // Klemmrad
+  if (P.jam > 0) {
+    P.jam -= dt;
+    steer += P.jamDir * (0.9 + Math.sin(now * 23) * 0.3);
+    fwd *= Math.exp(-0.6 * dt);
+    if (Math.random() < dt * 14) sfx.squeak();
+    if (P.jam <= 0) { P.jam = 0; P.jamCd = 3.5 + up.wd40 * 0.8 + rnd(0, 3); }
+  } else if (speed > 1.5) {
+    P.jamCd -= dt;
+    if (P.jamCd <= 0) { P.jam = 4; P.jamDir = Math.random() < 0.5 ? 1 : -1; P.jamHits = 0; }
+  }
+  const maxF = boosting ? 17 : 10.5;
+  if (thr > 0) fwd += (fwd < maxF ? (boosting ? 22 : 12) : 0) * dt;
+  else if (thr < 0) fwd -= (fwd > 0 ? 20 : 7) * dt;
+  else fwd *= Math.exp(-0.9 * dt);
+  fwd = clamp(fwd, -4, boosting ? 17 : Math.max(10.5, fwd - 8 * dt));
+  if (boosting) { P.turbo = Math.max(0, P.turbo - dt); if (Math.random() < dt * 30) burst(P.x - fx * 1.1, 0.4, P.z - fz * 1.1, 0x9ad4ff, 1, 1); }
+  else P.turbo = Math.min(P.turboMax, P.turbo + dt * 0.12);
+  let grip = 9;
+  for (const p of puddles) if (Math.hypot(P.x - p.x, P.z - p.z) < p.r) grip = 1.2;
+  lat *= Math.exp(-grip * dt);
+  const steerRate = steer * 2.5 * clamp(Math.abs(fwd) / 3, 0.25, 1) * (fwd < -0.1 ? -1 : 1);
+  P.h += steerRate * dt;
+  const nfx = Math.sin(P.h), nfz = Math.cos(P.h);
+  P.vx = nfx * fwd + nfz * lat; P.vz = nfz * fwd - nfx * lat;
+  P.x += P.vx * dt; P.z += P.vz * dt;
+  const hit = collideCircle(P, 0.8, 0.35);
+  if (hit > 3.5) { damage((hit - 3.5) * 7); sfx.crash(); burst(P.x + nfx * 0.8, 0.8, P.z + nfz * 0.8, 0xffe08a, 8, 3); }
+  else if (hit > 1.5) { sfx.squeak(); shake = Math.min(1, shake + 0.1); }
+  // Modell
+  cart.position.set(P.x, 0, P.z); cart.rotation.y = P.h + Math.PI;
+  cart.rotation.z = clamp(-lat * 0.03, -0.12, 0.12);
+  const sp = Math.hypot(P.vx, P.vz);
+  wheels.forEach((w, i) => {
+    w.w.rotation.x += fwd * dt / 0.09;
+    if (i === 0 && P.jam > 0) w.piv.rotation.y = Math.sin(now * 30) * 1.2;
+    else w.piv.rotation.y += (clamp(steer * 0.5, -0.6, 0.6) - w.piv.rotation.y) * Math.min(1, dt * 8);
+  });
+  const PP = driver.userData.parts, walk = now * clamp(sp, 0, 10) * 1.3;
+  PP.legL.rotation.x = Math.sin(walk) * clamp(sp * 0.1, 0, 0.7); PP.legR.rotation.x = -PP.legL.rotation.x;
+  return sp;
+}
+
+function update(dt) {
+  now += dt;
+  if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show'); }
+  if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
+  let sp = 0;
+  if (state === 'play') {
+    timeLeft -= dt;
+    if (timeLeft <= 0) { timeLeft = 0; finish(false); }
+    sp = stepCart(dt);
+    // Kasse
+    if (P.z < KASSE_Z - 1.5 && P.z > -HZ + 1) {
+      if (listItems.every(i => i.got)) finish(true);
+      else if (bannerT <= 0) banner('📝 Erst die Liste!', 1.2);
+    }
+  }
+  if (state === 'crash') {
+    crashT += dt / slowmo;
+    if (crashT > 2.2) finish(false);
+  }
+  // Ragdoll
+  for (const r of ragdoll) {
+    r.vy -= 18 * dt; r.m.position.x += r.vx * dt; r.m.position.y += r.vy * dt; r.m.position.z += r.vz * dt;
+    r.m.rotation.x += r.wx * dt; r.m.rotation.y += r.wy * dt; r.m.rotation.z += r.wz * dt;
+    const fl = r.cart ? 0.1 : 0.12;
+    if (r.m.position.y < fl) { r.m.position.y = fl; if (r.vy < -1.5) { r.vy *= -0.35; if (!r.cart) sfx.can(); } else r.vy = 0; r.vx *= 0.75; r.vz *= 0.75; r.wx *= 0.7; r.wy *= 0.7; r.wz *= 0.7; }
+    const o = { x: r.m.position.x, z: r.m.position.z, vx: r.vx, vz: r.vz };
+    collideCircle(o, 0.25, 0.4); r.m.position.x = o.x; r.m.position.z = o.z; r.vx = o.vx; r.vz = o.vz;
+  }
+  // Dosen
+  for (const p of pyramids) {
+    if (p.fallen || state !== 'play') continue;
+    if (Math.hypot(P.x - p.x, P.z - p.z) < 1.35 && sp > 1.5) {
+      p.fallen = true;
+      combo++; comboT = 4;
+      const base = 14 * 10 + 50;
+      addScore(base * (1 + (combo - 1) * 0.5));
+      banner('🥫 STRIKE!' + (combo > 1 ? ' x' + combo : '') + '<br><span style="font-size:22px">+' + Math.round(base * (1 + (combo - 1) * 0.5)) + '</span>', 1);
+      for (const c of p.cans) {
+        const dx = c.m.position.x - P.x, dz = c.m.position.z - P.z, d = Math.hypot(dx, dz) || 1;
+        c.dyn = true; c.vx = dx / d * rnd(1, 3) + P.vx * rnd(0.5, 1.1); c.vz = dz / d * rnd(1, 3) + P.vz * rnd(0.5, 1.1); c.vy = rnd(1.5, 5);
+        c.wx = rnd(-12, 12); c.wz = rnd(-12, 12);
       }
+      for (let i = 0; i < 4; i++) setTimeout(sfx.can, i * 70);
+      shake = Math.min(1, shake + 0.25);
+      P.vx *= 0.88; P.vz *= 0.88;
     }
-
-    function spawnSparks(x, y, color = '#fbbf24', count = 12) {
-      for (let i = 0; i < count; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const s = 60 + Math.random() * 220;
-        particles.push({
-          type: 'spark',
-          x, y,
-          vx: Math.cos(a) * s,
-          vy: Math.sin(a) * s,
-          color,
-          size: 3 + Math.random() * 4,
-          life: 0.35 + Math.random() * 0.3
-        });
-      }
+  }
+  for (const c of cans) {
+    if (!c.dyn) continue;
+    const m = c.m;
+    if (state === 'play' && Math.hypot(m.position.x - P.x, m.position.z - P.z) < 0.9 && sp > 1.2 && m.position.y < 0.6) {
+      const dx = m.position.x - P.x, dz = m.position.z - P.z, d = Math.hypot(dx, dz) || 1;
+      c.vx = dx / d * 2 + P.vx; c.vz = dz / d * 2 + P.vz; c.vy = 2.5; c.wx = rnd(-10, 10); c.wz = rnd(-10, 10); sfx.can();
     }
-
-    function kickWheel() {
-      if (state !== 'PLAYING') return;
-      if (cart.wheelieTime <= 0) {
-        cart.wheelieTime = 0.65;
-        if (window.ArcadeCore) ArcadeCore.jump();
-        spawnSparks(cart.x, cart.y + 25, '#38bdf8', 14);
-        if (cart.wonkyDir !== 0) {
-          cart.wonkyDir = 0;
-          cart.wonkyTimer = 0;
-          cart.nextJamCooldown = 3.0 + upgrades.wd40 * 1.1;
-          chaosScore += 75;
-          addFloatingText(cart.x, cart.y - 40, 'WHEEL KICKED FREE! +75', '#4ade80', 18);
-          updateWheelUi();
+    if (c.vy === 0 && Math.abs(c.vx) + Math.abs(c.vz) < 0.05) continue;
+    c.vy -= 20 * dt;
+    m.position.x += c.vx * dt; m.position.y += c.vy * dt; m.position.z += c.vz * dt;
+    m.rotation.x += c.wx * dt; m.rotation.z += c.wz * dt;
+    if (m.position.y < 0.17) {
+      m.position.y = 0.17;
+      if (c.vy < -2) { c.vy *= -0.3; if (Math.random() < 0.3) sfx.can(); } else c.vy = 0;
+      c.vx *= 0.82; c.vz *= 0.82; c.wx *= 0.8; c.wz *= 0.8;
+      if (c.vy === 0) { m.rotation.z = Math.PI / 2; m.rotation.x = 0; }
+    }
+    const o = { x: m.position.x, z: m.position.z, vx: c.vx, vz: c.vz };
+    collideCircle(o, 0.18, 0.4); m.position.x = o.x; m.position.z = o.z; c.vx = o.vx; c.vz = o.vz;
+  }
+  // Bons
+  for (const b of bons) {
+    if (!b.m.visible) { b.t += dt; if (b.t > 14) placeBon(b); continue; }
+    b.m.rotation.y += dt * 3; b.m.position.y = 0.9 + Math.sin(now * 3 + b.m.position.z) * 0.12;
+    if (state === 'play' && Math.hypot(b.m.position.x - P.x, b.m.position.z - P.z) < 1.3) {
+      b.m.visible = false; b.t = 0; earned++; addScore(25); P.turbo = Math.min(P.turboMax, P.turbo + 0.3); sfx.bon();
+      burst(b.m.position.x, 1, b.m.position.z, 0xffe36a, 6, 2);
+    }
+  }
+  // Liste
+  let target = null, td = 1e9;
+  for (const it of listItems) {
+    if (it.got) continue;
+    it.s.position.y = 1.4 + Math.sin(now * 2.5 + it.x) * 0.15; it.r.rotation.z += dt;
+    const d = Math.hypot(it.x - P.x, it.z - P.z);
+    if (d < td) { td = d; target = it; }
+    if (state === 'play' && d < 1.7) {
+      it.got = true; it.s.visible = false; it.r.visible = false; addScore(150); sfx.item();
+      burst(it.x, 1.2, it.z, 0x5cff8a, 14, 3);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(rnd(0.2, 0.35), rnd(0.2, 0.4), rnd(0.2, 0.35)), lam({ color: lootColors[loot.children.length % 5] }));
+      box.position.set(rnd(-0.25, 0.25), -BH / 2 + 0.15, rnd(-0.4, 0.4)); box.rotation.y = rnd(0, 3); loot.add(box);
+      const left = listItems.filter(i => !i.got).length;
+      banner(it.e + ' eingepackt!' + (left ? '<br><span style="font-size:20px">noch ' + left + '</span>' : '<br><span style="font-size:22px">🧾 Ab zur Kasse!</span>'), 1.3);
+    }
+  }
+  if (!target) target = { x: clamp(Math.round((P.x - 5) / 10) * 10 + 5, -25, 25), z: KASSE_Z - 3 };
+  arrow.visible = state === 'play';
+  arrow.position.set(P.x, 2.3 + Math.sin(now * 4) * 0.08, P.z);
+  arrow.rotation.y = Math.atan2(target.x - P.x, target.z - P.z);
+  arrow.material.color.setHex(listItems.every(i => i.got) ? 0xffde00 : 0x5cff8a);
+  // Kunden
+  for (const s of shoppers) {
+    const m = s.m, PP = m.userData.parts;
+    if (s.down > 0) {
+      s.down -= dt;
+      m.rotation.x += (-Math.PI / 2 - m.rotation.x) * Math.min(1, dt * 8);
+      if (s.down <= 0) m.rotation.x = 0;
+    } else {
+      s.z += s.dir * s.sp * dt;
+      if (s.z > 30 || s.z < -30) s.dir *= -1;
+      s.x += (s.ax - s.x) * Math.min(1, dt * 2);
+      m.rotation.y = s.dir > 0 ? 0 : Math.PI;
+      const w = Math.sin(now * s.sp * 5 + s.phase) * 0.5;
+      PP.legL.rotation.x = w; PP.legR.rotation.x = -w; PP.armL.rotation.x = -w * 0.6; PP.armR.rotation.x = w * 0.6;
+      if (state === 'play' && Math.hypot(s.x - P.x, s.z - P.z) < 1.1) {
+        if (sp > 3) {
+          s.down = 4; sfx.ouch(); addScore(-80); damage(6); banner('😡 Beschwerde! −80', 1);
+          P.vx *= 0.6; P.vz *= 0.6;
         } else {
-          addFloatingText(cart.x, cart.y - 35, 'WHEELIE!', '#38bdf8', 16);
+          const dx = P.x - s.x, dz = P.z - s.z, d = Math.hypot(dx, dz) || 1;
+          P.x = s.x + dx / d * 1.1; P.z = s.z + dz / d * 1.1;
         }
       }
     }
-
-    function updateWheelUi() {
-      const st = document.getElementById('wheelStatus');
-      const ic = document.getElementById('wheelIcon');
-      if (cart.wonkyDir === 0) {
-        st.textContent = 'Tracking Straight (All 4 Wheels OK)';
-        st.className = 'wheel-status';
-        ic.textContent = '🛒';
-      } else {
-        const dirText = cart.wonkyDir < 0 ? 'LEFT' : 'RIGHT';
-        st.textContent = `⚠️ WHEEL JAMS ${dirText}! (SPACE!)`;
-        st.className = 'wheel-status jammed';
-        ic.textContent = '🛞💥';
-      }
-    }
-
-    function resetGame() {
-      dist = 0;
-      chaosScore = 0;
-      combo = 1;
-      comboTimer = 0;
-      speed = 380;
-      slowMoFactor = 1.0;
-      obstacles = [];
-      particles = [];
-      floatingTexts = [];
-      spawnTimer = 0.4;
-
-      cart.maxHp = 100 + upgrades.armor * 35;
-      cart.hp = cart.maxHp;
-      cart.x = width / 2;
-      cart.y = height * 0.76;
-      cart.vx = 0;
-      cart.angle = 0;
-      cart.angVel = 0;
-      cart.wheelieTime = 0;
-      cart.turboTime = 0;
-      cart.wonkyDir = 0;
-      cart.wonkyTimer = 0;
-      cart.nextJamCooldown = 3.5 + upgrades.wd40 * 0.8;
-      cart.groceries = 14;
-      ragdoll.active = false;
-
-      updateWheelUi();
-      updateHud();
-    }
-
-    function triggerRagdollCrash() {
-      state = 'RAGDOLL';
-      slowMoFactor = 0.28; // Bullet-Time Slow-Mo!
-      ragdollTimer = 2.6;
-      ragdoll.active = true;
-      ragdoll.x = cart.x;
-      ragdoll.y = cart.y;
-      ragdoll.vx = cart.vx * 0.7 + (Math.random() - 0.5) * 260;
-      ragdoll.vy = -520;
-      ragdoll.rot = 0;
-      ragdoll.vrot = (Math.random() < 0.5 ? -1 : 1) * 11;
-
-      if (window.ArcadeCore) ArcadeCore.explosion();
-      spawnGroceriesBurst(cart.x, cart.y, 28, -360);
-      spawnSparks(cart.x, cart.y, '#ef4444', 30);
-      addFloatingText(cart.x, cart.y - 50, '💥 SLOW-MO TOTAL WRECK!', '#f87171', 26);
-    }
-
-    function spawnEntity() {
-      const aisleLeft = Math.max(70, width * 0.16);
-      const aisleRight = Math.min(width - 70, width * 0.84);
-      const x = aisleLeft + 45 + Math.random() * Math.max(80, (aisleRight - aisleLeft - 90));
-      const y = -90;
-
-      const r = Math.random();
-      if (r < 0.30) {
-        // Destructible Can Pyramid (Ravioli-Pyramide)
-        obstacles.push({
-          type: 'pyramid',
-          x, y, radius: 36,
-          emoji: '🥫',
-          label: 'Ravioli Tower',
-          points: 150
-        });
-      } else if (r < 0.48) {
-        // Melonen-Kiste (Destructible bonus)
-        obstacles.push({
-          type: 'melons',
-          x, y, radius: 34,
-          emoji: '🍉',
-          label: 'Melon Crate',
-          points: 200
-        });
-      } else if (r < 0.64) {
-        // Wet Floor Puddle (Spins cart)
-        obstacles.push({
-          type: 'puddle',
-          x, y, radius: 42,
-          emoji: '💧',
-          label: 'Slippery When Wet!'
-        });
-      } else if (r < 0.78) {
-        // Grandma / Omi with Rollator (Moving hazard)
-        obstacles.push({
-          type: 'oma',
-          x, y, radius: 30,
-          vx: (Math.random() < 0.5 ? -1 : 1) * 55,
-          emoji: '👵',
-          label: 'Granny Erna'
-        });
-      } else if (r < 0.90) {
-        // Solid Concrete Pillar / Kasse
-        obstacles.push({
-          type: 'pillar',
-          x, y, radius: 34,
-          emoji: '🧱',
-          label: 'Concrete Pillar'
-        });
-      } else if (r < 0.96) {
-        // Pfandbon Collectible
-        obstacles.push({
-          type: 'pfand',
-          x, y, radius: 26,
-          emoji: '🧾',
-          label: '+5 € Deposit Voucher'
-        });
-      } else {
-        // Energy Drink Turbo
-        obstacles.push({
-          type: 'turbo',
-          x, y, radius: 26,
-          emoji: '⚡',
-          label: 'MEGA-ENERGY'
-        });
-      }
-    }
-
-    function updateHud() {
-      document.getElementById('hudDist').textContent = `${Math.floor(dist)} m`;
-      document.getElementById('hudScore').textContent = Math.floor(chaosScore).toLocaleString('en-US');
-      document.getElementById('hudCoins').textContent = `${pfandEuros} €`;
-      document.getElementById('hudHp').textContent = `${Math.max(0, Math.ceil((cart.hp / cart.maxHp) * 100))}%`;
-      document.getElementById('hudBest').textContent = Math.floor(bestScore).toLocaleString('en-US');
-    }
-
-    function updateShopUi() {
-      const wd40Cost = 15 + upgrades.wd40 * 15;
-      const armorCost = 20 + upgrades.armor * 20;
-      const boostCost = 25 + upgrades.boost * 25;
-
-      document.getElementById('descWd40').textContent = `Level ${upgrades.wd40}/5 – Fewer wheel jams`;
-      document.getElementById('descArmor').textContent = `Level ${upgrades.armor}/5 – Max HP: ${100 + upgrades.armor * 35}`;
-      document.getElementById('descBoost').textContent = `Level ${upgrades.boost}/5 – Turbo: ${(3.5 + upgrades.boost * 1.2).toFixed(1)}s`;
-
-      const b1 = document.getElementById('buyWd40');
-      const b2 = document.getElementById('buyArmor');
-      const b3 = document.getElementById('buyBoost');
-
-      b1.textContent = upgrades.wd40 >= 5 ? 'MAX' : `Buy (${wd40Cost} €)`;
-      b1.disabled = upgrades.wd40 >= 5 || pfandEuros < wd40Cost;
-
-      b2.textContent = upgrades.armor >= 5 ? 'MAX' : `Buy (${armorCost} €)`;
-      b2.disabled = upgrades.armor >= 5 || pfandEuros < armorCost;
-
-      b3.textContent = upgrades.boost >= 5 ? 'MAX' : `Buy (${boostCost} €)`;
-      b3.disabled = upgrades.boost >= 5 || pfandEuros < boostCost;
-
-      updateHud();
-    }
-
-    document.getElementById('buyWd40').addEventListener('click', () => {
-      const cost = 15 + upgrades.wd40 * 15;
-      if (pfandEuros >= cost && upgrades.wd40 < 5) {
-        pfandEuros -= cost;
-        upgrades.wd40++;
-        if (window.ArcadeCore) ArcadeCore.coin();
-        saveProgress();
-        updateShopUi();
-      }
-    });
-    document.getElementById('buyArmor').addEventListener('click', () => {
-      const cost = 20 + upgrades.armor * 20;
-      if (pfandEuros >= cost && upgrades.armor < 5) {
-        pfandEuros -= cost;
-        upgrades.armor++;
-        if (window.ArcadeCore) ArcadeCore.coin();
-        saveProgress();
-        updateShopUi();
-      }
-    });
-    document.getElementById('buyBoost').addEventListener('click', () => {
-      const cost = 25 + upgrades.boost * 25;
-      if (pfandEuros >= cost && upgrades.boost < 5) {
-        pfandEuros -= cost;
-        upgrades.boost++;
-        if (window.ArcadeCore) ArcadeCore.coin();
-        saveProgress();
-        updateShopUi();
-      }
-    });
-
-    document.getElementById('startBtn').addEventListener('click', () => {
-      document.getElementById('modal').hidden = true;
-      resetGame();
-      state = 'PLAYING';
-    });
-
-    function finishRun() {
-      state = 'MENU';
-      const totalScore = Math.floor(chaosScore + dist * 2);
-      const earnedEuros = Math.max(3, Math.floor(totalScore / 180));
-      pfandEuros += earnedEuros;
-
-      if (totalScore > bestScore) {
-        bestScore = totalScore;
-        if (window.ArcadeCore) ArcadeCore.saveScore(GAME_KEY, bestScore);
-        try { localStorage.setItem('ek_best', String(bestScore)); } catch (e) {}
-      }
-      saveProgress();
-
-      document.getElementById('modalEmoji').textContent = '🛒🚑';
-      document.getElementById('modalTitle').textContent = `Banned from Aisle ${Math.max(1, Math.floor(dist / 50))}!`;
-      document.getElementById('modalDesc').innerHTML =
-        `Distance: <b>${Math.floor(dist)} m</b> &bull; Total Score: <b>${totalScore.toLocaleString('en-US')}</b><br>` +
-        `You salvaged <b>+${earnedEuros} € deposit</b> from the wreckage!`;
-      document.getElementById('startBtn').textContent = '🛒 Next Shopping Cart!';
-      updateShopUi();
-      document.getElementById('modal').hidden = false;
-    }
-
-    let lastTime = performance.now();
-    function update(now) {
-      const rawDt = Math.min(0.05, (now - lastTime) / 1000);
-      lastTime = now;
-      const dt = rawDt * slowMoFactor;
-
-      const aisleLeft = Math.max(70, width * 0.16);
-      const aisleRight = Math.min(width - 70, width * 0.84);
-
-      if (state === 'PLAYING') {
-        // Speed increases with distance
-        const curSpeed = (speed + dist * 0.65) * (cart.turboTime > 0 ? 1.55 : 1.0);
-        aisleScroll = (aisleScroll + curSpeed * dt) % 80;
-        dist += (curSpeed * dt) / 18;
-        chaosScore += (curSpeed * dt) * 0.12;
-
-        if (comboTimer > 0) {
-          comboTimer -= dt;
-          if (comboTimer <= 0) combo = 1;
-        }
-
-        if (cart.wheelieTime > 0) cart.wheelieTime -= dt;
-        if (cart.turboTime > 0) {
-          cart.turboTime -= dt;
-          if (Math.random() < 0.6) {
-            spawnSparks(cart.x + (Math.random() - 0.5) * 20, cart.y + 32, '#f97316', 2);
-          }
-        }
-
-        // Wonky Wheel Logic
-        if (cart.wonkyDir === 0) {
-          cart.nextJamCooldown -= dt;
-          if (cart.nextJamCooldown <= 0) {
-            cart.wonkyDir = Math.random() < 0.5 ? -1 : 1;
-            cart.wonkyTimer = 3.2;
-            if (window.ArcadeCore) ArcadeCore.playTone(210, 0.15, 'sawtooth', 0.12);
-            updateWheelUi();
-          }
-        } else {
-          cart.wonkyTimer -= dt;
-          if (Math.random() < 0.35) {
-            spawnSparks(cart.x + cart.wonkyDir * 16, cart.y + 20, '#fb7185', 1);
-          }
-          if (cart.wonkyTimer <= 0) {
-            cart.wonkyDir = 0;
-            cart.nextJamCooldown = 3.2 + upgrades.wd40 * 0.9;
-            updateWheelUi();
-          }
-        }
-
-        // Steering & Wonky Pull
-        const steerForce = 1150;
-        let ax = 0;
-        if (keys.left) ax -= steerForce;
-        if (keys.right) ax += steerForce;
-
-        // If wheel is jammed and not doing a wheelie, pull strongly to that side!
-        if (cart.wonkyDir !== 0 && cart.wheelieTime <= 0) {
-          const jamStrength = Math.max(260, 560 - upgrades.wd40 * 55);
-          ax += cart.wonkyDir * jamStrength;
-        }
-
-        cart.vx += ax * dt;
-        cart.vx *= Math.pow(0.06, dt); // Damping
-        cart.x += cart.vx * dt;
-        cart.y = height * 0.76;
-
-        // Visual tilt angle
-        const targetAngle = (cart.vx / 520) * 0.38 + (cart.wonkyDir * 0.12);
-        cart.angle += (targetAngle - cart.angle) * Math.min(1, dt * 12);
-
-        // Shelf Wall Collision
-        if (cart.x < aisleLeft + 28) {
-          cart.x = aisleLeft + 28;
-          cart.vx = Math.abs(cart.vx) * 0.55 + 140;
-          cart.hp -= 8;
-          if (window.ArcadeCore) ArcadeCore.hit();
-          spawnGroceriesBurst(cart.x - 15, cart.y, 4);
-          addFloatingText(cart.x, cart.y - 30, 'SHELF RAMMED!', '#f87171', 16);
-        } else if (cart.x > aisleRight - 28) {
-          cart.x = aisleRight - 28;
-          cart.vx = -Math.abs(cart.vx) * 0.55 - 140;
-          cart.hp -= 8;
-          if (window.ArcadeCore) ArcadeCore.hit();
-          spawnGroceriesBurst(cart.x + 15, cart.y, 4);
-          addFloatingText(cart.x, cart.y - 30, 'SHELF RAMMED!', '#f87171', 16);
-        }
-
-        // Spawn Entities
-        spawnTimer -= dt;
-        if (spawnTimer <= 0) {
-          spawnEntity();
-          spawnTimer = Math.max(0.32, 0.82 - dist * 0.0006);
-        }
-
-        // Update Obstacles
-        for (let i = obstacles.length - 1; i >= 0; i--) {
-          const o = obstacles[i];
-          o.y += curSpeed * dt;
-          if (o.vx) {
-            o.x += o.vx * dt;
-            if (o.x < aisleLeft + 40 || o.x > aisleRight - 40) o.vx *= -1;
-          }
-
-          const dx = o.x - cart.x;
-          const dy = o.y - cart.y;
-          const d = Math.hypot(dx, dy);
-
-          if (d < o.radius + 26) {
-            if (o.type === 'pyramid' || o.type === 'melons') {
-              combo = Math.min(10, combo + 1);
-              comboTimer = 3.2;
-              const pts = o.points * combo;
-              chaosScore += pts;
-              if (window.ArcadeCore) ArcadeCore.merge(combo);
-              spawnGroceriesBurst(o.x, o.y, 12);
-              addFloatingText(o.x, o.y - 20, `💥 SMASH +${pts} (${combo}x)`, '#fbbf24', 20);
-              obstacles.splice(i, 1);
-              continue;
-            } else if (o.type === 'pfand') {
-              pfandEuros += 5;
-              chaosScore += 100;
-              if (window.ArcadeCore) ArcadeCore.coin();
-              addFloatingText(o.x, o.y - 20, '+5 € DEPOSIT VOUCHER!', '#4ade80', 20);
-              obstacles.splice(i, 1);
-              continue;
-            } else if (o.type === 'turbo') {
-              cart.turboTime = 3.5 + upgrades.boost * 1.2;
-              cart.hp = Math.min(cart.maxHp, cart.hp + 20);
-              if (window.ArcadeCore) ArcadeCore.powerup();
-              addFloatingText(o.x, o.y - 20, '⚡ TURBO RUSH!', '#38bdf8', 22);
-              obstacles.splice(i, 1);
-              continue;
-            } else if (o.type === 'puddle') {
-              if (cart.turboTime <= 0 && cart.wheelieTime <= 0) {
-                cart.vx += (Math.random() < 0.5 ? -1 : 1) * 440;
-                cart.angle += 0.65;
-                if (window.ArcadeCore) ArcadeCore.pop(0.7);
-                addFloatingText(o.x, o.y - 20, '💧 AQUAPLANING!', '#38bdf8', 18);
-              }
-              obstacles.splice(i, 1);
-              continue;
-            } else if (o.type === 'oma' || o.type === 'pillar') {
-              if (cart.turboTime > 0) {
-                chaosScore += 300;
-                spawnGroceriesBurst(o.x, o.y, 14);
-                if (window.ArcadeCore) ArcadeCore.explosion();
-                addFloatingText(o.x, o.y - 20, '⚡ SMASHED THROUGH +300!', '#f97316', 22);
-              } else {
-                const dmg = o.type === 'pillar' ? 42 : 28;
-                cart.hp -= dmg;
-                cart.vx = (cart.x < o.x ? -1 : 1) * 320;
-                if (window.ArcadeCore) ArcadeCore.hit();
-                spawnGroceriesBurst(cart.x, cart.y, 8);
-                const msg = o.type === 'oma' ? '👵 "YOUNG MAN!!"' : '🧱 CRASH! -42 HP';
-                addFloatingText(o.x, o.y - 25, msg, '#ef4444', 20);
-              }
-              obstacles.splice(i, 1);
-              continue;
-            }
-          }
-
-          if (o.y > height + 100) {
-            obstacles.splice(i, 1);
-          }
-        }
-
-        if (cart.hp <= 0) {
-          cart.hp = 0;
-          triggerRagdollCrash();
-        }
-        updateHud();
-      } else if (state === 'RAGDOLL') {
-        ragdollTimer -= rawDt;
-        ragdoll.x += ragdoll.vx * dt;
-        ragdoll.y += ragdoll.vy * dt;
-        ragdoll.vy += 980 * dt;
-        ragdoll.rot += ragdoll.vrot * dt;
-
-        if (ragdollTimer <= 0) {
-          slowMoFactor = 1.0;
-          finishRun();
-        }
-      }
-
-      // Update Particles
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        if (p.type === 'emoji') {
-          p.vy += 650 * dt;
-          p.rot += p.vrot * dt;
-        }
-        p.life -= dt;
-        if (p.life <= 0) particles.splice(i, 1);
-      }
-
-      // Update Floating Texts
-      for (let i = floatingTexts.length - 1; i >= 0; i--) {
-        const ft = floatingTexts[i];
-        ft.y -= 55 * dt;
-        ft.life -= rawDt;
-        if (ft.life <= 0) floatingTexts.splice(i, 1);
-      }
-
-      draw(aisleLeft, aisleRight);
-      requestAnimationFrame(update);
-    }
-
-    function draw(aisleLeft, aisleRight) {
-      // Floor background
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, width, height);
-
-      // Supermarket tiled floor inside aisle
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(aisleLeft, 0, aisleRight - aisleLeft, height);
-
-      // Checkered tiles perspective lines
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
-      ctx.lineWidth = 2;
-      const tileSize = 80;
-      for (let x = aisleLeft; x <= aisleRight; x += tileSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-      }
-      for (let y = (aisleScroll % tileSize) - tileSize; y < height; y += tileSize) {
-        ctx.beginPath();
-        ctx.moveTo(aisleLeft, y);
-        ctx.lineTo(aisleRight, y);
-        ctx.stroke();
-      }
-
-      // Center racing stripes
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.22)';
-      ctx.lineWidth = 4;
-      ctx.setLineDash([32, 32]);
-      ctx.lineDashOffset = -aisleScroll * 2;
-      ctx.beginPath();
-      ctx.moveTo(width / 2, 0);
-      ctx.lineTo(width / 2, height);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Supermarket Shelves on Left and Right
-      const shelfColors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#a855f7'];
-      for (let y = (aisleScroll % 80) - 80; y < height + 80; y += 80) {
-        const idx = Math.abs(Math.floor((y - aisleScroll) / 80)) % shelfColors.length;
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(0, y, aisleLeft, 74);
-        ctx.fillRect(aisleRight, y, width - aisleRight, 74);
-
-        ctx.fillStyle = shelfColors[idx];
-        ctx.fillRect(aisleLeft - 18, y + 6, 14, 62);
-        ctx.fillRect(aisleRight + 4, y + 6, 14, 62);
-      }
-
-      // Draw Obstacles
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const o of obstacles) {
-        ctx.save();
-        ctx.translate(o.x, o.y);
-
-        if (o.type === 'puddle') {
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
-          ctx.beginPath();
-          ctx.ellipse(0, 0, o.radius * 1.2, o.radius * 0.75, 0, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-          ctx.beginPath();
-          ctx.ellipse(0, o.radius * 0.65, o.radius * 0.9, o.radius * 0.35, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        ctx.font = `${Math.round(o.radius * 1.4)}px sans-serif`;
-        ctx.fillText(o.emoji, 0, 0);
-
-        ctx.font = '700 11px system-ui, sans-serif';
-        ctx.fillStyle = '#e2e8f0';
-        ctx.fillText(o.label, 0, o.radius + 12);
-        ctx.restore();
-      }
-
-      // Draw Shopping Cart
-      if (state === 'PLAYING' || state === 'MENU') {
-        ctx.save();
-        ctx.translate(cart.x, cart.y);
-        ctx.rotate(cart.angle);
-        if (cart.wheelieTime > 0) {
-          ctx.scale(1.14, 1.14);
-        }
-
-        // Turbo Aura
-        if (cart.turboTime > 0) {
-          ctx.fillStyle = 'rgba(249, 115, 22, 0.28)';
-          ctx.beginPath();
-          ctx.arc(0, 0, 48, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Wheels
-        const wheels = [
-          { x: -20, y: -26, front: true },
-          { x: 20, y: -26, front: true },
-          { x: -20, y: 24, front: false },
-          { x: 20, y: 24, front: false }
-        ];
-        wheels.forEach((w, i) => {
-          ctx.save();
-          ctx.translate(w.x, w.y);
-          if (w.front && i === 0 && cart.wonkyDir !== 0) {
-            ctx.rotate(Math.sin(performance.now() * 0.04) * 0.9);
-            ctx.fillStyle = '#fb7185';
-          } else {
-            ctx.fillStyle = '#0f172a';
-          }
-          ctx.fillRect(-5, -8, 10, 16);
-          ctx.restore();
-        });
-
-        // Metal Cart Cage
-        ctx.fillStyle = 'rgba(226, 232, 240, 0.92)';
-        ctx.strokeStyle = cart.turboTime > 0 ? '#fbbf24' : '#94a3b8';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.roundRect(-22, -32, 44, 56, 8);
-        ctx.fill();
-        ctx.stroke();
-
-        // Wire grid lines
-        ctx.strokeStyle = '#64748b';
-        ctx.lineWidth = 2;
-        for (let gy = -20; gy <= 14; gy += 11) {
-          ctx.beginPath();
-          ctx.moveTo(-20, gy);
-          ctx.lineTo(20, gy);
-          ctx.stroke();
-        }
-
-        // Handlebar & Player hands
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(-24, 24, 48, 7);
-
-        // Groceries inside cart
-        ctx.font = '20px sans-serif';
-        ctx.fillText('🍉🥫🧀', 0, -6);
-
-        // Driver Helmet at back of cart
-        ctx.font = '26px sans-serif';
-        ctx.fillText('👷', 0, 34);
-
-        ctx.restore();
-      }
-
-      // Draw Flying Ragdoll in Slow-Mo
-      if (ragdoll.active) {
-        ctx.save();
-        ctx.translate(ragdoll.x, ragdoll.y);
-        ctx.rotate(ragdoll.rot);
-        ctx.font = '52px sans-serif';
-        ctx.fillText('🤸', 0, 0);
-        ctx.restore();
-
-        // Bullet-time vignette
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.14)';
-        ctx.fillRect(0, 0, width, height);
-      }
-
-      // Draw Particles
-      for (const p of particles) {
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        if (p.type === 'emoji') {
-          ctx.rotate(p.rot);
-          ctx.font = `${Math.round(p.size)}px sans-serif`;
-          ctx.fillText(p.emoji, 0, 0);
-        } else {
-          ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.arc(0, 0, p.size, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.restore();
-      }
-
-      // Draw Floating Texts
-      for (const ft of floatingTexts) {
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, ft.life / ft.maxLife);
-        ctx.font = `900 ${ft.size}px system-ui, sans-serif`;
-        ctx.fillStyle = '#000';
-        ctx.fillText(ft.text, ft.x + 2, ft.y + 2);
-        ctx.fillStyle = ft.color;
-        ctx.fillText(ft.text, ft.x, ft.y);
-        ctx.restore();
-      }
-
-      // Combo Banner
-      if (state === 'PLAYING' && combo > 1) {
-        ctx.save();
-        ctx.font = '900 24px system-ui, sans-serif';
-        ctx.fillStyle = '#fbbf24';
-        ctx.textAlign = 'center';
-        ctx.fillText(`🔥 ${combo}× CHAOS COMBO!`, width / 2, 82);
-        ctx.restore();
-      }
-    }
-
-    resetGame();
-    updateShopUi();
-    requestAnimationFrame(update);
-  })();
-  </script>
+    m.position.set(s.x, 0, s.z);
+  }
+  // Partikel
+  for (const s of sparks) {
+    if (!s.m.visible) continue;
+    s.life -= dt; if (s.life <= 0) { s.m.visible = false; continue; }
+    s.vy -= 14 * dt; s.m.position.x += s.vx * dt; s.m.position.y += s.vy * dt; s.m.position.z += s.vz * dt;
+    if (s.m.position.y < 0.04) { s.m.position.y = 0.04; s.vy *= -0.4; }
+  }
+}
+
+// ---------- HUD / Kamera ----------
+function updateHud() {
+  $('score').textContent = score;
+  const t = Math.ceil(timeLeft);
+  $('time').textContent = Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+  $('time').style.color = timeLeft < 15 ? '#ff5a4a' : '#fff';
+  $('money').textContent = (money + earned) + ' € Pfand';
+  $('list').innerHTML = listItems.map(i => i.got ? '<s style="opacity:.35">' + i.e + '</s>' : i.e).join('');
+  $('hp').style.width = (P.hp / P.maxHp * 100) + '%';
+  $('tb').style.width = (P.turbo / P.turboMax * 100) + '%';
+  $('speed').textContent = Math.round(Math.hypot(P.vx, P.vz) * 3.6) + ' km/h';
+  $('jam').style.display = state === 'play' && P.jam > 0 ? 'block' : 'none';
+}
+const camPos = new THREE.Vector3(0, 4, 42), camLook = new THREE.Vector3();
+let last = performance.now();
+function loop(t) {
+  requestAnimationFrame(loop);
+  const rdt = Math.min((t - last) / 1000, 0.05); last = t;
+  if (state === 'pause') { renderer.render(scene, camera); return; }
+  if (state === 'crash') slowmo = Math.min(1, slowmo + rdt * 0.25);
+  const dt = rdt * (state === 'crash' ? slowmo : 1);
+  update(dt);
+  if (state === 'menu') {
+    const a = now * 0.1;
+    camPos.set(Math.sin(a) * 30, 18, Math.cos(a) * 34); camLook.set(0, 0, 0);
+    camera.position.copy(camPos); camera.lookAt(camLook);
+  } else {
+    const fx = Math.sin(P.h), fz = Math.cos(P.h), spd = Math.hypot(P.vx, P.vz);
+    const tx = P.x - fx * (5 + spd * 0.12), tz = P.z - fz * (5 + spd * 0.12);
+    const k = Math.min(1, rdt * 5);
+    camPos.x += (tx - camPos.x) * k; camPos.z += (tz - camPos.z) * k; camPos.y += (3.3 - camPos.y) * k;
+    const o = { x: camPos.x, z: camPos.z, vx: 0, vz: 0 }; collideCircle(o, 0.3, 0); camPos.x = o.x; camPos.z = o.z;
+    const focus = state === 'crash' && ragdoll.length ? ragdoll[0].m.position : cart.position;
+    camLook.lerp(new THREE.Vector3(focus.x + (state === 'crash' ? 0 : fx * 3), 1, focus.z + (state === 'crash' ? 0 : fz * 3)), k);
+    camera.position.copy(camPos);
+    shake = Math.max(0, shake - rdt * 2.5);
+    camera.position.x += rnd(-1, 1) * shake * 0.25; camera.position.y += rnd(-1, 1) * shake * 0.25;
+    camera.lookAt(camLook);
+    const fovT = 64 + clamp(spd - 8, 0, 9) * 1.2;
+    camera.fov += (fovT - camera.fov) * k; camera.updateProjectionMatrix();
+  }
+  sun.position.set(P.x + 10, 30, P.z + 6); sun.target.position.set(P.x, 0, P.z);
+  if (state !== 'menu') updateHud();
+  renderer.render(scene, camera);
+}
+
+// ---------- Shop / Eingabe ----------
+const SHOP = [
+  ['wd40', '🧴 WD-40', l => `Klemmt seltener (Stufe ${l}/5)`, l => 15 + l * 15],
+  ['armor', '🛡️ Stoßstange', l => `Max HP ${100 + l * 35} (Stufe ${l}/5)`, l => 20 + l * 20],
+  ['boost', '🚀 Turbo-Rollen', l => `Turbo ${(3.5 + l * 1.2).toFixed(1)} s (Stufe ${l}/5)`, l => 25 + l * 25]
+];
+function renderShop() {
+  $('shop').innerHTML = `<div class="row" style="justify-content:center"><b>💰 Pfand-Konto: ${money} €</b></div>` + SHOP.map(([k, name, desc, cost]) => {
+    const l = up[k], c = cost(l), max = l >= 5;
+    return `<div class="row"><span><b>${name}</b><br>${desc(l)}</span><button data-k="${k}" ${max || money < c ? 'disabled' : ''}>${max ? 'MAX' : c + ' €'}</button></div>`;
+  }).join('');
+  $('shop').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const s = SHOP.find(x => x[0] === b.dataset.k), c = s[3](up[s[0]]);
+    if (money >= c && up[s[0]] < 5) { money -= c; up[s[0]]++; lsSet('ek_pfand', money); lsSet('ek_up_' + s[0], up[s[0]]); ArcadeCore.coin(); renderShop(); }
+  });
+  $('menuBest').textContent = best ? 'Rekord: ' + best + ' Punkte' : '';
+}
+function rattle() {
+  if (state !== 'play' || P.jam <= 0) return;
+  P.jamHits++; shake = Math.min(1, shake + 0.12);
+  ArcadeCore.playTone(rnd(180, 260), 0.06, 'square', 0.08);
+  wheels[0].piv.rotation.y = rnd(-1, 1);
+  if (P.jamHits >= 3) { P.jam = 0.001; banner('🔧 Läuft wieder!', 0.8); }
+}
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase(); keys[k] = true;
+  if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
+  if (k === ' ' && !e.repeat) rattle();
+  if ((k === 'p' || k === 'escape') && (state === 'play' || state === 'pause')) togglePause();
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') togglePause(); });
+function togglePause() {
+  if (state === 'pause') { state = prevState; $('pause').style.display = 'none'; last = performance.now(); }
+  else { prevState = state; state = 'pause'; $('pause').style.display = 'flex'; }
+}
+$('pause').addEventListener('pointerdown', () => { if (state === 'pause') togglePause(); });
+for (const [id, k] of [['tL', 'l'], ['tR', 'r'], ['tG', 'g'], ['tS', 's'], ['tB', 'b'], ['tJ', 'j']]) {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); touch[k] = true; el.classList.add('on'); el.setPointerCapture(e.pointerId); if (k === 'j') rattle(); });
+  const upF = () => { touch[k] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerup', upF); el.addEventListener('pointercancel', upF);
+}
+addEventListener('touchstart', () => { if (!touchMode) { touchMode = true; $('touch').style.display = 'block'; } }, { passive: true });
+$('go').onclick = () => { audio(); $('menu').classList.add('hide'); resetGame(); };
+$('again').onclick = () => { $('over').classList.add('hide'); state = 'menu'; renderShop(); $('menu').classList.remove('hide'); };
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+renderShop();
+buildPyramids(); placePuddles(); placeList(); placeShoppers(); bons.forEach(placeBon);
+cart.position.set(P.x, 0, P.z); cart.rotation.y = P.h + Math.PI;
+appStarted = true;
+requestAnimationFrame(loop);
+</script>
 </body>
 </html>

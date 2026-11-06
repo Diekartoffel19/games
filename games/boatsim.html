@@ -1,1848 +1,692 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Boat & Wave Simulator — Ocean Physics & Ship Lab</title>
-<meta name="description" content="Simulate boats on the open sea: draw your own waves, control wave height and wind, test different ships for seaworthiness and go full throttle!">
-<meta name="theme-color" content="#071b2c">
+<title>Boot- & Wellen-Simulator 3D</title>
+<meta name="description" content="3D-Ozean-Labor: Gerstner-Wellen, Monsterwellen und selbst gezeichnete Wellen gegen 8 Schiffe mit echter Auftriebsphysik, Krängung und Wassereinbruch.">
+<meta name="theme-color" content="#0d2a45">
 <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
 <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
 <script src="../src/arcade-core.js"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) { if (msg) document.getElementById('fallbackMsg').textContent = msg; fb.style.display = 'block'; }
+};
+window.addEventListener('error', function(e) { if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar')); });
+setTimeout(function() { if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).'); }, 8000);
+</script>
 <style>
-  :root {
-    --bg-dark: #071523;
-    --panel-bg: rgba(9, 26, 43, 0.88);
-    --panel-border: rgba(64, 169, 255, 0.25);
-    --panel-glow: rgba(0, 180, 255, 0.15);
-    --accent: #00d2ff;
-    --accent-hover: #3ad9ff;
-    --accent-gold: #ffb830;
-    --accent-red: #ff4d4f;
-    --accent-green: #2ecc71;
-    --text-main: #f0f8ff;
-    --text-dim: #8baec6;
-    --font: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-  }
-
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
-  html, body {
-    width: 100%; height: 100%; overflow: hidden;
-    background: var(--bg-dark); color: var(--text-main); font-family: var(--font);
-    user-select: none; -webkit-user-select: none; touch-action: none;
-  }
-
-  canvas#simCanvas {
-    position: fixed; inset: 0; width: 100%; height: 100%;
-    display: block; cursor: crosshair; touch-action: none;
-  }
-
-  /* Header & Back */
-  .top-bar {
-    position: fixed; top: 12px; left: 12px; right: 12px;
-    display: flex; justify-content: space-between; align-items: center;
-    pointer-events: none; z-index: 50;
-  }
-  .back-btn {
-    pointer-events: auto;
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 8px 16px; border-radius: 999px;
-    background: var(--panel-bg); border: 1px solid var(--panel-border);
-    color: var(--text-main); text-decoration: none; font-size: 0.9rem; font-weight: 600;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4); backdrop-filter: blur(10px);
-    transition: all 0.2s;
-  }
-  .back-btn:hover {
-    background: rgba(18, 48, 76, 0.95); border-color: var(--accent);
-    color: var(--accent); transform: translateY(-1px);
-  }
-
-  .title-badge {
-    pointer-events: auto;
-    background: var(--panel-bg); border: 1px solid var(--panel-border);
-    border-radius: 999px; padding: 7px 18px;
-    display: flex; align-items: center; gap: 10px;
-    backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    font-size: 0.92rem; font-weight: 700; letter-spacing: 0.5px;
-  }
-  .title-badge span.pill {
-    background: linear-gradient(135deg, #00d2ff, #0077ff);
-    color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 0.72rem; text-transform: uppercase;
-  }
-
-  .top-actions {
-    pointer-events: auto;
-    display: flex; gap: 8px;
-  }
-  .icon-btn {
-    width: 38px; height: 38px; border-radius: 50%;
-    background: var(--panel-bg); border: 1px solid var(--panel-border);
-    color: var(--text-main); font-size: 1.05rem; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    backdrop-filter: blur(8px); transition: all 0.2s;
-  }
-  .icon-btn:hover { background: rgba(20, 55, 88, 0.9); border-color: var(--accent); transform: scale(1.05); }
-  .icon-btn.active { background: var(--accent); color: #051421; border-color: var(--accent); font-weight: bold; }
-
-  /* Telemetry HUD */
-  #telemetryCard {
-    position: fixed; top: 62px; left: 12px; z-index: 40;
-    background: var(--panel-bg); border: 1px solid var(--panel-border);
-    border-radius: 12px; padding: 10px 14px; min-width: 210px;
-    backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-    font-size: 0.82rem;
-  }
-  #telemetryCard h3 {
-    font-size: 0.95rem; font-weight: 700; color: var(--accent);
-    margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;
-  }
-  .hud-row {
-    display: flex; justify-content: space-between; align-items: center;
-    margin: 4px 0; color: var(--text-dim);
-  }
-  .hud-row b { color: var(--text-main); font-variant-numeric: tabular-nums; }
-  .status-pill {
-    display: inline-block; padding: 2px 8px; border-radius: 999px;
-    font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
-  }
-  .status-good { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); }
-  .status-warn { background: rgba(243, 156, 18, 0.2); color: #f39c12; border: 1px solid rgba(243, 156, 18, 0.4); }
-  .status-danger { background: rgba(231, 76, 60, 0.25); color: #ff5252; border: 1px solid rgba(231, 76, 60, 0.5); }
-  .flood-bar {
-    width: 100%; height: 6px; border-radius: 3px;
-    background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 4px;
-  }
-  .flood-fill {
-    height: 100%; width: 0%; background: linear-gradient(90deg, #3498db, #e74c3c);
-    transition: width 0.2s;
-  }
-
-  /* Ship Picker bar */
-  #shipPicker {
-    position: fixed; top: 62px; right: 12px; z-index: 40;
-    background: var(--panel-bg); border: 1px solid var(--panel-border);
-    border-radius: 14px; padding: 8px 10px; max-width: 320px;
-    backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-  }
-  #shipPicker .picker-title {
-    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px;
-    color: var(--text-dim); margin-bottom: 6px; font-weight: 700;
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  .ship-grid {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-  }
-  .ship-btn {
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px; padding: 6px 4px; color: var(--text-main);
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    cursor: pointer; transition: all 0.15s; font-size: 0.7rem; font-family: inherit;
-  }
-  .ship-btn span.emoji { font-size: 1.3rem; }
-  .ship-btn:hover { background: rgba(0,210,255,0.15); border-color: var(--accent); }
-  .ship-btn.active {
-    background: linear-gradient(135deg, rgba(0,210,255,0.3), rgba(0,119,255,0.3));
-    border-color: var(--accent); box-shadow: 0 0 12px rgba(0,210,255,0.3);
-    font-weight: 700; color: #fff;
-  }
-
-  /* Bottom Controls Deck */
-  #controlDock {
-    position: fixed; bottom: 12px; left: 12px; right: 12px; z-index: 40;
-    background: var(--panel-bg); border: 1px solid var(--panel-border);
-    border-radius: 16px; padding: 10px 14px; backdrop-filter: blur(14px);
-    box-shadow: 0 10px 32px rgba(0,0,0,0.5);
-    display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
-  }
-
-  .dock-section {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  }
-  .dock-label {
-    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.8px;
-    color: var(--text-dim); font-weight: 700; margin-right: 2px;
-  }
-
-  /* Sliders */
-  .slider-group {
-    display: flex; align-items: center; gap: 8px; font-size: 0.8rem;
-    background: rgba(255,255,255,0.04); padding: 5px 10px; border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.06);
-  }
-  .slider-group label { color: var(--text-dim); font-size: 0.75rem; white-space: nowrap; }
-  .slider-group input[type="range"] {
-    -webkit-appearance: none; appearance: none;
-    width: 85px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.15);
-    outline: none; accent-color: var(--accent); cursor: pointer;
-  }
-  .slider-group output { min-width: 38px; text-align: right; color: var(--accent); font-weight: 700; font-size: 0.78rem; }
-
-  /* Buttons */
-  .btn {
-    font-family: inherit; font-size: 0.82rem; font-weight: 600;
-    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--panel-border);
-    background: rgba(255,255,255,0.06); color: var(--text-main);
-    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-    transition: all 0.15s; white-space: nowrap; touch-action: manipulation;
-  }
-  .btn:hover { background: rgba(0,210,255,0.15); border-color: var(--accent); transform: translateY(-1px); }
-  .btn.active {
-    background: var(--accent); color: #051421; border-color: var(--accent);
-    font-weight: 800; box-shadow: 0 0 12px rgba(0,210,255,0.4);
-  }
-  .btn.warn:hover { background: rgba(255,77,79,0.2); border-color: var(--accent-red); color: #ff7875; }
-  .btn.gold { border-color: rgba(255,184,48,0.4); }
-  .btn.gold:hover { background: rgba(255,184,48,0.2); border-color: var(--accent-gold); color: #ffd666; }
-
-  /* Throttle Lever & Steering */
-  .helm-box {
-    display: flex; align-items: center; gap: 6px;
-    background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.1);
-  }
-  .helm-btn {
-    width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--panel-border);
-    background: rgba(255,255,255,0.06); color: var(--text-main);
-    font-size: 0.95rem; font-weight: bold; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .helm-btn:active { background: var(--accent); color: #000; }
-  .throttle-val { font-size: 0.78rem; font-weight: 700; color: var(--accent); min-width: 42px; text-align: center; }
-
-  /* Draw Wave Hint Banner */
-  #drawBanner {
-    position: fixed; top: 110px; left: 50%; transform: translateX(-50%);
-    background: rgba(0, 210, 255, 0.9); color: #051421; font-weight: 700;
-    padding: 6px 18px; border-radius: 999px; font-size: 0.85rem;
-    box-shadow: 0 4px 20px rgba(0,210,255,0.5); z-index: 35;
-    pointer-events: none; opacity: 0; transition: opacity 0.25s, transform 0.25s;
-    display: flex; align-items: center; gap: 8px;
-  }
-  #drawBanner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-  /* Toast Notification */
-  #toast {
-    position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
-    background: rgba(13, 37, 63, 0.95); border: 1px solid var(--accent);
-    color: var(--text-main); font-weight: 600; padding: 7px 18px; border-radius: 999px;
-    font-size: 0.84rem; z-index: 100; pointer-events: none;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.25s;
-  }
-  #toast.show { opacity: 1; }
-
-  /* Help Modal */
-  #helpModal {
-    position: fixed; inset: 0; background: rgba(3, 10, 18, 0.8);
-    backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center;
-    z-index: 100; padding: 16px;
-  }
-  #helpModal.open { display: flex; }
-  .modal-card {
-    background: #091c30; border: 1px solid var(--panel-border);
-    border-radius: 16px; max-width: 480px; width: 100%; padding: 22px;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.6); position: relative;
-  }
-  .modal-card h2 { font-size: 1.25rem; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-  .modal-card p { font-size: 0.88rem; line-height: 1.5; color: var(--text-dim); margin-bottom: 10px; }
-  .modal-card ul { margin: 8px 0 16px 20px; font-size: 0.85rem; color: var(--text-main); line-height: 1.6; }
-  .modal-close {
-    width: 100%; padding: 9px; border-radius: 8px; border: 0;
-    background: var(--accent); color: #04121f; font-weight: 700;
-    font-size: 0.95rem; cursor: pointer; transition: all 0.15s;
-  }
-  .modal-close:hover { background: var(--accent-hover); }
-
-  /* Responsive styles */
-  @media (max-width: 768px) {
-    #telemetryCard { top: 58px; left: 8px; min-width: 170px; padding: 8px 10px; font-size: 0.74rem; }
-    #shipPicker { top: auto; bottom: 120px; right: 8px; left: 8px; max-width: none; }
-    #controlDock { bottom: 8px; left: 8px; right: 8px; padding: 8px; gap: 8px; }
-    .slider-group input[type="range"] { width: 65px; }
-  }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { margin:0; height:100%; overflow:hidden; background:#0d2a45; color:#fff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
+canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; min-height:36px; }
+#panel { position:fixed; top:54px; left:12px; z-index:30; width:250px; max-width:calc(100vw - 24px); background:#0b1f33dd; border:1px solid #ffffff33; border-radius:12px; padding:10px 12px; font-size:13px; backdrop-filter:blur(4px); }
+#panel h3 { margin:0 0 6px; font-size:15px; }
+#panel label { display:block; margin:6px 0 2px; color:#bfe0ff; }
+#panel input[type=range] { width:100%; }
+#panel select { width:100%; font:inherit; padding:4px; border-radius:6px; background:#12304d; color:#fff; border:1px solid #ffffff44; }
+#panel .row { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+#panel button { flex:1; font:inherit; font-weight:800; font-size:12px; color:#fff; background:#1d6be0; border:0; border-radius:8px; padding:7px 6px; cursor:pointer; min-width:70px; }
+#panel button.warn { background:#d6302c; }
+#panel button.on { background:#2fb24c; }
+#panel .small { font-size:11px; opacity:.75; margin-top:6px; line-height:1.4; }
+#toggle { position:fixed; top:10px; left:100px; z-index:51; font:inherit; font-weight:800; font-size:13px; color:#fff; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:8px 12px; border-radius:20px; cursor:pointer; }
+#hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+.t { position:absolute; font-weight:800; text-shadow:0 2px 0 #000a, 0 0 6px #0008; }
+#stats { top:12px; right:16px; font-size:15px; text-align:right; line-height:1.55; background:#0006; padding:8px 12px; border-radius:10px; }
+#heel { bottom:24px; right:16px; width:140px; height:140px; }
+#banner { top:28%; left:50%; transform:translate(-50%,-50%); font-size:44px; text-align:center; white-space:nowrap; opacity:0; transition:opacity .25s; }
+#banner.show { opacity:1; }
+#ctrl { bottom:16px; left:50%; transform:translateX(-50%); font-size:13px; white-space:nowrap; opacity:.85; text-align:center; }
+#thrWrap { width:200px; height:12px; border:2px solid #fff; border-radius:7px; background:#0007; margin:4px auto 0; position:relative; overflow:hidden; }
+#thr { position:absolute; top:0; bottom:0; left:50%; width:0; background:#5fe36a; }
+#touch { position:fixed; inset:auto 0 0 0; height:150px; z-index:15; display:none; pointer-events:none; }
+#touch .b { position:absolute; bottom:70px; width:62px; height:62px; border-radius:50%; background:#0004; border:2px solid #fff8; color:#fff; font-size:22px; font-weight:800; display:flex; align-items:center; justify-content:center; pointer-events:auto; touch-action:none; }
+#touch .b.on { background:#fff6; color:#000; }
 </style>
 </head>
 <body>
-
-<canvas id="simCanvas"></canvas>
-
-<!-- Top bar -->
-<div class="top-bar">
-  <a href="../index.html" class="back-btn">← Games</a>
-  
-  <div class="title-badge">
-    <span>🚢 Boat & Wave Simulator</span>
-    <span class="pill">Physics Lab</span>
+<a class="back" href="../index.html">← Hub</a>
+<button id="toggle">⚙️ Labor</button>
+<canvas id="gl"></canvas>
+<div id="panel">
+  <h3>🌊 Ozean-Labor</h3>
+  <label>Schiff (Taste 1–8)</label>
+  <select id="boatSel"></select>
+  <label>Seegang: <b id="seaV">1.0</b></label>
+  <input type="range" id="sea" min="0" max="3" step="0.05" value="1">
+  <label>Wind: <b id="windV">12</b> kn</label>
+  <input type="range" id="wind" min="0" max="60" step="1" value="12">
+  <label>Windrichtung: <b id="dirV">0</b>°</label>
+  <input type="range" id="wdir" min="0" max="359" step="1" value="30">
+  <div class="row">
+    <button id="rogue" class="warn">🌊 Monsterwelle (M)</button>
+    <button id="brush">✏️ Wellen-Pinsel (R)</button>
   </div>
-
-  <div class="top-actions">
-    <button class="icon-btn" id="btnHelp" title="Help & Instructions" onclick="toggleHelp()">❓</button>
-    <button class="icon-btn" id="btnMute" title="Sound on/off" onclick="toggleSound()">🔊</button>
+  <div class="row">
+    <button id="storm">⛈️ Sturm-Challenge</button>
+    <button id="reset">↺ Reset (Backspace)</button>
   </div>
+  <div class="small" id="boatInfo"></div>
+  <div class="small">W/S Gas · A/D Ruder · Q/E Ballast (U-Boot) · Maus ziehen = Kamera · Mausrad = Zoom · Wellen-Pinsel: aufs Wasser klicken/ziehen</div>
+</div>
+<div id="hud">
+  <div id="stats" class="t"></div>
+  <canvas id="heel" class="t" width="280" height="280"></canvas>
+  <div id="ctrl" class="t"><span id="ctrlTxt">Gas</span><div id="thrWrap"><div id="thr"></div></div></div>
+  <div id="banner" class="t"></div>
+</div>
+<div id="touch">
+  <div class="b" id="tL" style="left:14px">◀</div>
+  <div class="b" id="tR" style="left:90px">▶</div>
+  <div class="b" id="tF" style="right:90px">▲</div>
+  <div class="b" id="tB" style="right:14px">▼</div>
+</div>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#0d2a45;color:#fff;z-index:99999;padding:30px;text-align:center;">
+  <h2>🚢 Auf Grund gelaufen</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#8fd">Zurück zum Hub</a></p>
 </div>
 
-<!-- Telemetry HUD -->
-<div id="telemetryCard">
-  <h3>
-    <span id="hudShipName">Speedboat</span>
-    <span class="status-pill status-good" id="hudStatus">Stable</span>
-  </h3>
-  <div class="hud-row"><span>Speed:</span><b id="hudSpeed">0.0 kn</b></div>
-  <div class="hud-row"><span>Tilt (Pitch):</span><b id="hudAngle">0.0°</b></div>
-  <div class="hud-row"><span>Draft / Depth:</span><b id="hudDraft">0.0 m</b></div>
-  <div class="hud-row"><span>Buoyancy:</span><b id="hudBuoyancy">100%</b></div>
-  <div class="hud-row" style="margin-top:6px;"><span>Flooding:</span><b id="hudFlood">0%</b></div>
-  <div class="flood-bar"><div class="flood-fill" id="hudFloodBar"></div></div>
-</div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
 
-<!-- Ship selector -->
-<div id="shipPicker">
-  <div class="picker-title">
-    <span>Choose ship</span>
-    <span id="shipCount">8 models</span>
-  </div>
-  <div class="ship-grid" id="shipGrid">
-    <!-- Populated dynamically via JS -->
-  </div>
-</div>
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const KEY = 'boatsim';
+const G = 9.81;
+let bestStorm = Number(ArcadeCore.getScore(KEY)) || 0;
 
-<!-- Hint for Draw Waves -->
-<div id="drawBanner">
-  <span>✏️ Click or drag in the water to draw your own waves!</span>
-</div>
-
-<!-- Bottom Control Dock -->
-<div id="controlDock">
-  <!-- Controls -->
-  <div class="dock-section">
-    <span class="dock-label">Ship</span>
-    <div class="helm-box">
-      <button class="helm-btn" id="btnRudderLeft" title="Turn left (A / Left arrow)">◀</button>
-      <div class="throttle-val" id="throttleDisplay">0%</div>
-      <button class="helm-btn" id="btnRudderRight" title="Turn right (D / Right arrow)">▶</button>
-    </div>
-    <div class="slider-group">
-      <label for="throttleSlider">Throttle:</label>
-      <input type="range" id="throttleSlider" min="-100" max="100" value="0" step="5" oninput="updateThrottle(this.value)">
-      <output id="throttleOut">0%</output>
-    </div>
-    <button class="btn gold" onclick="honkHorn()" title="Sound the ship horn!">📯 Horn</button>
-    <button class="btn gold" id="btnSubmarineDive" style="display:none;" onclick="toggleSubmarineDive()" title="Control submarine dive tanks">🟡 Dive</button>
-    <button class="btn warn" onclick="resetBoat()" title="Right the boat and drain it">⚓ Reset</button>
-  </div>
-
-  <!-- Wellen- & Ozean-Regler -->
-  <div class="dock-section">
-    <span class="dock-label">Ocean</span>
-    <div class="slider-group">
-      <label for="waveHeightSlider">Waves:</label>
-      <input type="range" id="waveHeightSlider" min="0" max="120" value="35" oninput="updateWaveHeight(this.value)">
-      <output id="waveHeightOut">3.5m</output>
-    </div>
-    <div class="slider-group">
-      <label for="windSlider">Wind:</label>
-      <input type="range" id="windSlider" min="-100" max="100" value="15" oninput="updateWind(this.value)">
-      <output id="windOut">+15</output>
-    </div>
-    <div class="slider-group">
-      <label for="timeSpeedSlider">Speed:</label>
-      <input type="range" id="timeSpeedSlider" min="0" max="3" value="1" step="0.2" oninput="updateTimeSpeed(this.value)">
-      <output id="timeSpeedOut">1.0x</output>
-    </div>
-  </div>
-
-  <!-- Aktionen & Wellen-Generatoren -->
-  <div class="dock-section">
-    <span class="dock-label">Generator</span>
-    <button class="btn" id="btnDrawWave" onclick="toggleDrawWaveMode()">✏️ Draw wave</button>
-    <button class="btn" onclick="spawnRogueWave()">🌊 Rogue wave</button>
-    <button class="btn" onclick="triggerStorm()">⛈️ Storm</button>
-    <button class="btn" onclick="triggerCalm()">⛵ Calm sea</button>
-    <button class="btn" onclick="spawnWhirlpool()">🌪️ Whirlpool</button>
-  </div>
-</div>
-
-<!-- Toast -->
-<div id="toast"></div>
-
-<!-- Help Modal -->
-<div id="helpModal" onclick="if(event.target===this) toggleHelp()">
-  <div class="modal-card">
-    <h2>🚢 Boat & Wave Simulator</h2>
-    <p>Welcome to the interactive hydrodynamic physics lab! Test how seaworthy different ships are in stormy seas.</p>
-    <ul>
-      <li><b>✏️ Draw waves:</b> Activate the mode or simply drag with mouse/finger through the water to pile up crests and troughs.</li>
-      <li><b>🎮 Controls:</b> <b>W / S</b> for throttle (forward / reverse), <b>A / D</b> to steer. Or use the sliders below.</li>
-      <li><b>🌊 Ocean tools:</b> Change wave height, wind strength and slow-motion/fast-forward live with the sliders.</li>
-      <li><b>🚢 8 different ships:</b> From the light speedboat to the container freighter, submarine with dive tanks, sailing ship and the indestructible rubber duck!</li>
-      <li><b>⚠️ Seaworthiness:</b> Big breakers can flood ships, capsize them or even sink them to the seabed!</li>
-    </ul>
-    <button class="modal-close" onclick="toggleHelp()">All right, cast off!</button>
-  </div>
-</div>
-
-<script>
-/**
- * Ozean- & Boots-Physik Simulation
- * Reales 1D-Flachwasser Wellen-Gitter (Wave Equation) + Überlagerung trochoidaler Wellen
- * Auftrieb nach Archimedes (Volumenscheiben) + metazentrische Stabilität & Kenterphysik
- */
-
-const canvas = document.getElementById('simCanvas');
-const ctx = canvas.getContext('2d');
-
-let W = window.innerWidth;
-let H = window.innerHeight;
-let dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-function resizeCanvas() {
-  W = window.innerWidth;
-  H = window.innerHeight;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  initWaterGrid();
+// ---------- Renderer ----------
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.3, 2500);
+const skyCanvas = document.createElement('canvas'); skyCanvas.width = 4; skyCanvas.height = 256;
+const skyTex = new THREE.CanvasTexture(skyCanvas); skyTex.colorSpace = THREE.SRGBColorSpace;
+scene.background = skyTex;
+function paintSky(storm) {
+  const g = skyCanvas.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+  const top = new THREE.Color(0x2a6fc0).lerp(new THREE.Color(0x22272e), storm), mid = new THREE.Color(0x9fd0ff).lerp(new THREE.Color(0x58606a), storm), bot = new THREE.Color(0xdff0ff).lerp(new THREE.Color(0x6d757d), storm);
+  gr.addColorStop(0, '#' + top.getHexString()); gr.addColorStop(0.55, '#' + mid.getHexString()); gr.addColorStop(1, '#' + bot.getHexString());
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 256); skyTex.needsUpdate = true;
+  scene.fog.color.copy(bot);
 }
-window.addEventListener('resize', resizeCanvas);
+scene.fog = new THREE.Fog(0xdff0ff, 250, 1100);
+const hemi = new THREE.HemisphereLight(0xdff0ff, 0x0d2a45, 1.1); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 300 });
+sun.shadow.bias = -0.0005;
+scene.add(sun, sun.target);
+const sunDisk = new THREE.Mesh(new THREE.SphereGeometry(30, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff4c0, fog: false }));
+scene.add(sunDisk);
+paintSky(0);
 
-// --- Sound Synthesizer (Web Audio) ---
-let audioCtx = null;
-let soundEnabled = true;
-
-function initAudio() {
-  if (!audioCtx) {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtx) audioCtx = new AudioCtx();
-  }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
-  }
-}
-window.addEventListener('pointerdown', initAudio, { once: true });
-window.addEventListener('keydown', initAudio, { once: true });
-
-function playTone(freq, dur, type = 'sine', gainVal = 0.1) {
-  if (!soundEnabled || !audioCtx) return;
-  try {
-    const osc = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    g.gain.setValueAtTime(gainVal, audioCtx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
-    osc.connect(g);
-    g.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + dur);
-  } catch (e) {}
-}
-
-function playSplashSound(vol = 0.2) {
-  if (!soundEnabled || !audioCtx) return;
-  try {
-    const bufferSize = audioCtx.sampleRate * 0.25;
-    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
-    }
-    const noise = audioCtx.createBufferSource();
-    noise.buffer = buffer;
-    const filter = audioCtx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(600, audioCtx.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.25);
-    const gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(Math.min(vol, 0.4), audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(audioCtx.destination);
-    noise.start();
-  } catch (e) {}
-}
-
-function playHornSound() {
-  if (!soundEnabled || !audioCtx) return;
-  try {
-    [155, 196].forEach(f => {
-      const osc = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(f, audioCtx.currentTime);
-      g.gain.setValueAtTime(0.18, audioCtx.currentTime);
-      g.gain.linearRampToValueAtTime(0.18, audioCtx.currentTime + 0.6);
-      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2);
-      osc.connect(g);
-      g.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 1.2);
-    });
-  } catch (e) {}
-}
-
-function playThunderSound() {
-  if (!soundEnabled || !audioCtx) return;
-  try {
-    const dur = 1.4;
-    const bufferSize = audioCtx.sampleRate * dur;
-    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.45));
-    }
-    const noise = audioCtx.createBufferSource();
-    noise.buffer = buffer;
-    const filter = audioCtx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(280, audioCtx.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + dur);
-    const gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(audioCtx.destination);
-    noise.start();
-  } catch (e) {}
-}
-
-function toggleSound() {
-  soundEnabled = !soundEnabled;
-  document.getElementById('btnMute').textContent = soundEnabled ? '🔊' : '🔇';
-  showToast(soundEnabled ? 'Sound: ON' : 'Sound: OFF');
-}
-
-// --- Environment & Wave Parameters ---
-let simTime = 0;
-let timeSpeed = 1.0;
-let baseWaterLevel = 0; // Calculated dynamically in resize
-
-let waveAmplitude = 35; // px (0 to 120)
-let waveFreq = 0.007;
-let windSpeed = 15;     // -100 to 100 km/h
-let currentFlow = 0;
-let stormIntensity = 0; // 0 to 1
-let lightningFlash = 0;
-
-// Dynamic interactive 1D heightfield grid
-const NUM_NODES = 260;
-let nodeSpacing = 10;
-let waterHeight = new Float32Array(NUM_NODES);
-let waterVel = new Float32Array(NUM_NODES);
-
-function initWaterGrid() {
-  baseWaterLevel = H * 0.62;
-  nodeSpacing = Math.ceil(W / (NUM_NODES - 1));
-  for (let i = 0; i < NUM_NODES; i++) {
-    waterHeight[i] = 0;
-    waterVel[i] = 0;
-  }
-}
-
-// Particle System (Splashes, Rain, Bubbles, Exhaust Smoke)
-const particles = [];
-function addSplash(x, y, count = 12, vx = 0, vy = -4, color = 'rgba(210, 240, 255, 0.8)') {
-  for (let i = 0; i < count; i++) {
-    particles.push({
-      x: x + (Math.random() - 0.5) * 16,
-      y: y + (Math.random() - 0.5) * 6,
-      vx: vx + (Math.random() - 0.5) * 6,
-      vy: vy + (Math.random() - 0.5) * 6 - Math.random() * 3,
-      size: 2 + Math.random() * 3.5,
-      alpha: 0.9,
-      decay: 0.02 + Math.random() * 0.03,
-      color: color,
-      gravity: 0.28
-    });
-  }
-  if (count > 8) playSplashSound(Math.min(count * 0.02, 0.35));
-}
-
-function addSmoke(x, y, vx, vy) {
-  particles.push({
-    x: x, y: y,
-    vx: vx + (Math.random() - 0.5) * 0.8 + (windSpeed * 0.03),
-    vy: vy - 1.2 - Math.random() * 0.8,
-    size: 4 + Math.random() * 5,
-    alpha: 0.55,
-    decay: 0.015,
-    color: 'rgba(200, 215, 230, 0.5)',
-    gravity: -0.04
-  });
-}
-
-function addBubble(x, y) {
-  particles.push({
-    x: x + (Math.random() - 0.5) * 10,
-    y: y,
-    vx: (Math.random() - 0.5) * 1,
-    vy: -1.5 - Math.random() * 2,
-    size: 2 + Math.random() * 3,
-    alpha: 0.7,
-    decay: 0.012,
-    color: 'rgba(160, 230, 255, 0.6)',
-    gravity: -0.05
-  });
-}
-
-// Rain
-const rainDrops = [];
-for (let i = 0; i < 180; i++) {
-  rainDrops.push({
-    x: Math.random() * 2000 - 500,
-    y: Math.random() * 1000,
-    len: 12 + Math.random() * 16,
-    speed: 16 + Math.random() * 8
-  });
-}
-
-// --- Wave Equation Physics ---
-function updateWaveGrid(dt) {
-  const c2 = 180.0; // wave speed squared
-  const damping = 0.978;
-  const spread = 0.26;
-
-  // Tension & propagation passes
-  for (let step = 0; step < 2; step++) {
-    for (let i = 1; i < NUM_NODES - 1; i++) {
-      const force = (waterHeight[i - 1] + waterHeight[i + 1] - 2 * waterHeight[i]) * spread;
-      waterVel[i] += force;
-      waterVel[i] *= damping;
-      waterHeight[i] += waterVel[i];
-    }
-  }
-
-  // Boundary condition (absorbing edges)
-  waterVel[0] *= 0.8;
-  waterVel[NUM_NODES - 1] *= 0.8;
-}
-
-// Get total water surface elevation at horizontal coordinate x
-function getWaterY(x) {
-  // 1. Primary Gerstner & trochoidal swells
-  const t = simTime;
-  const windDir = windSpeed >= 0 ? 1 : -1;
-  const windFac = Math.abs(windSpeed) / 50;
-
-  const w1 = Math.sin(x * waveFreq - t * 2.2 * windDir) * waveAmplitude;
-  const w2 = Math.sin(x * waveFreq * 2.3 + t * 1.5 * windDir + 1.2) * (waveAmplitude * 0.35);
-  const w3 = Math.cos(x * waveFreq * 0.45 - t * 1.1 * windDir + 2.5) * (waveAmplitude * 0.4);
-  const chop = Math.sin(x * 0.04 - t * 4) * (waveAmplitude > 20 ? 4 : 1) * windFac;
-
-  // 2. Interpolate dynamic 1D heightfield
-  const nodeIndex = (x / nodeSpacing);
-  const i0 = Math.max(0, Math.min(NUM_NODES - 2, Math.floor(nodeIndex)));
-  const frac = nodeIndex - i0;
-  const dynamicH = waterHeight[i0] * (1 - frac) + waterHeight[i0 + 1] * frac;
-
-  return baseWaterLevel + w1 + w2 + w3 + chop + dynamicH;
-}
-
-// Water normal / slope at x
-function getWaterSlope(x) {
-  const eps = 4;
-  const y1 = getWaterY(x - eps);
-  const y2 = getWaterY(x + eps);
-  return (y2 - y1) / (2 * eps);
-}
-
-// Perturb dynamic water grid at screen point x
-function disturbWater(x, amount, radius = 40) {
-  const centerNode = Math.floor(x / nodeSpacing);
-  const nodeRadius = Math.ceil(radius / nodeSpacing);
-
-  for (let i = centerNode - nodeRadius; i <= centerNode + nodeRadius; i++) {
-    if (i >= 0 && i < NUM_NODES) {
-      const dist = Math.abs(i - centerNode) * nodeSpacing;
-      if (dist < radius) {
-        const falloff = 0.5 * (1 + Math.cos((Math.PI * dist) / radius));
-        waterHeight[i] += amount * falloff;
-        waterVel[i] += amount * 0.3 * falloff;
-      }
-    }
-  }
-}
-
-// --- Ship Definitions ---
-const SHIP_TYPES = [
-  {
-    id: 'speedboat',
-    name: 'Barracuda Speedboat',
-    emoji: '🚤',
-    length: 64,
-    height: 22,
-    mass: 1.2,
-    buoyancyFactor: 1.6,
-    maxThrust: 380,
-    rudderSpeed: 2.8,
-    draft: 8,
-    sinkThreshold: 120, // freeboard capacity
-    isSubmarine: false,
-    color: '#ff2d55',
-    accent: '#ffffff',
-    draw: drawSpeedboat
-  },
-  {
-    id: 'cargo',
-    name: 'Titan Container Ship',
-    emoji: '🚢',
-    length: 150,
-    height: 48,
-    mass: 9.5,
-    buoyancyFactor: 1.05,
-    maxThrust: 180,
-    rudderSpeed: 0.9,
-    draft: 22,
-    sinkThreshold: 240,
-    isSubmarine: false,
-    color: '#2c3e50',
-    accent: '#e67e22',
-    draw: drawCargoShip
-  },
-  {
-    id: 'sailboat',
-    name: 'Windseeker Sailing Yacht',
-    emoji: '⛵',
-    length: 78,
-    height: 68,
-    mass: 2.2,
-    buoyancyFactor: 1.35,
-    maxThrust: 140, // engine + sail
-    rudderSpeed: 2.0,
-    draft: 24, // deep keel
-    sinkThreshold: 130,
-    isSubmarine: false,
-    color: '#ffffff',
-    accent: '#2980b9',
-    draw: drawSailboat
-  },
-  {
-    id: 'ducky',
-    name: 'Rubber Duck XXL',
-    emoji: '🦆',
-    length: 52,
-    height: 46,
-    mass: 0.7,
-    buoyancyFactor: 2.6,
-    maxThrust: 160,
-    rudderSpeed: 3.5,
-    draft: 12,
-    sinkThreshold: 999, // Unsinkable funny meme duck
-    isSubmarine: false,
-    color: '#f1c40f',
-    accent: '#e67e22',
-    draw: drawDucky
-  },
-  {
-    id: 'trawler',
-    name: 'Northstar Trawler',
-    emoji: '🛥️',
-    length: 84,
-    height: 38,
-    mass: 3.8,
-    buoyancyFactor: 1.25,
-    maxThrust: 220,
-    rudderSpeed: 1.6,
-    draft: 15,
-    sinkThreshold: 160,
-    isSubmarine: false,
-    color: '#34495e',
-    accent: '#3498db',
-    draw: drawTrawler
-  },
-  {
-    id: 'viking',
-    name: 'Viking Drakkar',
-    emoji: '🛶',
-    length: 90,
-    height: 44,
-    mass: 2.4,
-    buoyancyFactor: 1.15,
-    maxThrust: 190,
-    rudderSpeed: 1.8,
-    draft: 10,
-    sinkThreshold: 85, // open hull - vulnerable to swamping!
-    isSubmarine: false,
-    color: '#8b5a2b',
-    accent: '#c0392b',
-    draw: drawViking
-  },
-  {
-    id: 'battleship',
-    name: 'Imperator Cruiser',
-    emoji: '⚓',
-    length: 165,
-    height: 42,
-    mass: 12.0,
-    buoyancyFactor: 1.1,
-    maxThrust: 260,
-    rudderSpeed: 1.1,
-    draft: 20,
-    sinkThreshold: 290,
-    isSubmarine: false,
-    color: '#7f8c8d',
-    accent: '#95a5a6',
-    draw: drawBattleship
-  },
-  {
-    id: 'submarine',
-    name: 'Nautilus Submarine',
-    emoji: '🟡',
-    length: 110,
-    height: 32,
-    mass: 5.5,
-    buoyancyFactor: 1.05,
-    maxThrust: 210,
-    rudderSpeed: 1.5,
-    draft: 16,
-    sinkThreshold: 9999, // Can dive underwater on purpose!
-    isSubmarine: true,
-    color: '#273c75',
-    accent: '#fbc531',
-    draw: drawSubmarine
-  }
+// ---------- Wellen ----------
+const env = { sea: 1, wind: 12, wdir: 30 * Math.PI / 180, t: 0, storm: 0 };
+const BASE_WAVES = [
+  { L: 62, A: 1.15, Q: 0.55, a: 0 },
+  { L: 37, A: 0.65, Q: 0.6, a: 0.55 },
+  { L: 21, A: 0.35, Q: 0.6, a: -0.7 },
+  { L: 11, A: 0.16, Q: 0.5, a: 1.3 },
+  { L: 6.5, A: 0.07, Q: 0.4, a: -1.6 }
 ];
-
-// Active Ship instance
-class Boat {
-  constructor(spec) {
-    this.spec = spec;
-    this.x = W * 0.45;
-    this.y = baseWaterLevel;
-    this.vx = 0;
-    this.vy = 0;
-    this.angle = 0;       // pitch angle (radians)
-    this.angularVel = 0;  // rad/s
-    this.throttle = 0;    // -1 to 1
-    this.rudder = 0;      // -1 to 1
-    this.waterIngress = 0; // accumulated flood (kg)
-    this.isCapsized = false;
-    this.isSunk = false;
-    this.submergeTarget = 0; // for submarine ballast
-    this.ballast = 0;        // 0 = surfaced, 1 = deep dive
-    this.sprayTimer = 0;
+const waves = BASE_WAVES.map(w => ({ ...w, k: 2 * Math.PI / w.L, w: Math.sqrt(G * 2 * Math.PI / w.L), dx: 1, dz: 0, amp: w.A }));
+function updateWaveParams() {
+  const windF = 0.55 + env.wind / 30;
+  for (const w of waves) {
+    const a = env.wdir + w.a * (0.6 + 0.4 * (1 - env.wind / 60));
+    w.dx = Math.cos(a); w.dz = Math.sin(a);
+    w.amp = w.A * env.sea * windF * (w.L < 15 ? 0.6 + env.wind / 25 : 1);
   }
-
-  reset() {
-    this.x = W * 0.45;
-    this.y = baseWaterLevel - 20;
-    this.vx = 0;
-    this.vy = 0;
-    this.angle = 0;
-    this.angularVel = 0;
-    this.waterIngress = 0;
-    this.isCapsized = false;
-    this.isSunk = false;
-    this.submergeTarget = 0;
-    this.ballast = 0;
-    this.throttle = 0;
-    const subBtn = document.getElementById('btnSubmarineDive');
-    if (subBtn) subBtn.textContent = '🟡 Dive';
-    document.getElementById('throttleSlider').value = 0;
-    updateThrottle(0);
+}
+updateWaveParams();
+const ripples = []; // {x,z,t0,amp}
+let rogue = null;   // {dx,dz,s,H,sigma,c}
+function horiz(x, z, t, out) {
+  let ox = 0, oz = 0;
+  for (const w of waves) {
+    const ph = w.k * (w.dx * x + w.dz * z) - w.w * t;
+    const c = Math.cos(ph) * w.Q * w.amp;
+    ox += w.dx * c; oz += w.dz * c;
   }
-
-  update(dt) {
-    // Substep so stiff buoyancy stays stable at high time speed
-    const steps = Math.ceil(dt / (1 / 120));
-    for (let s = 0; s < steps; s++) this.step(dt / steps);
+  out.x = ox; out.z = oz;
+}
+function heightAt0(x, z, t) {
+  let y = 0;
+  for (const w of waves) y += w.amp * Math.sin(w.k * (w.dx * x + w.dz * z) - w.w * t);
+  for (const r of ripples) {
+    const age = t - r.t0, d = Math.hypot(x - r.x, z - r.z), front = age * 9;
+    if (d > front + 6 || age > 14) continue;
+    const env2 = Math.exp(-d / 55) * Math.exp(-age / 6) * clamp((front + 6 - d) / 6, 0, 1);
+    y += r.amp * env2 * Math.sin(0.35 * d - 3.1 * age);
   }
+  if (rogue) {
+    const s = x * rogue.dx + z * rogue.dz - rogue.s;
+    const shape = s < 0 ? Math.exp(-(s * s) / (2 * rogue.sigma * rogue.sigma * 2.2)) : Math.exp(-(s * s) / (2 * rogue.sigma * rogue.sigma * 0.35));
+    const lat = x * -rogue.dz + z * rogue.dx;
+    y += rogue.H * shape * Math.exp(-(lat * lat) / (2 * 140 * 140)) - rogue.H * 0.35 * Math.exp(-((s + rogue.sigma * 2.2) ** 2) / (2 * rogue.sigma * rogue.sigma));
+  }
+  return y;
+}
+const _h = { x: 0, z: 0 };
+function waterHeight(x, z) {
+  // Inverse Gerstner-Verschiebung (2 Fixpunkt-Iterationen)
+  let px = x, pz = z;
+  for (let i = 0; i < 2; i++) { horiz(px, pz, env.t, _h); px = x - _h.x; pz = z - _h.z; }
+  return heightAt0(px, pz, env.t);
+}
 
-  step(dt) {
-    const f = dt * 60; // frame-rate independent damping exponent
-    // Effective mass with flooded water
-    const totalMass = this.spec.mass + (this.waterIngress * 0.05);
+// Wasser-Mesh (folgt der Kamera auf Rasterschritten)
+const W_SIZE = 260, W_SEG = 128, W_STEP = W_SIZE / W_SEG;
+const waterGeo = new THREE.PlaneGeometry(W_SIZE, W_SIZE, W_SEG, W_SEG); waterGeo.rotateX(-Math.PI / 2);
+const wBase = Float32Array.from(waterGeo.attributes.position.array);
+const wCol = new Float32Array(waterGeo.attributes.position.count * 3);
+waterGeo.setAttribute('color', new THREE.BufferAttribute(wCol, 3));
+const waterMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.12, metalness: 0.15, envMapIntensity: 1 });
+const water = new THREE.Mesh(waterGeo, waterMat); water.receiveShadow = true; scene.add(water);
+const farWater = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ color: 0x0f4a78, roughness: 0.25, metalness: 0.1 }));
+farWater.rotation.x = -Math.PI / 2; farWater.position.y = -0.6; scene.add(farWater);
+const deep = new THREE.Color(0x0b3d66), shallow = new THREE.Color(0x1f7fb0), foam = new THREE.Color(0xf2fbff), tmpC = new THREE.Color();
+function updateWater(cx, cz) {
+  const ox = Math.round(cx / W_STEP) * W_STEP, oz = Math.round(cz / W_STEP) * W_STEP;
+  const pos = waterGeo.attributes.position.array, t = env.t;
+  const ampSum = waves.reduce((a, w) => a + w.amp, 0) + 0.01;
+  for (let i = 0, n = pos.length / 3; i < n; i++) {
+    const bx = wBase[i * 3] + ox, bz = wBase[i * 3 + 2] + oz;
+    horiz(bx, bz, t, _h);
+    const y = heightAt0(bx, bz, t);
+    pos[i * 3] = bx + _h.x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = bz + _h.z;
+    const k = clamp((y / (ampSum * 1.1) + 0.55), 0, 1);
+    tmpC.copy(deep).lerp(shallow, k);
+    const f = clamp((y - ampSum * 0.62) / (ampSum * 0.4), 0, 1) + (rogue ? clamp((y - 3) / 4, 0, 1) : 0);
+    tmpC.lerp(foam, clamp(f, 0, 0.9));
+    wCol[i * 3] = tmpC.r; wCol[i * 3 + 1] = tmpC.g; wCol[i * 3 + 2] = tmpC.b;
+  }
+  waterGeo.attributes.position.needsUpdate = true; waterGeo.attributes.color.needsUpdate = true;
+  waterGeo.computeVertexNormals();
+  farWater.position.x = cx; farWater.position.z = cz;
+}
 
-    // Sample hull slices for buoyant force and torque
-    const halfL = this.spec.length * 0.5;
-    const slices = 16;
-    const sliceWidth = this.spec.length / slices;
-    let totalBuoyancy = 0;
-    let torque = 0;
-    let submergedSlices = 0;
-    const sliceWeight = (this.spec.mass * 9.81 * 4.2) / slices;
-
-    const cosA = Math.cos(this.angle);
-    const sinA = Math.sin(this.angle);
-
-    for (let i = 0; i < slices; i++) {
-      // Offset along hull from center
-      const lx = -halfL + (i + 0.5) * sliceWidth;
-      // World position of this hull slice bottom
-      const wx = this.x + (lx * cosA) - (this.spec.draft * sinA * 0.5);
-      const wy = this.y + (lx * sinA) + (this.spec.draft * cosA * 0.5);
-
-      const waterY = getWaterY(wx);
-      // Depth capped at hull height: fully submerged slice gives max buoyancy
-      const submergedDepth = Math.min(wy - waterY, this.spec.height);
-
-      if (submergedDepth > 0) {
-        submergedSlices++;
-        // Archimedes force per slice
-        // Scaled so a dry hull floats at draft / buoyancyFactor depth
-        let bForce = (submergedDepth / this.spec.draft) * sliceWeight * this.spec.buoyancyFactor;
-
-        // Submarine ballast tuning
-        if (this.spec.isSubmarine) {
-          bForce *= (1.0 - this.ballast * 0.98);
-        }
-        // Sunk hull has lost its buoyancy
-        if (this.isSunk) bForce *= 0.02;
-
-        // Add buoyant upward force
-        totalBuoyancy += bForce;
-
-        // Righting torque from buoyant center vs center of gravity
-        const leverArm = lx * cosA;
-        torque -= bForce * leverArm * 0.0019;
-
-        // Water drag on submerged hull
-        const relVx = this.vx - (windSpeed * 0.08);
-        this.vx -= relVx * 0.003 * dt;
-        this.angularVel -= this.angularVel * 0.02 * dt;
-
-        // Wave overtopping / ingress
-        const deckY = wy - (this.spec.height * cosA);
-        if (waterY < deckY && !this.spec.isSubmarine && this.spec.sinkThreshold < 900) {
-          const overDepth = deckY - waterY;
-          this.waterIngress += overDepth * dt * (this.spec.id === 'viking' ? 1.8 : 0.8);
-          if (Math.random() < 0.2) {
-            addBubble(wx, wy);
-          }
-        }
-      }
+// ---------- Schiffsmodelle ----------
+const std = o => new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.55, metalness: 0.1 }, o));
+function hullGeo(L, B, H, bow = 0.25, stern = 0.9) {
+  const s = new THREE.Shape();
+  s.moveTo(-L / 2, -B / 2 * stern);
+  s.lineTo(L / 2 - L * bow, -B / 2);
+  s.quadraticCurveTo(L / 2, -B * 0.2, L / 2, 0);
+  s.quadraticCurveTo(L / 2, B * 0.2, L / 2 - L * bow, B / 2);
+  s.lineTo(-L / 2, B / 2 * stern);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: H, bevelEnabled: true, bevelThickness: Math.min(0.4, H * 0.15), bevelSize: Math.min(0.3, B * 0.05), bevelSegments: 2, curveSegments: 10 });
+  g.rotateX(-Math.PI / 2);
+  // Kiel verjüngen: untere Vertices nach innen ziehen
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < H * 0.35) { const k = 1 - (H * 0.35 - y) / (H * 0.35) * 0.45; p.setZ(i, p.getZ(i) * k); } }
+  g.computeVertexNormals();
+  return g;
+}
+function addMesh(parent, geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
+  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+}
+const BOATS = [
+  { id: 'speed', name: 'Barracuda Rennboot', L: 9, B: 2.8, draft: 0.45, free: 0.9, mass: 2500, thrust: 16000, cx: 0.4, info: 'Schnell, leicht, springt über Wellenkämme – kippt bei Querseen.' },
+  { id: 'container', name: 'Titan Containerschiff', L: 70, B: 12, draft: 4.2, free: 3, mass: 2.4e6, thrust: 2.4e6, cx: 0.7, info: 'Riesig und träge. Monsterwellen brechen über den Bug.' },
+  { id: 'yacht', name: 'Windseeker Segelyacht', L: 13, B: 4, draft: 0.9, free: 1.2, mass: 9000, thrust: 6000, cx: 0.45, sail: 34, info: 'Segelt mit dem Wind – Krängung durch Seitenwind!' },
+  { id: 'duck', name: 'Gummiente XXL', L: 5, B: 4, draft: 0.5, free: 1.5, mass: 650, thrust: 1200, cx: 1.6, info: 'Unsinkbar. Unsteuerbar. Unverzichtbar.' },
+  { id: 'trawler', name: 'Northstar Trawler', L: 22, B: 6.5, draft: 1.8, free: 2.2, mass: 1.2e5, thrust: 9e4, cx: 0.8, info: 'Robuster Fischkutter mit hohem Aufbau.' },
+  { id: 'viking', name: 'Wikinger-Drakkar', L: 20, B: 4.2, draft: 0.65, free: 0.9, mass: 1.3e4, thrust: 1.6e4, cx: 0.5, sail: 40, info: 'Niedriges Freibord – nimmt gern Wasser über.' },
+  { id: 'cruiser', name: 'Imperator Kreuzfahrer', L: 80, B: 16, draft: 5, free: 7, mass: 4.5e6, thrust: 4e6, cx: 0.8, info: 'Schwimmendes Hochhaus mit viel Windangriffsfläche.' },
+  { id: 'sub', name: 'Nautilus U-Boot', L: 26, B: 3.6, draft: 1.8, free: 1.6, mass: 2.6e5, thrust: 2.2e5, cx: 0.35, sub: true, info: 'Q/E = Ballast. Taucht unter jede Monsterwelle.' }
+];
+function buildBoat(def) {
+  const g = new THREE.Group();
+  const { L, B, draft, free } = def, H = draft + free;
+  const hullAt = (geo, mat) => addMesh(g, geo, mat, 0, -draft, 0);
+  if (def.id === 'duck') {
+    const yel = std({ color: 0xffd21f, roughness: 0.3 });
+    const body = addMesh(g, new THREE.SphereGeometry(2.1, 24, 16), yel, 0, 0.3, 0); body.scale.set(1.2, 0.75, 0.95);
+    addMesh(g, new THREE.SphereGeometry(1.25, 20, 14), yel, 1.6, 2.1, 0);
+    addMesh(g, new THREE.SphereGeometry(0.55, 14, 10), std({ color: 0xff7a00 }), 2.75, 1.9, 0).scale.set(1.3, 0.45, 1);
+    for (const s of [-1, 1]) { addMesh(g, new THREE.SphereGeometry(0.22, 10, 8), std({ color: 0xffffff }), 2.55, 2.45, s * 0.5); addMesh(g, new THREE.SphereGeometry(0.11, 8, 6), std({ color: 0x111111 }), 2.72, 2.48, s * 0.52); }
+    addMesh(g, new THREE.ConeGeometry(0.7, 1.2, 10), yel, -2.3, 1.2, 0, 0, 0, 0.9);
+    return g;
+  }
+  if (def.id === 'sub') {
+    const steel = std({ color: 0x3a434c, metalness: 0.6, roughness: 0.4 });
+    const body = addMesh(g, new THREE.CapsuleGeometry(1.8, L - 3.6, 8, 20), steel, 0, 0, 0, 0, 0, Math.PI / 2);
+    addMesh(g, new THREE.BoxGeometry(5, 2.6, 1.6), steel, 2, 2.6, 0);
+    addMesh(g, new THREE.CylinderGeometry(0.12, 0.12, 2.5), steel, 2.6, 4.9, 0);
+    addMesh(g, new THREE.BoxGeometry(2.5, 0.15, 6), steel, -L / 2 + 2, 0, 0);
+    addMesh(g, new THREE.BoxGeometry(2.2, 3, 0.15), steel, -L / 2 + 1.5, 0, 0);
+    addMesh(g, new THREE.BoxGeometry(1.4, 0.12, 4.5), steel, 2.2, 2.2, 0);
+    for (let i = 0; i < 5; i++) addMesh(g, new THREE.CircleGeometry(0.3, 12), std({ color: 0xffe08a, emissive: 0x664400 }), -6 + i * 3, 0.6, 1.79, 0, 0, 0);
+    return g;
+  }
+  const hullCol = { speed: 0xffffff, container: 0x9c2a2a, yacht: 0xf6f6f6, trawler: 0x1d4f8a, viking: 0x6b4423, cruiser: 0xffffff }[def.id];
+  const hull = hullAt(hullGeo(L, B, H, def.id === 'viking' ? 0.35 : 0.22, def.id === 'viking' ? 0.4 : 0.92), std({ color: hullCol, roughness: def.id === 'viking' ? 0.9 : 0.4 }));
+  const bottom = new THREE.Mesh(new THREE.BoxGeometry(L * 0.8, 0.01, B * 0.6), std({ color: 0x8a1a1a })); bottom.position.y = -draft + 0.05; g.add(bottom);
+  addMesh(g, new THREE.BoxGeometry(L * 0.94, 0.12, B * 0.86), std({ color: def.id === 'viking' ? 0x8a6a43 : 0xc9b48a }), -L * 0.02, free + 0.02, 0);
+  if (def.id === 'speed') {
+    addMesh(g, new THREE.BoxGeometry(2.2, 0.9, 2.2), std({ color: 0x2233aa, transparent: true, opacity: 0.6, metalness: 0.5, roughness: 0.1 }), 0.6, free + 0.5, 0, 0, 0, -0.3);
+    addMesh(g, new THREE.BoxGeometry(L * 0.9, 0.25, 0.05), std({ color: 0xd6302c }), 0, 0.2, B / 2 - 0.05);
+    addMesh(g, new THREE.BoxGeometry(L * 0.9, 0.25, 0.05), std({ color: 0xd6302c }), 0, 0.2, -B / 2 + 0.05);
+    addMesh(g, new THREE.BoxGeometry(0.8, 1.0, 0.7), std({ color: 0x222222 }), -L / 2 - 0.2, 0.1, 0);
+  } else if (def.id === 'container') {
+    addMesh(g, new THREE.BoxGeometry(9, 9, B * 0.9), std({ color: 0xf1f1f1 }), -L / 2 + 6, free + 4.5, 0);
+    addMesh(g, new THREE.BoxGeometry(8, 0.5, B + 2), std({ color: 0xdddddd }), -L / 2 + 6, free + 9, 0);
+    addMesh(g, new THREE.CylinderGeometry(1.2, 1.5, 4, 12), std({ color: 0x222222 }), -L / 2 + 4, free + 11, 0);
+    const cols = [0xd6302c, 0x1d6be0, 0x2fb24c, 0xffb020, 0x7a3cff, 0x1b9aaa, 0xe86a2a];
+    const cg = new THREE.BoxGeometry(5.8, 2.5, 2.4);
+    const im = new THREE.InstancedMesh(cg, std({ color: 0xffffff, roughness: 0.7 }), 260);
+    let n = 0; const m = new THREE.Matrix4(), c = new THREE.Color();
+    for (let x = -L / 2 + 14; x < L / 2 - 8; x += 6.1) for (let z = -B / 2 + 1.6; z < B / 2 - 1; z += 2.5) {
+      const stack = 2 + Math.floor(Math.random() * 3);
+      for (let y = 0; y < stack && n < 260; y++) { m.makeTranslation(x, free + 1.3 + y * 2.55, z); im.setMatrixAt(n, m); im.setColorAt(n, c.setHex(cols[Math.floor(Math.random() * cols.length)])); n++; }
     }
-
-    // Bilge pumps: automatically pump out water if not overwhelmed
-    if (this.waterIngress > 0) {
-      const pumpRate = this.spec.id === 'cargo' ? 12 : 6;
-      this.waterIngress = Math.max(0, this.waterIngress - pumpRate * dt);
+    im.count = n; im.castShadow = true; g.add(im);
+  } else if (def.id === 'yacht' || def.id === 'viking') {
+    const mastH = def.id === 'yacht' ? 15 : 10;
+    addMesh(g, new THREE.CylinderGeometry(0.12, 0.16, mastH), std({ color: def.id === 'yacht' ? 0xdddddd : 0x5a3a1a }), def.id === 'yacht' ? 1 : 0, free + mastH / 2, 0);
+    const boom = new THREE.Group(); boom.position.set(def.id === 'yacht' ? 1 : 0, free + (def.id === 'yacht' ? 1.4 : 2), 0); g.add(boom);
+    let sailGeo;
+    if (def.id === 'yacht') { const s = new THREE.Shape(); s.moveTo(0, 0); s.lineTo(-5.5, 0); s.lineTo(0, mastH - 2); s.closePath(); sailGeo = new THREE.ShapeGeometry(s); addMesh(boom, new THREE.CylinderGeometry(0.08, 0.08, 5.6), std({ color: 0xcccccc }), -2.8, 0, 0, 0, 0, Math.PI / 2); }
+    else { sailGeo = new THREE.PlaneGeometry(6, 6.5); sailGeo.translate(0, 4, 0); sailGeo.rotateY(Math.PI / 2); }
+    const sailTex = def.id === 'viking' ? (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; const x = c.getContext('2d'); for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#c8202a' : '#f1e6c8'; x.fillRect(i * 8, 0, 8, 64); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })() : null;
+    const sail = addMesh(boom, sailGeo, std({ color: 0xffffff, map: sailTex, side: THREE.DoubleSide, roughness: 0.9 }));
+    g.userData.boom = boom;
+    if (def.id === 'viking') {
+      for (let i = 0; i < 7; i++) for (const s of [-1, 1]) addMesh(g, new THREE.CircleGeometry(0.55, 14), std({ color: [0xd6302c, 0xffd21f, 0x1d6be0][i % 3], side: THREE.DoubleSide }), -6 + i * 2, free - 0.2, s * (B / 2 + 0.05), 0, s > 0 ? 0 : Math.PI, 0);
+      addMesh(g, new THREE.ConeGeometry(0.4, 3, 8), std({ color: 0x6b4423 }), L / 2 - 0.4, free + 1.6, 0, 0, 0, -0.5);
+      addMesh(g, new THREE.SphereGeometry(0.6, 10, 8), std({ color: 0x4a2a13 }), L / 2 + 0.3, free + 3, 0);
+    } else {
+      addMesh(g, new THREE.BoxGeometry(4, 0.8, 2.6), std({ color: 0xf6f6f6 }), -1.5, free + 0.4, 0);
+      addMesh(g, new THREE.BoxGeometry(0.15, 2.4, 0.5), std({ color: 0x333333 }), -L * 0.15, -draft - 1.2, 0);
     }
-
-    // Check capsizing (> 75 degrees roll/pitch)
-    const absDeg = Math.abs(this.angle * (180 / Math.PI));
-    if (absDeg > 75 && !this.spec.isSubmarine) {
-      this.isCapsized = true;
-      this.waterIngress += 40 * dt;
-    }
-
-    // Check sunk
-    if (this.waterIngress > this.spec.sinkThreshold && !this.spec.isSubmarine) {
-      this.isSunk = true;
-    }
-
-    // Submarine ballast dive / surface adjustment
-    if (this.spec.isSubmarine) {
-      this.ballast += (this.submergeTarget - this.ballast) * (1 - Math.pow(0.97, f));
-    }
-
-    // Gravity force
-    const gravity = totalMass * 9.81 * 4.2;
-
-    // Net vertical acceleration (screen y points down: gravity +, buoyancy -)
-    const netFvertical = gravity - totalBuoyancy;
-    this.vy += (netFvertical / totalMass) * dt;
-
-    // Water damping
-    this.vy *= Math.pow(0.96, f);
-    this.vx *= Math.pow(0.985, f);
-    this.angularVel *= Math.pow(0.94, f);
-
-    // Self-righting torque (metacentric keel restoring force)
-    const rightingMoment = -Math.sin(this.angle) * (this.spec.id === 'sailboat' ? 65 : 28);
-    torque += rightingMoment;
-
-    // Apply torque
-    this.angularVel += (torque / (totalMass * 18)) * dt;
-
-    // Propulsion / Throttle thrust along boat heading
-    const thrustMagnitude = this.throttle * this.spec.maxThrust * 0.03;
-    const fx = Math.cos(this.angle) * thrustMagnitude;
-    const fy = Math.sin(this.angle) * thrustMagnitude * 0.5;
-
-    this.vx += (fx / totalMass) * dt;
-    this.vy += (fy / totalMass) * dt;
-
-    // Rudder turn steering (scales with forward speed)
-    if (Math.abs(this.rudder) > 0.01) {
-      const steerPower = (Math.abs(this.vx) + 1.5) * this.spec.rudderSpeed * 0.015;
-      this.angularVel += this.rudder * steerPower * dt;
-    }
-
-    // Integrate motion
-    this.x += this.vx * dt * 40;
-    this.y += this.vy * dt * 40;
-    this.angle += this.angularVel * dt;
-
-    // Ocean boundary wrapping / soft rebound
-    if (this.x < 40) { this.x = 40; this.vx = Math.abs(this.vx) * 0.5; }
-    if (this.x > W - 40) { this.x = W - 40; this.vx = -Math.abs(this.vx) * 0.5; }
-
-    // Seabed bottom collision
-    const seaFloor = H - 25;
-    if (this.y > seaFloor) {
-      this.y = seaFloor;
-      this.vy = 0;
-      this.vx *= 0.8;
-      this.angularVel *= 0.8;
-    }
-
-    // Wake and propeller spray (scaled to substep length)
-    if (Math.abs(this.throttle) > 0.1 && submergedSlices > 2 && Math.random() < f) {
-      const sternX = this.x - Math.cos(this.angle) * halfL;
-      const sternY = this.y - Math.sin(this.angle) * halfL;
-      if (Math.random() < 0.6) {
-        addSplash(sternX, sternY, 3, -this.vx * 0.8, -1.5, 'rgba(255,255,255,0.7)');
-      }
-      if (this.spec.id !== 'ducky' && this.spec.id !== 'sailboat' && Math.random() < 0.25) {
-        addSmoke(this.x, this.y - this.spec.height * 0.6, -this.vx * 0.2, -1);
-      }
-    }
-
-    // Bow wave spray when slamming into waves
-    const bowX = this.x + Math.cos(this.angle) * halfL;
-    const bowY = this.y + Math.sin(this.angle) * halfL;
-    const bowWaterY = getWaterY(bowX);
-    if (bowY > bowWaterY + 6 && Math.abs(this.vx) > 1.2 && Math.random() < f) {
-      addSplash(bowX, bowWaterY, Math.floor(Math.abs(this.vx) * 2), this.vx * 0.4, -3);
-    }
+  } else if (def.id === 'trawler') {
+    addMesh(g, new THREE.BoxGeometry(6, 3.4, 4.6), std({ color: 0xf1f1f1 }), 3, free + 1.7, 0);
+    addMesh(g, new THREE.BoxGeometry(4, 1.6, 4), std({ color: 0xf1f1f1 }), 3.2, free + 4.2, 0);
+    addMesh(g, new THREE.CylinderGeometry(0.15, 0.15, 7), std({ color: 0xffb020 }), -5, free + 3.5, 0, 0, 0, 0.3);
+    addMesh(g, new THREE.CylinderGeometry(0.15, 0.15, 7), std({ color: 0xffb020 }), -5, free + 3.5, 0, 0.6, 0, -0.3);
+    addMesh(g, new THREE.CylinderGeometry(0.5, 0.6, 2), std({ color: 0x222222 }), 1, free + 5.2, 0);
+  } else if (def.id === 'cruiser') {
+    for (let i = 0; i < 6; i++) addMesh(g, new THREE.BoxGeometry(L * (0.72 - i * 0.07), 2.6, B * (0.92 - i * 0.04)), std({ color: 0xffffff }), -L * 0.05 - i * 1.2, free + 1.3 + i * 2.6, 0);
+    const winTex = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 16; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 256, 16); x.fillStyle = '#1b3a5c'; for (let i = 2; i < 256; i += 8) x.fillRect(i, 4, 5, 8); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.repeat.set(4, 1); return t; })();
+    for (let i = 0; i < 5; i++) for (const s of [-1, 1]) addMesh(g, new THREE.PlaneGeometry(L * (0.7 - i * 0.07), 1.6), std({ map: winTex }), -L * 0.05 - i * 1.2, free + 1.3 + i * 2.6, s * (B * (0.92 - i * 0.04) / 2 + 0.02), 0, s > 0 ? 0 : Math.PI, 0);
+    addMesh(g, new THREE.CylinderGeometry(2.2, 2.6, 6, 14), std({ color: 0xd6302c }), -L * 0.25, free + 19, 0);
+    addMesh(g, new THREE.CylinderGeometry(2.25, 2.25, 1.2, 14), std({ color: 0x111111 }), -L * 0.25, free + 22, 0);
   }
+  return g;
+}
 
-  draw() {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.angle);
-
-    // Call individual ship custom vector draw
-    this.spec.draw(ctx, this);
-
-    ctx.restore();
+// ---------- Rigid Body ----------
+const boat = {
+  def: null, mesh: null, pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(), w: new THREE.Vector3(),
+  I: new THREE.Vector3(), pts: [], kp: 0, throttle: 0, rudder: 0, ballast: 1, flood: 0, capT: 0, capsized: false, maxHeel: 0
+};
+function selectBoat(i) {
+  const def = BOATS[i];
+  if (boat.mesh) scene.remove(boat.mesh);
+  boat.def = def; boat.mesh = buildBoat(def); scene.add(boat.mesh);
+  const { L, B, draft, free } = def, H = draft + free;
+  const m = def.mass;
+  boat.I.set(m * (B * B + H * H) / 12 * 1.4, m * (L * L + B * B) / 12, m * (L * L + H * H) / 12);
+  boat.pts = [];
+  const nx = def.id === 'duck' ? 3 : 7, nz = def.sub ? 1 : 3;
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+    const fx = nx === 1 ? 0 : i / (nx - 1) - 0.5, fz = nz === 1 ? 0 : j / (nz - 1) - 0.5;
+    const taper = fx > 0.3 ? 1 - (fx - 0.3) * 2.2 : 1;
+    boat.pts.push(new THREE.Vector3(fx * L * 0.92, -draft, fz * B * 0.85 * taper));
   }
+  boat.kp = m * G / (boat.pts.length * draft);
+  boat.hMax = def.sub ? draft * 2 : H;
+  $('boatInfo').innerHTML = `<b>${def.name}</b><br>${def.info}<br>Länge ${L} m · Breite ${B} m · ${(def.mass / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} t`;
+  $('ctrlTxt').textContent = def.sub ? 'Gas · Ballast Q/E' : 'Gas';
+  resetBoat();
+  camDist = clamp(L * 1.6 + 10, 18, 170);
 }
-
-let activeBoat = new Boat(SHIP_TYPES[0]);
-
-// --- Drawing Ships (Vector Art) ---
-function drawSpeedboat(ctx, b) {
-  const L = b.spec.length;
-  // Hull
-  ctx.beginPath();
-  ctx.moveTo(L * 0.5, 4);
-  ctx.lineTo(-L * 0.45, 8);
-  ctx.lineTo(-L * 0.48, -4);
-  ctx.lineTo(L * 0.35, -7);
-  ctx.closePath();
-  ctx.fillStyle = '#ff2d55';
-  ctx.fill();
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Windshield & Cockpit
-  ctx.beginPath();
-  ctx.moveTo(-L * 0.1, -7);
-  ctx.lineTo(L * 0.15, -7);
-  ctx.lineTo(L * 0.05, -16);
-  ctx.lineTo(-L * 0.12, -14);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(0, 210, 255, 0.7)';
-  ctx.fill();
-  ctx.strokeStyle = '#00d2ff';
-  ctx.stroke();
-
-  // Racing stripe
-  ctx.beginPath();
-  ctx.moveTo(-L * 0.4, 1);
-  ctx.lineTo(L * 0.4, 0);
-  ctx.strokeStyle = '#ffd700';
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-
-  // Outboard Motor
-  ctx.fillStyle = '#111';
-  ctx.fillRect(-L * 0.52, -2, 6, 12);
-}
-
-function drawCargoShip(ctx, b) {
-  const L = b.spec.length;
-  // Deep hull
-  ctx.beginPath();
-  ctx.moveTo(L * 0.52, -10);
-  ctx.lineTo(L * 0.48, 14);
-  ctx.lineTo(-L * 0.48, 14);
-  ctx.lineTo(-L * 0.5, -10);
-  ctx.closePath();
-  ctx.fillStyle = '#1e272e';
-  ctx.fill();
-  ctx.strokeStyle = '#e74c3c';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Red waterline stripe
-  ctx.fillStyle = '#c0392b';
-  ctx.fillRect(-L * 0.48, 5, L * 0.96, 6);
-
-  // Deck Bridge Tower at Stern
-  ctx.fillStyle = '#ecf0f1';
-  ctx.fillRect(-L * 0.42, -32, 28, 22);
-  ctx.fillStyle = '#3498db';
-  ctx.fillRect(-L * 0.38, -28, 20, 6); // windows
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(-L * 0.32, -40, 8, 10); // Funnel
-
-  // Stacks of Cargo Containers
-  const colors = ['#e67e22', '#2980b9', '#27ae60', '#f39c12', '#8e44ad'];
-  for (let c = 0; c < 5; c++) {
-    const cx = -L * 0.15 + c * 18;
-    // Row 1
-    ctx.fillStyle = colors[c % colors.length];
-    ctx.fillRect(cx, -18, 16, 8);
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 0.8;
-    ctx.strokeRect(cx, -18, 16, 8);
-    // Row 2 (if not sinking)
-    if (!b.isCapsized) {
-      ctx.fillStyle = colors[(c + 2) % colors.length];
-      ctx.fillRect(cx, -26, 16, 8);
-      ctx.strokeRect(cx, -26, 16, 8);
-    }
-  }
-}
-
-function drawSailboat(ctx, b) {
-  const L = b.spec.length;
-  // Sleek hull
-  ctx.beginPath();
-  ctx.moveTo(L * 0.5, -4);
-  ctx.lineTo(L * 0.35, 10);
-  ctx.lineTo(-L * 0.45, 8);
-  ctx.lineTo(-L * 0.48, -4);
-  ctx.closePath();
-  ctx.fillStyle = '#f5f6fa';
-  ctx.fill();
-  ctx.strokeStyle = '#2f3640';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Heavy Deep Keel with Lead Bulb
-  ctx.beginPath();
-  ctx.moveTo(-L * 0.05, 10);
-  ctx.lineTo(L * 0.05, 10);
-  ctx.lineTo(L * 0.02, 28);
-  ctx.lineTo(-L * 0.08, 28);
-  ctx.closePath();
-  ctx.fillStyle = '#718093';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(-L * 0.03, 28, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#2f3640';
-  ctx.fill();
-
-  // Tall Mast
-  ctx.strokeStyle = '#4b6584';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(0, -4);
-  ctx.lineTo(0, -58);
-  ctx.stroke();
-
-  // Billowing Main Sail (curve reacts to wind)
-  const sailBulge = windSpeed * 0.15;
-  ctx.beginPath();
-  ctx.moveTo(0, -56);
-  ctx.quadraticCurveTo(-L * 0.25 - sailBulge, -30, -L * 0.4, -8);
-  ctx.lineTo(0, -8);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0, 150, 255, 0.4)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Jib (front sail)
-  ctx.beginPath();
-  ctx.moveTo(0, -52);
-  ctx.quadraticCurveTo(L * 0.25 + sailBulge * 0.5, -25, L * 0.42, -6);
-  ctx.lineTo(0, -6);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(230, 245, 255, 0.85)';
-  ctx.fill();
-}
-
-function drawDucky(ctx, b) {
-  const L = b.spec.length;
-  // Ducky body
-  ctx.beginPath();
-  ctx.ellipse(0, 4, L * 0.45, 16, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#f1c40f';
-  ctx.fill();
-  ctx.strokeStyle = '#f39c12';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Ducky head
-  ctx.beginPath();
-  ctx.arc(L * 0.22, -14, 14, 0, Math.PI * 2);
-  ctx.fillStyle = '#f1c40f';
-  ctx.fill();
-  ctx.stroke();
-
-  // Eye
-  ctx.beginPath();
-  ctx.arc(L * 0.26, -16, 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = '#000';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(L * 0.27, -17, 1, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff';
-  ctx.fill();
-
-  // Orange Beak
-  ctx.beginPath();
-  ctx.moveTo(L * 0.32, -14);
-  ctx.lineTo(L * 0.52, -11);
-  ctx.lineTo(L * 0.32, -7);
-  ctx.closePath();
-  ctx.fillStyle = '#e67e22';
-  ctx.fill();
-
-  // Wing
-  ctx.beginPath();
-  ctx.ellipse(-L * 0.08, 0, 12, 7, -0.2, 0, Math.PI * 2);
-  ctx.fillStyle = '#f39c12';
-  ctx.fill();
-}
-
-function drawTrawler(ctx, b) {
-  const L = b.spec.length;
-  // Hull
-  ctx.beginPath();
-  ctx.moveTo(L * 0.5, -6);
-  ctx.lineTo(L * 0.35, 12);
-  ctx.lineTo(-L * 0.45, 10);
-  ctx.lineTo(-L * 0.48, -4);
-  ctx.closePath();
-  ctx.fillStyle = '#2c3e50';
-  ctx.fill();
-  ctx.strokeStyle = '#3498db';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Cabin
-  ctx.fillStyle = '#ecf0f1';
-  ctx.fillRect(-L * 0.15, -24, 26, 18);
-  ctx.fillStyle = '#3498db';
-  ctx.fillRect(-L * 0.05, -20, 12, 6); // windshield
-
-  // Mast & Rigging / Radar
-  ctx.strokeStyle = '#7f8c8d';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(L * 0.1, -6);
-  ctx.lineTo(L * 0.1, -36);
-  ctx.lineTo(-L * 0.35, -6);
-  ctx.stroke();
-
-  // Trawl net winch
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(-L * 0.35, -10, 8, 8);
-}
-
-function drawViking(ctx, b) {
-  const L = b.spec.length;
-  // Longship wooden hull with curved prow and stern
-  ctx.beginPath();
-  ctx.moveTo(L * 0.55, -22); // dragon head
-  ctx.quadraticCurveTo(L * 0.48, -5, L * 0.4, 8);
-  ctx.lineTo(-L * 0.4, 8);
-  ctx.quadraticCurveTo(-L * 0.48, -5, -L * 0.52, -20); // tail
-  ctx.quadraticCurveTo(-L * 0.42, 2, -L * 0.35, 3);
-  ctx.lineTo(L * 0.35, 3);
-  ctx.closePath();
-  ctx.fillStyle = '#8b5a2b';
-  ctx.fill();
-  ctx.strokeStyle = '#5c3a1e';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Viking Shields along gunwale
-  const shieldColors = ['#c0392b', '#f1c40f', '#2980b9'];
-  for (let i = 0; i < 6; i++) {
-    const sx = -L * 0.28 + i * 11;
-    ctx.beginPath();
-    ctx.arc(sx, 0, 5, 0, Math.PI * 2);
-    ctx.fillStyle = shieldColors[i % 3];
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
-
-  // Mast & Striped Square Sail
-  ctx.strokeStyle = '#5c3a1e';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(0, 3);
-  ctx.lineTo(0, -40);
-  ctx.stroke();
-
-  // Sail
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(-18, -38, 36, 26);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(-6, -38, 12, 26);
-}
-
-function drawBattleship(ctx, b) {
-  const L = b.spec.length;
-  // Armored Gunmetal Hull
-  ctx.beginPath();
-  ctx.moveTo(L * 0.52, -8);
-  ctx.lineTo(L * 0.42, 16);
-  ctx.lineTo(-L * 0.45, 14);
-  ctx.lineTo(-L * 0.5, -8);
-  ctx.closePath();
-  ctx.fillStyle = '#57606f';
-  ctx.fill();
-  ctx.strokeStyle = '#2f3542';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Superstructure
-  ctx.fillStyle = '#747d8c';
-  ctx.fillRect(-L * 0.2, -26, 42, 18);
-  ctx.fillStyle = '#2ed573';
-  ctx.fillRect(-L * 0.05, -34, 12, 8); // bridge tower
-
-  // Twin Gun Turrets (Bow and Stern)
-  [L * 0.24, -L * 0.32].forEach((tx, idx) => {
-    ctx.fillStyle = '#2f3542';
-    ctx.beginPath();
-    ctx.arc(tx, -11, 8, 0, Math.PI * 2);
-    ctx.fill();
-    // Gun barrels
-    ctx.strokeStyle = '#1e272e';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(tx, -11);
-    ctx.lineTo(tx + (idx === 0 ? 18 : -18), -15);
-    ctx.stroke();
-  });
-}
-
-function drawSubmarine(ctx, b) {
-  const L = b.spec.length;
-  // Teardrop Hull
-  ctx.beginPath();
-  ctx.ellipse(0, 0, L * 0.48, 13, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#1e272e';
-  ctx.fill();
-  ctx.strokeStyle = '#fbc531';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Conning Tower (Sail)
-  ctx.fillStyle = '#2f3542';
-  ctx.fillRect(-L * 0.08, -22, 16, 12);
-  // Periscope
-  ctx.strokeStyle = '#f5f6fa';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(-L * 0.02, -22);
-  ctx.lineTo(-L * 0.02, -30);
-  ctx.lineTo(L * 0.04, -30);
-  ctx.stroke();
-
-  // Propeller at stern
-  ctx.fillStyle = '#fbc531';
-  ctx.fillRect(-L * 0.5, -6, 4, 12);
-
-  // Ballast flood indicator LED
-  ctx.beginPath();
-  ctx.arc(0, 0, 4, 0, Math.PI * 2);
-  ctx.fillStyle = b.ballast > 0.5 ? '#e74c3c' : '#2ecc71';
-  ctx.fill();
-}
-
-// --- Render Sky & Ocean Background ---
-function drawSky() {
-  const grad = ctx.createLinearGradient(0, 0, 0, baseWaterLevel + 100);
-  if (stormIntensity > 0.4) {
-    // Storm sky
-    grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(0.6, '#1e293b');
-    grad.addColorStop(1, '#334155');
-  } else {
-    // Sunset / Dusk Ocean Sky
-    grad.addColorStop(0, '#0a192f');
-    grad.addColorStop(0.4, '#1b2a4a');
-    grad.addColorStop(0.7, '#243b60');
-    grad.addColorStop(1, '#3b537d');
-  }
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
-
-  // Lightning Flash
-  if (lightningFlash > 0) {
-    ctx.fillStyle = `rgba(255, 255, 255, ${lightningFlash * 0.75})`;
-    ctx.fillRect(0, 0, W, H);
-    lightningFlash = Math.max(0, lightningFlash - 0.08);
-  }
-
-  // Distant clouds
-  ctx.fillStyle = stormIntensity > 0.4 ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.06)';
-  for (let c = 0; c < 5; c++) {
-    const cx = ((simTime * 15 + c * 320) % (W + 400)) - 200;
-    const cy = 40 + (c % 3) * 35;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 55, 0, Math.PI * 2);
-    ctx.arc(cx + 45, cy - 12, 45, 0, Math.PI * 2);
-    ctx.arc(cx + 90, cy, 50, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Rain in storm mode
-  if (stormIntensity > 0.2) {
-    ctx.strokeStyle = 'rgba(200, 230, 255, 0.35)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    for (let r of rainDrops) {
-      r.y += r.speed * (1 + stormIntensity * 0.5);
-      r.x += windSpeed * 0.15;
-      if (r.y > baseWaterLevel) {
-        if (Math.random() < 0.2) disturbWater(r.x, 0.4, 15);
-        r.y = -20;
-        r.x = Math.random() * (W + 400) - 200;
-      }
-      ctx.moveTo(r.x, r.y);
-      ctx.lineTo(r.x + windSpeed * 0.2, r.y + r.len);
-    }
-    ctx.stroke();
-  }
-}
-
-// Render Water Mesh with Depth Gradient, Caustics, and Crest Highlights
-function drawWater() {
-  // Step 1: Deep water fill
-  ctx.beginPath();
-  ctx.moveTo(0, H);
-  const step = 4;
-  for (let x = 0; x <= W; x += step) {
-    const y = getWaterY(x);
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(W, H);
-  ctx.closePath();
-
-  const waterGrad = ctx.createLinearGradient(0, baseWaterLevel - 50, 0, H);
-  if (stormIntensity > 0.4) {
-    waterGrad.addColorStop(0, 'rgba(15, 42, 68, 0.94)');
-    waterGrad.addColorStop(0.3, '#0b233a');
-    waterGrad.addColorStop(1, '#05121d');
-  } else {
-    waterGrad.addColorStop(0, 'rgba(0, 150, 215, 0.88)');
-    waterGrad.addColorStop(0.2, '#006699');
-    waterGrad.addColorStop(0.6, '#003d5c');
-    waterGrad.addColorStop(1, '#001a29');
-  }
-  ctx.fillStyle = waterGrad;
-  ctx.fill();
-
-  // Step 2: Surface highlight & foam crests
-  ctx.beginPath();
-  for (let x = 0; x <= W; x += step) {
-    const y = getWaterY(x);
-    if (x === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.strokeStyle = stormIntensity > 0.4 ? 'rgba(170, 220, 245, 0.75)' : 'rgba(0, 230, 255, 0.85)';
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-
-  // Foam on steep wave crests
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  for (let x = 10; x < W - 10; x += 16) {
-    const y = getWaterY(x);
-    const slope = Math.abs(getWaterSlope(x));
-    if (y < baseWaterLevel - 15 || slope > 0.35) {
-      ctx.beginPath();
-      ctx.arc(x, y - 1, 2 + slope * 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  // Seabed details
-  ctx.fillStyle = '#0a1622';
-  ctx.fillRect(0, H - 20, W, 20);
-  ctx.strokeStyle = 'rgba(64, 169, 255, 0.2)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, H - 20);
-  ctx.lineTo(W, H - 20);
-  ctx.stroke();
-}
-
-function updateAndDrawParticles(dt) {
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy += p.gravity;
-    p.alpha -= p.decay;
-
-    if (p.alpha <= 0 || p.y > H) {
-      particles.splice(i, 1);
-      continue;
-    }
-
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, p.alpha);
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-// --- Main Simulation Loop ---
-let lastTime = performance.now();
-
-function loop(currentTime) {
-  const rawDt = Math.min((currentTime - lastTime) / 1000, 0.05);
-  lastTime = currentTime;
-  const dt = rawDt * timeSpeed;
-
-  if (dt > 0) {
-    simTime += dt;
-    updateWaveGrid(dt);
-    activeBoat.update(dt);
-  }
-
-  // Draw Scene
-  ctx.clearRect(0, 0, W, H);
-  drawSky();
-  activeBoat.draw();
-  drawWater();
-  updateAndDrawParticles(dt);
-
-  updateTelemetryHUD();
-
-  requestAnimationFrame(loop);
-}
-
-// --- Telemetry & HUD Update ---
-function updateTelemetryHUD() {
-  const b = activeBoat;
-  document.getElementById('hudShipName').textContent = b.spec.name;
-
-  const speedKnots = Math.abs(b.vx * 7.5).toFixed(1);
-  document.getElementById('hudSpeed').textContent = `${speedKnots} kn`;
-
-  const deg = (b.angle * (180 / Math.PI)).toFixed(1);
-  document.getElementById('hudAngle').textContent = `${deg}°`;
-
-  const draftM = Math.max(0, (b.y - baseWaterLevel) * 0.1).toFixed(1);
-  document.getElementById('hudDraft').textContent = `${draftM} m`;
-
-  const buoyancyPct = Math.min(150, Math.max(0, 100 - (b.waterIngress * 0.4))).toFixed(0);
-  document.getElementById('hudBuoyancy').textContent = `${buoyancyPct}%`;
-
-  const floodPct = Math.min(100, (b.waterIngress / (b.spec.sinkThreshold || 100)) * 100).toFixed(0);
-  document.getElementById('hudFlood').textContent = `${floodPct}%`;
-  document.getElementById('hudFloodBar').style.width = `${floodPct}%`;
-
-  // Status Badge
-  const statusBadge = document.getElementById('hudStatus');
-  if (b.isSunk) {
-    statusBadge.textContent = 'SUNK';
-    statusBadge.className = 'status-pill status-danger';
-  } else if (b.isCapsized) {
-    statusBadge.textContent = 'CAPSIZED';
-    statusBadge.className = 'status-pill status-danger';
-  } else if (b.waterIngress > 30) {
-    statusBadge.textContent = 'LEAKING / FLOODED';
-    statusBadge.className = 'status-pill status-warn';
-  } else if (Math.abs(deg) > 20) {
-    statusBadge.textContent = 'LISTING';
-    statusBadge.className = 'status-pill status-warn';
-  } else {
-    statusBadge.textContent = 'STABLE';
-    statusBadge.className = 'status-pill status-good';
-  }
-}
-
-// --- Ship Selection UI ---
-function initShipGrid() {
-  const grid = document.getElementById('shipGrid');
-  grid.innerHTML = SHIP_TYPES.map((ship, idx) => `
-    <button class="ship-btn ${idx === 0 ? 'active' : ''}" onclick="selectShip('${ship.id}')" id="shipBtn_${ship.id}">
-      <span class="emoji">${ship.emoji}</span>
-      <span>${ship.name.split(' ')[0]}</span>
-    </button>
-  `).join('');
-}
-
-function selectShip(shipId) {
-  const found = SHIP_TYPES.find(s => s.id === shipId);
-  if (!found) return;
-
-  activeBoat = new Boat(found);
-
-  // Update UI active button
-  document.querySelectorAll('.ship-btn').forEach(btn => btn.classList.remove('active'));
-  const btn = document.getElementById(`shipBtn_${shipId}`);
-  if (btn) btn.classList.add('active');
-
-  const subBtn = document.getElementById('btnSubmarineDive');
-  if (subBtn) {
-    subBtn.style.display = found.isSubmarine ? 'inline-flex' : 'none';
-    subBtn.textContent = '🟡 Dive';
-  }
-
-  showToast(`Ship changed: ${found.name}`);
-  playTone(320, 0.12, 'triangle', 0.15);
-}
-
-function toggleSubmarineDive() {
-  if (!activeBoat.spec.isSubmarine) return;
-  activeBoat.submergeTarget = activeBoat.submergeTarget > 0.5 ? 0 : 1;
-  const isDiving = activeBoat.submergeTarget > 0.5;
-  const btn = document.getElementById('btnSubmarineDive');
-  if (btn) btn.textContent = isDiving ? '🟢 Surface' : '🟡 Dive';
-  showToast(isDiving ? 'Dive tanks FLOODED: submarine is diving!' : 'Tanks BLOWN: submarine is surfacing!');
-  playTone(isDiving ? 160 : 380, 0.2, 'sine', 0.15);
-}
-
-// --- Interactive Wave Drawing & Touch Events ---
-let isDrawingWave = false;
-let drawWaveMode = false;
-let lastPointerX = 0;
-let lastPointerY = 0;
-
-function toggleDrawWaveMode() {
-  drawWaveMode = !drawWaveMode;
-  const btn = document.getElementById('btnDrawWave');
-  const banner = document.getElementById('drawBanner');
-  if (drawWaveMode) {
-    btn.classList.add('active');
-    banner.classList.add('show');
-    showToast('Wave drawing mode ON: drag in the water!');
-  } else {
-    btn.classList.remove('active');
-    banner.classList.remove('show');
-    showToast('Wave drawing mode OFF');
-  }
-}
-
-canvas.addEventListener('pointerdown', (e) => {
-  initAudio();
-  isDrawingWave = true;
-  lastPointerX = e.clientX;
-  lastPointerY = e.clientY;
-  handlePointerWave(e.clientX, e.clientY, 0);
-});
-
-window.addEventListener('pointermove', (e) => {
-  if (!isDrawingWave) return;
-  const dy = e.clientY - lastPointerY;
-  handlePointerWave(e.clientX, e.clientY, dy);
-  lastPointerX = e.clientX;
-  lastPointerY = e.clientY;
-});
-
-window.addEventListener('pointerup', () => { isDrawingWave = false; });
-window.addEventListener('pointercancel', () => { isDrawingWave = false; });
-
-function handlePointerWave(px, py, dy) {
-  // If in draw mode, or clicking near the water surface, displace water
-  const waterY = getWaterY(px);
-  const distFromSurface = Math.abs(py - waterY);
-
-  if (drawWaveMode || distFromSurface < 160) {
-    const waveDisplacement = -dy * 1.4;
-    const amount = Math.max(-80, Math.min(80, waveDisplacement !== 0 ? waveDisplacement : -25));
-    disturbWater(px, amount, 60);
-
-    if (Math.abs(amount) > 10 && Math.random() < 0.3) {
-      addSplash(px, waterY, 5, (Math.random() - 0.5) * 4, -2.5);
-    }
-  }
-}
-
-// --- Controls & Parameter Handlers ---
-function updateThrottle(val) {
-  const num = parseInt(val, 10);
-  activeBoat.throttle = num / 100;
-  document.getElementById('throttleOut').textContent = `${num}%`;
-  document.getElementById('throttleDisplay').textContent = `${num}%`;
-  if (Math.abs(num) > 0) playTone(90 + Math.abs(num) * 1.8, 0.08, 'sawtooth', 0.05);
-}
-
-function updateWaveHeight(val) {
-  waveAmplitude = parseFloat(val);
-  document.getElementById('waveHeightOut').textContent = `${(waveAmplitude * 0.1).toFixed(1)}m`;
-}
-
-function updateWind(val) {
-  windSpeed = parseFloat(val);
-  document.getElementById('windOut').textContent = (windSpeed >= 0 ? '+' : '') + windSpeed;
-}
-
-function updateTimeSpeed(val) {
-  timeSpeed = parseFloat(val);
-  document.getElementById('timeSpeedOut').textContent = `${timeSpeed.toFixed(1)}x`;
-}
-
 function resetBoat() {
-  activeBoat.reset();
-  showToast('Ship salvaged & repaired!');
-  playTone(440, 0.15, 'sine', 0.15);
+  boat.pos.set(0, 0, 0); boat.vel.set(0, 0, 0); boat.w.set(0, 0, 0); boat.q.identity();
+  boat.throttle = 0; boat.rudder = 0; boat.ballast = 1; boat.flood = 0; boat.capT = 0; boat.capsized = false; boat.maxHeel = 0;
+  boat.pos.y = waterHeight(0, 0);
 }
-
-function honkHorn() {
-  playHornSound();
-  showToast('📯 HOOOONK!');
-  // Ripple shockwave around boat
-  disturbWater(activeBoat.x, -20, 90);
-  addSplash(activeBoat.x, getWaterY(activeBoat.x), 8, 0, -3);
-}
-
-// --- Presets & Generators ---
-function spawnRogueWave() {
-  showToast('🌊 ROGUE WAVE INCOMING!');
-  playSplashSound(0.5);
-  // Spawn a moving solitary wave crest on the left edge
-  disturbWater(W * 0.08, -110, 140);
-  disturbWater(W * 0.15, 80, 110);
-}
-
-function triggerStorm() {
-  stormIntensity = 1.0;
-  waveAmplitude = 95;
-  document.getElementById('waveHeightSlider').value = 95;
-  updateWaveHeight(95);
-
-  windSpeed = 65;
-  document.getElementById('windSlider').value = 65;
-  updateWind(65);
-
-  lightningFlash = 1.0;
-  playThunderSound();
-  showToast('⛈️ SEVERE HURRICANE BREAKS OUT!');
-}
-
-function triggerCalm() {
-  stormIntensity = 0.0;
-  waveAmplitude = 12;
-  document.getElementById('waveHeightSlider').value = 12;
-  updateWaveHeight(12);
-
-  windSpeed = 5;
-  document.getElementById('windSlider').value = 5;
-  updateWind(5);
-
-  // Smooth out all dynamic ripples
-  for (let i = 0; i < NUM_NODES; i++) {
-    waterHeight[i] = 0;
-    waterVel[i] = 0;
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _qi = new THREE.Quaternion();
+const sprayQueue = [];
+function stepBoat(dt) {
+  const d = boat.def, m = d.mass * (1 + boat.flood * 1.6);
+  const F = new THREE.Vector3(0, -m * G, 0), T = new THREE.Vector3();
+  const fwd = _v3.set(1, 0, 0).applyQuaternion(boat.q).clone();
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(boat.q);
+  const side = new THREE.Vector3(0, 0, 1).applyQuaternion(boat.q);
+  _qi.copy(boat.q).invert();
+  let subm = 0, awash = 0;
+  const nP = boat.pts.length;
+  for (const lp of boat.pts) {
+    const r = _v1.copy(lp).applyQuaternion(boat.q);
+    const wp = _v2.copy(r).add(boat.pos);
+    const wh = waterHeight(wp.x, wp.z);
+    const depth = wh - wp.y;
+    if (depth <= 0) continue;
+    const dd = Math.min(depth, boat.hMax);
+    subm += dd / boat.hMax;
+    if (depth > boat.hMax * 0.98 && !d.sub && d.id !== 'duck') awash++;
+    const fb = new THREE.Vector3(0, boat.kp * dd * (d.sub ? boat.ballast : 1), 0);
+    // Punktgeschwindigkeit
+    const vp = new THREE.Vector3().crossVectors(boat.w, r).add(boat.vel);
+    const vb = vp.clone().applyQuaternion(_qi);
+    const frac = clamp(dd / d.draft, 0, 1.5);
+    const mm = m / nP;
+    const drag = new THREE.Vector3(
+      -vb.x * mm * 0.08 * d.cx * frac - vb.x * Math.abs(vb.x) * mm * 0.02 * d.cx,
+      -vb.y * mm * 1.6 * frac,
+      -vb.z * mm * 1.5 * frac - vb.z * Math.abs(vb.z) * mm * 0.05
+    ).applyQuaternion(boat.q);
+    fb.add(drag);
+    F.add(fb); T.add(new THREE.Vector3().crossVectors(r, fb));
   }
-  showToast('⛵ Calm sea set');
-  playTone(523, 0.25, 'sine', 0.12);
+  boat.sub = subm / nP;
+  // Antrieb & Ruder (am Heck, nur wenn eingetaucht)
+  const sternL = new THREE.Vector3(-d.L * 0.46, -d.draft * 0.8, 0);
+  const sr = sternL.clone().applyQuaternion(boat.q), sw = sr.clone().add(boat.pos);
+  const sternWet = waterHeight(sw.x, sw.z) > sw.y;
+  const vbBody = boat.vel.clone().applyQuaternion(_qi);
+  if (sternWet || d.sub) {
+    const th = fwd.clone().multiplyScalar(boat.throttle * d.thrust);
+    F.add(th); T.add(new THREE.Vector3().crossVectors(sr, th));
+    const flow = vbBody.x + boat.throttle * 3;
+    const rf = side.clone().multiplyScalar(-boat.rudder * flow * Math.abs(flow) * d.mass * 0.012 / Math.max(1, d.L * 0.08) - boat.rudder * flow * d.mass * 0.05);
+    F.add(rf); T.add(new THREE.Vector3().crossVectors(sr, rf));
+  }
+  // Wind auf Aufbau / Segel
+  const wv = new THREE.Vector3(Math.cos(env.wdir), 0, Math.sin(env.wdir)).multiplyScalar(env.wind * 0.514);
+  const rel = wv.clone().sub(new THREE.Vector3(boat.vel.x, 0, boat.vel.z));
+  const area = (d.sail || 0) + d.L * d.free * 0.35 + (d.id === 'cruiser' ? d.L * 14 : d.id === 'container' ? d.L * 8 : 0);
+  const windF = rel.clone().multiplyScalar(rel.length() * 0.6 * area);
+  const hArm = new THREE.Vector3(0, d.free + (d.sail ? 5 : d.id === 'cruiser' ? 10 : 2), 0).applyQuaternion(boat.q);
+  if (d.sail) {
+    // Segel: Vortrieb aus Seitenwind
+    const relB = rel.clone().applyQuaternion(_qi);
+    const drive = Math.abs(relB.z) * rel.length() * d.sail * 1.4 + Math.max(0, relB.x) * rel.length() * d.sail * 0.8;
+    F.add(fwd.clone().multiplyScalar(drive));
+    if (boat.mesh.userData.boom) { const target = clamp(Math.atan2(relB.z, -relB.x) * 0.5, -1.2, 1.2); boat.mesh.userData.boom.rotation.y += (-target - boat.mesh.userData.boom.rotation.y) * 0.05; }
+  }
+  F.add(windF); T.add(new THREE.Vector3().crossVectors(hArm, windF));
+  // Wassereinbruch
+  if (awash > 0) boat.flood = Math.min(1, boat.flood + awash / nP * dt * 0.35);
+  boat.flood = Math.max(0, boat.flood - dt * 0.012);
+  // Integration
+  boat.vel.addScaledVector(F, dt / m);
+  boat.pos.addScaledVector(boat.vel, dt);
+  const wb = boat.w.clone().applyQuaternion(_qi), tb = T.applyQuaternion(_qi);
+  const I = boat.I.clone().multiplyScalar(1 + boat.flood * 1.6);
+  const Iw = new THREE.Vector3(I.x * wb.x, I.y * wb.y, I.z * wb.z);
+  tb.sub(new THREE.Vector3().crossVectors(wb, Iw));
+  wb.x += tb.x / I.x * dt; wb.y += tb.y / I.y * dt; wb.z += tb.z / I.z * dt;
+  wb.multiplyScalar(Math.exp(-(0.25 + boat.sub * 0.9) * dt));
+  boat.w.copy(wb.applyQuaternion(boat.q));
+  const wq = new THREE.Quaternion(boat.w.x * dt * 0.5, boat.w.y * dt * 0.5, boat.w.z * dt * 0.5, 0).multiply(boat.q);
+  boat.q.x += wq.x; boat.q.y += wq.y; boat.q.z += wq.z; boat.q.w += wq.w; boat.q.normalize();
+  // Meeresgrund
+  if (boat.pos.y < -70) { boat.pos.y = -70; boat.vel.y = Math.max(0, boat.vel.y); }
+  // Gischt
+  const sp = Math.hypot(boat.vel.x, boat.vel.z);
+  if (sp > 3 && Math.random() < dt * (8 + sp)) {
+    const bow = new THREE.Vector3(d.L * 0.45, 0, rnd(-d.B / 2, d.B / 2)).applyQuaternion(boat.q).add(boat.pos);
+    const wh = waterHeight(bow.x, bow.z);
+    if (Math.abs(bow.y - wh) < 1.5 + d.draft) sprayQueue.push([bow.x, wh, bow.z, sp]);
+  }
+  return up;
 }
 
-function spawnWhirlpool() {
-  showToast('🌪️ WHIRLPOOL ACTIVE!');
-  const cx = W * 0.55;
-  for (let i = 0; i < 30; i++) {
-    setTimeout(() => {
-      disturbWater(cx + Math.sin(i * 0.4) * 40, 45, 90);
-      addBubble(cx, baseWaterLevel + 40);
-    }, i * 35);
-  }
+// ---------- Gischt-Partikel ----------
+const SP_MAX = 500;
+const spGeo = new THREE.BufferGeometry();
+const spPos = new Float32Array(SP_MAX * 3); spGeo.setAttribute('position', new THREE.BufferAttribute(spPos, 3));
+const spTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
+const spMat = new THREE.PointsMaterial({ size: 0.9, map: spTex, transparent: true, depthWrite: false, color: 0xffffff, opacity: 0.85 });
+const spray = new THREE.Points(spGeo, spMat); spray.frustumCulled = false; scene.add(spray);
+const sp = [];
+function emitSpray(x, y, z, vx, vy, vz) { if (sp.length < SP_MAX) sp.push({ x, y, z, vx, vy, vz, life: rnd(0.6, 1.3) }); }
+function updateSpray(dt) {
+  while (sprayQueue.length) { const [x, y, z, s] = sprayQueue.pop(); for (let i = 0; i < 4; i++) emitSpray(x, y, z, rnd(-2, 2) + boat.vel.x * 0.5, rnd(1, 2 + s * 0.4), rnd(-2, 2) + boat.vel.z * 0.5); }
+  for (let i = sp.length - 1; i >= 0; i--) { const p = sp[i]; p.life -= dt; if (p.life <= 0) { sp.splice(i, 1); continue; } p.vy -= G * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; }
+  for (let i = 0; i < SP_MAX; i++) { const p = sp[i]; if (p) { spPos[i * 3] = p.x; spPos[i * 3 + 1] = p.y; spPos[i * 3 + 2] = p.z; } else spPos[i * 3 + 1] = -999; }
+  spGeo.attributes.position.needsUpdate = true;
+  spMat.size = clamp(boat.def.L * 0.06, 0.6, 3);
 }
 
-// --- Keyboard Steer & Gas Handling ---
-const keys = {};
-window.addEventListener('keydown', (e) => {
-  if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
-    e.preventDefault();
-  }
-  keys[e.code] = true;
+// ---------- Möwen ----------
+const gulls = [];
+for (let i = 0; i < 6; i++) {
+  const g = new THREE.Group();
+  const wm = std({ color: 0xffffff });
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), wm); b.scale.set(1.6, 0.8, 0.8); g.add(b);
+  const wl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 1.4), wm); wl.position.z = 0.7; g.add(wl);
+  const wr = wl.clone(); wr.position.z = -0.7; g.add(wr);
+  g.userData = { wl, wr, a: rnd(0, 6), r: rnd(20, 45), h: rnd(12, 25), s: rnd(0.2, 0.4) };
+  scene.add(g); gulls.push(g);
+}
 
-  if (e.code === 'KeyW' || e.code === 'ArrowUp') {
-    const cur = parseInt(document.getElementById('throttleSlider').value, 10);
-    const next = Math.min(100, cur + 20);
-    document.getElementById('throttleSlider').value = next;
-    updateThrottle(next);
-  }
-  if (e.code === 'KeyS' || e.code === 'ArrowDown') {
-    const cur = parseInt(document.getElementById('throttleSlider').value, 10);
-    const next = Math.max(-100, cur - 20);
-    document.getElementById('throttleSlider').value = next;
-    updateThrottle(next);
-  }
-  if (e.code === 'KeyR') resetBoat();
-  if (e.code === 'KeyH') honkHorn();
-  if (e.code === 'KeyM') spawnRogueWave();
+// ---------- Kamera ----------
+let camYaw = -2.4, camPitch = 0.32, camDist = 40, drag = null, brushOn = false, brushDown = false;
+const cv = $('gl');
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+function waterPick(e) {
+  mouse.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObject(water, false)[0];
+  return hit ? hit.point : null;
+}
+let lastRipple = 0;
+function addRipple(p) {
+  if (env.t - lastRipple < 0.18) return;
+  lastRipple = env.t;
+  ripples.push({ x: p.x, z: p.z, t0: env.t, amp: 1.6 + env.sea * 0.5 });
+  if (ripples.length > 14) ripples.shift();
+  ArcadeCore.playTone(rnd(200, 300), 0.15, 'sine', 0.05);
+}
+cv.addEventListener('pointerdown', e => {
+  audio();
+  if (brushOn || e.shiftKey) { brushDown = true; const p = waterPick(e); if (p) addRipple(p); cv.setPointerCapture(e.pointerId); return; }
+  drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; cv.setPointerCapture(e.pointerId);
 });
-
-window.addEventListener('keyup', (e) => {
-  keys[e.code] = false;
+cv.addEventListener('pointermove', e => {
+  if (brushDown) { const p = waterPick(e); if (p) addRipple(p); return; }
+  if (!drag || drag.id !== e.pointerId) return;
+  camYaw -= (e.clientX - drag.x) * 0.006; camPitch = clamp(camPitch + (e.clientY - drag.y) * 0.004, -0.05, 1.3);
+  drag.x = e.clientX; drag.y = e.clientY;
 });
+const endP = () => { drag = null; brushDown = false; };
+cv.addEventListener('pointerup', endP); cv.addEventListener('pointercancel', endP);
+cv.addEventListener('wheel', e => { camDist = clamp(camDist * (e.deltaY > 0 ? 1.1 : 0.9), 8, 400); e.preventDefault(); }, { passive: false });
 
-// Rudder button pointers
-const btnRudderLeft = document.getElementById('btnRudderLeft');
-const btnRudderRight = document.getElementById('btnRudderRight');
-
-btnRudderLeft.addEventListener('pointerdown', () => { activeBoat.rudder = -1; });
-btnRudderLeft.addEventListener('pointerup', () => { activeBoat.rudder = 0; });
-btnRudderLeft.addEventListener('pointerleave', () => { activeBoat.rudder = 0; });
-
-btnRudderRight.addEventListener('pointerdown', () => { activeBoat.rudder = 1; });
-btnRudderRight.addEventListener('pointerup', () => { activeBoat.rudder = 0; });
-btnRudderRight.addEventListener('pointerleave', () => { activeBoat.rudder = 0; });
-
-// Continuous rudder check in loop
-setInterval(() => {
-  if (keys['KeyA'] || keys['ArrowLeft']) activeBoat.rudder = -1;
-  else if (keys['KeyD'] || keys['ArrowRight']) activeBoat.rudder = 1;
-  else if (!btnRudderLeft.matches(':active') && !btnRudderRight.matches(':active')) {
-    activeBoat.rudder = 0;
-  }
-}, 30);
-
-// --- Submarine Ballast Controls ---
-// If user selects submarine, toggle diving
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyB' && activeBoat.spec.isSubmarine) {
-    activeBoat.submergeTarget = activeBoat.submergeTarget > 0.5 ? 0 : 1;
-    showToast(activeBoat.submergeTarget > 0.5 ? 'Dive tanks FLOODED: submarine is diving!' : 'Tanks BLOWN: submarine is surfacing!');
-  }
-});
-
-// --- Toast & Help Modal ---
-let toastTimer = null;
-function showToast(msg) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
+// ---------- Audio ----------
+let actx = null, oceanGain = null;
+function audio() {
+  try {
+    actx = ArcadeCore.getAudioContext(); if (!actx) return;
+    if (actx.state === 'suspended') actx.resume();
+    if (!oceanGain && !ArcadeCore.isMuted()) {
+      const n = actx.sampleRate * 3, b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0);
+      let l = 0; for (let i = 0; i < n; i++) { l = l * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = l * 6; }
+      const s = actx.createBufferSource(); s.buffer = b; s.loop = true;
+      const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500;
+      oceanGain = actx.createGain(); oceanGain.gain.value = 0.1;
+      s.connect(f); f.connect(oceanGain); oceanGain.connect(actx.destination); s.start();
+    }
+  } catch (e) {}
 }
 
-function toggleHelp() {
-  const modal = document.getElementById('helpModal');
-  modal.classList.toggle('open');
+// ---------- Panel ----------
+const sel = $('boatSel');
+BOATS.forEach((b, i) => { const o = document.createElement('option'); o.value = i; o.textContent = (i + 1) + '. ' + b.name; sel.appendChild(o); });
+sel.onchange = () => { selectBoat(+sel.value); sel.blur(); stopStorm(); };
+$('sea').oninput = e => { env.sea = +e.target.value; $('seaV').textContent = env.sea.toFixed(2); updateWaveParams(); };
+$('wind').oninput = e => { env.wind = +e.target.value; $('windV').textContent = env.wind; updateWaveParams(); };
+$('wdir').oninput = e => { env.wdir = +e.target.value * Math.PI / 180; $('dirV').textContent = e.target.value; updateWaveParams(); };
+function spawnRogue() {
+  const a = Math.atan2(boat.pos.z, boat.pos.x) + rnd(-0.4, 0.4) + (Math.random() < 0.5 ? Math.PI : 0);
+  const dx = Math.cos(env.wdir + rnd(-0.6, 0.6)), dz = Math.sin(env.wdir + rnd(-0.6, 0.6)), L = Math.hypot(dx, dz);
+  const H = clamp(6 + env.sea * 3 + Math.max(0, boat.def.L - 20) * 0.08, 6, 18);
+  rogue = { dx: dx / L, dz: dz / L, s: (boat.pos.x * dx + boat.pos.z * dz) / L - 180, H, sigma: 9 + H * 0.6, c: 13 + H * 0.5 };
+  banner('🌊 MONSTERWELLE!', 2); ArcadeCore.explosion();
+}
+$('rogue').onclick = () => { audio(); spawnRogue(); };
+$('brush').onclick = () => { brushOn = !brushOn; $('brush').classList.toggle('on', brushOn); };
+$('reset').onclick = () => { resetBoat(); stopStorm(); };
+$('toggle').onclick = () => { const p = $('panel'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; };
+if (innerWidth < 700) $('panel').style.display = 'none';
+let storm = null;
+function startStorm() {
+  storm = { t: 0, next: 20 }; resetBoat();
+  env.sea = 0.8; env.wind = 18; syncSliders(); updateWaveParams();
+  $('storm').textContent = '⏹ Challenge stoppen'; $('storm').classList.add('on');
+  banner('⛈️ STURM-CHALLENGE<br><span style="font-size:20px">Halte dich über Wasser!</span>', 2.5);
+}
+function stopStorm() { storm = null; $('storm').textContent = '⛈️ Sturm-Challenge'; $('storm').classList.remove('on'); }
+$('storm').onclick = () => { audio(); storm ? stopStorm() : startStorm(); };
+function syncSliders() { $('sea').value = env.sea; $('seaV').textContent = env.sea.toFixed(2); $('wind').value = env.wind; $('windV').textContent = Math.round(env.wind); }
+let bannerT = 0;
+function banner(html, dur = 1.6) { $('banner').innerHTML = html; $('banner').classList.add('show'); bannerT = dur; }
+
+// ---------- Eingabe ----------
+const keys = {}, touch = {};
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') { if (!['w', 'a', 's', 'd', 'q', 'e'].includes(e.key.toLowerCase())) return; }
+  const k = e.key.toLowerCase(); keys[k] = true;
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'backspace'].includes(k)) e.preventDefault();
+  if (e.repeat) return;
+  if (k >= '1' && k <= '8') { sel.value = +k - 1; selectBoat(+k - 1); stopStorm(); }
+  if (k === 'm') { audio(); spawnRogue(); }
+  if (k === 'r') $('brush').click();
+  if (k === 'backspace') { resetBoat(); stopStorm(); }
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+for (const [id, k] of [['tL', 'l'], ['tR', 'r'], ['tF', 'f'], ['tB', 'b']]) {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); touch[k] = true; el.classList.add('on'); el.setPointerCapture(e.pointerId); });
+  const upF = () => { touch[k] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerup', upF); el.addEventListener('pointercancel', upF);
+}
+addEventListener('touchstart', () => { $('touch').style.display = 'block'; }, { passive: true, once: true });
+
+// ---------- HUD ----------
+const heelCtx = $('heel').getContext('2d');
+function drawHeel(roll, pitch) {
+  const g = heelCtx, W = 280;
+  g.clearRect(0, 0, W, W);
+  g.save(); g.translate(W / 2, W / 2);
+  g.fillStyle = '#0008'; g.beginPath(); g.arc(0, 0, 130, 0, 7); g.fill();
+  g.save(); g.beginPath(); g.arc(0, 0, 128, 0, 7); g.clip(); g.rotate(-roll);
+  g.fillStyle = '#1f7fb0'; g.fillRect(-140, pitch * 120, 280, 280);
+  g.restore();
+  g.strokeStyle = '#fff'; g.lineWidth = 3;
+  for (const a of [-60, -30, 0, 30, 60]) { const r = a * Math.PI / 180; g.beginPath(); g.moveTo(Math.sin(r) * 112, -Math.cos(r) * 112); g.lineTo(Math.sin(r) * 128, -Math.cos(r) * 128); g.stroke(); }
+  g.fillStyle = '#ffd21f'; g.fillRect(-60, -4, 120, 8); g.fillRect(-4, -22, 8, 22);
+  g.fillStyle = '#fff'; g.font = 'bold 30px Trebuchet MS'; g.textAlign = 'center';
+  g.fillText(Math.round(Math.abs(roll) * 180 / Math.PI) + '°', 0, 70);
+  g.font = 'bold 18px Trebuchet MS'; g.fillText('Krängung', 0, 96);
+  g.restore();
+  g.strokeStyle = Math.abs(roll) > 0.7 ? '#ff4a3a' : '#fff'; g.lineWidth = 6; g.beginPath(); g.arc(W / 2, W / 2, 130, 0, 7); g.stroke();
 }
 
-// --- Initialization ---
-initWaterGrid();
-initShipGrid();
-resizeCanvas();
-activeBoat.reset(); // place boat on real water level
+// ---------- Loop ----------
+let last = performance.now();
+const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+let camInit = false;
+function loop(t) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((t - last) / 1000, 0.05); last = t;
+  env.t += dt;
+  if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show'); }
+  // Steuerung
+  const d = boat.def;
+  const th = (keys['w'] || keys['arrowup'] || touch.f ? 1 : 0) - (keys['s'] || keys['arrowdown'] || touch.b ? 1 : 0);
+  if (th) boat.throttle = clamp(boat.throttle + th * dt * 0.6, -0.5, 1); else if (Math.abs(boat.throttle) < 0.03) boat.throttle = 0;
+  const rd = (keys['a'] || keys['arrowleft'] || touch.l ? 1 : 0) - (keys['d'] || keys['arrowright'] || touch.r ? 1 : 0);
+  boat.rudder += ((rd * 0.6) - boat.rudder) * Math.min(1, dt * 3);
+  if (d.sub) { if (keys['q']) boat.ballast = clamp(boat.ballast - dt * 0.25, 0.38, 1.1); if (keys['e']) boat.ballast = clamp(boat.ballast + dt * 0.25, 0.38, 1.1); }
+  // Sturm-Challenge
+  if (storm) {
+    storm.t += dt;
+    env.sea = Math.min(3, 0.8 + storm.t * 0.025); env.wind = Math.min(60, 18 + storm.t * 0.35);
+    env.wdir += dt * 0.01; updateWaveParams();
+    if (Math.floor(storm.t * 4) % 4 === 0) syncSliders();
+    storm.next -= dt; if (storm.next <= 0) { storm.next = Math.max(10, 24 - storm.t * 0.06); spawnRogue(); }
+  }
+  env.storm += ((clamp((env.sea - 1) / 2, 0, 1) * 0.5 + clamp((env.wind - 25) / 35, 0, 1) * 0.5) - env.storm) * Math.min(1, dt * 0.5);
+  if (Math.random() < dt * 2) paintSky(env.storm);
+  sun.intensity = 2.2 * (1 - env.storm * 0.7); hemi.intensity = 1.1 * (1 - env.storm * 0.35);
+  // Monsterwelle
+  if (rogue) { rogue.s += rogue.c * dt; if (rogue.s - (boat.pos.x * rogue.dx + boat.pos.z * rogue.dz) > 160) rogue = null; }
+  for (let i = ripples.length - 1; i >= 0; i--) if (env.t - ripples[i].t0 > 14) ripples.splice(i, 1);
+  // Physik (Substeps)
+  const big = d.mass > 1e6;
+  const sub = big ? 3 : 5;
+  let up;
+  for (let i = 0; i < sub; i++) up = stepBoat(dt / sub);
+  // Kentern / Sinken
+  const roll = Math.atan2(new THREE.Vector3(0, 0, 1).applyQuaternion(boat.q).y, up.y);
+  const fwdV = new THREE.Vector3(1, 0, 0).applyQuaternion(boat.q);
+  const pitch = Math.asin(clamp(fwdV.y, -1, 1));
+  boat.maxHeel = Math.max(boat.maxHeel, Math.abs(roll));
+  const sunk = !d.sub && boat.pos.y < waterHeight(boat.pos.x, boat.pos.z) - d.free - d.draft - 2;
+  if (!boat.capsized && (up.y < 0.05 || sunk || boat.flood > 0.95)) {
+    boat.capT += dt;
+    if (boat.capT > 2.2) {
+      boat.capsized = true;
+      banner(sunk || boat.flood > 0.95 ? '🫧 GESUNKEN!' : '🙃 GEKENTERT!', 2.5); ArcadeCore.gameOver();
+      if (storm) {
+        const s = Math.floor(storm.t);
+        let rec = '';
+        if (s > bestStorm) { bestStorm = s; ArcadeCore.saveScore(KEY, s); rec = ' · NEUER REKORD!'; }
+        setTimeout(() => banner(`⛈️ ${d.name}<br><span style="font-size:22px">${s} s im Sturm überlebt${rec}</span>`, 3.5), 2600);
+        stopStorm();
+      }
+      setTimeout(() => { resetBoat(); if (env.sea > 1.6 && !storm) { env.sea = 1.2; syncSliders(); updateWaveParams(); } }, 3200);
+    }
+  } else if (up.y > 0.3) boat.capT = 0;
+  boat.mesh.position.copy(boat.pos); boat.mesh.quaternion.copy(boat.q);
+  // Wasser & Szene
+  updateWater(boat.pos.x, boat.pos.z);
+  updateSpray(dt);
+  for (const g of gulls) { const u = g.userData; u.a += dt * u.s; g.position.set(boat.pos.x + Math.cos(u.a) * u.r, u.h + Math.sin(u.a * 3) * 1.5, boat.pos.z + Math.sin(u.a) * u.r); g.rotation.y = -u.a; const f = Math.sin(env.t * 9 + u.r) * 0.5; u.wl.rotation.x = f; u.wr.rotation.x = -f; g.visible = env.storm < 0.6; }
+  if (oceanGain) oceanGain.gain.value = 0.06 + env.sea * 0.05 + env.wind * 0.002;
+  // Kamera
+  const dist = camDist;
+  const tp = new THREE.Vector3(boat.pos.x + Math.cos(camYaw) * Math.cos(camPitch) * dist, boat.pos.y + Math.sin(camPitch) * dist + d.free, boat.pos.z + Math.sin(camYaw) * Math.cos(camPitch) * dist);
+  const wh = waterHeight(tp.x, tp.z) + 1.5; if (tp.y < wh) tp.y = wh;
+  if (!camInit) { camPos.copy(tp); camLook.copy(boat.pos); camInit = true; }
+  camPos.lerp(tp, Math.min(1, dt * 4)); camLook.lerp(boat.pos.clone().add(new THREE.Vector3(0, d.free, 0)), Math.min(1, dt * 6));
+  camera.position.copy(camPos); camera.lookAt(camLook);
+  sun.position.set(boat.pos.x + 80, 140, boat.pos.z + 50); sun.target.position.copy(boat.pos);
+  sun.shadow.camera.left = sun.shadow.camera.bottom = -Math.max(40, d.L); sun.shadow.camera.right = sun.shadow.camera.top = Math.max(40, d.L); sun.shadow.camera.updateProjectionMatrix();
+  sunDisk.position.set(camera.position.x + 600, 420, camera.position.z + 380);
+  // HUD
+  const spd = Math.hypot(boat.vel.x, boat.vel.z) / 0.514;
+  const draftNow = Math.max(0, waterHeight(boat.pos.x, boat.pos.z) - (boat.pos.y - d.draft));
+  $('stats').innerHTML = `<b>${d.name}</b><br>⚓ ${spd.toFixed(1)} kn<br>Trimm ${(pitch * 180 / Math.PI).toFixed(1)}°<br>Tiefgang ${draftNow.toFixed(1)} m${d.sub ? '<br>Tiefe ' + Math.max(0, -boat.pos.y).toFixed(1) + ' m · Ballast ' + Math.round((1.1 - boat.ballast) / 0.72 * 100) + '%' : ''}<br>💧 Wasser im Rumpf ${Math.round(boat.flood * 100)}%<br>Max. Krängung ${Math.round(boat.maxHeel * 180 / Math.PI)}°` + (storm ? `<br>⛈️ <b>${Math.floor(storm.t)} s</b> überlebt` : '') + (bestStorm ? `<br>🏆 Sturm-Rekord ${bestStorm} s` : '');
+  $('thr').style.left = (boat.throttle >= 0 ? 50 : 50 + boat.throttle * 50) + '%'; $('thr').style.width = Math.abs(boat.throttle) * 50 + '%';
+  $('thr').style.background = boat.throttle >= 0 ? '#5fe36a' : '#ff8a3a';
+  drawHeel(roll, pitch);
+  renderer.render(scene, camera);
+}
+selectBoat(0);
+appStarted = true;
 requestAnimationFrame(loop);
 </script>
 </body>

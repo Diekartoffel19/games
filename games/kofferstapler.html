@@ -1,905 +1,597 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Luggage Stacker Extreme — Airport Luggage Jenga</title>
-  <meta name="description" content="Stack suitcases, slippery coolers, guitar cases, and wobbling pet crates into the tilting airplane cargo hold with real Matter.js physics!">
-  <link rel="stylesheet" href="../style.css">
-  <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
-  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
-  <script src="matter.min.js"></script>
-  <script>
-    if (typeof Matter === 'undefined') {
-      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"><\/script>');
-    }
-  </script>
-  <script src="../src/arcade-core.js"></script>
-  <style>
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body {
-      margin: 0; padding: 0;
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: #090d16;
-      color: #f8fafc;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      user-select: none; -webkit-user-select: none;
-      touch-action: none;
-    }
-
-    #gameCanvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-
-    .hud-top {
-      position: fixed;
-      top: 12px; left: 12px; right: 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      pointer-events: none;
-      z-index: 20;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .hud-left {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      pointer-events: auto;
-    }
-    .btn-hud {
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: #f8fafc;
-      padding: 8px 14px;
-      border-radius: 10px;
-      font-weight: 700;
-      font-size: 0.85rem;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      backdrop-filter: blur(8px);
-    }
-    .btn-hud:hover { background: rgba(30, 41, 59, 0.95); }
-
-    .stats-bar {
-      display: flex;
-      gap: 12px;
-      background: rgba(15, 23, 42, 0.88);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      padding: 8px 14px;
-      border-radius: 12px;
-      backdrop-filter: blur(8px);
-      pointer-events: auto;
-      flex-wrap: wrap;
-    }
-    .stat-box { display: flex; flex-direction: column; min-width: 68px; }
-    .stat-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; font-weight: 700; }
-    .stat-val { font-size: 1.05rem; font-weight: 800; color: #f8fafc; font-variant-numeric: tabular-nums; }
-    .stat-val.gold { color: #fbbf24; }
-    .stat-val.cyan { color: #38bdf8; }
-    .stat-val.red { color: #fb7185; }
-
-    .controls-bar {
-      position: fixed;
-      bottom: 14px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      background: rgba(15, 23, 42, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      padding: 8px 14px;
-      border-radius: 16px;
-      z-index: 25;
-      backdrop-filter: blur(8px);
-      max-width: 96vw;
-    }
-    .ctrl-btn {
-      background: #1e293b;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #f8fafc;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-weight: 800;
-      font-size: 0.85rem;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .ctrl-btn:active { background: #f59e0b; color: #0f172a; }
-    .ctrl-btn.drop {
-      background: linear-gradient(135deg, #f59e0b, #ea580c);
-      border-color: #fbbf24;
-    }
-
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(6, 10, 18, 0.84);
-      backdrop-filter: blur(8px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 50;
-      padding: 16px;
-    }
-    .modal-backdrop[hidden] { display: none; }
-    .modal-card {
-      background: linear-gradient(145deg, #1e293b, #0f172a);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 20px;
-      max-width: 520px;
-      width: 100%;
-      padding: 26px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
-      text-align: center;
-    }
-    .modal-card h1 {
-      margin: 0 0 8px;
-      font-size: 1.85rem;
-      font-weight: 900;
-      background: linear-gradient(90deg, #fbbf24, #38bdf8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .modal-sub {
-      color: #94a3b8;
-      font-size: 0.94rem;
-      line-height: 1.5;
-      margin-bottom: 18px;
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: #ffffff;
-      border: none;
-      padding: 14px 28px;
-      border-radius: 12px;
-      font-size: 1.05rem;
-      font-weight: 900;
-      cursor: pointer;
-      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
-      width: 100%;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Koffer-Stapler 3D</title>
+<meta name="description" content="3D-Airport-Jenga: Staple Koffer, Kühlboxen, Gitarren und zappelnde Hundeboxen mit echter Rigid-Body-Physik in den Frachtraum und überstehe den Turbulenz-Test.">
+<meta name="theme-color" content="#1b2430">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) { if (msg) document.getElementById('fallbackMsg').textContent = msg; fb.style.display = 'block'; }
+};
+window.addEventListener('error', function(e) { if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar')); });
+setTimeout(function() { if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).'); }, 9000);
+</script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#1b2430; color:#fff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; min-height:36px; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#0008; z-index:20; padding:16px; }
+.overlay.hide { display:none; }
+.card { background:#fff7e8; color:#1b2430; border-radius:16px; padding:20px 24px; max-width:500px; text-align:center; box-shadow:0 8px 0 #0006; border:4px solid #ff8a00; }
+.card h1 { margin:0 0 6px; font-size:28px; }
+.card p { margin:8px 0; line-height:1.4; font-size:15px; }
+.best { color:#d66a00; font-weight:800; }
+button { font:inherit; font-weight:800; font-size:19px; color:#fff; background:linear-gradient(#ffa53a,#d66a00); border:0; border-radius:12px; padding:11px 26px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #7a3a00; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #7a3a00; }
+#hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+.t { position:absolute; font-weight:800; text-shadow:0 2px 0 #000a, 0 0 6px #0008; }
+#score { top:12px; right:16px; font-size:32px; }
+#flight { top:52px; right:16px; font-size:18px; }
+#hearts { top:78px; right:16px; font-size:20px; }
+#queue { top:56px; left:12px; font-size:15px; background:#0006; border-radius:10px; padding:6px 10px; line-height:1.5; }
+#timer { bottom:18px; left:50%; transform:translateX(-50%); font-size:16px; white-space:nowrap; }
+#help { bottom:18px; left:16px; font-size:12px; opacity:.75; line-height:1.5; }
+#banner { top:30%; left:50%; transform:translate(-50%,-50%); font-size:40px; text-align:center; white-space:nowrap; opacity:0; transition:opacity .2s; }
+#banner.show { opacity:1; }
+#pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; font-size:34px; background:#0006; pointer-events:auto; }
+#pause span { font-size:15px; margin-top:6px; }
+#touch { position:fixed; inset:auto 0 0 0; height:170px; z-index:15; display:none; pointer-events:none; }
+#touch .b { position:absolute; width:58px; height:58px; border-radius:50%; background:#0005; border:2px solid #fff8; color:#fff; font-size:22px; font-weight:800; display:flex; align-items:center; justify-content:center; pointer-events:auto; touch-action:none; }
+#touch .b.on { background:#fff6; color:#000; }
+</style>
 </head>
 <body>
+<a class="back" href="../index.html">← Hub</a>
+<canvas id="gl"></canvas>
+<div id="hud">
+  <div id="score" class="t">0</div>
+  <div id="flight" class="t">Flug #1</div>
+  <div id="hearts" class="t"></div>
+  <div id="queue" class="t"></div>
+  <div id="timer" class="t"></div>
+  <div id="help" class="t">WASD/Pfeile bewegen · Q/E drehen · R kippen · Leertaste abwerfen<br>Maus ziehen = Kamera · Mausrad = Zoom</div>
+  <div id="banner" class="t"></div>
+  <div id="pause"><b>⏸ Rollfeld-Pause</b><span>P / Esc / Tippen = weiter</span></div>
+</div>
+<div id="touch">
+  <div class="b" id="tU" style="left:70px;bottom:100px">▲</div>
+  <div class="b" id="tD" style="left:70px;bottom:20px">▼</div>
+  <div class="b" id="tL" style="left:8px;bottom:60px">◀</div>
+  <div class="b" id="tR" style="left:132px;bottom:60px">▶</div>
+  <div class="b" id="tY" style="right:140px;bottom:20px">⟲</div>
+  <div class="b" id="tT" style="right:140px;bottom:90px">⤾</div>
+  <div class="b" id="tX" style="right:16px;bottom:40px;width:96px;height:96px;font-size:20px">⬇ DROP</div>
+</div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🧳 Koffer-Stapler 3D</h1>
+  <p>Gate B42, Boarding in 3 Minuten. Alles muss in den Frachtraum – und hinter die Tür-Linie. Danach kommt der <b>Turbulenz-Test</b>.</p>
+  <p><b>Bewegen:</b> WASD / Pfeile · <b>Drehen:</b> Q / E · <b>Kippen:</b> R<br><b>Abwerfen:</b> Leertaste · <b>Kamera:</b> Maus ziehen + Mausrad</p>
+  <p>Kühlboxen rutschen, Hundeboxen zappeln, Gitarren rollen. Was rausfällt oder über die gelbe Linie ragt, gibt eine Beschwerde. Drei Beschwerden = gefeuert.</p>
+  <p class="best" id="menuBest"></p>
+  <button id="go">Schicht beginnen</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle"></h1>
+  <p id="otext"></p>
+  <button id="again">Neue Schicht</button>
+</div></div>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#1b2430;color:#fff;z-index:99999;padding:30px;text-align:center;">
+  <h2>🧳 Gepäckband steht still</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder Physik-CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#8fd">Zurück zum Hub</a></p>
+</div>
 
-  <div class="hud-top">
-    <div class="hud-left">
-      <a href="../index.html" class="btn-hud">← Hub</a>
-      <button id="muteBtn" class="btn-hud" type="button">🔊 Sound</button>
-    </div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
 
-    <div class="stats-bar">
-      <div class="stat-box">
-        <span class="stat-label">Flight Level</span>
-        <span class="stat-val cyan" id="hudFlight">Flight #1</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">Remaining</span>
-        <span class="stat-val" id="hudRemaining">8 bags</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">Lost</span>
-        <span class="stat-val red" id="hudLost">0 / 3</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">Score</span>
-        <span class="stat-val gold" id="hudScore">0</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">Best</span>
-        <span class="stat-val gold" id="hudBest">0</span>
-      </div>
-    </div>
-  </div>
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const KEY = 'kofferstapler';
+const HW = 1.9, HD = 1.3, HH = 2.3, DOOR = 2.05; // Halbe Breite/Tiefe, Höhe, Tür-Linie
+let best = Number(ArcadeCore.getScore(KEY)) || 0;
 
-  <div class="controls-bar">
-    <button class="ctrl-btn" id="btnLeft" type="button">◀ Left (A)</button>
-    <button class="ctrl-btn" id="btnRot" type="button">🔄 Rotate (R)</button>
-    <button class="ctrl-btn drop" id="btnDrop" type="button">⬇ Drop (Space)</button>
-    <button class="ctrl-btn" id="btnRight" type="button">Right (D) ▶</button>
-  </div>
+// ---------- Renderer ----------
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9cc0e4);
+scene.fog = new THREE.Fog(0x9cc0e4, 30, 120);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x3a3a40, 1.1));
+const sun = new THREE.DirectionalLight(0xffe7c4, 1.6);
+sun.position.set(6, 12, 9); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 1, far: 40 });
+sun.shadow.bias = -0.0008;
+scene.add(sun);
+const holdLight = new THREE.PointLight(0xfff1d0, 14, 7, 1.5); holdLight.position.set(0, HH - 0.2, -0.3); scene.add(holdLight);
 
-  <canvas id="gameCanvas"></canvas>
+function canvasTex(w, h, draw, rx, ry) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  if (rx) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry || rx); }
+  return t;
+}
+const std = o => new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.6, metalness: 0.1 }, o));
 
-  <div class="modal-backdrop" id="modal">
-    <div class="modal-card">
-      <div style="font-size:3rem; margin-bottom:4px;" id="modalEmoji">🧳✈️</div>
-      <h1 id="modalTitle">Luggage Stacker Extreme</h1>
-      <p class="modal-sub" id="modalDesc">
-        Stack every piece of luggage into the tilting airplane cargo bay!
-        Watch the <b>Balance Indicator</b> and beware of <b>slippery coolers 🧊</b>, <b>bouncy gym bags 🏀</b>, and <b>wobbling dog crates 🐶</b>!
-        After the last bag lands, survive the <b>4-second Takeoff Turbulence Test</b>!
-      </p>
-      <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:14px;">
-        Controls: <b>Mouse / A &amp; D</b> to position &bull; <b>R / W / Right-Click</b> to rotate &bull; <b>Click / SPACE</b> to drop
-      </div>
-      <button class="btn-primary" id="startBtn" type="button">✈️ Start Loading!</button>
-    </div>
-  </div>
+// ---------- Physik ----------
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+world.broadphase = new CANNON.SAPBroadphase(world);
+world.allowSleep = true;
+world.solver.iterations = 14;
+const mDefault = new CANNON.Material('def'), mSlip = new CANNON.Material('slip'), mGrip = new CANNON.Material('grip');
+world.defaultContactMaterial.friction = 0.5; world.defaultContactMaterial.restitution = 0.05;
+world.addContactMaterial(new CANNON.ContactMaterial(mSlip, mDefault, { friction: 0.04, restitution: 0.05 }));
+world.addContactMaterial(new CANNON.ContactMaterial(mSlip, mSlip, { friction: 0.02, restitution: 0.05 }));
+world.addContactMaterial(new CANNON.ContactMaterial(mSlip, mGrip, { friction: 0.2, restitution: 0.05 }));
+world.addContactMaterial(new CANNON.ContactMaterial(mGrip, mDefault, { friction: 0.9, restitution: 0.02 }));
+world.addContactMaterial(new CANNON.ContactMaterial(mGrip, mGrip, { friction: 1.0, restitution: 0.02 }));
 
-  <script>
-  (() => {
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const GAME_KEY = 'kofferstapler';
+// Frachtraum (kinematisch, wackelt)
+const hold = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: mDefault });
+const T = 0.1;
+hold.addShape(new CANNON.Box(new CANNON.Vec3(HW + T, T, HD + T)), new CANNON.Vec3(0, -T, 0));
+hold.addShape(new CANNON.Box(new CANNON.Vec3(HW + T, HH / 2, T)), new CANNON.Vec3(0, HH / 2, -HD - T));
+hold.addShape(new CANNON.Box(new CANNON.Vec3(T, HH / 2, HD + T)), new CANNON.Vec3(-HW - T, HH / 2, 0));
+hold.addShape(new CANNON.Box(new CANNON.Vec3(T, HH / 2, HD + T)), new CANNON.Vec3(HW + T, HH / 2, 0));
+hold.addShape(new CANNON.Box(new CANNON.Vec3(HW + T, 0.09, T)), new CANNON.Vec3(0, 0.09, HD + T));
+world.addBody(hold);
+const groundBody = new CANNON.Body({ mass: 0, material: mDefault });
+groundBody.addShape(new CANNON.Plane());
+groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); groundBody.position.y = -2.6;
+world.addBody(groundBody);
 
-    let width = window.innerWidth;
-    let height = window.innerHeight;
-    let bayW = Math.min(440, width * 0.80);
-    let bayY = height * 0.74;
-    let cx = width / 2;
+// ---------- Szene: Flugzeug, Vorfeld ----------
+const holdGroup = new THREE.Group(); scene.add(holdGroup);
+const floorTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#5d646c'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#3f454b'; g.lineWidth = 3;
+  for (let i = 0; i <= w; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); }
+  g.fillStyle = '#868d95'; for (let x = 16; x < w; x += 32) for (let y = 16; y < h; y += 32) { g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill(); }
+}, 2, 1.4);
+const hFloor = new THREE.Mesh(new THREE.BoxGeometry(HW * 2 + T * 2, T * 2, HD * 2 + T * 2), std({ map: floorTex, metalness: 0.4 }));
+hFloor.position.y = -T; hFloor.receiveShadow = true; holdGroup.add(hFloor);
+const wallMat = std({ color: 0xc9cdd2, roughness: 0.8 });
+const wallTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#c4c8cd'; g.fillRect(0, 0, w, h); g.strokeStyle = '#9aa0a7'; g.lineWidth = 6; for (let x = 0; x < w; x += 64) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); } g.fillStyle = '#e8eaed'; for (let x = 32; x < w; x += 64) for (let y = 20; y < h; y += 40) g.fillRect(x - 3, y, 6, 6); }, 2, 1);
+const back = new THREE.Mesh(new THREE.BoxGeometry(HW * 2 + T * 2, HH, T * 2), std({ map: wallTex })); back.position.set(0, HH / 2, -HD - T); back.receiveShadow = true; holdGroup.add(back);
+for (const sx of [-1, 1]) {
+  const s = new THREE.Mesh(new THREE.BoxGeometry(T * 2, HH, HD * 2 + T * 2), std({ map: wallTex })); s.position.set(sx * (HW + T), HH / 2, 0); s.receiveShadow = true; holdGroup.add(s);
+}
+const lip = new THREE.Mesh(new THREE.BoxGeometry(HW * 2 + T * 2, 0.18, T * 2), std({ color: 0xffb020 })); lip.position.set(0, 0.09, HD + T); holdGroup.add(lip);
+// Tür-Linie
+const doorLine = new THREE.Group(); holdGroup.add(doorLine);
+const dlMat = new THREE.MeshBasicMaterial({ color: 0xffd400, transparent: true, opacity: 0.85 });
+for (const [w, d, x, z] of [[HW * 2, 0.03, 0, -HD + 0.01], [0.03, HD * 2, -HW + 0.01, 0], [0.03, HD * 2, HW - 0.01, 0]]) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w || 0.03, 0.04, d || 0.03), dlMat); m.position.set(x, DOOR, z); doorLine.add(m);
+}
+const doorPlane = new THREE.Mesh(new THREE.PlaneGeometry(HW * 2, HD * 2), new THREE.MeshBasicMaterial({ color: 0xffd400, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }));
+doorPlane.rotation.x = -Math.PI / 2; doorPlane.position.y = DOOR; holdGroup.add(doorPlane);
+// Rumpf (Optik)
+const fuseMat = std({ color: 0xf1f3f5, metalness: 0.3, roughness: 0.4 });
+const fuse = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 30, 48, 1, true, 1.6, Math.PI * 2 - 2.5), fuseMat);
+fuse.rotation.z = Math.PI / 2; fuse.position.set(0, 2.6, 0); fuse.castShadow = true; scene.add(fuse);
+const fuseIn = new THREE.Mesh(fuse.geometry, std({ color: 0x8d949b, side: THREE.BackSide })); fuseIn.rotation.copy(fuse.rotation); fuseIn.position.copy(fuse.position); scene.add(fuseIn);
+const stripe = new THREE.Mesh(new THREE.CylinderGeometry(3.43, 3.43, 30, 48, 1, true, 1.7, 0.3), std({ color: 0x1d6be0 })); stripe.rotation.z = Math.PI / 2; stripe.position.set(0, 2.6, 0); scene.add(stripe);
+const cutEdge = new THREE.Mesh(new THREE.CylinderGeometry(3.45, 3.45, 30, 48, 1, true, -0.9, 0.06), std({ color: 0xffb020 })); cutEdge.rotation.z = Math.PI / 2; cutEdge.position.set(0, 2.6, 0); scene.add(cutEdge);
+// Vorfeld
+const apronTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#6b7078'; g.fillRect(0, 0, w, h); for (let i = 0; i < 3000; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`; g.fillRect(Math.random() * w, Math.random() * h, 2, 2); } g.fillStyle = '#ffd400'; g.fillRect(0, 120, w, 8); }, 20, 20);
+const apron = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), std({ map: apronTex, roughness: 0.9 }));
+apron.rotation.x = -Math.PI / 2; apron.position.y = -2.6; apron.receiveShadow = true; scene.add(apron);
+// Fahrwerk, Gepäckband
+for (const x of [-6, 6]) {
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.8), std({ color: 0x555b62, metalness: 0.7 })); leg.position.set(x, -1.7, 0); scene.add(leg);
+  for (const dz of [-0.4, 0.4]) { const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.4, 20), std({ color: 0x1a1a1a })); wh.rotation.z = Math.PI / 2; wh.position.set(x + dz, -2.05, 0); scene.add(wh); }
+}
+const belt = new THREE.Group(); belt.position.set(HW + 2.4, -0.4, 3.2); belt.rotation.z = 0.35; scene.add(belt);
+const beltM = new THREE.Mesh(new THREE.BoxGeometry(5, 0.2, 1.1), std({ color: 0x222222 })); belt.add(beltM);
+const beltF = new THREE.Mesh(new THREE.BoxGeometry(5, 0.4, 1.3), std({ color: 0xffb020 })); beltF.position.y = -0.25; belt.add(beltF);
+const lights = [];
+for (let i = 0; i < 14; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? 0x3aff6a : 0xffffff })); l.position.set(-24 + i * 4, -2.5, 9); scene.add(l); lights.push(l); }
 
-    const muteBtn = document.getElementById('muteBtn');
-    function updateMuteUi() {
-      const m = window.ArcadeCore && ArcadeCore.isMuted();
-      muteBtn.textContent = m ? '🔇 Muted' : '🔊 Sound';
+// ---------- Gepäck-Typen ----------
+const TYPES = {
+  hard:   { name: 'Hartschalenkoffer', icon: '🧳', size: [0.95, 0.66, 0.36], mass: 18, mat: mDefault, w: 4 },
+  big:    { name: 'XXL-Koffer', icon: '💼', size: [1.25, 0.82, 0.48], mass: 28, mat: mDefault, w: 3 },
+  cooler: { name: 'Kühlbox (rutschig!)', icon: '🧊', size: [0.8, 0.5, 0.5], mass: 14, mat: mSlip, w: 2 },
+  guitar: { name: 'Gitarrenkoffer', icon: '🎸', size: [1.5, 0.16, 0.48], mass: 6, mat: mDefault, w: 2 },
+  dog:    { name: 'Hundebox (zappelt)', icon: '🐕', size: [0.8, 0.62, 0.6], mass: 16, mat: mDefault, w: 2 },
+  golf:   { name: 'Golfbag (rollt)', icon: '⛳', cyl: [0.2, 1.25], mass: 12, mat: mDefault, w: 2 },
+  duffel: { name: 'Reisetasche', icon: '👜', cylSide: [0.27, 0.85], mass: 9, mat: mGrip, w: 3 },
+  surf:   { name: 'Surfbrett', icon: '🏄', size: [2.0, 0.09, 0.5], mass: 5, mat: mDefault, w: 1 }
+};
+const TYPE_KEYS = Object.keys(TYPES);
+const caseColors = [0xe23b3b, 0x1d6be0, 0x2fb24c, 0xffb020, 0x9b4ad1, 0x22282e, 0xff6fa8, 0x18a0a0, 0xc0c4c8];
+function stickerTex() {
+  const txt = ['FRA', 'JFK', 'NRT', 'MUC', 'BCN', 'LHR', 'DXB', 'MAL'][Math.floor(rnd(0, 8))];
+  return canvasTex(64, 32, (g, w, h) => { g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.fillStyle = '#e23b3b'; g.fillRect(0, 0, w, 7); g.fillStyle = '#111'; g.font = 'bold 18px monospace'; g.textAlign = 'center'; g.fillText(txt, w / 2, 26); });
+}
+function buildMesh(type) {
+  const T = TYPES[type], g = new THREE.Group();
+  const col = caseColors[Math.floor(rnd(0, caseColors.length))];
+  const add = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
+  const dark = std({ color: 0x1a1a1a });
+  if (type === 'hard' || type === 'big') {
+    const [w, h, d] = T.size;
+    add(new THREE.BoxGeometry(w, h, d), std({ color: col, roughness: 0.35, metalness: 0.15 }));
+    for (let i = -2; i <= 2; i++) add(new THREE.BoxGeometry(0.02, h * 0.98, d + 0.01), std({ color: new THREE.Color(col).multiplyScalar(0.8), roughness: 0.4 }), i * w * 0.18);
+    add(new THREE.BoxGeometry(0.3, 0.05, 0.08), dark, 0, h / 2 + 0.03, 0);
+    const st = add(new THREE.PlaneGeometry(0.22, 0.11), std({ map: stickerTex() }), rnd(-w * 0.3, w * 0.3), rnd(-h * 0.2, h * 0.2), d / 2 + 0.012);
+    for (const sx of [-1, 1]) add(new THREE.SphereGeometry(0.04, 8, 6), dark, sx * (w / 2 - 0.06), -h / 2, d / 2 - 0.06);
+  } else if (type === 'cooler') {
+    const [w, h, d] = T.size;
+    add(new THREE.BoxGeometry(w, h * 0.78, d), std({ color: 0x2a7de1, roughness: 0.3 }), 0, -h * 0.11);
+    add(new THREE.BoxGeometry(w + 0.02, h * 0.22, d + 0.02), std({ color: 0xffffff, roughness: 0.3 }), 0, h * 0.39);
+    add(new THREE.BoxGeometry(0.4, 0.05, 0.06), std({ color: 0xffffff }), 0, h / 2 + 0.02, 0);
+  } else if (type === 'guitar') {
+    const [w, h, d] = T.size;
+    add(new THREE.BoxGeometry(w, h, d), std({ color: 0x2b1d14, roughness: 0.7 }));
+    add(new THREE.BoxGeometry(w * 0.5, h + 0.02, d * 0.5), std({ color: 0x3d2a1e }), w * 0.22);
+    add(new THREE.BoxGeometry(0.2, 0.04, 0.06), std({ color: 0xc0a060, metalness: 0.8 }), -0.1, h / 2 + 0.02, 0);
+  } else if (type === 'dog') {
+    const [w, h, d] = T.size;
+    add(new THREE.BoxGeometry(w, h, d), std({ color: 0xd8d8d0, roughness: 0.6 }));
+    add(new THREE.PlaneGeometry(w * 0.5, h * 0.7), std({ color: 0x333333, transparent: true, opacity: 0.85 }), 0, 0, d / 2 + 0.01);
+    for (let i = -2; i <= 2; i++) add(new THREE.BoxGeometry(0.02, h * 0.7, 0.02), std({ color: 0xaaaaaa, metalness: 0.8 }), i * w * 0.1, 0, d / 2 + 0.02);
+    const face = canvasTex(64, 64, (g2) => { g2.font = '48px "Segoe UI Emoji",sans-serif'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('🐶', 32, 36); });
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: face })); s.scale.setScalar(0.32); s.position.set(0, 0, d / 2 - 0.12); g.add(s);
+  } else if (type === 'golf') {
+    const [r, h] = T.cyl;
+    add(new THREE.CylinderGeometry(r, r, h, 16), std({ color: col, roughness: 0.7 }));
+    add(new THREE.CylinderGeometry(r + 0.01, r + 0.01, 0.12, 16), std({ color: 0x111111 }), 0, -h / 2 + 0.06);
+    for (let i = 0; i < 4; i++) add(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 8), std({ color: 0xcccccc, metalness: 0.9 }), Math.cos(i * 1.6) * 0.09, h / 2 + 0.12, Math.sin(i * 1.6) * 0.09);
+  } else if (type === 'duffel') {
+    const [r, len] = T.cylSide;
+    add(new THREE.CylinderGeometry(r, r, len, 16), std({ color: col, roughness: 0.9 }), 0, 0, 0, 0, 0, Math.PI / 2);
+    for (const sx of [-1, 1]) add(new THREE.CircleGeometry(r * 0.98, 16), std({ color: new THREE.Color(col).multiplyScalar(0.7) }), sx * len / 2 + sx * 0.005, 0, 0, 0, sx * Math.PI / 2);
+    add(new THREE.TorusGeometry(0.16, 0.02, 6, 16, Math.PI), dark, 0, r - 0.02, 0);
+  } else if (type === 'surf') {
+    const [w, h, d] = T.size;
+    const m = add(new THREE.CylinderGeometry(0.5, 0.5, h, 24), std({ color: 0xffffff, roughness: 0.25 }));
+    m.scale.set(w, 1, d);
+    const st = add(new THREE.CylinderGeometry(0.5, 0.5, h + 0.01, 24), std({ color: col, roughness: 0.25 }));
+    st.scale.set(w, 1, 0.1);
+  }
+  scene.add(g);
+  return g;
+}
+function buildBody(type) {
+  const T = TYPES[type];
+  const b = new CANNON.Body({ mass: T.mass, material: T.mat, linearDamping: 0.05, angularDamping: 0.12, allowSleep: true, sleepSpeedLimit: 0.08, sleepTimeLimit: 0.8 });
+  if (T.size) b.addShape(new CANNON.Box(new CANNON.Vec3(T.size[0] / 2, T.size[1] / 2, T.size[2] / 2)));
+  else if (T.cyl) b.addShape(new CANNON.Cylinder(T.cyl[0], T.cyl[0], T.cyl[1], 12));
+  else if (T.cylSide) { const q = new CANNON.Quaternion(); q.setFromEuler(0, 0, Math.PI / 2); b.addShape(new CANNON.Cylinder(T.cylSide[0], T.cylSide[0], T.cylSide[1], 12), new CANNON.Vec3(), q); }
+  return b;
+}
+function halfHeight(type, q) {
+  // Maximale Ausdehnung in y für Ghost/Abwurf
+  const T = TYPES[type];
+  const e = T.size ? new THREE.Vector3(T.size[0] / 2, T.size[1] / 2, T.size[2] / 2) : T.cyl ? new THREE.Vector3(T.cyl[0], T.cyl[1] / 2, T.cyl[0]) : new THREE.Vector3(T.cylSide[1] / 2, T.cylSide[0], T.cylSide[0]);
+  const m = new THREE.Matrix4().makeRotationFromQuaternion(q).elements;
+  return Math.abs(m[1]) * e.x + Math.abs(m[5]) * e.y + Math.abs(m[9]) * e.z;
+}
+function halfExt(type, q) {
+  const T = TYPES[type];
+  const e = T.size ? new THREE.Vector3(T.size[0] / 2, T.size[1] / 2, T.size[2] / 2) : T.cyl ? new THREE.Vector3(T.cyl[0], T.cyl[1] / 2, T.cyl[0]) : new THREE.Vector3(T.cylSide[1] / 2, T.cylSide[0], T.cylSide[0]);
+  const m = new THREE.Matrix4().makeRotationFromQuaternion(q).elements;
+  return {
+    x: Math.abs(m[0]) * e.x + Math.abs(m[4]) * e.y + Math.abs(m[8]) * e.z,
+    y: Math.abs(m[1]) * e.x + Math.abs(m[5]) * e.y + Math.abs(m[9]) * e.z,
+    z: Math.abs(m[2]) * e.x + Math.abs(m[6]) * e.y + Math.abs(m[10]) * e.z
+  };
+}
+
+// ---------- Audio ----------
+let actx = null;
+function audio() { try { actx = ArcadeCore.getAudioContext(); if (actx && actx.state === 'suspended') actx.resume(); } catch (e) {} }
+function noise(dur, freq, gain, q = 1) {
+  if (!actx || ArcadeCore.isMuted()) return;
+  const n = Math.floor(actx.sampleRate * dur), b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+  const s = actx.createBufferSource(); s.buffer = b;
+  const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+  const g = actx.createGain(); g.gain.value = gain;
+  s.connect(f); f.connect(g); g.connect(actx.destination); s.start();
+}
+const sfx = {
+  thud(v) { noise(0.12, rnd(140, 260), clamp(v * 0.12, 0.05, 0.5), 1.2); },
+  bark() { ArcadeCore.playTone(520, 0.07, 'sawtooth', 0.07); setTimeout(() => ArcadeCore.playTone(430, 0.09, 'sawtooth', 0.07), 90); },
+  rumble() { noise(0.6, 70, 0.5, 0.6); },
+  lost() { ArcadeCore.playTone(300, 0.2, 'square', 0.08); setTimeout(() => ArcadeCore.playTone(200, 0.3, 'square', 0.08), 180); },
+  rotate() { ArcadeCore.playTone(700, 0.04, 'triangle', 0.04); }
+};
+
+// ---------- Spielzustand ----------
+const pieces = []; // {type, body, mesh, lost, dogT}
+let state = 'menu', prevState = 'load', flight = 1, score = 0, hearts = 3, queue = [], held = null, dropTimer = 10, settleT = 0, turbT = 0, now = 0, holdT = 0, bannerT = 0, flightLost = 0, nextDelay = 0;
+const heldPos = new THREE.Vector3(), heldQ = new THREE.Quaternion();
+let heldYaw = 0, heldTip = 0, heldRoll = 0;
+function banner(html, dur = 1.8) { $('banner').innerHTML = html; $('banner').classList.add('show'); bannerT = dur; }
+function pickType() {
+  let tot = 0; for (const k of TYPE_KEYS) tot += TYPES[k].w;
+  let r = Math.random() * tot;
+  for (const k of TYPE_KEYS) { r -= TYPES[k].w; if (r <= 0) return k; }
+  return 'hard';
+}
+function clearPieces() {
+  for (const p of pieces) { world.removeBody(p.body); scene.remove(p.mesh); }
+  pieces.length = 0;
+}
+function startFlight(n) {
+  flight = n; clearPieces();
+  const count = 5 + n * 2;
+  queue = []; for (let i = 0; i < count; i++) queue.push(pickType());
+  if (n === 1) queue[0] = 'hard';
+  flightLost = 0; held = null; nextDelay = 0.3;
+  hold.position.set(0, 0, 0); hold.quaternion.set(0, 0, 0, 1); hold.velocity.set(0, 0, 0); hold.angularVelocity.set(0, 0, 0);
+  state = 'load';
+  banner('🛫 Flug #' + n + '<br><span style="font-size:20px">' + count + ' Gepäckstücke</span>', 2);
+}
+function spawnHeld() {
+  if (!queue.length) { held = null; return; }
+  const type = queue.shift();
+  const mesh = buildMesh(type);
+  held = { type, mesh };
+  heldYaw = 0; heldTip = 0; heldRoll = 0;
+  heldPos.set(rnd(-0.4, 0.4), 0, rnd(-0.2, 0.2));
+  dropTimer = Math.max(6, 11 - flight * 0.5);
+}
+function dropHeld() {
+  if (!held || state !== 'load') return;
+  const b = buildBody(held.type);
+  b.position.set(heldPos.x, heldPos.y, heldPos.z);
+  b.quaternion.set(heldQ.x, heldQ.y, heldQ.z, heldQ.w);
+  b.addEventListener('collide', e => { const v = Math.abs(e.contact.getImpactVelocityAlongNormal()); if (v > 0.8) sfx.thud(v); });
+  world.addBody(b);
+  pieces.push({ type: held.type, body: b, mesh: held.mesh, lost: false, dogT: rnd(1, 2.5), scored: false });
+  held = null; nextDelay = 0.7;
+  ArcadeCore.pop(0.6);
+}
+function markLost(p, why) {
+  if (p.lost) return;
+  p.lost = true; flightLost++; hearts--;
+  sfx.lost();
+  banner('😡 Beschwerde!<br><span style="font-size:20px">' + TYPES[p.type].icon + ' ' + why + '</span>', 1.6);
+  if (hearts <= 0) setTimeout(gameOver, 900);
+}
+function gameOver() {
+  if (state === 'over') return;
+  state = 'over';
+  let rec = false;
+  if (score > best) { best = score; ArcadeCore.saveScore(KEY, best); rec = true; }
+  ArcadeCore.gameOver();
+  $('otitle').textContent = '📋 Fristlos gekündigt';
+  $('otext').innerHTML = `Flüge abgefertigt: <b>${flight - 1}</b><br>Punkte: <b>${score}</b>${rec ? ' <span class="best">NEUER REKORD!</span>' : ''}<br>Rekord: ${best}`;
+  setTimeout(() => $('over').classList.remove('hide'), 500);
+}
+function insideHold(p) {
+  const lp = new CANNON.Vec3(); hold.pointToLocalFrame(p.body.position, lp);
+  return lp.y > -0.3 && Math.abs(lp.x) < HW + 0.05 && Math.abs(lp.z) < HD + 0.15;
+}
+function topOf(p) {
+  const q = new THREE.Quaternion(p.body.quaternion.x, p.body.quaternion.y, p.body.quaternion.z, p.body.quaternion.w);
+  return p.body.position.y + halfHeight(p.type, q);
+}
+
+// ---------- Kamera ----------
+let camYaw = 0.3, camPitch = 0.62, camDist = 8, drag = null;
+const cv = $('gl');
+cv.addEventListener('pointerdown', e => { audio(); drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointermove', e => { if (!drag || drag.id !== e.pointerId) return; camYaw = clamp(camYaw - (e.clientX - drag.x) * 0.006, -1.2, 1.2); camPitch = clamp(camPitch + (e.clientY - drag.y) * 0.005, 0.08, 1.1); drag.x = e.clientX; drag.y = e.clientY; });
+const endDrag = () => drag = null;
+cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+cv.addEventListener('wheel', e => { camDist = clamp(camDist + Math.sign(e.deltaY) * 0.6, 4.5, 14); e.preventDefault(); }, { passive: false });
+
+// ---------- Eingabe ----------
+const keys = {}, touch = {};
+let touchMode = false;
+function rotateYaw(dir) { if (!held) return; heldYaw += dir * Math.PI / 2; sfx.rotate(); }
+function tip() { if (!held) return; heldTip = (heldTip + 1) % 4; sfx.rotate(); }
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase(); keys[k] = true;
+  if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
+  if (e.repeat) return;
+  if (k === 'q') rotateYaw(1);
+  if (k === 'e') rotateYaw(-1);
+  if (k === 'r') tip();
+  if (k === ' ') dropHeld();
+  if ((k === 'p' || k === 'escape') && ['load', 'settle', 'turb', 'pause'].includes(state)) togglePause();
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (['load', 'settle', 'turb'].includes(state)) togglePause(); });
+function togglePause() {
+  if (state === 'pause') { state = prevState; $('pause').style.display = 'none'; last = performance.now(); }
+  else { prevState = state; state = 'pause'; $('pause').style.display = 'flex'; }
+}
+$('pause').addEventListener('pointerdown', () => { if (state === 'pause') togglePause(); });
+for (const [id, k] of [['tU', 'u'], ['tD', 'd'], ['tL', 'l'], ['tR', 'r']]) {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); touch[k] = true; el.classList.add('on'); el.setPointerCapture(e.pointerId); });
+  const upF = () => { touch[k] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerup', upF); el.addEventListener('pointercancel', upF);
+}
+$('tY').addEventListener('pointerdown', e => { e.preventDefault(); rotateYaw(1); });
+$('tT').addEventListener('pointerdown', e => { e.preventDefault(); tip(); });
+$('tX').addEventListener('pointerdown', e => { e.preventDefault(); dropHeld(); });
+addEventListener('touchstart', () => { if (!touchMode) { touchMode = true; $('touch').style.display = 'block'; $('help').style.display = 'none'; } }, { passive: true });
+
+// ---------- Ghost / Landepunkt ----------
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0x3aff8a, transparent: true, opacity: 0.25, depthWrite: false });
+const ghost = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), ghostMat); scene.add(ghost);
+const dropLine = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1, 4), new THREE.MeshBasicMaterial({ color: 0x3aff8a, transparent: true, opacity: 0.6 })); scene.add(dropLine);
+const ghostRay = new THREE.Raycaster();
+
+// ---------- Update ----------
+function updateHeld(dt) {
+  if (!held) return;
+  const mx = (keys['d'] || keys['arrowright'] || touch.r ? 1 : 0) - (keys['a'] || keys['arrowleft'] || touch.l ? 1 : 0);
+  const mz = (keys['s'] || keys['arrowdown'] || touch.d ? 1 : 0) - (keys['w'] || keys['arrowup'] || touch.u ? 1 : 0);
+  const cs = Math.cos(camYaw), sn = Math.sin(camYaw);
+  heldPos.x += (mx * cs + mz * sn) * 2.4 * dt;
+  heldPos.z += (-mx * sn + mz * cs) * 2.4 * dt;
+  const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(heldTip * Math.PI / 2, heldYaw, 0, 'YXZ'));
+  heldQ.slerp(tq, Math.min(1, dt * 14));
+  const ext = halfExt(held.type, tq);
+  heldPos.x = clamp(heldPos.x, -HW + ext.x, HW - ext.x);
+  heldPos.z = clamp(heldPos.z, -HD + ext.z, HD - ext.z);
+  heldPos.y = HH + 0.3 + ext.y;
+  // Hindernis-Check: über bestehenden Stücken ausweichen nach oben (bis Decke)
+  held.mesh.position.copy(heldPos); held.mesh.quaternion.copy(heldQ);
+  held.mesh.position.y += Math.sin(now * 3) * 0.02;
+  // Ghost
+  const extNow = halfExt(held.type, heldQ);
+  ghost.visible = dropLine.visible = true;
+  ghost.scale.set(extNow.x * 2, 0.02, extNow.z * 2);
+  const targets = pieces.filter(p => !p.lost).map(p => p.mesh).concat([hFloor]);
+  let landY = 0;
+  for (const [ox, oz] of [[0, 0], [-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) {
+    ghostRay.set(new THREE.Vector3(heldPos.x + ox * extNow.x, heldPos.y - extNow.y - 0.01, heldPos.z + oz * extNow.z), new THREE.Vector3(0, -1, 0));
+    const h = ghostRay.intersectObjects(targets, true)[0];
+    if (h) landY = Math.max(landY, h.point.y);
+  }
+  ghost.position.set(heldPos.x, landY + 0.015, heldPos.z);
+  const top = landY + extNow.y * 2;
+  ghostMat.color.setHex(top > DOOR ? 0xff4a3a : 0x3aff8a);
+  const len = Math.max(0.01, heldPos.y - extNow.y - landY);
+  dropLine.scale.set(1, len, 1); dropLine.position.set(heldPos.x, landY + len / 2, heldPos.z);
+  dropTimer -= dt;
+  if (dropTimer <= 0) { banner('⏱ Zu langsam – Abwurf!', 1); dropHeld(); }
+}
+
+let lastHoldPose = 0;
+function driveHold(t, dt, amp, freq, bump) {
+  // Kinematische Bewegung über Geschwindigkeit (für Reibungskopplung)
+  const roll = amp * Math.sin(t * freq) + amp * 0.4 * Math.sin(t * freq * 2.3 + 1);
+  const droll = amp * freq * Math.cos(t * freq) + amp * 0.4 * freq * 2.3 * Math.cos(t * freq * 2.3 + 1);
+  const pitch = amp * 0.5 * Math.sin(t * freq * 0.7 + 2), dpitch = amp * 0.5 * freq * 0.7 * Math.cos(t * freq * 0.7 + 2);
+  const y = bump * Math.sin(t * freq * 3.1) , dy = bump * freq * 3.1 * Math.cos(t * freq * 3.1);
+  hold.velocity.set(0, dy, 0);
+  hold.angularVelocity.set(dpitch, 0, droll);
+  // Pose-Korrektur gegen Drift
+  const q = new CANNON.Quaternion(); q.setFromEuler(pitch, 0, roll, 'XYZ');
+  hold.quaternion.copy(q); hold.position.set(0, y, 0);
+}
+
+function update(dt) {
+  now += dt;
+  if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show'); }
+  for (let i = 0; i < lights.length; i++) lights[i].material.color.setHex(Math.floor(now * 3 + i) % 3 === 0 ? 0x3aff6a : 0x2a3a2a);
+  if (state === 'pause' || state === 'menu') { if (state === 'menu') { holdT += dt; driveHold(holdT, dt, 0.01, 0.8, 0); world.step(1 / 60, dt, 3); syncMeshes(); } return; }
+  holdT += dt;
+  if (state === 'load') {
+    driveHold(holdT, dt, 0.008 + flight * 0.003, 0.9, 0.004);
+    if (!held) { nextDelay -= dt; if (nextDelay <= 0) { if (queue.length) spawnHeld(); else { state = 'settle'; settleT = 0; banner('⏳ Alles drin? Warte…', 1.2); } } }
+    updateHeld(dt);
+  } else if (state === 'settle') {
+    driveHold(holdT, dt, 0.008 + flight * 0.003, 0.9, 0.004);
+    settleT += dt;
+    const moving = pieces.some(p => !p.lost && p.body.velocity.length() > 0.15);
+    if ((!moving && settleT > 1.2) || settleT > 5) {
+      // Tür-Linie prüfen
+      for (const p of pieces) if (!p.lost && insideHold(p) && topOf(p) > DOOR + 0.04) markLost(p, 'ragt über die Tür-Linie');
+      if (hearts <= 0) return;
+      state = 'turb'; turbT = 0;
+      banner('🌪️ TURBULENZ-TEST!', 1.8); sfx.rumble();
+      // Überstehende Teile werden "rausgeholt"
+      for (const p of pieces) if (p.lost && insideHold(p)) { world.removeBody(p.body); p.mesh.visible = false; }
     }
-    muteBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (window.ArcadeCore) ArcadeCore.toggleMute();
-      updateMuteUi();
-    });
-    updateMuteUi();
-
-    let bestScore = Number(window.ArcadeCore ? ArcadeCore.getScore(GAME_KEY) : localStorage.getItem('ks_best')) || 0;
-
-    const LUGGAGE_TYPES = [
-      {
-        id: 'suitcase',
-        name: 'Hardshell Suitcase',
-        emoji: '🧳',
-        w: 78, h: 50,
-        color: '#3b82f6',
-        border: '#93c5fd',
-        friction: 0.85,
-        frictionStatic: 0.95,
-        restitution: 0.05,
-        density: 0.002,
-        points: 100
-      },
-      {
-        id: 'cooler',
-        name: 'Frosty Cooler (Slippery!)',
-        emoji: '🧊',
-        w: 68, h: 46,
-        color: '#06b6d4',
-        border: '#cffafe',
-        friction: 0.08,
-        frictionStatic: 0.12,
-        restitution: 0.08,
-        density: 0.0022,
-        points: 150
-      },
-      {
-        id: 'pet',
-        name: 'Wobbly Dog Crate',
-        emoji: '🐶',
-        w: 66, h: 54,
-        color: '#f59e0b',
-        border: '#fde68a',
-        friction: 0.8,
-        frictionStatic: 0.9,
-        restitution: 0.1,
-        density: 0.002,
-        vibrates: true,
-        points: 180
-      },
-      {
-        id: 'surf',
-        name: 'Long Guitar Case',
-        emoji: '🎸',
-        w: 116, h: 32,
-        color: '#8b5cf6',
-        border: '#ddd6fe',
-        friction: 0.82,
-        frictionStatic: 0.92,
-        restitution: 0.05,
-        density: 0.0018,
-        points: 140
-      },
-      {
-        id: 'bouncy',
-        name: 'Overstuffed Gym Bag (Bouncy!)',
-        emoji: '🏀',
-        w: 64, h: 44,
-        color: '#10b981',
-        border: '#a7f3d0',
-        friction: 0.72,
-        frictionStatic: 0.85,
-        restitution: 0.56,
-        density: 0.0017,
-        points: 160
-      },
-      {
-        id: 'safe',
-        name: 'Heavy Gold Safe',
-        emoji: '⚓',
-        w: 56, h: 56,
-        color: '#64748b',
-        border: '#e2e8f0',
-        friction: 0.92,
-        frictionStatic: 1.0,
-        restitution: 0.01,
-        density: 0.0042,
-        points: 220
-      }
-    ];
-
-    const Engine = Matter.Engine;
-    const World = Matter.World;
-    const Bodies = Matter.Bodies;
-    const Body = Matter.Body;
-
-    let engine = null;
-    let cargoFloor = null;
-    let leftLip = null;
-    let rightLip = null;
-    let stackedBodies = [];
-
-    // States: MENU, AIMING, SETTLING, TURBULENCE
-    let state = 'MENU';
-    let flightLevel = 1;
-    let remainingToDrop = 8;
-    let lostCount = 0;
-    const maxLost = 3;
-    let score = 0;
-    let settleTimer = 0;
-    let turbulenceTimer = 0;
-    let dropCooldown = 0;
-    let floorAngle = 0;
-    let currentTorque = 0;
-    let floatingTexts = [];
-
-    const crane = {
-      x: width / 2,
-      angle: 0,
-      currentType: LUGGAGE_TYPES[0],
-      nextType: LUGGAGE_TYPES[1]
-    };
-
-    function randomLuggageType() {
-      return LUGGAGE_TYPES[Math.floor(Math.random() * LUGGAGE_TYPES.length)];
+  } else if (state === 'turb') {
+    turbT += dt;
+    const amp = (0.05 + Math.min(0.09, flight * 0.012)) * Math.min(1, turbT / 0.8) * (turbT > 4.5 ? Math.max(0, (5.5 - turbT)) : 1);
+    driveHold(holdT, dt, amp, 2.6 + flight * 0.15, 0.03 + flight * 0.004);
+    if (Math.random() < dt * 3) sfx.rumble();
+    for (const p of pieces) if (!p.lost) p.body.wakeUp();
+    if (turbT > 5.6) {
+      driveHold(0, dt, 0, 1, 0);
+      let ok = 0;
+      for (const p of pieces) if (!p.lost) { if (insideHold(p)) ok++; else markLost(p, 'aus dem Frachtraum gefallen'); }
+      if (hearts <= 0) return;
+      const bonus = ok * 100 + flight * 250 + (flightLost === 0 ? 300 : 0);
+      score += bonus;
+      ArcadeCore.powerup();
+      banner(`✅ Flug #${flight} gestartet!<br><span style="font-size:20px">+${bonus} (${ok} Stück${flightLost === 0 ? ', perfekt +300' : ''})</span>`, 2.4);
+      state = 'between'; turbT = 0;
     }
-
-    function pickNextLuggage() {
-      crane.currentType = crane.nextType || randomLuggageType();
-      crane.nextType = randomLuggageType();
-      crane.angle = 0;
+  } else if (state === 'between') {
+    turbT += dt;
+    if (turbT > 2.6) startFlight(flight + 1);
+  }
+  // Hunde zappeln
+  for (const p of pieces) {
+    if (p.lost) continue;
+    if (p.type === 'dog') {
+      p.dogT -= dt;
+      if (p.dogT <= 0) { p.dogT = rnd(1.2, 2.8); p.body.wakeUp(); p.body.applyImpulse(new CANNON.Vec3(rnd(-1, 1) * 18, rnd(10, 30), rnd(-1, 1) * 18), new CANNON.Vec3(rnd(-0.2, 0.2), 0.3, rnd(-0.2, 0.2))); sfx.bark(); }
     }
+    if (p.body.position.y < -0.8 && state !== 'turb') markLost(p, 'auf dem Vorfeld gelandet');
+  }
+  world.step(1 / 60, dt, 4);
+  syncMeshes();
+}
+function syncMeshes() {
+  holdGroup.position.set(hold.position.x, hold.position.y, hold.position.z);
+  holdGroup.quaternion.set(hold.quaternion.x, hold.quaternion.y, hold.quaternion.z, hold.quaternion.w);
+  holdLight.position.set(0, HH - 0.2, -0.3).applyQuaternion(holdGroup.quaternion);
+  for (const p of pieces) { p.mesh.position.copy(p.body.position); p.mesh.quaternion.copy(p.body.quaternion); }
+  if (!held) ghost.visible = dropLine.visible = false;
+}
 
-    function computeLayout() {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = width;
-      canvas.height = height;
-      bayW = Math.min(440, Math.max(280, width * 0.80));
-      bayY = Math.min(height - 95, Math.max(340, height * 0.74));
-      cx = width / 2;
-    }
+// ---------- HUD ----------
+function updateHud() {
+  $('score').textContent = score.toLocaleString('de-DE');
+  $('flight').textContent = 'Flug #' + flight;
+  $('hearts').textContent = '❤️'.repeat(Math.max(0, hearts)) + '🖤'.repeat(Math.max(0, 3 - hearts));
+  const cur = held ? `<b>Jetzt:</b> ${TYPES[held.type].icon} ${TYPES[held.type].name}<br>` : '';
+  $('queue').innerHTML = cur + '<b>Band:</b> ' + (queue.slice(0, 6).map(k => TYPES[k].icon).join(' ') || '–') + (queue.length > 6 ? ' +' + (queue.length - 6) : '');
+  $('timer').textContent = state === 'load' && held ? '⏱ ' + Math.ceil(dropTimer) + ' s bis Zwangsabwurf' : state === 'turb' ? '🌪️ Turbulenz… ' + Math.max(0, 5.6 - turbT).toFixed(1) + ' s' : '';
+}
 
-    function initPhysicsWorld() {
-      computeLayout();
-      engine = Engine.create({
-        positionIterations: 10,
-        velocityIterations: 8
-      });
-      engine.world.gravity.x = 0;
-      engine.world.gravity.y = 0.95;
-      stackedBodies = [];
+// ---------- Loop ----------
+let last = performance.now();
+function loop(t) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((t - last) / 1000, 0.05); last = t;
+  update(dt);
+  const shake = state === 'turb' ? 0.06 : 0;
+  const target = new THREE.Vector3(0, 1.0, 0);
+  camera.position.set(Math.sin(camYaw) * Math.cos(camPitch) * camDist, 1.0 + Math.sin(camPitch) * camDist, Math.cos(camYaw) * Math.cos(camPitch) * camDist);
+  if (state === 'menu') { camera.position.set(Math.sin(now * 0.2) * 10, 4, 9 + Math.cos(now * 0.2) * 2); }
+  camera.position.x += rnd(-1, 1) * shake; camera.position.y += rnd(-1, 1) * shake;
+  camera.lookAt(target);
+  if (state !== 'menu') updateHud();
+  renderer.render(scene, camera);
+}
 
-      const floorThick = 40;
-      const wallW = 24;
-      const wallH = 64;
-
-      // Static bodies remain fixed in container-local coordinates so Matter.js
-      // contact caching and static friction never jitter or tunnel.
-      cargoFloor = Bodies.rectangle(cx, bayY + floorThick / 2 - 12, bayW, floorThick, {
-        isStatic: true,
-        friction: 0.95,
-        frictionStatic: 1.0,
-        restitution: 0.02
-      });
-      leftLip = Bodies.rectangle(cx - bayW / 2 + wallW / 2, bayY - wallH / 2 - 8, wallW, wallH, {
-        isStatic: true,
-        friction: 0.7,
-        restitution: 0.05
-      });
-      rightLip = Bodies.rectangle(cx + bayW / 2 - wallW / 2, bayY - wallH / 2 - 8, wallW, wallH, {
-        isStatic: true,
-        friction: 0.7,
-        restitution: 0.05
-      });
-
-      World.add(engine.world, [cargoFloor, leftLip, rightLip]);
-    }
-
-    window.addEventListener('resize', () => {
-      const oldCx = cx;
-      const oldBayY = bayY;
-      computeLayout();
-      const dx = cx - oldCx;
-      const dy = bayY - oldBayY;
-      if (cargoFloor) {
-        const floorThick = 40;
-        const wallW = 24;
-        const wallH = 64;
-        Body.setPosition(cargoFloor, { x: cx, y: bayY + floorThick / 2 - 12 });
-        Body.setPosition(leftLip, { x: cx - bayW / 2 + wallW / 2, y: bayY - wallH / 2 - 8 });
-        Body.setPosition(rightLip, { x: cx + bayW / 2 - wallW / 2, y: bayY - wallH / 2 - 8 });
-        for (const b of stackedBodies) {
-          Body.setPosition(b, { x: b.position.x + dx, y: b.position.y + dy });
-        }
-      }
-      crane.x = Math.max(cx - bayW / 2 + 36, Math.min(cx + bayW / 2 - 36, crane.x + dx));
-    });
-
-    function startFlight(level) {
-      flightLevel = level;
-      remainingToDrop = 5 + level * 2;
-      settleTimer = 0;
-      turbulenceTimer = 0;
-      dropCooldown = 0;
-      floorAngle = 0;
-      currentTorque = 0;
-      initPhysicsWorld();
-      crane.x = cx;
-      crane.nextType = randomLuggageType();
-      pickNextLuggage();
-      state = 'AIMING';
-      updateHud();
-    }
-
-    function screenToContainer(sx, sy) {
-      const dx = sx - cx;
-      const dy = sy - bayY;
-      const cosA = Math.cos(-floorAngle);
-      const sinA = Math.sin(-floorAngle);
-      return {
-        x: cx + dx * cosA - dy * sinA,
-        y: bayY + dx * sinA + dy * cosA
-      };
-    }
-
-    function dropCurrentLuggage() {
-      if (state !== 'AIMING' || dropCooldown > 0 || remainingToDrop <= 0) return;
-      const t = crane.currentType;
-      const dropY = 132;
-      const spawnPos = screenToContainer(crane.x, dropY);
-
-      const body = Bodies.rectangle(spawnPos.x, spawnPos.y, t.w, t.h, {
-        friction: t.friction,
-        frictionStatic: t.frictionStatic ?? 0.9,
-        frictionAir: 0.016,
-        restitution: t.restitution,
-        density: t.density,
-        angle: crane.angle - floorAngle,
-        chamfer: { radius: 6 }
-      });
-      body.luggageMeta = t;
-      body.shakeTimer = 1.6 + Math.random() * 1.2;
-
-      World.add(engine.world, body);
-      stackedBodies.push(body);
-
-      if (window.ArcadeCore) ArcadeCore.pop(1.0);
-      score += t.points;
-      remainingToDrop--;
-      dropCooldown = 0.5;
-
-      if (remainingToDrop > 0) {
-        pickNextLuggage();
-      } else {
-        // Wait for the final suitcase to land and settle before starting turbulence
-        state = 'SETTLING';
-        settleTimer = 1.9;
-        floatingTexts.push({
-          x: cx,
-          y: height * 0.30,
-          text: '⏳ FINAL BAG LANDING...',
-          color: '#38bdf8',
-          size: 20,
-          life: 1.6
-        });
-      }
-      updateHud();
-    }
-
-    function rotateCrane() {
-      if (state !== 'AIMING') return;
-      crane.angle = (crane.angle + Math.PI / 4) % (Math.PI * 2);
-      if (window.ArcadeCore) ArcadeCore.playTone(540, 0.06, 'sine', 0.1);
-    }
-
-    // Input Handling
-    const keys = { left: false, right: false };
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
-      if (e.code === 'KeyR' || e.code === 'KeyW' || e.code === 'ArrowUp') {
-        e.preventDefault();
-        rotateCrane();
-      }
-      if (e.code === 'Space' || e.code === 'ArrowDown' || e.code === 'KeyS') {
-        e.preventDefault();
-        dropCurrentLuggage();
-      }
-    });
-    window.addEventListener('keyup', (e) => {
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
-    });
-
-    canvas.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      rotateCrane();
-    });
-
-    canvas.addEventListener('pointermove', (e) => {
-      if (state === 'AIMING') {
-        crane.x = Math.max(cx - bayW / 2 + 36, Math.min(cx + bayW / 2 - 36, e.clientX));
-      }
-    });
-    canvas.addEventListener('pointerdown', (e) => {
-      if (e.button === 2) return;
-      if (state === 'AIMING') {
-        crane.x = Math.max(cx - bayW / 2 + 36, Math.min(cx + bayW / 2 - 36, e.clientX));
-        dropCurrentLuggage();
-      }
-    });
-
-    const btnLeft = document.getElementById('btnLeft');
-    const btnRight = document.getElementById('btnRight');
-    btnLeft.addEventListener('pointerdown', (e) => { e.stopPropagation(); keys.left = true; });
-    btnLeft.addEventListener('pointerup', () => { keys.left = false; });
-    btnLeft.addEventListener('pointerleave', () => { keys.left = false; });
-    btnRight.addEventListener('pointerdown', (e) => { e.stopPropagation(); keys.right = true; });
-    btnRight.addEventListener('pointerup', () => { keys.right = false; });
-    btnRight.addEventListener('pointerleave', () => { keys.right = false; });
-    document.getElementById('btnRot').addEventListener('click', (e) => { e.stopPropagation(); rotateCrane(); });
-    document.getElementById('btnDrop').addEventListener('click', (e) => { e.stopPropagation(); dropCurrentLuggage(); });
-
-    function updateHud() {
-      document.getElementById('hudFlight').textContent = `Flight #${flightLevel}`;
-      document.getElementById('hudRemaining').textContent = `${remainingToDrop} bags`;
-      document.getElementById('hudLost').textContent = `${lostCount} / ${maxLost}`;
-      document.getElementById('hudScore').textContent = score.toLocaleString('en-US');
-      document.getElementById('hudBest').textContent = bestScore.toLocaleString('en-US');
-    }
-
-    function triggerGameOver() {
-      state = 'MENU';
-      if (window.ArcadeCore) ArcadeCore.gameOver();
-      if (score > bestScore) {
-        bestScore = score;
-        if (window.ArcadeCore) ArcadeCore.saveScore(GAME_KEY, bestScore);
-        try { localStorage.setItem('ks_best', String(bestScore)); } catch (e) {}
-      }
-      updateHud();
-
-      document.getElementById('modalEmoji').textContent = '🧳💥';
-      document.getElementById('modalTitle').textContent = 'Cargo scattered across the tarmac!';
-      document.getElementById('modalDesc').innerHTML =
-        `Flights cleared: <b>${flightLevel - 1}</b> &bull; Total score: <b>${score.toLocaleString('en-US')}</b><br>` +
-        `Best: <b>${bestScore.toLocaleString('en-US')}</b>`;
-      document.getElementById('startBtn').textContent = '✈️ Start a new shift!';
-      document.getElementById('modal').hidden = false;
-    }
-
-    document.getElementById('startBtn').addEventListener('click', () => {
-      document.getElementById('modal').hidden = true;
-      score = 0;
-      lostCount = 0;
-      startFlight(1);
-    });
-
-    let lastTime = performance.now();
-    function update(now) {
-      const dt = Math.min(0.05, (now - lastTime) / 1000);
-      lastTime = now;
-
-      if (dropCooldown > 0) dropCooldown -= dt;
-
-      if (state === 'AIMING' || state === 'SETTLING' || state === 'TURBULENCE') {
-        if (keys.left) crane.x -= 320 * dt;
-        if (keys.right) crane.x += 320 * dt;
-        crane.x = Math.max(cx - bayW / 2 + 36, Math.min(cx + bayW / 2 - 36, crane.x));
-
-        // Calculate center-of-mass torque from landed/low suitcases
-        let torqueSum = 0;
-        for (const b of stackedBodies) {
-          if (b.position.y > bayY - 320) {
-            const relX = Math.max(-1.2, Math.min(1.2, (b.position.x - cx) / (bayW * 0.5)));
-            torqueSum += relX * (b.mass / 8.0) * 0.024;
-          }
-
-          // Vibrating Pet Carrier gives a gentle hop when resting
-          if (b.luggageMeta && b.luggageMeta.vibrates && state !== 'SETTLING') {
-            b.shakeTimer -= dt;
-            if (b.shakeTimer <= 0) {
-              b.shakeTimer = 2.0 + Math.random() * 1.4;
-              if (Math.abs(b.velocity.y) < 1.2 && b.position.y > bayY - 260) {
-                Body.setVelocity(b, {
-                  x: b.velocity.x + (Math.random() - 0.5) * 1.3,
-                  y: b.velocity.y - 1.9
-                });
-                floatingTexts.push({
-                  x: b.position.x,
-                  y: b.position.y - 28,
-                  text: '🐶 WOOF!',
-                  color: '#fde68a',
-                  size: 14,
-                  life: 0.65
-                });
-              }
-            }
-          }
-        }
-
-        currentTorque = Math.max(-1, Math.min(1, torqueSum / 0.13));
-        let targetTilt = Math.max(-0.13, Math.min(0.13, torqueSum));
-
-        if (state === 'SETTLING') {
-          settleTimer -= dt;
-          if (settleTimer <= 0) {
-            state = 'TURBULENCE';
-            turbulenceTimer = 4.0;
-            if (window.ArcadeCore) ArcadeCore.playTone(180, 0.3, 'sawtooth', 0.15);
-            floatingTexts.push({
-              x: cx,
-              y: height * 0.30,
-              text: '✈️ TAKEOFF TURBULENCE! HOLD FOR 4s!',
-              color: '#fbbf24',
-              size: 21,
-              life: 2.2
-            });
-          }
-        } else if (state === 'TURBULENCE') {
-          turbulenceTimer -= dt;
-          const wave = Math.sin(now * 0.0085) * (0.065 + Math.min(0.06, flightLevel * 0.01));
-          targetTilt += wave;
-          if (turbulenceTimer <= 0) {
-            const bonus = stackedBodies.length * 100 + flightLevel * 250;
-            score += bonus;
-            if (window.ArcadeCore) ArcadeCore.powerup();
-            floatingTexts.push({
-              x: cx,
-              y: height * 0.35,
-              text: `🛫 FLIGHT #${flightLevel} TOOK OFF! +${bonus} BONUS!`,
-              color: '#4ade80',
-              size: 24,
-              life: 2.0
-            });
-            startFlight(flightLevel + 1);
-          }
-        }
-
-        floorAngle = floorAngle + (targetTilt - floorAngle) * Math.min(1, dt * 4.5);
-
-        // Rotate gravity vector in container space so static floor contacts never break!
-        const gMag = 0.95;
-        engine.world.gravity.x = Math.sin(floorAngle) * gMag;
-        engine.world.gravity.y = Math.cos(floorAngle) * gMag;
-
-        Engine.update(engine, 1000 / 60);
-
-        // Check for fallen luggage
-        for (let i = stackedBodies.length - 1; i >= 0; i--) {
-          const b = stackedBodies[i];
-          if (b.position.y > bayY + 180 || Math.abs(b.position.x - cx) > bayW * 0.95) {
-            World.remove(engine.world, b);
-            stackedBodies.splice(i, 1);
-            lostCount++;
-            if (window.ArcadeCore) ArcadeCore.hit();
-            floatingTexts.push({
-              x: Math.max(90, Math.min(width - 90, b.position.x)),
-              y: Math.min(height - 90, bayY + 40),
-              text: '💥 BAG LOST!',
-              color: '#fb7185',
-              size: 20,
-              life: 1.3
-            });
-            updateHud();
-            if (lostCount >= maxLost) {
-              triggerGameOver();
-              break;
-            }
-          }
-        }
-      }
-
-      for (let i = floatingTexts.length - 1; i >= 0; i--) {
-        const ft = floatingTexts[i];
-        ft.y -= 42 * dt;
-        ft.life -= dt;
-        if (ft.life <= 0) floatingTexts.splice(i, 1);
-      }
-
-      draw();
-      requestAnimationFrame(update);
-    }
-
-    function drawLuggageBox(t, w, h) {
-      ctx.fillStyle = t.color;
-      ctx.strokeStyle = t.border;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.roundRect(-w / 2, -h / 2, w, h, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.25, -h / 2);
-      ctx.lineTo(-w * 0.25, h / 2);
-      ctx.moveTo(w * 0.25, -h / 2);
-      ctx.lineTo(w * 0.25, h / 2);
-      ctx.stroke();
-
-      ctx.font = '24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(t.emoji, 0, 0);
-    }
-
-    function draw() {
-      ctx.fillStyle = '#090d16';
-      ctx.fillRect(0, 0, width, height);
-
-      // Tilted Airplane Fuselage + Cargo Bay + Stacked Luggage
-      ctx.save();
-      ctx.translate(cx, bayY);
-      ctx.rotate(floorAngle);
-      ctx.translate(-cx, -bayY);
-
-      // Airplane Fuselage Cross-Section Circle
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
-      ctx.lineWidth = 14;
-      ctx.beginPath();
-      ctx.arc(cx, bayY - 125, bayW * 0.66, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Cargo Bay Container Floor & Side Rails
-      const wallW = 24;
-      const wallH = 64;
-      ctx.fillStyle = '#334155';
-      ctx.strokeStyle = '#f59e0b';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.roundRect(cx - bayW / 2, bayY - 12, bayW, 30, 6);
-      ctx.fill();
-      ctx.stroke();
-
-      // Anti-slip rubber grip strips on cargo floor
-      ctx.fillStyle = '#1e293b';
-      for (let gx = -bayW / 2 + 34; gx < bayW / 2 - 40; gx += 36) {
-        ctx.fillRect(cx + gx, bayY - 12, 18, 5);
-      }
-
-      // Left & Right Cargo Container Side Walls
-      ctx.fillStyle = '#f59e0b';
-      ctx.strokeStyle = '#fde68a';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(cx - bayW / 2, bayY - wallH - 8, wallW, wallH, 5);
-      ctx.roundRect(cx + bayW / 2 - wallW, bayY - wallH - 8, wallW, wallH, 5);
-      ctx.fill();
-      ctx.stroke();
-
-      // Stacked Luggage Bodies (in container coordinates)
-      for (const b of stackedBodies) {
-        const t = b.luggageMeta;
-        ctx.save();
-        ctx.translate(b.position.x, b.position.y);
-        ctx.rotate(b.angle);
-        drawLuggageBox(t, t.w, t.h);
-        ctx.restore();
-      }
-
-      ctx.restore();
-
-      // Balance / Trim Meter below Cargo Bay
-      const meterW = 180;
-      const meterY = Math.min(height - 64, bayY + 34);
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(cx - meterW / 2, meterY, meterW, 12, 6);
-      ctx.fill();
-      ctx.stroke();
-
-      // Center tick
-      ctx.strokeStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.moveTo(cx, meterY - 3);
-      ctx.lineTo(cx, meterY + 15);
-      ctx.stroke();
-
-      const trimX = cx + currentTorque * (meterW * 0.44);
-      const absTrim = Math.abs(currentTorque);
-      ctx.fillStyle = absTrim > 0.7 ? '#fb7185' : (absTrim > 0.38 ? '#fbbf24' : '#4ade80');
-      ctx.beginPath();
-      ctx.arc(trimX, meterY + 6, 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Crane Preview at Top (in screen coordinates so it drops straight down)
-      if (state === 'AIMING' && remainingToDrop > 0) {
-        const t = crane.currentType;
-        const dropY = 132;
-
-        // Vertical laser guide line
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
-        ctx.setLineDash([6, 6]);
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(crane.x, dropY);
-        ctx.lineTo(crane.x, bayY - 12);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Crane claw cable
-        ctx.strokeStyle = '#64748b';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(crane.x, 62);
-        ctx.lineTo(crane.x, dropY);
-        ctx.stroke();
-
-        // Current luggage on crane
-        ctx.save();
-        ctx.translate(crane.x, dropY);
-        ctx.rotate(crane.angle);
-        drawLuggageBox(t, t.w, t.h);
-        ctx.restore();
-
-        // Info badge for current & next luggage
-        ctx.font = '800 13px system-ui, sans-serif';
-        ctx.fillStyle = '#e2e8f0';
-        ctx.textAlign = 'center';
-        const nextT = crane.nextType;
-        const nextStr = remainingToDrop > 1 && nextT ? `  •  Next: ${nextT.emoji} ${nextT.name}` : '  •  Final bag!';
-        ctx.fillText(`Current: ${t.emoji} ${t.name}${nextStr}`, cx, 80);
-      }
-
-      if (state === 'SETTLING') {
-        ctx.font = '900 20px system-ui, sans-serif';
-        ctx.fillStyle = '#38bdf8';
-        ctx.textAlign = 'center';
-        ctx.fillText(`⏳ STACK SETTLING: ${settleTimer.toFixed(1)}s`, cx, 88);
-      } else if (state === 'TURBULENCE') {
-        ctx.font = '900 22px system-ui, sans-serif';
-        ctx.fillStyle = '#fbbf24';
-        ctx.textAlign = 'center';
-        ctx.fillText(`🌪️ TURBULENCE TEST: ${turbulenceTimer.toFixed(1)}s`, cx, 88);
-      }
-
-      // Floating Texts
-      ctx.textAlign = 'center';
-      for (const ft of floatingTexts) {
-        ctx.save();
-        ctx.font = `900 ${ft.size}px system-ui, sans-serif`;
-        ctx.fillStyle = '#000';
-        ctx.fillText(ft.text, ft.x + 2, ft.y + 2);
-        ctx.fillStyle = ft.color;
-        ctx.fillText(ft.text, ft.x, ft.y);
-        ctx.restore();
-      }
-    }
-
-    initPhysicsWorld();
-    updateHud();
-    requestAnimationFrame(update);
-  })();
-  </script>
+$('go').onclick = () => { audio(); $('menu').classList.add('hide'); score = 0; hearts = 3; startFlight(1); };
+$('again').onclick = () => { $('over').classList.add('hide'); score = 0; hearts = 3; startFlight(1); };
+$('menuBest').textContent = best ? 'Rekord: ' + best.toLocaleString('de-DE') + ' Punkte' : '';
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+// Deko-Koffer im Menü
+for (let i = 0; i < 5; i++) {
+  const type = TYPE_KEYS[i]; const b = buildBody(type);
+  b.position.set(rnd(-1.2, 1.2), 0.5 + i * 0.6, rnd(-0.6, 0.6)); world.addBody(b);
+  pieces.push({ type, body: b, mesh: buildMesh(type), lost: false, dogT: 99 });
+}
+appStarted = true;
+requestAnimationFrame(loop);
+</script>
 </body>
 </html>

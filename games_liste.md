@@ -2,8 +2,8 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-2. **🧊 Bestehende 3D-Spiele (24 Spiele):** Alle im Repository bereits voll funktionsfähigen 3D-Titel.
-3. **⭐ Top 3D-Upgrade-Kandidaten (14 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
+2. **🧊 Bestehende 3D-Spiele (30 Spiele):** Alle im Repository bereits voll funktionsfähigen 3D-Titel.
+3. **⭐ Top 3D-Upgrade-Kandidaten (8 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 53 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
 ---
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (24 Spiele)
+## 🧊 Bestehende 3D-Spiele (30 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -175,31 +175,31 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 22 | 🪜 **Office Yeet 3D** | [`games/stair_yeet.html`](games/stair_yeet.html) | `physics` | Three.js | Eigene Verlet-Ragdoll, Brüche, Atrium-Sturz |
 | 23 | 🎯 **Panzer-Röntgen 3D** | [`games/ballistics.html`](games/ballistics.html) | `physics` | Three.js | Plattenneigung, Abpraller, Röntgen-Splitter |
 | 24 | 🕯️ **Wachsnacht 3D** | [`games/fnaf.html`](games/fnaf.html) | `action` | Three.js | Echte 3D-CCTV-Kameras, Figuren nur unbeobachtet |
+| 25 | 🛒 **Einkaufswagen-Rallye 3D** | [`games/einkaufswagen.html`](games/einkaufswagen.html) | `racing` | Three.js | Klemmendes Vorderrad, Dosen-Pyramiden, Einkaufsliste, Slow-Mo-Ragdoll-Crash, Pfand-Shop |
+| 26 | 🪟 **Fensterputzer 9000 3D** | [`games/fensterputzer.html`](games/fensterputzer.html) | `physics` | Three.js | Zwei-Seil-Gondel mit Kipp-Physik, Canvas-Dreck per Raycast wegwischen, Tauben, Straßenschlucht |
+| 27 | 🧳 **Koffer-Stapler 3D** | [`games/kofferstapler.html`](games/kofferstapler.html) | `physics` | Three.js + cannon-es | Rigid-Body-Gepäck im kinematischen Frachtraum, Tür-Linie, Turbulenz-Test |
+| 28 | 🐑 **Cannon Sheep 3D** | [`games/cannon_sheep.html`](games/cannon_sheep.html) | `physics` | Three.js | Endlose Alpen-Chunks, Trampoline, Windmühlen-Flügel, Booster-Kanonen, Wollschirm, Goldklee-Shop |
+| 29 | ⚔️ **Crypt Survivor 3D** | [`games/survivor.html`](games/survivor.html) | `action` | Three.js | Isometrische Gruft, InstancedMesh-Horden (600+), Spatial Hash, 7 Waffen, Lich-Bosse |
+| 30 | 🌊 **Boot- & Wellen-Simulator 3D** | [`games/boatsim.html`](games/boatsim.html) | `sim` | Three.js | Gerstner-Wellen, eigene Auftriebs-Rigid-Body-Physik, 8 Schiffe, Monsterwelle, Sturm-Challenge |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
 ---
 
-## ⭐ Kuratierte 3D-Upgrade-Kandidaten (14 Spiele)
+## ⭐ Kuratierte 3D-Upgrade-Kandidaten (8 Spiele)
 
-Diese 14 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von einem Umstieg auf 3D** (bessere Physik, räumliche Immersion, First-Person-Perspektive oder echtes Ragdoll):
+Diese 8 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von einem Umstieg auf 3D** (bessere Physik, räumliche Immersion, First-Person-Perspektive oder echtes Ragdoll):
 
 | # | Spiel | Aktuelle Datei | Warum 3D massiven Mehrwert bringt | Geplantes 3D-Konzept |
 |---|-------|----------------|------------------------------------|----------------------|
-| 7 | 🛒 **Einkaufswagen-Rallye** | [`games/einkaufswagen.html`](games/einkaufswagen.html) | Supermarkt-Gänge & Regale leben von 3D-Zerstörung | Driften durch 3D-Supermarktgänge, umstürzende Dosen-Pyramiden |
-| 8 | 🪟 **Fensterputzer 9000** | [`games/fensterputzer.html`](games/fensterputzer.html) | Höhenangst & Wolkenkratzer-Tiefe wirken nur in 3D | Gondel vor spiegelnder 3D-Fassade, Blick in die Straßenschlucht |
-| 9 | 🧳 **Koffer-Stapler Extreme** | [`games/kofferstapler.html`](games/kofferstapler.html) | Raumfüllendes Packen im Flugzeugbauch ist 3D-Jenga | 3D-Frachtraum, Koffer mit Cannon.js-Physik präzise in 3 Achsen stapeln |
-| 10 | 🐑 **Cannon Sheep** | [`games/cannon_sheep.html`](games/cannon_sheep.html) | Weitenflug über Hügelketten & Windmühlen braucht Weitsicht | 3D-Schaf im Ragdoll-Flug über alpine Täler, Schanzen & Ziel-Heuballen |
-| 11 | ⚔️ **Crypt Survivor** | [`games/survivor.html`](games/survivor.html) | 3D-Diablo-Perspektive mit dynamischem Licht & Partikeln | Isometrische 3D-Krypta, Zaubereffekte mit Bloom, Hunderte 3D-Skelette |
-| 12 | 🌊 **Boot- & Wellen-Simulator** | [`games/boatsim.html`](games/boatsim.html) | Wellenhöhen, Gischt & Krängung erfordern 3D-Flüssigkeiten | Gerstner-Wellen 3D-Wassernetz, schwimmender Rumpf mit Auftriebsvektoren |
-| 13 | 🔦 **Nachtwache: Mall Security** | [`games/securityguard.html`](games/securityguard.html) | Taschenlampen-Horror & Sichtkegel leben von 3D-Räumen | First-Person-Patrouille mit volumetrischem Taschenlampenkegel in Mall |
-| 14 | 🧹 **WG Putzen Chaos** | [`games/wg_putzen.html`](games/wg_putzen.html) | Reinigungs-Simulatoren (PowerWash) sind 3D-Kult | First-Person-Wohnungsputz: Pizzakartons greifen, Waschbecken schrubben |
-| 15 | 🚇 **Subway Dodger (Schwarzfahrer)** | [`games/schwarzfahrer.html`](games/schwarzfahrer.html) | Waggon-Flucht & Sitze-Verstecken sind 3D-Raumprobleme | Durch 3D-U-Bahn-Waggons hechten, hinter Sitzen ducken, Kontrolleur umkurven |
-| 16 | 🦑 **Squid Survival (Rotes Licht)** | [`games/squidgame.html`](games/squidgame.html) | Das Erkennen der drehenden Riesenpuppe verlangt Tiefe | 3D-Arena, Roboter-Puppe dreht Kopf um 180°, Glasbrücke mit Fall-Physik |
-| 17 | 🚀 **Furz-Rakete** | [`games/furzrakete.html`](games/furzrakete.html) | Raketenstart vom Klo zum Mond erfordert sphärischen Raum | 3D-Erde verlassen, Wolkenschichten durchstoßen, Mondkrater-Landung |
-| 18 | 🗺️ **HEXFRONT: Tactical Warfare** | [`games/hexfront.html`](games/hexfront.html) | Tabletop-Spiele wirken als 3D-Diorama unvergleichlich | Tilt-Shift Miniatur-3D-Schlachtfeld, 3D-Hexfelder mit Höhenstufen |
-| 19 | 🥙 **Döner Tycoon** | [`games/doener.html`](games/doener.html) | Fleisch am rotierenden Spieß schneiden ist 3D-Handwerk | First-Person-Theke: 3D-Spieß drehen, Streifen schneiden, Brot befüllen |
-| 20 | 🍲 **Microwave Meltdown** | [`games/microwave.html`](games/microwave.html) | Aufblähende Marshmallows & Plasma funken räumlich | Blick durch 3D-Sicherheitsglas in Mikrowelle, rotierender 3D-Glasteller |
+| 1 | 🔦 **Nachtwache: Mall Security** | [`games/securityguard.html`](games/securityguard.html) | Taschenlampen-Horror & Sichtkegel leben von 3D-Räumen | First-Person-Patrouille mit volumetrischem Taschenlampenkegel in Mall |
+| 2 | 🧹 **WG Putzen Chaos** | [`games/wg_putzen.html`](games/wg_putzen.html) | Reinigungs-Simulatoren (PowerWash) sind 3D-Kult | First-Person-Wohnungsputz: Pizzakartons greifen, Waschbecken schrubben |
+| 3 | 🚇 **Subway Dodger (Schwarzfahrer)** | [`games/schwarzfahrer.html`](games/schwarzfahrer.html) | Waggon-Flucht & Sitze-Verstecken sind 3D-Raumprobleme | Durch 3D-U-Bahn-Waggons hechten, hinter Sitzen ducken, Kontrolleur umkurven |
+| 4 | 🦑 **Squid Survival (Rotes Licht)** | [`games/squidgame.html`](games/squidgame.html) | Das Erkennen der drehenden Riesenpuppe verlangt Tiefe | 3D-Arena, Roboter-Puppe dreht Kopf um 180°, Glasbrücke mit Fall-Physik |
+| 5 | 🚀 **Furz-Rakete** | [`games/furzrakete.html`](games/furzrakete.html) | Raketenstart vom Klo zum Mond erfordert sphärischen Raum | 3D-Erde verlassen, Wolkenschichten durchstoßen, Mondkrater-Landung |
+| 6 | 🗺️ **HEXFRONT: Tactical Warfare** | [`games/hexfront.html`](games/hexfront.html) | Tabletop-Spiele wirken als 3D-Diorama unvergleichlich | Tilt-Shift Miniatur-3D-Schlachtfeld, 3D-Hexfelder mit Höhenstufen |
+| 7 | 🥙 **Döner Tycoon** | [`games/doener.html`](games/doener.html) | Fleisch am rotierenden Spieß schneiden ist 3D-Handwerk | First-Person-Theke: 3D-Spieß drehen, Streifen schneiden, Brot befüllen |
+| 8 | 🍲 **Microwave Meltdown** | [`games/microwave.html`](games/microwave.html) | Aufblähende Marshmallows & Plasma funken räumlich | Blick durch 3D-Sicherheitsglas in Mikrowelle, rotierender 3D-Glasteller |
 
 ---
 
