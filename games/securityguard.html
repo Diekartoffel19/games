@@ -1,2291 +1,991 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Night Watch: Mall Security Guard Simulator — Game Arcade</title>
-<link rel="stylesheet" href="../style.css">
+<title>Nachtwache 3D</title>
+<meta name="description" content="First-Person-Nachtschicht im leeren Einkaufszentrum: Patrouilliere mit der Taschenlampe, stempel Kontrollpunkte, blende Einbrecher, leg Handschellen an und halte das Phantom im Lichtkegel.">
+<meta name="theme-color" content="#05070c">
 <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
 <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
 <script src="../src/arcade-core.js"></script>
-
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) { if (msg) document.getElementById('fallbackMsg').textContent = msg; fb.style.display = 'block'; }
+};
+window.addEventListener('error', function(e) { if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar')); });
+setTimeout(function() { if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).'); }, 8000);
+</script>
 <style>
-  .main-stage canvas { margin: 0 !important; border-radius: 0 !important; max-width: none !important; height: 100% !important; width: 100% !important; }
-  :root {
-    --bg-dark: #080c10;
-    --bg-panel: #0d151e;
-    --bg-card: #13202e;
-    --border-color: #1f364d;
-    --accent-blue: #38bdf8;
-    --accent-gold: #fbbf24;
-    --accent-red: #ef4444;
-    --accent-green: #22c55e;
-    --accent-purple: #a855f7;
-    --text-primary: #f0f6fc;
-    --text-muted: #8ba2b9;
-    --crt-green: #39ff14;
-  }
-
-  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
-
-  body {
-    background: radial-gradient(circle at 50% 10%, #111d2b 0%, #06090d 90%);
-    color: var(--text-primary);
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-    touch-action: manipulation;
-  }
-
-  /* Back Button Override to fit the top bar */
-  a.back {
-    position: fixed;
-    top: 10px;
-    left: 12px;
-    z-index: 1000;
-    padding: 6px 14px;
-    font-size: 0.85rem;
-    font-weight: 700;
-    background: rgba(13, 21, 30, 0.85);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    border-radius: 999px;
-    backdrop-filter: blur(8px);
-    text-decoration: none;
-    transition: all 0.2s;
-  }
-  a.back:hover {
-    background: var(--accent-blue);
-    color: #000;
-    transform: scale(1.04);
-  }
-
-  .game-wrapper {
-    max-width: 1300px;
-    margin: 0 auto;
-    padding: 50px 10px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  /* Top Navigation & Status Bar */
-  .hud-header {
-    background: linear-gradient(180deg, #101c2b, #0b131e);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 8px 14px;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  }
-
-  .hud-badge-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .hud-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(19, 32, 46, 0.9);
-    border: 1px solid var(--border-color);
-    padding: 4px 10px;
-    border-radius: 8px;
-    font-size: 0.82rem;
-    font-weight: 700;
-  }
-  .hud-badge.time {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 1.05rem;
-    color: var(--accent-gold);
-    letter-spacing: 1px;
-    border-color: rgba(251, 191, 36, 0.4);
-  }
-  .hud-badge.cash { color: var(--accent-green); }
-  .hud-badge.alert-green { color: var(--accent-green); border-color: rgba(34, 197, 94, 0.4); }
-  .hud-badge.alert-yellow { color: var(--accent-gold); border-color: rgba(251, 191, 36, 0.6); animation: pulseWarn 1s infinite; }
-  .hud-badge.alert-red { color: var(--accent-red); border-color: rgba(239, 68, 68, 0.8); background: rgba(239, 68, 68, 0.15); animation: pulseAlarm 0.6s infinite; }
-
-  @keyframes pulseAlarm { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-  @keyframes pulseWarn { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-
-  /* Mode Switch Buttons */
-  .view-switcher {
-    display: flex;
-    gap: 6px;
-  }
-  .view-btn {
-    background: #152435;
-    border: 1px solid var(--border-color);
-    color: var(--text-muted);
-    font-weight: 700;
-    font-size: 0.82rem;
-    padding: 6px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.2s;
-  }
-  .view-btn.active {
-    background: #0284c7;
-    color: #fff;
-    border-color: #38bdf8;
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
-  }
-  .view-btn:hover:not(.active) {
-    background: #1e334a;
-    color: #fff;
-  }
-
-  /* Audio & Radio Banner */
-  .radio-feed {
-    background: rgba(13, 21, 30, 0.95);
-    border: 1px solid #1a334d;
-    border-left: 4px solid var(--accent-blue);
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 0.82rem;
-    color: #cbd5e1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-  .radio-msg {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .radio-icon { animation: blink 1.2s infinite; font-size: 0.9rem; }
-  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-  /* Main Container */
-  .main-stage {
-    position: relative;
-    width: 100%;
-    background: #05080c;
-    border: 2px solid var(--border-color);
-    border-radius: 14px;
-    overflow: hidden;
-    min-height: 580px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.7);
-  }
-
-  /* CCTV Room Grid View */
-  #cctvContainer {
-    width: 100%;
-    min-height: 600px;
-    padding: 12px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    background: #090e15;
-  }
-  @media (max-width: 900px) {
-    #cctvContainer { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (max-width: 600px) {
-    #cctvContainer { grid-template-columns: 1fr; }
-  }
-
-  .cctv-card {
-    background: #070c12;
-    border: 2px solid #1e334a;
-    border-radius: 10px;
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
-  }
-  .cctv-card.alarm-border {
-    border-color: var(--accent-red) !important;
-    animation: cctvAlarmGlow 0.8s infinite;
-  }
-  @keyframes cctvAlarmGlow {
-    0%, 100% { box-shadow: inset 0 0 25px rgba(239, 68, 68, 0.4), 0 0 15px rgba(239, 68, 68, 0.6); }
-    50% { box-shadow: inset 0 0 10px rgba(239, 68, 68, 0.1), 0 0 5px rgba(239, 68, 68, 0.2); }
-  }
-
-  .cctv-canvas-wrap {
-    position: relative;
-    width: 100%;
-    height: 180px;
-    background: #000;
-    overflow: hidden;
-    cursor: pointer;
-  }
-  .cctv-canvas-wrap canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: cover;
-  }
-
-  /* CRT Scanline Overlay */
-  .crt-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-    background-size: 100% 3px, 6px 100%;
-    pointer-events: none;
-  }
-  .crt-timestamp {
-    position: absolute;
-    top: 6px;
-    left: 8px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.72rem;
-    color: var(--crt-green);
-    text-shadow: 0 0 4px var(--crt-green);
-    pointer-events: none;
-    z-index: 5;
-    background: rgba(0,0,0,0.5);
-    padding: 2px 4px;
-    border-radius: 4px;
-  }
-  .crt-rec {
-    position: absolute;
-    top: 6px;
-    right: 8px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.72rem;
-    color: #ef4444;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    z-index: 5;
-    background: rgba(0,0,0,0.5);
-    padding: 2px 4px;
-    border-radius: 4px;
-  }
-  .crt-rec-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #ef4444;
-    animation: blink 1s infinite;
-  }
-
-  .cctv-controls {
-    padding: 8px 10px;
-    background: #0d1520;
-    border-top: 1px solid #1a2c3f;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .cctv-name {
-    font-weight: 700;
-    font-size: 0.8rem;
-    color: var(--text-primary);
-  }
-  .cctv-btn-row {
-    display: flex;
-    gap: 4px;
-  }
-  .cctv-act-btn {
-    background: #182738;
-    border: 1px solid #284462;
-    color: #e2e8f0;
-    border-radius: 6px;
-    padding: 3px 8px;
-    font-size: 0.72rem;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.15s;
-  }
-  .cctv-act-btn:hover {
-    background: #233a52;
-    border-color: #38bdf8;
-  }
-  .cctv-act-btn.active {
-    background: #dc2626;
-    color: #fff;
-    border-color: #f87171;
-  }
-
-  /* Patrol Canvas View */
-  #patrolContainer {
-    position: relative;
-    width: 100%;
-    height: 640px;
-    display: none;
-    background: #000;
-  }
-  #patrolCanvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-
-  /* Patrol In-Game Overlay HUD */
-  .patrol-hud {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    display: flex;
-    justify-content: space-between;
-    pointer-events: none;
-    z-index: 20;
-  }
-  .patrol-tools {
-    position: absolute;
-    bottom: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 8px;
-    background: rgba(10, 16, 24, 0.88);
-    backdrop-filter: blur(8px);
-    border: 1px solid #233a52;
-    padding: 6px 10px;
-    border-radius: 12px;
-    z-index: 20;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-  }
-  .tool-btn {
-    background: #142232;
-    border: 1px solid #2b4562;
-    color: #cbd5e1;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 0.8rem;
-    font-weight: 700;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    min-width: 64px;
-    transition: all 0.2s;
-  }
-  .tool-btn .key { font-size: 0.65rem; color: var(--accent-blue); opacity: 0.8; }
-  .tool-btn.active {
-    background: #0369a1;
-    border-color: #38bdf8;
-    color: #fff;
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
-  }
-  .tool-btn:hover:not(.active) { background: #1c3046; }
-
-  /* Stamina & Alertness Bars */
-  .guard-bars {
-    background: rgba(10, 16, 24, 0.85);
-    border: 1px solid #1f364d;
-    backdrop-filter: blur(6px);
-    padding: 6px 10px;
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    width: 170px;
-    pointer-events: auto;
-  }
-  .bar-label { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); display: flex; justify-content: space-between; }
-  .bar-track { width: 100%; height: 7px; background: #152230; border-radius: 4px; overflow: hidden; border: 1px solid #24384d; }
-  .bar-fill { height: 100%; transition: width 0.15s ease; border-radius: 3px; }
-  .bar-fill.stamina { background: linear-gradient(90deg, #0284c7, #38bdf8); }
-  .bar-fill.alertness { background: linear-gradient(90deg, #d97706, #fbbf24); }
-
-  /* Minimap */
-  .minimap-wrap {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 130px;
-    height: 100px;
-    background: rgba(8, 14, 22, 0.85);
-    border: 1px solid #233a52;
-    border-radius: 8px;
-    overflow: hidden;
-    backdrop-filter: blur(6px);
-    pointer-events: auto;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-  }
-  .minimap-canvas { width: 100%; height: 100%; display: block; }
-
-  /* Touch Joystick & Actions */
-  .touch-zone {
-    display: none;
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 30;
-  }
-  @media (pointer: coarse) {
-    .touch-zone { display: block; }
-  }
-  .virtual-stick {
-    position: absolute;
-    bottom: 24px;
-    left: 20px;
-    width: 110px;
-    height: 110px;
-    background: rgba(255,255,255,0.06);
-    border: 2px dashed rgba(255,255,255,0.25);
-    border-radius: 50%;
-    pointer-events: auto;
-    touch-action: none;
-  }
-  .virtual-knob {
-    position: absolute;
-    top: 35px;
-    left: 35px;
-    width: 40px;
-    height: 40px;
-    background: rgba(56, 189, 248, 0.6);
-    border: 2px solid #38bdf8;
-    border-radius: 50%;
-    pointer-events: none;
-  }
-  .touch-action-cluster {
-    position: absolute;
-    bottom: 24px;
-    right: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    pointer-events: auto;
-  }
-  .touch-act-btn {
-    width: 54px;
-    height: 54px;
-    border-radius: 50%;
-    background: rgba(15, 27, 40, 0.9);
-    border: 2px solid #38bdf8;
-    color: #fff;
-    font-size: 1.25rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    touch-action: manipulation;
-  }
-  .touch-act-btn:active { background: #38bdf8; color: #000; transform: scale(0.92); }
-
-  /* Modals: Shop / Shift Report / Mission Briefing */
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(4, 7, 12, 0.85);
-    backdrop-filter: blur(6px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
-    padding: 16px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.25s ease;
-  }
-  .modal-backdrop.show {
-    opacity: 1;
-    pointer-events: auto;
-  }
-  .modal-card {
-    background: #0f1925;
-    border: 2px solid var(--border-color);
-    border-radius: 16px;
-    width: 100%;
-    max-width: 620px;
-    max-height: 90vh;
-    overflow-y: auto;
-    padding: 20px;
-    box-shadow: 0 12px 48px rgba(0,0,0,0.8);
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    position: relative;
-  }
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #1a2f44;
-    padding-bottom: 10px;
-  }
-  .modal-title { font-size: 1.25rem; font-weight: 800; color: var(--accent-gold); display: flex; align-items: center; gap: 8px; }
-  .close-btn {
-    background: none;
-    border: none;
-    color: #94a3b8;
-    font-size: 1.3rem;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 6px;
-  }
-  .close-btn:hover { color: #fff; background: #1c3046; }
-
-  /* Shop Items */
-  .shop-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
-  @media (max-width: 500px) {
-    .shop-grid { grid-template-columns: 1fr; }
-  }
-  .shop-item {
-    background: #142232;
-    border: 1px solid #233b54;
-    border-radius: 10px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 6px;
-  }
-  .shop-item-top { display: flex; align-items: center; gap: 8px; }
-  .shop-item-icon { font-size: 1.5rem; }
-  .shop-item-title { font-size: 0.88rem; font-weight: 700; color: #f1f5f9; }
-  .shop-item-desc { font-size: 0.74rem; color: #94a3b8; line-height: 1.3; }
-  .shop-buy-btn {
-    margin-top: 4px;
-    background: #0284c7;
-    border: none;
-    color: #fff;
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-weight: 700;
-    font-size: 0.8rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    transition: all 0.2s;
-  }
-  .shop-buy-btn:hover:not(:disabled) { background: #0ea5e9; }
-  .shop-buy-btn:disabled { background: #1e334a; color: #64748b; cursor: not-allowed; }
-
-  /* Shift Summary */
-  .shift-stats {
-    background: #090e15;
-    border: 1px solid #1a2d40;
-    border-radius: 10px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.88rem;
-  }
-  .stat-row { display: flex; justify-content: space-between; }
-  .stat-row.total { border-top: 1px dashed #2a4563; padding-top: 6px; color: var(--accent-green); font-weight: 700; }
-
-  /* Bottom Controls / Help Bar */
-  .quick-tips {
-    background: #0d1520;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 8px 14px;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .tip-kbd {
-    display: inline-block;
-    background: #18283a;
-    border: 1px solid #2b4562;
-    padding: 1px 6px;
-    border-radius: 4px;
-    color: #38bdf8;
-    font-weight: 700;
-  }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#05070c; color:#e8f0ff; font-family:"Segoe UI",system-ui,sans-serif; }
+canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; min-height:36px; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000b; z-index:20; padding:16px; overflow:auto; }
+.overlay.hide { display:none; }
+.card { background:#0f1522; color:#e8f0ff; border-radius:14px; padding:20px 24px; max-width:560px; width:100%; text-align:center; border:2px solid #3b82f6; box-shadow:0 0 40px #3b82f633; }
+.card h1 { margin:0 0 6px; font-size:28px; letter-spacing:1px; }
+.card p { margin:8px 0; line-height:1.45; font-size:15px; color:#c5d0e6; }
+.card table { width:100%; margin:8px 0; border-collapse:collapse; font-size:15px; }
+.card td { padding:3px 6px; text-align:left; } .card td:last-child { text-align:right; font-weight:700; }
+.best { color:#facc15; font-weight:800; }
+button { font:inherit; font-weight:800; font-size:18px; color:#fff; background:linear-gradient(#3b82f6,#1d4ed8); border:0; border-radius:10px; padding:11px 26px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #0b2a7a; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #0b2a7a; }
+button:disabled { filter:grayscale(1); opacity:.5; cursor:default; }
+.shop { display:grid; gap:6px; margin:10px 0; text-align:left; }
+.shop .row { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#1a2335; border-radius:10px; padding:6px 10px; font-size:14px; }
+.shop .row button { font-size:13px; padding:6px 10px; margin:0; box-shadow:0 2px 0 #0b2a7a; white-space:nowrap; }
+#hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+.t { position:absolute; font-weight:700; text-shadow:0 2px 3px #000; }
+#clock { top:12px; right:16px; font-size:28px; font-family:Consolas,monospace; }
+#night { top:48px; right:16px; font-size:15px; color:#9fb3d9; }
+#money { top:70px; right:16px; font-size:16px; color:#facc15; }
+#cps { top:54px; left:12px; font-size:14px; background:#0008; border-radius:8px; padding:5px 10px; letter-spacing:2px; }
+.bar { left:16px; width:180px; height:10px; border:1px solid #fff8; border-radius:6px; background:#0008; overflow:hidden; }
+.bar > div { height:100%; width:100%; }
+#batW { bottom:46px; } #bat { background:linear-gradient(90deg,#ef4444,#facc15,#4ade80); }
+#staW { bottom:26px; } #sta { background:#60a5fa; }
+#barL { bottom:60px; left:16px; font-size:12px; color:#9fb3d9; }
+#taser { bottom:22px; right:16px; font-size:16px; }
+#cross { top:50%; left:50%; width:6px; height:6px; margin:-3px; border-radius:50%; background:#fff9; }
+#prompt { bottom:90px; left:50%; transform:translateX(-50%); font-size:18px; background:#000a; padding:6px 14px; border-radius:8px; display:none; white-space:nowrap; }
+#radio { top:100px; left:50%; transform:translateX(-50%); font-size:15px; background:#0a1a10dd; color:#86efac; border:1px solid #22c55e66; padding:6px 14px; border-radius:8px; max-width:90vw; text-align:center; opacity:0; transition:opacity .3s; }
+#radio.show { opacity:1; }
+#alarm { top:140px; left:50%; transform:translateX(-50%); font-size:20px; color:#f87171; display:none; text-align:center; }
+#arrow { top:178px; left:50%; width:0; height:0; margin-left:-12px; border-left:12px solid transparent; border-right:12px solid transparent; border-bottom:26px solid #f87171; display:none; transform-origin:50% 60%; }
+#banner { top:38%; left:50%; transform:translate(-50%,-50%); font-size:44px; text-align:center; white-space:nowrap; opacity:0; transition:opacity .25s; }
+#banner.show { opacity:1; }
+#vign { position:absolute; inset:0; background:radial-gradient(ellipse at center, transparent 45%, #000c 100%); }
+#flash { position:absolute; inset:0; background:#fff; opacity:0; }
+#cctv { position:absolute; inset:0; display:none; }
+#cctv.on { display:block; }
+#cctv .scan { position:absolute; inset:0; background:repeating-linear-gradient(0deg,#0000 0 2px,#0004 2px 4px); }
+#cctv .lbl { position:absolute; top:84px; left:16px; font-family:Consolas,monospace; font-size:20px; color:#bbffcc; text-shadow:0 0 6px #0f0; }
+#cctv .rec { position:absolute; top:100px; right:16px; font-family:Consolas,monospace; font-size:18px; color:#ff5555; }
+#cctv .help { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); font-family:Consolas,monospace; font-size:14px; color:#bbffcc; background:#0008; padding:4px 10px; border-radius:6px; white-space:nowrap; }
+#cctvBtns { position:absolute; bottom:50px; left:50%; transform:translateX(-50%); display:flex; gap:6px; pointer-events:auto; }
+#cctvBtns button { font-size:14px; padding:8px 12px; margin:0; background:#0a2a14; border:1px solid #22c55e; box-shadow:none; }
+#cctvBtns button.on { background:#16a34a; }
+#pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; font-size:32px; background:#000a; pointer-events:auto; cursor:pointer; }
+#pause span { font-size:15px; margin-top:6px; color:#9fb3d9; }
+#touch { position:fixed; inset:0; z-index:15; display:none; pointer-events:none; }
+#touch .b { position:absolute; width:64px; height:64px; border-radius:50%; background:#fff2; border:2px solid #fff6; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; pointer-events:auto; touch-action:none; }
+#touch .b.on { background:#fff6; }
+#joy { position:absolute; left:20px; bottom:30px; width:120px; height:120px; border-radius:50%; border:2px solid #fff4; background:#fff1; pointer-events:auto; touch-action:none; }
+#joyK { position:absolute; left:40px; top:40px; width:40px; height:40px; border-radius:50%; background:#fff5; }
 </style>
 </head>
 <body>
-
-<a href="../index.html" class="back">← Arcade</a>
-
-<div class="game-wrapper">
-  <!-- HUD Header -->
-  <header class="hud-header">
-    <div class="hud-badge-group">
-      <div class="hud-badge time" id="clockDisplay">⏰ 22:00:00</div>
-      <div class="hud-badge" id="nightDisplay">🌙 Night 1/5</div>
-      <div class="hud-badge cash" id="cashDisplay">💰 150 €</div>
-      <div class="hud-badge alert-green" id="alarmBadge">🟢 STATUS: NORMAL</div>
-    </div>
-
-    <!-- View Switcher -->
-    <div class="view-switcher">
-      <button class="view-btn active" id="btnViewCctv" onclick="switchView('cctv')">
-        🖥️ CCTV Control Room [TAB]
-      </button>
-      <button class="view-btn" id="btnViewPatrol" onclick="switchView('patrol')">
-        🚶 On Site / Patrol [TAB]
-      </button>
-      <button class="view-btn" onclick="openShopModal()">
-        🛒 Terminal / Equipment
-      </button>
-    </div>
-  </header>
-
-  <!-- Walkie-Talkie Radio Broadcast Bar -->
-  <div class="radio-feed">
-    <div class="radio-msg" id="radioMsg">
-      <span class="radio-icon">📻</span>
-      <span id="radioText"><strong>Dispatch:</strong> Welcome to the night shift, Guard Alpha. Start your checkpoint round at stations A-F.</span>
-    </div>
-    <div style="display: flex; gap: 6px;">
-      <button class="cctv-act-btn" onclick="triggerRadioChatter()">🔊 Request radio chatter</button>
-      <button class="cctv-act-btn" id="audioToggleBtn" onclick="toggleMuteAudio()">🔊 Sound</button>
-    </div>
-  </div>
-
-  <!-- Main View Stage -->
-  <div class="main-stage">
-    
-    <!-- 1. CCTV CONTROL ROOM -->
-    <div id="cctvContainer">
-      <!-- 6 Security Camera Monitors -->
-      <!-- CAM 1: Main Atrium -->
-      <div class="cctv-card" id="cardCam1">
-        <div class="cctv-canvas-wrap" onclick="focusCctvCam(0)">
-          <div class="crt-timestamp" id="stampCam1">CAM 01 // ATRIUM & FOUNTAIN</div>
-          <div class="crt-rec"><span class="crt-rec-dot"></span>LIVE</div>
-          <canvas id="cctv1" width="320" height="180"></canvas>
-          <div class="crt-overlay"></div>
-        </div>
-        <div class="cctv-controls">
-          <span class="cctv-name">Sector A: Main Atrium</span>
-          <div class="cctv-btn-row">
-            <button class="cctv-act-btn" onclick="cctvAction(0, 'lock')">🔒 Lock</button>
-            <button class="cctv-act-btn" onclick="cctvAction(0, 'light')">💡 Light</button>
-            <button class="cctv-act-btn" onclick="cctvAction(0, 'mic')">📢 Announcement</button>
-            <button class="cctv-act-btn" onclick="cctvAction(0, 'sprinkler')">🚨 Sprinkler</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- CAM 2: Juwelier Karat Royale -->
-      <div class="cctv-card" id="cardCam2">
-        <div class="cctv-canvas-wrap" onclick="focusCctvCam(1)">
-          <div class="crt-timestamp" id="stampCam2">CAM 02 // JEWELER KARAT ROYALE</div>
-          <div class="crt-rec"><span class="crt-rec-dot"></span>LIVE</div>
-          <canvas id="cctv2" width="320" height="180"></canvas>
-          <div class="crt-overlay"></div>
-        </div>
-        <div class="cctv-controls">
-          <span class="cctv-name">Sector B: Jeweler</span>
-          <div class="cctv-btn-row">
-            <button class="cctv-act-btn" onclick="cctvAction(1, 'lock')">🔒 Lock</button>
-            <button class="cctv-act-btn" onclick="cctvAction(1, 'light')">💡 Light</button>
-            <button class="cctv-act-btn" onclick="cctvAction(1, 'mic')">📢 Announcement</button>
-            <button class="cctv-act-btn" onclick="cctvAction(1, 'sprinkler')">🚨 Sprinkler</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- CAM 3: CyberTech MegaStore -->
-      <div class="cctv-card" id="cardCam3">
-        <div class="cctv-canvas-wrap" onclick="focusCctvCam(2)">
-          <div class="crt-timestamp" id="stampCam3">CAM 03 // CYBER-TECH STORE</div>
-          <div class="crt-rec"><span class="crt-rec-dot"></span>LIVE</div>
-          <canvas id="cctv3" width="320" height="180"></canvas>
-          <div class="crt-overlay"></div>
-        </div>
-        <div class="cctv-controls">
-          <span class="cctv-name">Sector C: Tech Store</span>
-          <div class="cctv-btn-row">
-            <button class="cctv-act-btn" onclick="cctvAction(2, 'lock')">🔒 Lock</button>
-            <button class="cctv-act-btn" onclick="cctvAction(2, 'light')">💡 Light</button>
-            <button class="cctv-act-btn" onclick="cctvAction(2, 'mic')">📢 Announcement</button>
-            <button class="cctv-act-btn" onclick="cctvAction(2, 'sprinkler')">🚨 Sprinkler</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- CAM 4: Food Court & Donut Stand -->
-      <div class="cctv-card" id="cardCam4">
-        <div class="cctv-canvas-wrap" onclick="focusCctvCam(3)">
-          <div class="crt-timestamp" id="stampCam4">CAM 04 // FOOD COURT & CAFE</div>
-          <div class="crt-rec"><span class="crt-rec-dot"></span>LIVE</div>
-          <canvas id="cctv4" width="320" height="180"></canvas>
-          <div class="crt-overlay"></div>
-        </div>
-        <div class="cctv-controls">
-          <span class="cctv-name">Sector D: Food Court</span>
-          <div class="cctv-btn-row">
-            <button class="cctv-act-btn" onclick="cctvAction(3, 'lock')">🔒 Lock</button>
-            <button class="cctv-act-btn" onclick="cctvAction(3, 'light')">💡 Light</button>
-            <button class="cctv-act-btn" onclick="cctvAction(3, 'mic')">📢 Announcement</button>
-            <button class="cctv-act-btn" onclick="cctvAction(3, 'sprinkler')">🚨 Sprinkler</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- CAM 5: Ladezone & Notausgang -->
-      <div class="cctv-card" id="cardCam5">
-        <div class="cctv-canvas-wrap" onclick="focusCctvCam(4)">
-          <div class="crt-timestamp" id="stampCam5">CAM 05 // LOADING BAY & DOCK</div>
-          <div class="crt-rec"><span class="crt-rec-dot"></span>LIVE</div>
-          <canvas id="cctv5" width="320" height="180"></canvas>
-          <div class="crt-overlay"></div>
-        </div>
-        <div class="cctv-controls">
-          <span class="cctv-name">Sector E: Loading Bay</span>
-          <div class="cctv-btn-row">
-            <button class="cctv-act-btn" onclick="cctvAction(4, 'lock')">🔒 Lock</button>
-            <button class="cctv-act-btn" onclick="cctvAction(4, 'light')">💡 Light</button>
-            <button class="cctv-act-btn" onclick="cctvAction(4, 'mic')">📢 Announcement</button>
-            <button class="cctv-act-btn" onclick="cctvAction(4, 'sprinkler')">🚨 Sprinkler</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- CAM 6: Tresorraum & Haupt-Sicherungskasten -->
-      <div class="cctv-card" id="cardCam6">
-        <div class="cctv-canvas-wrap" onclick="focusCctvCam(5)">
-          <div class="crt-timestamp" id="stampCam6">CAM 06 // VAULT & GENERATOR</div>
-          <div class="crt-rec"><span class="crt-rec-dot"></span>LIVE</div>
-          <canvas id="cctv6" width="320" height="180"></canvas>
-          <div class="crt-overlay"></div>
-        </div>
-        <div class="cctv-controls">
-          <span class="cctv-name">Sector F: Vault & Power</span>
-          <div class="cctv-btn-row">
-            <button class="cctv-act-btn" onclick="cctvAction(5, 'lock')">🔒 Lock</button>
-            <button class="cctv-act-btn" onclick="cctvAction(5, 'light')">💡 Light</button>
-            <button class="cctv-act-btn" onclick="cctvAction(5, 'mic')">📢 Announcement</button>
-            <button class="cctv-act-btn" onclick="cctvAction(5, 'sprinkler')">🚨 Sprinkler</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 2. PATROL MODE (Canvas Flashlight Action) -->
-    <div id="patrolContainer">
-      <canvas id="patrolCanvas"></canvas>
-
-      <!-- Overlay HUD -->
-      <div class="patrol-hud">
-        <div class="guard-bars">
-          <div class="bar-label"><span>STAMINA</span><span id="staminaVal">100%</span></div>
-          <div class="bar-track"><div class="bar-fill stamina" id="staminaFill" style="width: 100%;"></div></div>
-          <div class="bar-label" style="margin-top:2px;"><span>ALERTNESS</span><span id="alertnessVal">100%</span></div>
-          <div class="bar-track"><div class="bar-fill alertness" id="alertnessFill" style="width: 100%;"></div></div>
-        </div>
-
-        <div class="minimap-wrap" title="Minimap (click to enlarge)">
-          <canvas class="minimap-canvas" id="minimapCanvas" width="130" height="100"></canvas>
-        </div>
-      </div>
-
-      <!-- Equipment Quick Bar -->
-      <div class="patrol-tools">
-        <button class="tool-btn active" id="toolBtn1" onclick="selectTool(1)">
-          <span>🔦 Light</span>
-          <span class="key">[F]</span>
-        </button>
-        <button class="tool-btn" id="toolBtn2" onclick="selectTool(2)">
-          <span>⛓️ Cuffs</span>
-          <span class="key">[1]</span>
-        </button>
-        <button class="tool-btn" id="toolBtn3" onclick="selectTool(3)">
-          <span>⚡ Taser</span>
-          <span class="key">[2]</span>
-        </button>
-        <button class="tool-btn" id="toolBtn4" onclick="selectTool(4)">
-          <span>🌶️ Spray</span>
-          <span class="key">[3]</span>
-        </button>
-        <button class="tool-btn" id="toolBtn5" onclick="selectTool(5)">
-          <span>🛴 Segway</span>
-          <span class="key">[E]</span>
-        </button>
-        <button class="tool-btn" id="toolBtn6" onclick="selectTool(6)">
-          <span>🐕 K9 Buster</span>
-          <span class="key">[4]</span>
-        </button>
-      </div>
-
-      <!-- Touch Controls for Mobile / Tablets -->
-      <div class="touch-zone">
-        <div class="virtual-stick" id="virtualStick">
-          <div class="virtual-knob" id="virtualKnob"></div>
-        </div>
-        <div class="touch-action-cluster">
-          <button class="touch-act-btn" onclick="performPatrolAction()" title="Action / Arrest / Tase">⚡</button>
-          <button class="touch-act-btn" onclick="toggleFlashlightTouch()" title="Flashlight">🔦</button>
-          <button class="touch-act-btn" onclick="toggleSegwayTouch()" title="Segway">🛴</button>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Bottom Quick Controls Bar -->
-  <footer class="quick-tips">
-    <div>
-      <span class="tip-kbd">W A S D</span> / <span class="tip-kbd">Arrow keys</span>: Move &bull;
-      <span class="tip-kbd">Mouse</span>: Aim &bull;
-      <span class="tip-kbd">Left click</span>: Use equipment &bull;
-      <span class="tip-kbd">Shift</span>: Sprint &bull;
-      <span class="tip-kbd">F</span>: Strobe flash &bull;
-      <span class="tip-kbd">E</span>: Interact / Segway &bull;
-      <span class="tip-kbd">TAB</span>: Switch view
-    </div>
-    <div id="checkpointsStatus">
-      <span>Checkpoints: <strong id="cpCounter" style="color:var(--accent-gold);">0 / 6</strong> stamped</span>
-    </div>
-  </footer>
+<a class="back" href="../index.html">← Hub</a>
+<canvas id="gl"></canvas>
+<div id="hud">
+  <div id="vign"></div>
+  <div id="flash"></div>
+  <div id="cctv"><div class="scan"></div><div class="lbl" id="camLbl">CAM 01</div><div class="rec" id="camRec">● REC</div>
+    <div id="cctvBtns"></div>
+    <div class="help">1–6 Kamera · L Sektorlicht · TAB zurück</div></div>
+  <div id="clock" class="t">22:00</div>
+  <div id="night" class="t">Nacht 1/5</div>
+  <div id="money" class="t">0 €</div>
+  <div id="cps" class="t">A B C D E F</div>
+  <div id="barL" class="t">🔋 AKKU · 🏃 PUSTE</div>
+  <div id="batW" class="t bar"><div id="bat"></div></div>
+  <div id="staW" class="t bar"><div id="sta"></div></div>
+  <div id="taser" class="t">⚡ ×0</div>
+  <div id="cross" class="t"></div>
+  <div id="prompt" class="t"></div>
+  <div id="radio" class="t"></div>
+  <div id="alarm" class="t"></div>
+  <div id="arrow" class="t"></div>
+  <div id="banner" class="t"></div>
+  <div id="pause"><b>⏸ Pause</b><span>Klicken / Tippen = weiter</span></div>
+</div>
+<div id="touch">
+  <div id="joy"><div id="joyK"></div></div>
+  <div class="b" id="tF" style="right:20px;bottom:180px">🔦</div>
+  <div class="b" id="tS" style="right:96px;bottom:110px">✨</div>
+  <div class="b" id="tE" style="right:20px;bottom:100px">✋</div>
+  <div class="b" id="tQ" style="right:96px;bottom:30px">⚡</div>
+  <div class="b" id="tC" style="right:20px;bottom:20px">📺</div>
+  <div class="b" id="tR" style="right:172px;bottom:30px">🏃</div>
+</div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🔦 Nachtwache 3D</h1>
+  <p>Einkaufszentrum „Galerie am Kanal“, 22:00. Die Rolltore sind unten, das Licht ist aus – und du bist allein. Fast.</p>
+  <p><b>Laufen:</b> WASD · <b>Umsehen:</b> Maus · <b>Sprinten:</b> Shift<br><b>🔦 Lampe:</b> F · <b>✨ Blitz:</b> Linksklick · <b>⚡ Taser:</b> Q<br><b>✋ Stempeln / Festnehmen / Laden:</b> E · <b>📺 Kameras:</b> TAB</p>
+  <p>Einbrecher bemerken deinen Lichtkegel. Blende sie mit dem Blitz und leg Handschellen an. Ab Nacht 3 wandert eine Schaufensterpuppe – sie bewegt sich nur im Dunkeln.</p>
+  <div class="shop" id="shop"></div>
+  <p class="best" id="menuBest"></p>
+  <button id="go">Schicht beginnen</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle"></h1>
+  <p id="otext"></p>
+  <table id="otable"></table>
+  <div class="shop" id="shop2"></div>
+  <button id="again">Weiter</button>
+</div></div>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#05070c;color:#fff;z-index:99999;padding:30px;text-align:center;">
+  <h2>🔦 Stromausfall im Einkaufszentrum</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#8fd">Zurück zum Hub</a></p>
 </div>
 
-<!-- MODAL: Equipment Shop & Guard Terminal -->
-<div class="modal-backdrop" id="shopModal">
-  <div class="modal-card">
-    <div class="modal-header">
-      <div class="modal-title">🛡️ Guard Terminal & Equipment Depot</div>
-      <button class="close-btn" onclick="closeShopModal()">✕</button>
-    </div>
-    <p style="font-size: 0.85rem; color: #94a3b8;">
-      Invest your hard-earned guard pay in better equipment to effectively protect the mall from break-ins.
-    </p>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
 
-    <div class="shop-grid">
-      <!-- 1. Megawatt-Taschenlampe -->
-      <div class="shop-item">
-        <div class="shop-item-top">
-          <div class="shop-item-icon">🔦</div>
-          <div>
-            <div class="shop-item-title">Mag-Beam Tactical 5000</div>
-            <div class="shop-item-desc">Larger light cone & 3x longer blinding with the strobe flash.</div>
-          </div>
-        </div>
-        <button class="shop-buy-btn" id="buyFlashlightBtn" onclick="buyUpgrade('flashlight')">
-          <span>Buy</span><span>120 €</span>
-        </button>
-      </div>
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const KEY = 'securityguard', NIGHT_LEN = 200, NIGHTS = 5;
+const SAVE_KEY = 'sg3d_save';
+let save = { money: 0, up: { lamp: 0, batt: 0, shoes: 0, tracker: 0, taser: 0 } };
+try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.up) save = Object.assign(save, s, { up: Object.assign(save.up, s.up) }); } catch (e) {}
+const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
+let best = Number(ArcadeCore.getScore(KEY)) || 0;
 
-      <!-- 2. K9 Diensthund Buster -->
-      <div class="shop-item">
-        <div class="shop-item-top">
-          <div class="shop-item-icon">🐕</div>
-          <div>
-            <div class="shop-item-title">K9 German Shepherd "Buster"</div>
-            <div class="shop-item-desc">Loyal companion: alerts you to burglars and tackles fleeing culprits!</div>
-          </div>
-        </div>
-        <button class="shop-buy-btn" id="buyDogBtn" onclick="buyUpgrade('dog')">
-          <span>Buy</span><span>250 €</span>
-        </button>
-      </div>
+// ---------- Renderer ----------
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020306);
+scene.fog = new THREE.FogExp2(0x020306, 0.034);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 120);
+scene.add(camera);
+const hemi = new THREE.HemisphereLight(0x4a5a80, 0x151010, 0.18);
+scene.add(hemi);
 
-      <!-- 3. Segway Ninebot Pro -->
-      <div class="shop-item">
-        <div class="shop-item-top">
-          <div class="shop-item-icon">🛴</div>
-          <div>
-            <div class="shop-item-title">Turbo Patrol Segway</div>
-            <div class="shop-item-desc">2.2x travel speed with front headlight & horn [Space]!</div>
-          </div>
-        </div>
-        <button class="shop-buy-btn" id="buySegwayBtn" onclick="buyUpgrade('segway')">
-          <span>Buy</span><span>180 €</span>
-        </button>
-      </div>
-
-      <!-- 4. High-Volt Taser Patrone -->
-      <div class="shop-item">
-        <div class="shop-item-top">
-          <div class="shop-item-icon">⚡</div>
-          <div>
-            <div class="shop-item-title">Taser Cartridge (3 shots)</div>
-            <div class="shop-item-desc">Instantly shocks suspects out from 12 m away.</div>
-          </div>
-        </div>
-        <button class="shop-buy-btn" id="buyTaserAmmoBtn" onclick="buyUpgrade('taser_ammo')">
-          <span>Reload ammo</span><span>40 €</span>
-        </button>
-      </div>
-
-      <!-- 5. KI-Bewegungssensor Kameras -->
-      <div class="shop-item">
-        <div class="shop-item-top">
-          <div class="shop-item-icon">📡</div>
-          <div>
-            <div class="shop-item-title">CCTV AI Tracker Software</div>
-            <div class="shop-item-desc">Automatically highlights burglars in red on the monitors and raises the alarm.</div>
-          </div>
-        </div>
-        <button class="shop-buy-btn" id="buyCctvAiBtn" onclick="buyUpgrade('cctv_ai')">
-          <span>Upgrade</span><span>200 €</span>
-        </button>
-      </div>
-
-      <!-- 6. Große Thermoskanne Kaffee -->
-      <div class="shop-item">
-        <div class="shop-item-top">
-          <div class="shop-item-icon">☕</div>
-          <div>
-            <div class="shop-item-title">Premium Espresso & Donut Box</div>
-            <div class="shop-item-desc">Instantly refills stamina and alertness to 100%!</div>
-          </div>
-        </div>
-        <button class="shop-buy-btn" id="buyCoffeeBtn" onclick="buyUpgrade('coffee')">
-          <span>Refuel</span><span>25 €</span>
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: Shift Complete / Morning Report -->
-<div class="modal-backdrop" id="shiftReportModal">
-  <div class="modal-card">
-    <div class="modal-header">
-      <div class="modal-title">🌅 Shift Report at 06:00</div>
-    </div>
-    <p id="shiftReportGreeting" style="font-size: 0.9rem; color: #cbd5e1;">
-      Good morning! The early shift is taking over the center. Here's the summary of your night:
-    </p>
-
-    <div class="shift-stats">
-      <div class="stat-row"><span>Base shift pay:</span><span>+ 150 €</span></div>
-      <div class="stat-row"><span>Burglars caught:</span><span id="repSuspects">+ 0 €</span></div>
-      <div class="stat-row"><span>Checkpoints completed:</span><span id="repCheckpoints">+ 0 €</span></div>
-      <div class="stat-row"><span>Merchandise theft prevented:</span><span id="repGoodsSaved">+ 0 €</span></div>
-      <div class="stat-row total"><span>Total payout:</span><span id="repTotal">+ 150 €</span></div>
-    </div>
-
-    <button class="shop-buy-btn" style="padding: 10px; font-size: 0.95rem; justify-content: center;" onclick="startNextNight()">
-      ▶ Start next night
-    </button>
-  </div>
-</div>
-
-<script>
-/**
- * NACHTWACHE: MALL SECURITY GUARD SIMULATOR
- * Modern Canvas & Web Audio Security Guard Simulation
- */
-
-// --- STATE MANAGEMENT ---
-const GAME = {
-  activeView: 'cctv', // 'cctv' | 'patrol'
-  night: 1,
-  maxNights: 5,
-  cash: 150,
-  score: 0,
-  timeSec: 22 * 3600, // starts at 22:00:00 (ends at 06:00:00 = 30 * 3600)
-  timeSpeed: 4, // 1 real sec = 4 in-game secs (shift takes ~2 minutes of high intensity)
-  alarmLevel: 'green', // 'green' | 'yellow' | 'red'
-  blackout: false,
-  soundMuted: false,
-
-  // Guard Stats
-  guard: {
-    x: 180,
-    y: 160,
-    vx: 0,
-    vy: 0,
-    angle: 0,
-    speed: 3.2,
-    sprintSpeed: 5.4,
-    segwaySpeed: 7.2,
-    stamina: 100,
-    alertness: 100,
-    isSprinting: false,
-    onSegway: false,
-    activeTool: 1, // 1: Flashlight, 2: Handcuffs, 3: Taser, 4: Pepper Spray, 5: Segway, 6: Dog
-    taserAmmo: 2,
-    hasFlashlightUpgrade: false,
-    hasDog: false,
-    hasSegway: false,
-    hasCctvAi: false,
-    flashlightOn: true,
-    strobeActive: false,
-    strobeTimer: 0
-  },
-
-  // K9 Buster
-  k9: {
-    x: 150,
-    y: 160,
-    angle: 0,
-    targetSuspect: null,
-    state: 'following', // 'following', 'chasing', 'biting'
-    biteTimer: 0
-  },
-
-  // Map Sectors (6 distinct mall sections)
-  sectors: [
-    { id: 0, name: "Atrium & Fountain", x: 300, y: 350, w: 400, h: 300, locked: false, light: true, sprinkler: false, sprinklerTimer: 0 },
-    { id: 1, name: "Karat Royale Jeweler", x: 750, y: 80, w: 350, h: 250, locked: false, light: true, sprinkler: false, sprinklerTimer: 0 },
-    { id: 2, name: "CyberTech MegaStore", x: 750, y: 380, w: 350, h: 280, locked: false, light: true, sprinkler: false, sprinklerTimer: 0 },
-    { id: 3, name: "Food Court & Cafe", x: 80, y: 380, w: 200, h: 280, locked: false, light: true, sprinkler: false, sprinklerTimer: 0 },
-    { id: 4, name: "Loading Bay & Emergency Exit", x: 400, y: 80, w: 300, h: 200, locked: false, light: true, sprinkler: false, sprinklerTimer: 0 },
-    { id: 5, name: "Vault & Generator", x: 80, y: 80, w: 250, h: 250, locked: false, light: true, sprinkler: false, sprinklerTimer: 0 }
-  ],
-
-  // RFID Checkpoint Stations
-  checkpoints: [
-    { id: 'A', name: 'Atrium', x: 500, y: 480, stamped: false },
-    { id: 'B', name: 'Jeweler', x: 920, y: 150, stamped: false },
-    { id: 'C', name: 'CyberTech', x: 920, y: 520, stamped: false },
-    { id: 'D', name: 'Food Court', x: 180, y: 500, stamped: false },
-    { id: 'E', name: 'Loading Bay', x: 550, y: 160, stamped: false },
-    { id: 'F', name: 'Main Generator', x: 150, y: 140, stamped: false }
-  ],
-
-  // Entities
-  suspects: [],
-  lostItems: [],
-  mannequin: { x: 820, y: 220, angle: 0, moved: false },
-  particles: [],
-  sprayClouds: [],
-
-  // Night Stats Counter
-  shiftReport: {
-    arrests: 0,
-    checkpointsCount: 0,
-    goodsSaved: 0
-  }
-};
-
-// --- AUDIO SYNTHESIZER (Native Web Audio API) ---
-let audioCtx = null;
-function getAudioCtx() {
-  if (!audioCtx) {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtx) audioCtx = new AudioCtx();
-  }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
-  }
-  return audioCtx;
+function canvasTex(w, h, draw, rx, ry) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  if (rx) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry || rx); }
+  return t;
 }
+const std = o => new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.7, metalness: 0.05 }, o));
 
-const AudioFX = {
-  // Walkie Talkie Radio Click & Noise Burst
-  radioChirp() {
-    if (GAME.soundMuted) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
-    try {
-      const now = ctx.currentTime;
-      // Tone blip
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1400, now);
-      osc.frequency.setValueAtTime(1800, now + 0.04);
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(now); osc.stop(now + 0.1);
-
-      // Noise squelch
-      const bufSize = ctx.sampleRate * 0.08;
-      const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-      const noise = ctx.createBufferSource();
-      noise.buffer = buffer;
-      const nGain = ctx.createGain();
-      nGain.gain.setValueAtTime(0.06, now + 0.08);
-      nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-      noise.connect(nGain); nGain.connect(ctx.destination);
-      noise.start(now + 0.08);
-    } catch(e) {}
-  },
-
-  // Taser Shock crackle
-  taserZap() {
-    if (GAME.soundMuted) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
-    try {
-      const now = ctx.currentTime;
-      for (let i = 0; i < 4; i++) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(160 + Math.random() * 280, now + i * 0.05);
-        gain.gain.setValueAtTime(0.18, now + i * 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + (i + 1) * 0.05);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(now + i * 0.05); osc.stop(now + (i + 1) * 0.05);
-      }
-    } catch(e) {}
-  },
-
-  // Handcuff Click-Clack
-  handcuff() {
-    if (GAME.soundMuted) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
-    try {
-      const now = ctx.currentTime;
-      [800, 1200].forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
-        gain.gain.setValueAtTime(0.2, now + idx * 0.07);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.05);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(now + idx * 0.07); osc.stop(now + idx * 0.07 + 0.05);
-      });
-    } catch(e) {}
-  },
-
-  // RFID Checkpoint Beep
-  checkpointBeep() {
-    if (GAME.soundMuted) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
-    try {
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, now);
-      osc.frequency.setValueAtTime(1760, now + 0.08);
-      gain.gain.setValueAtTime(0.2, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(now); osc.stop(now + 0.22);
-    } catch(e) {}
-  },
-
-  // Segway Bell Ring
-  bellRing() {
-    if (GAME.soundMuted) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
-    try {
-      const now = ctx.currentTime;
-      [2000, 2400].forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.08);
-        gain.gain.setValueAtTime(0.2, now + idx * 0.08);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.3);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.3);
-      });
-    } catch(e) {}
-  },
-
-  // Dog Bark
-  dogBark() {
-    if (GAME.soundMuted) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
-    try {
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(320, now);
-      osc.frequency.exponentialRampToValueAtTime(110, now + 0.14);
-      gain.gain.setValueAtTime(0.3, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(now); osc.stop(now + 0.16);
-    } catch(e) {}
-  },
-
-  // Alarm Siren
-  alarm() {
-    if (GAME.soundMuted) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
-    try {
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(650, now);
-      osc.frequency.linearRampToValueAtTime(950, now + 0.25);
-      osc.frequency.linearRampToValueAtTime(650, now + 0.5);
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(now); osc.stop(now + 0.52);
-    } catch(e) {}
-  },
-
-  // Sprinkler / Spray Hiss
-  spray() {
-    if (GAME.soundMuted) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
-    try {
-      const now = ctx.currentTime;
-      const bufSize = ctx.sampleRate * 0.25;
-      const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-      const noise = ctx.createBufferSource();
-      noise.buffer = buffer;
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.value = 2400;
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-      noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-      noise.start(now);
-    } catch(e) {}
-  }
-};
-
-// --- INITIALIZATION & VIEW TOGGLE ---
-function switchView(viewName) {
-  GAME.activeView = viewName;
-  document.getElementById('btnViewCctv').classList.toggle('active', viewName === 'cctv');
-  document.getElementById('btnViewPatrol').classList.toggle('active', viewName === 'patrol');
-  document.getElementById('cctvContainer').style.display = (viewName === 'cctv') ? 'grid' : 'none';
-  document.getElementById('patrolContainer').style.display = (viewName === 'patrol') ? 'block' : 'none';
-
-  if (viewName === 'patrol') {
-    resizePatrolCanvas();
-  }
-}
-
-function toggleMuteAudio() {
-  GAME.soundMuted = !GAME.soundMuted;
-  const btn = document.getElementById('audioToggleBtn');
-  btn.textContent = GAME.soundMuted ? '🔇 Muted' : '🔊 Sound';
-  if (window.ArcadeCore) ArcadeCore.toggleMute();
-}
-
-// --- RADIO CHATTER SYSTEM ---
-const RADIO_QUOTES = [
-  "Delta-1 reporting: loading bay gate 4 is locked. No incidents.",
-  "Dispatch to Alpha-1: please check the jeweler, a motion sensor was flickering.",
-  "Heads up: trash can tipped over in the food court. Probably Rocky the raccoon again!",
-  "Boss to security: the break room coffee machine has freshly roasted beans.",
-  "Notice: storm warning over the center. During thunderstorms the main power may flicker briefly.",
-  "Dispatch: Greetings! Don't forget to stamp checkpoints A through F."
+// ---------- Mall-Layout ----------
+// Gang: x ∈ [-5,5], z ∈ [-30,30]. Läden links/rechts, je 20 m breit.
+const STORES = [
+  { id: 'A', name: 'Juwelier Karat', side: -1, cz: -20, col: 0xfacc15, loot: 90, item: 'gem' },
+  { id: 'B', name: 'CyberTech', side: -1, cz: 0, col: 0x38bdf8, loot: 70, item: 'tv' },
+  { id: 'C', name: 'Food Court', side: -1, cz: 20, col: 0xfb923c, loot: 30, item: 'cash' },
+  { id: 'D', name: 'Spielwaren Kunterbunt', side: 1, cz: -20, col: 0xf472b6, loot: 40, item: 'toy' },
+  { id: 'E', name: 'Mode Lavelle', side: 1, cz: 0, col: 0xa78bfa, loot: 55, item: 'bag' },
+  { id: 'F', name: 'Tresor & Technik', side: 1, cz: 20, col: 0x4ade80, loot: 120, item: 'safe' }
 ];
-
-function setRadioMessage(speaker, text) {
-  const elem = document.getElementById('radioText');
-  elem.innerHTML = `<strong>${speaker}:</strong> ${text}`;
-  AudioFX.radioChirp();
+const solids = [];
+const wallMeshes = [];
+function box(w, h, d, mat, x, y, z, solid = true, cast = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = true; scene.add(m);
+  if (solid) solids.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2, h: y + h / 2 });
+  return m;
 }
-
-function triggerRadioChatter() {
-  const quote = RADIO_QUOTES[Math.floor(Math.random() * RADIO_QUOTES.length)];
-  setRadioMessage("Radio", quote);
-}
-
-// --- SETUP PATROL CANVAS & WORLD ---
-const patrolCanvas = document.getElementById('patrolCanvas');
-const patrolCtx = patrolCanvas.getContext('2d');
-const minimapCanvas = document.getElementById('minimapCanvas');
-const minimapCtx = minimapCanvas.getContext('2d');
-
-// World size: 1200 x 800
-const WORLD_W = 1200;
-const WORLD_H = 800;
-
-function resizePatrolCanvas() {
-  const rect = patrolCanvas.parentElement.getBoundingClientRect();
-  patrolCanvas.width = rect.width;
-  patrolCanvas.height = rect.height || 640;
-}
-window.addEventListener('resize', resizePatrolCanvas);
-
-// Input Handlers
-const KEYS = {};
-window.addEventListener('keydown', (e) => {
-  KEYS[e.key.toLowerCase()] = true;
-  KEYS[e.code] = true;
-
-  if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
-  if (e.repeat) return;
-
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    switchView(GAME.activeView === 'cctv' ? 'patrol' : 'cctv');
-  } else if (e.key === '1') selectTool(2);
-  else if (e.key === '2') selectTool(3);
-  else if (e.key === '3') selectTool(4);
-  else if (e.key === '4') selectTool(6);
-  else if (e.key === 'f' || e.key === 'F') toggleFlashlight();
-  else if (e.key === 'e' || e.key === 'E') toggleSegwayOrInteract();
-  else if (e.key === ' ') {
-    if (GAME.guard.onSegway) AudioFX.bellRing();
+const floorTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#3a3c42'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const v = 52 + ((i * 7 + j * 13) % 5) * 4; g.fillStyle = `rgb(${v},${v + 2},${v + 6})`; g.fillRect(i * 64 + 1, j * 64 + 1, 62, 62);
   }
-});
-
-window.addEventListener('keyup', (e) => {
-  KEYS[e.key.toLowerCase()] = false;
-  KEYS[e.code] = false;
-});
-window.addEventListener('blur', () => { for (const k in KEYS) KEYS[k] = false; });
-
-let mouseWorldX = 0, mouseWorldY = 0;
-patrolCanvas.addEventListener('mousemove', (e) => {
-  const rect = patrolCanvas.getBoundingClientRect();
-  const screenX = e.clientX - rect.left;
-  const screenY = e.clientY - rect.top;
-  // Calculate relative to guard / camera
-  const camX = GAME.guard.x - patrolCanvas.width / 2;
-  const camY = GAME.guard.y - patrolCanvas.height / 2;
-  mouseWorldX = screenX + camX;
-  mouseWorldY = screenY + camY;
-  GAME.guard.angle = Math.atan2(mouseWorldY - GAME.guard.y, mouseWorldX - GAME.guard.x);
-});
-
-patrolCanvas.addEventListener('mousedown', (e) => {
-  if (e.button === 0) {
-    performPatrolAction();
-  }
-});
-
-// --- TOOLS & WEAPONS ---
-function selectTool(toolId) {
-  GAME.guard.activeTool = toolId;
-  for (let i = 1; i <= 6; i++) {
-    const btn = document.getElementById(`toolBtn${i}`);
-    if (btn) btn.classList.toggle('active', i === toolId);
-  }
+  g.strokeStyle = '#ffffff10'; for (let k = 0; k < 30; k++) { g.beginPath(); g.moveTo(Math.random() * w, Math.random() * h); g.lineTo(Math.random() * w, Math.random() * h); g.stroke(); }
+}, 15, 15);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 66), std({ map: floorTex, roughness: 0.25, metalness: 0.2 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const ceil = new THREE.Mesh(new THREE.PlaneGeometry(40, 66), std({ color: 0x15171c }));
+ceil.rotation.x = Math.PI / 2; ceil.position.y = 4.6; scene.add(ceil);
+// Glas-Oberlicht im Gang
+const sky = new THREE.Mesh(new THREE.PlaneGeometry(8, 56), new THREE.MeshBasicMaterial({ color: 0x0c1530 }));
+sky.rotation.x = Math.PI / 2; sky.position.y = 4.58; scene.add(sky);
+const wallMat = std({ color: 0x8a8f99 }), darkWall = std({ color: 0x3b3f48 }), trim = std({ color: 0x1c1f26, metalness: 0.5, roughness: 0.4 });
+// Außenwände
+box(0.4, 4.6, 66, darkWall, -17.2, 2.3, 0); box(0.4, 4.6, 66, darkWall, 17.2, 2.3, 0);
+box(34, 4.6, 0.4, darkWall, 0, 2.3, -31.2); box(34, 4.6, 0.4, darkWall, 0, 2.3, 31.2);
+// Trennwände zwischen Läden
+for (const s of [-1, 1]) for (const z of [-10, 10]) box(12, 4.6, 0.3, wallMat, s * 11, 2.3, z);
+// Ladenfronten mit Türöffnung (z = cz ± 3)
+for (const s of [-1, 1]) for (const [z0, z1] of [[-31, -23], [-17, -3], [3, 17], [23, 31]]) {
+  box(0.3, 4.6, z1 - z0, wallMat, s * 5, 2.3, (z0 + z1) / 2);
 }
-
-function toggleFlashlight() {
-  GAME.guard.flashlightOn = !GAME.guard.flashlightOn;
-  AudioFX.radioChirp();
+// Schaufensterglas über Türen
+const glassMat = new THREE.MeshStandardMaterial({ color: 0x88aacc, transparent: true, opacity: 0.12, roughness: 0.05, metalness: 0.8 });
+for (const st of STORES) {
+  const g = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.3, 6), glassMat); g.position.set(st.side * 5, 3.95, st.cz); scene.add(g);
+  // Rolltor-Kasten
+  const rb = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 6.2), trim); rb.position.set(st.side * 5, 3.3, st.cz); scene.add(rb);
 }
+// Gang-Enden: Glastüren (Ausgänge)
+for (const z of [-30.95, 30.95]) {
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(6, 3.6), new THREE.MeshStandardMaterial({ color: 0x223355, emissive: 0x0a1428, roughness: 0.1, metalness: 0.9 }));
+  g.position.set(0, 1.8, z); g.rotation.y = z > 0 ? Math.PI : 0; scene.add(g);
+  const ex = canvasTex(256, 96, (c, w, h) => { c.fillStyle = '#0a5c2a'; c.fillRect(0, 0, w, h); c.fillStyle = '#eafff0'; c.font = 'bold 54px Segoe UI'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🏃 AUSGANG', w / 2, h / 2 + 2); });
+  const sg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.6), new THREE.MeshBasicMaterial({ map: ex })); sg.position.set(0, 4.0, z + (z > 0 ? -0.05 : 0.05)); sg.rotation.y = z > 0 ? Math.PI : 0; scene.add(sg);
+  const el = new THREE.PointLight(0x22ff66, 2.5, 8, 2); el.position.set(0, 3.6, z + (z > 0 ? -1 : 1)); scene.add(el);
+}
+// Gang-Deko: Bänke & Pflanzkübel (nur an den Rändern)
+const planterMat = std({ color: 0x5b4636 }), leafMat = std({ color: 0x1f4d2b, flatShading: true });
+for (const z of [-10, 10]) for (const s of [-1, 1]) {
+  box(1.2, 0.8, 1.2, planterMat, s * 3.9, 0.4, z);
+  const l = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 0), leafMat); l.position.set(s * 3.9, 1.5, z); l.castShadow = true; scene.add(l);
+}
+for (const z of [-26, 26]) for (const s of [-1, 1]) { box(0.6, 0.45, 2.4, std({ color: 0x6b4a2e }), s * 4.1, 0.25, z); }
+// Infosäulen
+box(0.8, 2.2, 0.8, std({ color: 0x1f2937, emissive: 0x0a1222 }), -4.3, 1.1, -14, true);
+box(0.8, 2.2, 0.8, std({ color: 0x1f2937, emissive: 0x0a1222 }), 4.3, 1.1, 14, true);
 
-function toggleSegwayOrInteract() {
-  // Check if near checkpoint or door first
-  let interacted = false;
-  GAME.checkpoints.forEach(cp => {
-    const dist = Math.hypot(GAME.guard.x - cp.x, GAME.guard.y - cp.y);
-    if (dist < 50 && !cp.stamped) {
-      cp.stamped = true;
-      GAME.cash += 35;
-      GAME.score += 50;
-      GAME.shiftReport.checkpointsCount++;
-      updateHud();
-      AudioFX.checkpointBeep();
-      setRadioMessage("Time Clock", `Checkpoint ${cp.id} (${cp.name}) successfully logged! (+35 €)`);
-      interacted = true;
-    }
+// Läden einrichten
+const storeLights = [], checkpoints = [], displays = [];
+const lootMat = {
+  gem: std({ color: 0xfff6a0, emissive: 0x806010, metalness: 0.9, roughness: 0.15 }),
+  tv: std({ color: 0x111111, emissive: 0x0b3a66, roughness: 0.2 }),
+  cash: std({ color: 0x4ade80, emissive: 0x0a3a1a }),
+  toy: std({ color: 0xff4d8d, emissive: 0x3a0a20 }),
+  bag: std({ color: 0x8b5cf6, emissive: 0x200a3a }),
+  safe: std({ color: 0x9ca3af, metalness: 0.8, roughness: 0.3 })
+};
+function signTex(text, col) {
+  return canvasTex(512, 96, (g, w, h) => {
+    g.fillStyle = '#05060a'; g.fillRect(0, 0, w, h);
+    const c = '#' + col.toString(16).padStart(6, '0');
+    g.shadowColor = c; g.shadowBlur = 16; g.fillStyle = c; g.font = 'bold 50px Segoe UI'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 2);
   });
+}
+STORES.forEach((st, i) => {
+  const sx = st.side, cz = st.cz;
+  // Leuchtschild über dem Eingang
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 1.0), new THREE.MeshBasicMaterial({ map: signTex(st.id + ' · ' + st.name, st.col) }));
+  sign.position.set(sx * 4.82, 3.95, cz); sign.rotation.y = -sx * Math.PI / 2; scene.add(sign);
+  // Bodenfarbe im Laden
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(11.6, 19.6), std({ color: new THREE.Color(st.col).multiplyScalar(0.18), roughness: 0.8 }));
+  fl.rotation.x = -Math.PI / 2; fl.position.set(sx * 11, 0.01, cz); fl.receiveShadow = true; scene.add(fl);
+  // Regale
+  const shelfMat = std({ color: new THREE.Color(st.col).multiplyScalar(0.35) });
+  for (const dz of [-6, 6]) {
+    box(7, 2.0, 0.8, shelfMat, sx * 11, 1.0, cz + dz);
+    for (let k = 0; k < 6; k++) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.5), std({ color: new THREE.Color().setHSL(Math.random(), 0.6, 0.45) }));
+      p.position.set(sx * (8.2 + k * 1.1), 2.22, cz + dz); scene.add(p);
+    }
+  }
+  box(0.8, 3.2, 3.5, shelfMat, sx * 16.3, 1.6, cz + 7.5);
+  // Vitrine mit Beute
+  box(1.4, 1.0, 2.6, std({ color: 0x2b2f38, metalness: 0.4 }), sx * 13.5, 0.5, cz);
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.7, 2.6), glassMat); glass.position.set(sx * 13.5, 1.35, cz); scene.add(glass);
+  let lootM;
+  if (st.item === 'gem') lootM = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), lootMat.gem);
+  else if (st.item === 'tv') lootM = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.55, 0.9), lootMat.tv);
+  else if (st.item === 'safe') lootM = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 0.7), lootMat.safe);
+  else lootM = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.6), lootMat[st.item]);
+  lootM.position.set(sx * 13.5, 1.35, cz); lootM.castShadow = true; scene.add(lootM);
+  displays.push({ mesh: lootM, glass, broken: false, home: lootM.position.clone() });
+  // Ladenlicht (dimm, per CCTV hochregelbar)
+  const L = new THREE.PointLight(st.col, 4, 16, 1.6); L.position.set(sx * 11, 4.2, cz); scene.add(L);
+  storeLights.push({ light: L, on: 0, cd: 0 });
+  // Kontrollpunkt-Säule
+  const cpx = sx * 15.6, cpz = cz - 7.5;
+  box(0.5, 1.3, 0.5, std({ color: 0x334155, metalness: 0.6 }), cpx, 0.65, cpz);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff3344 }));
+  lamp.position.set(cpx, 1.42, cpz); scene.add(lamp);
+  checkpoints.push({ x: cpx, z: cpz, lamp, done: false });
+  // Ladestation im Technikraum
+  if (st.item === 'safe') {
+    const ch = box(0.6, 1.6, 1.0, std({ color: 0x14532d, emissive: 0x0b3d1d }), sx * 15.6, 0.8, cz + 3.5);
+    st.charger = { x: sx * 15.0, z: cz + 3.5, mesh: ch };
+  }
+});
 
-  if (interacted) return;
+// ---------- CCTV-Kameras ----------
+const cctvBodies = [];
+const cctvCams = STORES.map(st => {
+  const c = new THREE.PerspectiveCamera(78, innerWidth / innerHeight, 0.1, 60);
+  c.position.set(st.side * 5.7, 4.1, st.cz + 9.2);
+  c.lookAt(st.side * 13, 0.3, st.cz - 2.5);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.2, 0.45), trim); body.position.copy(c.position); body.lookAt(st.side * 13, 0.3, st.cz - 2.5); scene.add(body); cctvBodies.push(body);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff0000 })); led.position.set(0, 0.12, 0); body.add(led);
+  return c;
+});
+cctvCams.forEach(c => c.layers.enable(1));
 
-  // Toggle Segway if owned
-  if (GAME.guard.hasSegway) {
-    GAME.guard.onSegway = !GAME.guard.onSegway;
-    AudioFX.bellRing();
-    setRadioMessage("Guard", GAME.guard.onSegway ? "Mounted the Segway. Higher speed!" : "Dismounted the Segway.");
+// Nachtsicht-Postprocessing für CCTV
+const nvTarget = new THREE.WebGLRenderTarget(innerWidth, innerHeight);
+const nvMat = new THREE.ShaderMaterial({
+  uniforms: { tDiffuse: { value: nvTarget.texture }, time: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + time * 43.0) * 43758.5453); }
+    void main(){
+      vec2 uv = vUv + vec2(sin(vUv.y * 40.0 + time * 9.0) * 0.0015, 0.0);
+      vec3 c = texture2D(tDiffuse, uv).rgb;
+      float l = dot(c, vec3(0.3, 0.59, 0.11));
+      l = pow(clamp(l * 3.5, 0.0, 1.0), 0.55) + (h(vUv * 500.0) - 0.5) * 0.14;
+      float v = smoothstep(0.95, 0.35, length(vUv - 0.5));
+      gl_FragColor = vec4(vec3(0.25, 1.0, 0.4) * l * v + vec3(0.0, 0.03, 0.0), 1.0);
+    }`,
+  depthTest: false, depthWrite: false
+});
+const nvScene = new THREE.Scene(), nvCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+nvScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), nvMat));
+
+// ---------- Taschenlampe ----------
+const flash = new THREE.SpotLight(0xfff4dd, 220, 24, 0.42, 0.45, 1.5);
+flash.castShadow = true; flash.shadow.mapSize.set(1024, 1024); flash.shadow.camera.near = 0.3; flash.shadow.bias = -0.0008;
+camera.add(flash); flash.position.set(0.25, -0.2, 0);
+camera.add(flash.target); flash.target.position.set(0.1, -0.2, -5);
+// Taschenlampe im Bild
+const torch = new THREE.Group();
+const tb = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.32, 10), std({ color: 0x111318, metalness: 0.7, roughness: 0.35 }));
+tb.rotation.x = Math.PI / 2; torch.add(tb);
+const tl = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.06, 12), std({ color: 0x222, metalness: 0.8 })); tl.rotation.x = Math.PI / 2; tl.position.z = -0.18; torch.add(tl);
+const lens = new THREE.Mesh(new THREE.CircleGeometry(0.045, 12), new THREE.MeshBasicMaterial({ color: 0xfff6d0 })); lens.position.z = -0.211; torch.add(lens);
+torch.position.set(0.22, -0.2, -0.35); torch.rotation.set(0.18, 0.25, 0); torch.scale.setScalar(0.6); camera.add(torch);
+// Spieler-Figur (nur auf CCTV sichtbar)
+const guardBody = new THREE.Group();
+const gTorso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.8, 0.32), std({ color: 0x1e3a8a })); gTorso.position.y = 1.15; guardBody.add(gTorso);
+const gLegs = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.75, 0.28), std({ color: 0x111827 })); gLegs.position.y = 0.38; guardBody.add(gLegs);
+const gHead = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), std({ color: 0xe0b48a })); gHead.position.y = 1.75; guardBody.add(gHead);
+const gCap = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.08, 12), std({ color: 0x0f172a })); gCap.position.y = 1.88; guardBody.add(gCap);
+guardBody.visible = false; scene.add(guardBody);
+
+// ---------- Figuren ----------
+function humanoid(cloth, skin, extra) {
+  const g = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.3), std({ color: cloth })); torso.position.y = 1.12; g.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), std({ color: skin })); head.position.y = 1.7; g.add(head);
+  const legs = [], arms = [];
+  for (const s of [-1, 1]) {
+    const leg = new THREE.Group(); leg.position.set(s * 0.12, 0.75, 0);
+    const lm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.75, 0.2), std({ color: 0x18181b })); lm.position.y = -0.37; lm.castShadow = true; leg.add(lm); g.add(leg); legs.push(leg);
+    const arm = new THREE.Group(); arm.position.set(s * 0.33, 1.45, 0);
+    const am = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.65, 0.16), std({ color: cloth })); am.position.y = -0.3; am.castShadow = true; arm.add(am); g.add(arm); arms.push(arm);
+  }
+  torso.castShadow = head.castShadow = true;
+  if (extra) extra(g);
+  g.userData = { legs, arms, head };
+  return g;
+}
+function marker(color) {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.6, 4), new THREE.MeshBasicMaterial({ color, depthTest: false }));
+  m.rotation.x = Math.PI; m.position.y = 2.5; m.layers.set(1); m.renderOrder = 9;
+  return m;
+}
+const npcs = [];
+function makeThief() {
+  const g = humanoid(0x111111, 0xc8a07a, g => {
+    const beanie = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), std({ color: 0x7f1d1d })); beanie.position.y = 1.72; g.add(beanie);
+    const mask = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.05), std({ color: 0x000000 })); mask.position.set(0, 1.72, 0.15); g.add(mask);
+    const sack = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), std({ color: 0x8b7355 })); sack.position.set(0, 1.15, -0.3); sack.visible = false; g.add(sack); g.userData.sack = sack;
+  });
+  return g;
+}
+function makeRaccoon() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), std({ color: 0x6b6b6b })); body.scale.set(1, 0.75, 1.5); body.position.y = 0.32; body.castShadow = true; g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), std({ color: 0x8a8a8a })); head.position.set(0, 0.42, 0.42); g.add(head);
+  const mask = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.07, 0.1), std({ color: 0x111111 })); mask.position.set(0, 0.46, 0.53); g.add(mask);
+  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), new THREE.MeshBasicMaterial({ color: 0xffee88 })); e.position.set(s * 0.07, 0.47, 0.585); g.add(e); }
+  const tail = new THREE.Group(); tail.position.set(0, 0.35, -0.42);
+  for (let i = 0; i < 5; i++) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 8), std({ color: i % 2 ? 0x222222 : 0x9a9a9a })); r.rotation.x = Math.PI / 2 - 0.4; r.position.set(0, i * 0.04, -i * 0.09); tail.add(r); }
+  g.add(tail); g.userData = { tail };
+  return g;
+}
+function makePhantom() {
+  const g = humanoid(0xe8e4dc, 0xece8e0, g => {
+    for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff2222 })); e.position.set(s * 0.06, 1.72, 0.15); g.add(e); }
+  });
+  g.traverse(o => { if (o.isMesh && o.material.color && o.material.color.getHex() === 0x18181b) o.material = std({ color: 0xe0dcd4 }); });
+  g.scale.setScalar(1.12);
+  return g;
+}
+function spawnNPC(type) {
+  let mesh, o;
+  if (type === 'thief') {
+    mesh = makeThief();
+    const ex = (P.z > 0 ? -1 : 1) * (Math.random() < 0.75 ? 1 : -1);
+    const free = STORES.map((s, i) => i).filter(i => !displays[i].broken && !npcs.some(n => n.type === 'thief' && n.target === i));
+    if (!free.length) return;
+    const t = free[(Math.random() * free.length) | 0];
+    o = { type, x: rnd(-1, 1), z: ex * 29.6, target: t, st: 'enter', steal: 0, stun: 0, spook: 0, speed: 2.4 + night * 0.15, loot: 0 };
+  } else if (type === 'raccoon') {
+    mesh = makeRaccoon();
+    const s = STORES[(Math.random() * 6) | 0];
+    o = { type, x: s.side * 10, z: s.cz + rnd(-3, 3), st: 'wander', stun: 0, speed: 2.2, goal: null, t: 0 };
   } else {
-    setRadioMessage("Info", "Segway not purchased yet! Visit the terminal.");
+    mesh = makePhantom();
+    const cand = STORES.map((s, i) => i).sort((a, b) => Math.hypot(STORES[b].side * 11 - P.x, STORES[b].cz - P.z) - Math.hypot(STORES[a].side * 11 - P.x, STORES[a].cz - P.z));
+    const s = STORES[cand[0]];
+    o = { type, x: s.side * 14, z: s.cz + 5, st: 'hunt', burn: 0, speed: 1.6 + night * 0.25, frozen: false };
+    radio(`📻 Zentrale: Kamera ${s.id} zeigt eine Gestalt im ${s.name}… keine Wärmesignatur?!`, 5);
   }
+  o.mesh = mesh; o.walk = 0; o.h = 0;
+  const mk = marker(type === 'thief' ? 0xff2222 : type === 'raccoon' ? 0xffaa00 : 0xffffff);
+  mk.visible = save.up.tracker > 0; mesh.add(mk); o.mk = mk;
+  mesh.position.set(o.x, 0, o.z); scene.add(mesh);
+  npcs.push(o);
 }
+function removeNPC(o) { scene.remove(o.mesh); npcs.splice(npcs.indexOf(o), 1); }
 
-function performPatrolAction() {
-  const tool = GAME.guard.activeTool;
-
-  // 1: Flashlight Strobe
-  if (tool === 1) {
-    GAME.guard.strobeActive = true;
-    GAME.guard.strobeTimer = 30; // frames
-    AudioFX.radioChirp();
-    // Stun suspects in flashlight cone
-    GAME.suspects.forEach(s => {
-      const dist = Math.hypot(s.x - GAME.guard.x, s.y - GAME.guard.y);
-      const angleToS = Math.atan2(s.y - GAME.guard.y, s.x - GAME.guard.x);
-      let diff = Math.abs(angleToS - GAME.guard.angle);
-      if (diff > Math.PI) diff = 2 * Math.PI - diff;
-      const cone = GAME.guard.hasFlashlightUpgrade ? 0.9 : 0.6;
-      if (dist < (GAME.guard.hasFlashlightUpgrade ? 280 : 200) && diff < cone) {
-        s.stunnedTimer = 180; // 3 seconds stun
-        s.alerted = true;
-        AudioFX.radioChirp();
+// ---------- Navigation ----------
+function regionOf(x, z) {
+  if (Math.abs(x) <= 5) return -1;
+  const side = x < 0 ? -1 : 1, cz = z < -10 ? -20 : z > 10 ? 20 : 0;
+  return STORES.findIndex(s => s.side === side && s.cz === cz);
+}
+function nav(fx, fz, tx, tz) {
+  const rf = regionOf(fx, fz), rt = regionOf(tx, tz);
+  if (rf === rt) return [tx, tz];
+  if (rf >= 0) {
+    const s = STORES[rf];
+    if (Math.abs(fz - s.cz) > 1.6 || Math.abs(fx) > 7) return [s.side * 6.6, s.cz];
+    return [s.side * 3.2, s.cz];
+  }
+  if (rt >= 0) {
+    const s = STORES[rt];
+    if (Math.abs(fz - s.cz) > 0.9) return [s.side * 2.5, s.cz];
+    return [s.side * 6.8, s.cz];
+  }
+  return [tx, tz];
+}
+function collide(o, r) {
+  for (const b of solids) {
+    const cx = clamp(o.x, b.x0, b.x1), cz = clamp(o.z, b.z0, b.z1);
+    const dx = o.x - cx, dz = o.z - cz, d2 = dx * dx + dz * dz;
+    if (d2 < r * r) {
+      if (d2 > 1e-8) { const d = Math.sqrt(d2), k = (r - d) / d; o.x += dx * k; o.z += dz * k; }
+      else { // im Block: zur nächsten Kante raus
+        const opts = [[b.x0 - r - o.x, 0], [b.x1 + r - o.x, 0], [0, b.z0 - r - o.z], [0, b.z1 + r - o.z]];
+        opts.sort((a, c) => Math.abs(a[0] + a[1]) - Math.abs(c[0] + c[1]));
+        o.x += opts[0][0]; o.z += opts[0][1];
       }
-    });
-  }
-  // 2: Handcuffs
-  else if (tool === 2) {
-    let arrested = false;
-    let idx = -1, best = 60;
-    GAME.suspects.forEach((s, i) => {
-      const dist = Math.hypot(s.x - GAME.guard.x, s.y - GAME.guard.y);
-      if (dist < best) { best = dist; idx = i; }
-    });
-    if (idx >= 0) {
-      const s = GAME.suspects.splice(idx, 1)[0];
-      AudioFX.handcuff();
-      GAME.cash += s.reward;
-      GAME.score += 200;
-      GAME.shiftReport.arrests++;
-      GAME.shiftReport.goodsSaved += s.lootValue;
-      updateHud();
-      setRadioMessage("Dispatch", `Suspect (${s.type}) successfully arrested! Bonus: +${s.reward} €`);
-      arrested = true;
-    }
-    if (!arrested) {
-      AudioFX.handcuff();
-    }
-  }
-  // 3: Taser
-  else if (tool === 3) {
-    if (GAME.guard.taserAmmo > 0) {
-      GAME.guard.taserAmmo--;
-      AudioFX.taserZap();
-      // Raycast taser dart
-      const reach = 220;
-      GAME.suspects.forEach(s => {
-        const dist = Math.hypot(s.x - GAME.guard.x, s.y - GAME.guard.y);
-        const angleToS = Math.atan2(s.y - GAME.guard.y, s.x - GAME.guard.x);
-        let diff = Math.abs(angleToS - GAME.guard.angle);
-        if (diff > Math.PI) diff = 2 * Math.PI - diff;
-        if (dist < reach && diff < 0.25) {
-          s.stunnedTimer = 300; // 5 seconds paralyzed
-          s.alerted = true;
-          // Spawn electric particles
-          for (let p = 0; p < 10; p++) {
-            GAME.particles.push({
-              x: s.x, y: s.y,
-              vx: (Math.random() - 0.5) * 4,
-              vy: (Math.random() - 0.5) * 4,
-              life: 25,
-              color: '#38bdf8'
-            });
-          }
-        }
-      });
-      setRadioMessage("Guard", `Taser fired! Charges remaining: ${GAME.guard.taserAmmo}`);
-    } else {
-      setRadioMessage("Warning", "Taser empty! Reload new cartridges at the terminal.");
     }
   }
-  // 4: Pepper Spray
-  else if (tool === 4) {
-    AudioFX.spray();
-    GAME.sprayClouds.push({
-      x: GAME.guard.x + Math.cos(GAME.guard.angle) * 30,
-      y: GAME.guard.y + Math.sin(GAME.guard.angle) * 30,
-      angle: GAME.guard.angle,
-      radius: 20,
-      maxRadius: 70,
-      life: 50
-    });
-    GAME.suspects.forEach(s => {
-      const dist = Math.hypot(s.x - GAME.guard.x, s.y - GAME.guard.y);
-      if (dist < 100) {
-        s.slowMul = 0.3; s.slowTimer = 400;
-        s.stunnedTimer = 150;
-      }
-    });
+  o.x = clamp(o.x, -16.8, 16.8); o.z = clamp(o.z, -30.8, 30.8);
+}
+function segHitsBox(ax, az, bx, bz, b) {
+  let t0 = 0, t1 = 1; const dx = bx - ax, dz = bz - az;
+  for (const [p, q] of [[-dx, ax - b.x0], [dx, b.x1 - ax], [-dz, az - b.z0], [dz, b.z1 - az]]) {
+    if (p === 0) { if (q < 0) return false; }
+    else { const r = q / p; if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; } }
   }
-  // 5: Segway Bell
-  else if (tool === 5) {
-    toggleSegwayOrInteract();
-  }
-  // 6: K9 Command
-  else if (tool === 6) {
-    if (GAME.guard.hasDog) {
-      AudioFX.dogBark();
-      // Send dog to nearest suspect
-      let nearest = null;
-      let minD = Infinity;
-      GAME.suspects.forEach(s => {
-        const d = Math.hypot(s.x - GAME.guard.x, s.y - GAME.guard.y);
-        if (d < minD) { minD = d; nearest = s; }
-      });
-      if (nearest) {
-        GAME.k9.targetSuspect = nearest;
-        GAME.k9.state = 'chasing';
-        setRadioMessage("K9 Buster", "Get him! Buster is chasing the suspect!");
-      }
-    } else {
-      setRadioMessage("Info", "You don't have a K9 service dog yet. Buy Buster at the terminal!");
-    }
-  }
+  return true;
+}
+function los(ax, az, bx, bz) {
+  for (const b of solids) if (b.h > 1.6 && segHitsBox(ax, az, bx, bz, b)) return false;
+  return true;
 }
 
-// Mobile Touch helpers
-function toggleFlashlightTouch() { toggleFlashlight(); }
-function toggleSegwayTouch() { toggleSegwayOrInteract(); }
+// ---------- Audio ----------
+let actx = null;
+function audio() { try { actx = ArcadeCore.getAudioContext(); if (actx && actx.state === 'suspended') actx.resume(); } catch (e) {} }
+function noise(dur, freq, gain, q = 1, type = 'bandpass') {
+  if (!actx || ArcadeCore.isMuted()) return;
+  const n = Math.floor(actx.sampleRate * dur), b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = actx.createBufferSource(); s.buffer = b;
+  const f = actx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const g = actx.createGain(); g.gain.value = gain;
+  s.connect(f); f.connect(g); g.connect(actx.destination); s.start();
+}
+const tone = (f, d, t = 'sine', g = 0.1) => ArcadeCore.playTone(f, d, t, g);
+const sfx = {
+  step() { noise(0.05, rnd(300, 500), 0.05, 2); },
+  glass() { noise(0.5, 5200, 0.35, 1.5); setTimeout(() => noise(0.3, 3500, 0.2, 3), 90); },
+  strobe() { noise(0.12, 2400, 0.15, 0.7); tone(1800, 0.08, 'square', 0.05); },
+  cuff() { tone(1400, 0.05, 'square', 0.08); setTimeout(() => tone(900, 0.07, 'square', 0.08), 70); },
+  stamp() { noise(0.08, 220, 0.4, 1); tone(660, 0.12, 'triangle', 0.08); },
+  radio() { noise(0.25, 1600, 0.08, 0.5); },
+  heart() { tone(55, 0.12, 'sine', 0.35); setTimeout(() => tone(48, 0.12, 'sine', 0.28), 160); },
+  scream() { tone(880, 0.6, 'sawtooth', 0.12); tone(620, 0.7, 'sawtooth', 0.1); noise(0.8, 900, 0.3, 0.5); },
+  taser() { for (let i = 0; i < 5; i++) setTimeout(() => noise(0.05, rnd(3000, 6000), 0.2, 2), i * 40); },
+  click() { tone(240, 0.03, 'square', 0.05); }
+};
 
-// --- VIRTUAL JOYSTICK (Mobile) ---
-const stick = document.getElementById('virtualStick');
-const knob = document.getElementById('virtualKnob');
-let touchActive = false;
-let touchOriginX = 0, touchOriginY = 0;
-let stickVx = 0, stickVy = 0;
+// ---------- Zustand ----------
+const keys = {};
+const P = { x: 0, z: 24, yaw: 0, pitch: 0, bat: 100, sta: 100, light: true, strobeCd: 0, taser: 0, bob: 0, stepT: 0, charging: false };
+let state = 'menu', prevState = 'play', night = 1, clockT = 0, runScore = 0;
+let nightStats = null, spawnT = 0, spawnQueue = [], camIdx = 0, mode = 'fp', shake = 0, alarmIdx = -1, heartT = 0;
+let radioT = 0, bannerT = 0;
+const lampAngle = () => 0.42 + save.up.lamp * 0.05, lampRange = () => 20 + save.up.lamp * 3;
+const stunTime = () => 2.6 + save.up.lamp * 0.6;
+const drain = () => 1.0 * (1 - save.up.batt * 0.17);
+const sprintSpd = () => 5.8 + save.up.shoes * 0.45;
 
-if (stick) {
-  stick.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    const t = e.touches[0];
-    const rect = stick.getBoundingClientRect();
-    touchOriginX = rect.left + rect.width / 2;
-    touchOriginY = rect.top + rect.height / 2;
-    touchActive = true;
-  }, { passive: false });
+function radio(msg, t = 3.5) { $('radio').textContent = msg; $('radio').classList.add('show'); radioT = t; sfx.radio(); }
+function banner(msg, t = 1.6) { $('banner').innerHTML = msg; $('banner').classList.add('show'); bannerT = t; }
 
-  window.addEventListener('touchmove', (e) => {
-    if (!touchActive) return;
-    const t = e.touches[0];
-    const dx = t.clientX - touchOriginX;
-    const dy = t.clientY - touchOriginY;
-    const dist = Math.hypot(dx, dy);
-    const maxR = 38;
-    const norm = dist > maxR ? maxR / dist : 1;
-    knob.style.transform = `translate(${dx * norm}px, ${dy * norm}px)`;
-    stickVx = (dx * norm) / maxR;
-    stickVy = (dy * norm) / maxR;
-    GAME.guard.angle = Math.atan2(stickVy, stickVx);
-  }, { passive: false });
+function startNight() {
+  for (const o of [...npcs]) removeNPC(o);
+  displays.forEach(d => { d.broken = false; d.mesh.visible = true; d.mesh.position.copy(d.home); d.glass.visible = true; });
+  checkpoints.forEach(c => { c.done = false; c.lamp.material.color.set(0xff3344); });
+  storeLights.forEach(s => { s.on = 0; s.cd = 0; });
+  Object.assign(P, { x: 0, z: 24, yaw: 0, pitch: 0, bat: 100, sta: 100, light: true, strobeCd: 0, taser: save.up.taser * 2, charging: false });
+  clockT = 0; spawnT = 6; alarmIdx = -1; mode = 'fp'; $('cctv').classList.remove('on');
+  nightStats = { caught: 0, raccoons: 0, phantoms: 0, cps: 0, lost: 0, thefts: 0 };
+  // Spawn-Plan
+  spawnQueue = [];
+  const thieves = 1 + night, rac = 1 + (night > 1 ? 1 : 0), ph = night >= 5 ? 2 : night >= 3 ? 1 : 0;
+  for (let i = 0; i < thieves; i++) spawnQueue.push({ t: 14 + i * (NIGHT_LEN - 40) / thieves + rnd(-6, 6), type: 'thief' });
+  for (let i = 0; i < rac; i++) spawnQueue.push({ t: 5 + rnd(0, 40) + i * 50, type: 'raccoon' });
+  for (let i = 0; i < ph; i++) spawnQueue.push({ t: 50 + i * 60 + rnd(0, 20), type: 'phantom' });
+  spawnQueue.sort((a, b) => a.t - b.t);
+  state = 'play';
+  banner(`🌙 Nacht ${night}`, 2);
+  radio(night === 1 ? '📻 Zentrale: Willkommen zur Nachtschicht. Stempel die Kontrollpunkte A–F.' : night === 3 ? '📻 Zentrale: Die Kollegen erzählen Geschichten über eine Puppe… Lampe anlassen!' : '📻 Zentrale: Ruhige Nacht gewünscht. Hoffentlich.', 5);
+  lockPointer();
+}
+function newRun() { night = 1; runScore = 0; startNight(); }
 
-  const endStick = () => {
-    touchActive = false;
-    knob.style.transform = 'translate(0px, 0px)';
-    stickVx = 0; stickVy = 0;
-  };
-  window.addEventListener('touchend', endStick);
-  window.addEventListener('touchcancel', endStick);
+function hourStr() {
+  const mins = 22 * 60 + Math.floor(clockT / NIGHT_LEN * 480);
+  const h = Math.floor(mins / 60) % 24, m = mins % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
 
-// --- CCTV ROOM ACTIONS ---
-function cctvAction(secIdx, action) {
-  const sec = GAME.sectors[secIdx];
-  if (!sec) return;
-
-  if (action === 'lock') {
-    sec.locked = !sec.locked;
-    AudioFX.handcuff();
-    setRadioMessage("CCTV", `Sector ${sec.id + 1} (${sec.name}): magnetic lock ${sec.locked ? 'ENGAGED' : 'DISENGAGED'}.`);
-  } else if (action === 'light') {
-    sec.light = !sec.light;
-    AudioFX.radioChirp();
-    setRadioMessage("CCTV", `Sector ${sec.id + 1}: floodlight ${sec.light ? 'ON' : 'OFF'}.`);
-  } else if (action === 'mic') {
-    AudioFX.alarm();
-    setRadioMessage("MEGAPHONE", `📢 "This is Security! Leave Sector ${sec.id + 1} immediately!"`);
-    // Scare suspects in this sector
-    GAME.suspects.forEach(s => {
-      if (s.x >= sec.x && s.x <= sec.x + sec.w && s.y >= sec.y && s.y <= sec.y + sec.h) {
-        s.alerted = true;
-        s.fleeing = true;
-        s.slowMul = 1.3; s.slowTimer = 300;
-      }
-    });
-  } else if (action === 'sprinkler') {
-    sec.sprinkler = true;
-    sec.sprinklerTimer = 180; // 3 seconds
-    AudioFX.spray();
-    setRadioMessage("CCTV", `🚨 Fire sprinklers in Sector ${sec.id + 1} activated!`);
-    GAME.suspects.forEach(s => {
-      if (s.x >= sec.x && s.x <= sec.x + sec.w && s.y >= sec.y && s.y <= sec.y + sec.h) {
-        s.slowMul = 0.4; s.slowTimer = 240;
-      }
-    });
-  }
-}
-
-function focusCctvCam(secIdx) {
-  switchView('patrol');
-  const sec = GAME.sectors[secIdx];
-  if (sec) {
-    GAME.guard.x = sec.x + sec.w / 2;
-    GAME.guard.y = sec.y + sec.h / 2;
-    setRadioMessage("Guard", `Rushed to Sector ${sec.id + 1} (${sec.name}).`);
-  }
-}
-
-// --- SPAWN SUSPECTS & EVENTS BY NIGHT ---
-function spawnSuspect(type) {
-  let s = {
-    x: 450 + (Math.random() - 0.5) * 100,
-    y: 120,
-    vx: 0,
-    vy: 0,
-    angle: Math.random() * Math.PI * 2,
-    speed: 1.8,
-    type: type, // 'raccoon', 'skater', 'thief', 'phantom'
-    alerted: false,
-    fleeing: false,
-    stunnedTimer: 0,
-    reward: 50,
-    lootValue: 200,
-    color: '#ef4444'
-  };
-
-  if (type === 'raccoon') {
-    s.x = 180; s.y = 480; // food court
-    s.speed = 2.4;
-    s.reward = 35;
-    s.color = '#94a3b8';
-  } else if (type === 'skater') {
-    s.x = 500; s.y = 450;
-    s.speed = 3.6;
-    s.reward = 80;
-    s.color = '#38bdf8';
-  } else if (type === 'thief') {
-    // jeweler or tech store
-    s.x = Math.random() > 0.5 ? 900 : 880;
-    s.y = Math.random() > 0.5 ? 200 : 500;
-    s.speed = 2.6;
-    s.reward = 120;
-    s.color = '#f59e0b';
-  } else if (type === 'phantom') {
-    s.x = 180; s.y = 150; // vault
-    s.speed = 3.2;
-    s.reward = 300;
-    s.color = '#a855f7';
-  }
-
-  GAME.suspects.push(s);
-  AudioFX.alarm();
-  setRadioMessage("ALARM", `⚠️ Break-in detected in sector: suspect (${type.toUpperCase()}) spotted!`);
-}
-
-// Night Spawning Logic
-let nightTimer = 0;
-function checkNightEvents() {
-  nightTimer++;
-  // Every 25 seconds of play, trigger dynamic incident
-  if (nightTimer % 400 === 0) {
-    if (GAME.night === 1) {
-      if (GAME.suspects.length < 2) spawnSuspect(Math.random() > 0.5 ? 'raccoon' : 'thief');
-    } else if (GAME.night === 2) {
-      if (Math.random() > 0.4) spawnSuspect('skater');
-      else spawnSuspect('thief');
-    } else if (GAME.night === 3) {
-      spawnSuspect('thief');
-      if (Math.random() > 0.5) spawnSuspect('thief');
-    } else if (GAME.night >= 4) {
-      spawnSuspect(Math.random() > 0.5 ? 'phantom' : 'thief');
-    }
-  }
-
-  // Occasional power breaker trip on Night 2+
-  if (GAME.night >= 2 && nightTimer % 1200 === 0 && !GAME.blackout) {
-    triggerBlackout();
-  }
-}
-
-function triggerBlackout() {
-  GAME.blackout = true;
-  GAME.alarmLevel = 'red';
-  AudioFX.alarm();
-  setRadioMessage("BACKUP POWER", "⚠️ POWER OUTAGE! Main fuse blew! Go to Sector 6 (main distribution) and flip the switch!");
-}
-
-// --- UPDATE GAME LOOP ---
-function updateGame() {
-  // Time progression
-  if (GAME.shiftOver) return;
-  GAME.timeSec += GAME.timeSpeed;
-  if (GAME.timeSec >= 30 * 3600) {
-    // 06:00 reached -> shift complete!
-    GAME.shiftOver = true;
-    finishShift();
-    return;
-  }
-
-  // Update HUD Time
-  const tot = Math.floor(GAME.timeSec) % 86400;
-  const pad = n => String(n).padStart(2, '0');
-  const timeStr = `${pad(Math.floor(tot / 3600))}:${pad(Math.floor(tot % 3600 / 60))}:${pad(tot % 60)}`;
-  document.getElementById('clockDisplay').textContent = `⏰ ${timeStr}`;
-
-  // Stamina & Alertness
-  if (KEYS['shift'] && (KEYS['w'] || KEYS['a'] || KEYS['s'] || KEYS['d']) && !GAME.guard.onSegway) {
-    GAME.guard.stamina = Math.max(0, GAME.guard.stamina - 0.25);
-    GAME.guard.isSprinting = GAME.guard.stamina > 5;
+function endNight(reason) {
+  state = 'over'; unlockPointer();
+  const pay = 80 + night * 20, cpPay = nightStats.cps * 15 + (nightStats.cps === 6 ? 50 : 0);
+  const caughtPay = nightStats.caught * 60, racPay = nightStats.raccoons * 15, phPay = nightStats.phantoms * 80;
+  let total = 0, title, text, btn;
+  const rows = [];
+  if (reason === 'ok' || reason === 'win') {
+    total = pay + cpPay + caughtPay + racPay + phPay - nightStats.lost;
+    rows.push(['Grundlohn', pay + ' €'], ['Kontrollpunkte (' + nightStats.cps + '/6)', '+' + cpPay + ' €'], ['Einbrecher gefasst (' + nightStats.caught + ')', '+' + caughtPay + ' €'], ['Waschbären (' + nightStats.raccoons + ')', '+' + racPay + ' €'], ['Phantome gebannt (' + nightStats.phantoms + ')', '+' + phPay + ' €'], ['Gestohlene Ware', '−' + nightStats.lost + ' €'], ['<b>Auszahlung</b>', '<b>' + total + ' €</b>']);
+    title = reason === 'win' ? '🏆 Fünf Nächte überstanden!' : `🌅 06:00 – Nacht ${night} geschafft`;
+    text = reason === 'win' ? 'Die Geschäftsleitung befördert dich zum Schichtleiter. Die Puppe steht wieder im Schaufenster. Sie lächelt.' : 'Die Frühschicht übernimmt. Investier deinen Lohn in bessere Ausrüstung.';
+    btn = reason === 'win' ? 'Neue Woche' : `Nacht ${night + 1} starten`;
+    ArcadeCore.powerup();
   } else {
-    GAME.guard.stamina = Math.min(100, GAME.guard.stamina + 0.18);
-    GAME.guard.isSprinting = false;
+    total = Math.max(0, caughtPay + racPay + phPay + cpPay - nightStats.lost);
+    title = reason === 'phantom' ? '💀 Das Phantom hat dich geholt' : '📄 Fristlos gekündigt';
+    text = reason === 'phantom' ? 'Man fand nur deine Taschenlampe – noch eingeschaltet, auf den Ausgang gerichtet.' : 'Drei Einbrüche in einer Nacht. Die Versicherung ist… nicht begeistert.';
+    rows.push(['Prämien bis dahin', total + ' €']);
+    btn = 'Neuer Vertrag (Nacht 1)';
+    ArcadeCore.gameOver();
   }
+  runScore += total; save.money += total; persist();
+  let rec = '';
+  if (runScore > best) { best = runScore; ArcadeCore.saveScore(KEY, best); rec = ' 🏅 Neuer Rekord!'; }
+  rows.push(['Gesamt diese Woche', runScore + ' €' + rec]);
+  $('otitle').textContent = title; $('otext').textContent = text;
+  $('otable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+  $('again').textContent = btn;
+  $('again').dataset.next = reason === 'ok' ? 'next' : 'new';
+  renderShop('shop2');
+  $('over').classList.remove('hide');
+}
 
-  // Alertness slowly drains
-  GAME.guard.alertness = Math.max(10, GAME.guard.alertness - 0.008);
-  document.getElementById('staminaFill').style.width = `${GAME.guard.stamina}%`;
-  document.getElementById('staminaVal').textContent = `${Math.round(GAME.guard.stamina)}%`;
-  document.getElementById('alertnessFill').style.width = `${GAME.guard.alertness}%`;
-  document.getElementById('alertnessVal').textContent = `${Math.round(GAME.guard.alertness)}%`;
-
-  // Guard Movement
-  let moveX = 0, moveY = 0;
-  if (KEYS['w'] || KEYS['arrowup']) moveY -= 1;
-  if (KEYS['s'] || KEYS['arrowdown']) moveY += 1;
-  if (KEYS['a'] || KEYS['arrowleft']) moveX -= 1;
-  if (KEYS['d'] || KEYS['arrowright']) moveX += 1;
-
-  if (touchActive) {
-    moveX = stickVx;
-    moveY = stickVy;
+// ---------- Aktionen ----------
+const fwd = new THREE.Vector3();
+function inCone(x, y, z, range, angle) {
+  camera.getWorldDirection(fwd);
+  const dx = x - camera.position.x, dy = y - camera.position.y, dz = z - camera.position.z, d = Math.hypot(dx, dy, dz);
+  if (d > range) return false;
+  const cos = (dx * fwd.x + dy * fwd.y + dz * fwd.z) / (d || 1);
+  if (cos < Math.cos(angle)) return false;
+  return los(camera.position.x, camera.position.z, x, z);
+}
+function strobe() {
+  if (state !== 'play' || mode !== 'fp' || P.strobeCd > 0 || P.bat < 6) return;
+  P.strobeCd = 1.2; P.bat -= 6; sfx.strobe();
+  $('flash').style.transition = 'none'; $('flash').style.opacity = 0.55;
+  requestAnimationFrame(() => { $('flash').style.transition = 'opacity .35s'; $('flash').style.opacity = 0; });
+  flash.intensity = 900;
+  for (const o of npcs) {
+    if (o.type === 'phantom') { if (inCone(o.x, 1.5, o.z, lampRange(), lampAngle() + 0.15)) o.burn += 1.2; continue; }
+    if (inCone(o.x, 1.0, o.z, 13, lampAngle() + 0.2)) { o.stun = o.type === 'raccoon' ? 3.5 : stunTime(); if (o.type === 'thief') banner('😵 Geblendet!', 0.8); }
   }
-
-  const curSpeed = GAME.guard.onSegway
-    ? GAME.guard.segwaySpeed
-    : (GAME.guard.isSprinting ? GAME.guard.sprintSpeed : GAME.guard.speed);
-
-  if (moveX !== 0 || moveY !== 0) {
-    const len = Math.hypot(moveX, moveY);
-    GAME.guard.x += (moveX / len) * curSpeed;
-    GAME.guard.y += (moveY / len) * curSpeed;
-
-    // Bounds checking
-    GAME.guard.x = Math.max(40, Math.min(WORLD_W - 40, GAME.guard.x));
-    GAME.guard.y = Math.max(40, Math.min(WORLD_H - 40, GAME.guard.y));
+}
+function fireTaser() {
+  if (state !== 'play' || mode !== 'fp' || P.taser <= 0) return;
+  let bestO = null, bd = 11;
+  for (const o of npcs) {
+    if (o.type === 'phantom') continue;
+    const d = Math.hypot(o.x - P.x, o.z - P.z);
+    if (d < bd && inCone(o.x, 1.0, o.z, 11, 0.25)) { bd = d; bestO = o; }
   }
-
-  // Check near generator if blackout active
-  if (GAME.blackout) {
-    const distToGen = Math.hypot(GAME.guard.x - 150, GAME.guard.y - 140);
-    if (distToGen < 50) {
-      GAME.blackout = false;
-      GAME.alarmLevel = 'green';
-      AudioFX.checkpointBeep();
-      setRadioMessage("Zentrale", "Power restored! Cameras and lights fully operational.");
-      updateHud();
-    }
+  P.taser--; sfx.taser();
+  if (bestO) { bestO.stun = 6; banner('⚡ Treffer!', 0.8); } else banner('⚡ daneben', 0.6);
+}
+function interactTarget() {
+  for (const o of npcs) if (o.type !== 'phantom' && o.stun > 0 && Math.hypot(o.x - P.x, o.z - P.z) < 1.9) return { kind: 'cuff', o };
+  for (const o of npcs) if (o.type === 'raccoon' && Math.hypot(o.x - P.x, o.z - P.z) < 1.1) return { kind: 'cuff', o };
+  for (const c of checkpoints) if (!c.done && Math.hypot(c.x - P.x, c.z - P.z) < 1.6) return { kind: 'stamp', c };
+  const ch = STORES[5].charger;
+  if (ch && Math.hypot(ch.x - P.x, ch.z - P.z) < 1.8 && P.bat < 99.5) return { kind: 'charge' };
+  return null;
+}
+function interact() {
+  if (state !== 'play' || mode !== 'fp') return;
+  const t = interactTarget(); if (!t) return;
+  if (t.kind === 'cuff') {
+    sfx.cuff();
+    if (t.o.type === 'thief') {
+      nightStats.caught++;
+      if (t.o.loot) { const d = displays[t.o.target]; d.mesh.visible = true; d.mesh.position.copy(d.home); }
+      banner('⛓️ Festgenommen! +60 €', 1.4); radio('📻 Zentrale: Gute Arbeit. Polizei ist unterwegs.', 3);
+      if (alarmIdx === t.o.target) alarmIdx = -1;
+    } else { nightStats.raccoons++; banner('🦝 Waschbär eingefangen! +15 €', 1.2); }
+    removeNPC(t.o);
+  } else if (t.kind === 'stamp') {
+    t.c.done = true; t.c.lamp.material.color.set(0x22ff66); nightStats.cps++; sfx.stamp();
+    banner(nightStats.cps === 6 ? '✅ Alle 6 Kontrollpunkte! +50 € Bonus' : `🖋️ Gestempelt (${nightStats.cps}/6)`, 1.3);
+  } else if (t.kind === 'charge') { P.charging = true; }
+}
+function toggleCCTV() {
+  if (state !== 'play') return;
+  mode = mode === 'fp' ? 'cctv' : 'fp';
+  $('cctv').classList.toggle('on', mode === 'cctv');
+  sfx.click();
+  if (mode === 'cctv') { unlockPointer(); renderCamBtns(); } else lockPointer();
+}
+function sectorLight(i) {
+  const s = storeLights[i]; if (s.cd > 0) return;
+  s.on = 12; s.cd = 25; sfx.click(); renderCamBtns();
+  for (const o of npcs) if (regionOf(o.x, o.z) === i) {
+    if (o.type === 'thief' && o.st !== 'flee') { o.st = 'flee'; o.speed *= 1.25; radio(`📻 Der Einbrecher in ${STORES[i].id} flieht – die Beute bleibt!`, 3); if (o.loot) { const d = displays[o.target]; d.mesh.visible = true; d.mesh.position.copy(d.home); o.loot = 0; o.mesh.userData.sack.visible = false; } }
+    if (o.type === 'raccoon') o.stun = 0.01;
   }
+}
+function renderCamBtns() {
+  $('cctvBtns').innerHTML = STORES.map((s, i) => `<button data-i="${i}" class="${i === camIdx ? 'on' : ''}">${i + 1}·${s.id}</button>`).join('') +
+    `<button data-l="1">💡 ${storeLights[camIdx].cd > 0 ? Math.ceil(storeLights[camIdx].cd) + 's' : 'Licht'}</button><button data-x="1">✕</button>`;
+  $('cctvBtns').querySelectorAll('button').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    if (b.dataset.i) { camIdx = +b.dataset.i; sfx.click(); renderCamBtns(); }
+    else if (b.dataset.l) sectorLight(camIdx);
+    else toggleCCTV();
+  });
+}
 
-  // Update K9 Buster
-  if (GAME.guard.hasDog) {
-    if (GAME.k9.state === 'following') {
-      const targetX = GAME.guard.x - Math.cos(GAME.guard.angle) * 35;
-      const targetY = GAME.guard.y - Math.sin(GAME.guard.angle) * 35;
-      const dist = Math.hypot(targetX - GAME.k9.x, targetY - GAME.k9.y);
-      if (dist > 15) {
-        GAME.k9.angle = Math.atan2(targetY - GAME.k9.y, targetX - GAME.k9.x);
-        GAME.k9.x += Math.cos(GAME.k9.angle) * 4.2;
-        GAME.k9.y += Math.sin(GAME.k9.angle) * 4.2;
-      }
-    } else if (GAME.k9.state === 'chasing' && GAME.k9.targetSuspect) {
-      const s = GAME.k9.targetSuspect;
-      const dist = Math.hypot(s.x - GAME.k9.x, s.y - GAME.k9.y);
-      GAME.k9.angle = Math.atan2(s.y - GAME.k9.y, s.x - GAME.k9.x);
-      GAME.k9.x += Math.cos(GAME.k9.angle) * 6.0;
-      GAME.k9.y += Math.sin(GAME.k9.angle) * 6.0;
-
-      if (dist < 30) {
-        // Dog tackles suspect!
-        AudioFX.dogBark();
-        s.stunnedTimer = 240;
-        GAME.k9.state = 'following';
-        GAME.k9.targetSuspect = null;
-        setRadioMessage("K9 Buster", "Woof! Buster took the culprit down!");
-      }
-    }
+// ---------- Update ----------
+function updatePlayer(dt) {
+  let mx = 0, mz = 0;
+  if (keys.w || keys.arrowup) mz -= 1; if (keys.s || keys.arrowdown) mz += 1;
+  if (keys.a || keys.arrowleft) mx -= 1; if (keys.d || keys.arrowright) mx += 1;
+  mx += joy.x; mz += joy.y;
+  const len = Math.hypot(mx, mz);
+  if (len > 1) { mx /= len; mz /= len; }
+  const sprinting = (keys.shift || touchRun) && len > 0.1 && P.sta > 1;
+  const spd = sprinting ? sprintSpd() : 3.4;
+  P.sta = clamp(P.sta + (sprinting ? -22 * (1 - save.up.shoes * 0.12) : 14) * dt, 0, 100);
+  const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
+  const vx = (mx * cy + mz * sy) * spd, vz = (-mx * sy + mz * cy) * spd;
+  P.x += vx * dt; P.z += vz * dt;
+  collide(P, 0.35);
+  const moving = Math.min(1, len);
+  P.bob += dt * spd * 2.2 * moving;
+  P.stepT -= dt * spd * moving;
+  if (P.stepT < 0) { P.stepT = 2.2; sfx.step(); }
+  if (P.charging) {
+    const ch = STORES[5].charger;
+    if (!ch || Math.hypot(ch.x - P.x, ch.z - P.z) > 2 || P.bat >= 100) P.charging = false;
+    else P.bat = Math.min(100, P.bat + 28 * dt);
   }
-
-  // Update Suspects
-  for (let i = GAME.suspects.length - 1; i >= 0; i--) {
-    const s = GAME.suspects[i];
-    if (s.stunnedTimer > 0) {
-      s.stunnedTimer--;
+  if (P.light) { P.bat -= drain() * dt; if (P.bat <= 0) { P.bat = 0; P.light = false; banner('🔋 Akku leer!', 1.2); } }
+  P.strobeCd = Math.max(0, P.strobeCd - dt);
+  // Lampe flackert bei wenig Akku
+  const flick = P.bat < 15 && Math.random() < 0.08 ? 0.2 : 1;
+  flash.intensity += ((P.light ? 220 * flick : 0) - flash.intensity) * Math.min(1, dt * 12);
+  flash.angle = lampAngle(); flash.distance = lampRange();
+  lens.material.color.set(P.light ? 0xfff6d0 : 0x333333);
+}
+function moveToward(o, tx, tz, spd, dt) {
+  const [wx, wz] = nav(o.x, o.z, tx, tz);
+  const dx = wx - o.x, dz = wz - o.z, d = Math.hypot(dx, dz);
+  if (d > 0.05) {
+    const s = Math.min(spd * dt, d); o.x += dx / d * s; o.z += dz / d * s;
+    const th = Math.atan2(dx, dz); let dh = th - o.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); o.h += dh * Math.min(1, dt * 10);
+  }
+  collide(o, o.type === 'raccoon' ? 0.3 : 0.32);
+  o.walk += spd * dt * 3;
+  return Math.hypot(tx - o.x, tz - o.z);
+}
+function animHuman(o, spd) {
+  const u = o.mesh.userData; if (!u.legs) return;
+  const a = Math.sin(o.walk) * 0.7 * Math.min(1, spd / 2);
+  u.legs[0].rotation.x = a; u.legs[1].rotation.x = -a; u.arms[0].rotation.x = -a; u.arms[1].rotation.x = a;
+}
+function updateNPCs(dt) {
+  for (const o of [...npcs]) {
+    if (o.stun > 0) {
+      o.stun -= dt;
+      o.mesh.rotation.z = Math.sin(performance.now() * 0.02) * 0.08;
+      if (o.mesh.userData.arms) { o.mesh.userData.arms[0].rotation.x = -2.6; o.mesh.userData.arms[1].rotation.x = -2.6; }
+      if (o.stun <= 0 && o.type === 'thief') { o.st = 'flee'; }
+      o.mesh.position.set(o.x, 0, o.z); o.mesh.rotation.y = o.h;
       continue;
     }
-    if (s.slowTimer > 0) { s.slowTimer--; if (s.slowTimer <= 0) s.slowMul = 1; }
-    const mul = s.slowMul || 1;
-
-    // After a while unnoticed suspects grab loot and run
-    s.age = (s.age || 0) + 1;
-    if (!s.alerted && s.age > 900) s.alerted = true;
-
-    if (s.alerted) {
-      const exitX = 550, exitY = 90;
-      const angleToExit = Math.atan2(exitY - s.y, exitX - s.x);
-      s.x += Math.cos(angleToExit) * s.speed * mul;
-      s.y += Math.sin(angleToExit) * s.speed * mul;
-      s.angle = angleToExit;
-      if (Math.hypot(exitX - s.x, exitY - s.y) < 25) {
-        // Escaped!
-        GAME.suspects.splice(i, 1);
-        GAME.cash = Math.max(0, GAME.cash - 60);
-        GAME.shiftReport.escaped = (GAME.shiftReport.escaped || 0) + 1;
-        setRadioMessage("Zentrale", `❌ ${s.type.toUpperCase()} escaped with the loot! (-60 €)`);
-        AudioFX.alarm();
-        updateHud();
-        continue;
+    o.mesh.rotation.z = 0;
+    const dP = Math.hypot(o.x - P.x, o.z - P.z);
+    if (o.type === 'thief') {
+      const s = STORES[o.target];
+      // bemerkt den Lichtkegel
+      if (o.st !== 'flee' && P.light && mode === 'fp' && inCone(o.x, 1.2, o.z, lampRange() * 0.8, lampAngle())) {
+        o.spook += dt;
+        if (o.spook > 0.35) { o.st = 'flee'; o.speed = 4.4 + night * 0.12; banner('🏃 Er hat dich gesehen!', 1); }
       }
-    } else {
-      if (Math.random() < 0.03) s.angle += (Math.random() - 0.5) * 1.5;
-      s.x += Math.cos(s.angle) * (s.speed * 0.6 * mul);
-      s.y += Math.sin(s.angle) * (s.speed * 0.6 * mul);
-    }
-
-    // Keep in world
-    s.x = Math.max(50, Math.min(WORLD_W - 50, s.x));
-    s.y = Math.max(50, Math.min(WORLD_H - 50, s.y));
-  }
-  if ((GAME.suspects.length > 0) !== GAME.hudAlarm) { GAME.hudAlarm = GAME.suspects.length > 0; updateHud(); }
-
-  // Check Sprinklers timer
-  GAME.sectors.forEach(sec => {
-    if (sec.sprinklerTimer > 0) {
-      sec.sprinklerTimer--;
-      if (sec.sprinklerTimer <= 0) sec.sprinkler = false;
-    }
-  });
-
-  // Strobe timer
-  if (GAME.guard.strobeTimer > 0) {
-    GAME.guard.strobeTimer--;
-    if (GAME.guard.strobeTimer <= 0) GAME.guard.strobeActive = false;
-  }
-
-  checkNightEvents();
-}
-
-// --- RENDER PATROL CANVAS ---
-function renderPatrol() {
-  if (GAME.activeView !== 'patrol') return;
-
-  const ctx = patrolCtx;
-  const cw = patrolCanvas.width;
-  const ch = patrolCanvas.height;
-
-  // Clear
-  ctx.fillStyle = '#060a0f';
-  ctx.fillRect(0, 0, cw, ch);
-
-  // Camera offset centered on guard
-  const camX = GAME.guard.x - cw / 2;
-  const camY = GAME.guard.y - ch / 2;
-
-  ctx.save();
-  ctx.translate(-camX, -camY);
-
-  // 1. Draw Mall Floor Grid & Tiles
-  ctx.strokeStyle = '#0e1824';
-  ctx.lineWidth = 1;
-  const tileSize = 60;
-  for (let x = 0; x < WORLD_W; x += tileSize) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_H); ctx.stroke();
-  }
-  for (let y = 0; y < WORLD_H; y += tileSize) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD_W, y); ctx.stroke();
-  }
-
-  // 2. Draw Sectors & Storefronts
-  GAME.sectors.forEach(sec => {
-    ctx.fillStyle = '#0b131c';
-    ctx.fillRect(sec.x, sec.y, sec.w, sec.h);
-    ctx.strokeStyle = sec.locked ? '#ef4444' : '#1f3852';
-    ctx.lineWidth = sec.locked ? 3 : 2;
-    ctx.strokeRect(sec.x, sec.y, sec.w, sec.h);
-
-    // Store Name Sign
-    ctx.fillStyle = sec.locked ? '#ef4444' : '#38bdf8';
-    ctx.font = 'bold 13px system-ui';
-    ctx.fillText(sec.name, sec.x + 12, sec.y + 24);
-
-    // Water Sprinkler Effect
-    if (sec.sprinkler) {
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
-      ctx.fillRect(sec.x, sec.y, sec.w, sec.h);
-    }
-  });
-
-  // 3. Draw Checkpoint Stations
-  GAME.checkpoints.forEach(cp => {
-    ctx.save();
-    ctx.translate(cp.x, cp.y);
-    // Glowing ring
-    ctx.beginPath();
-    ctx.arc(0, 0, 18, 0, Math.PI * 2);
-    ctx.fillStyle = cp.stamped ? 'rgba(34, 197, 94, 0.2)' : 'rgba(251, 191, 36, 0.25)';
-    ctx.fill();
-    ctx.strokeStyle = cp.stamped ? '#22c55e' : '#fbbf24';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Icon / Letter
-    ctx.fillStyle = cp.stamped ? '#22c55e' : '#fbbf24';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(cp.id, 0, 0);
-    ctx.restore();
-  });
-
-  // 4. Draw Suspects
-  GAME.suspects.forEach(s => {
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.rotate(s.angle);
-
-    // Stun sparkles
-    if (s.stunnedTimer > 0) {
-      ctx.strokeStyle = '#38bdf8';
-      ctx.strokeRect(-16, -16, 32, 32);
-    }
-
-    // Body
-    ctx.fillStyle = s.color;
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Backpack / Loot bag
-    ctx.fillStyle = '#f59e0b';
-    ctx.fillRect(-14, -6, 6, 12);
-
-    ctx.restore();
-  });
-
-  // 5. Draw K9 Buster
-  if (GAME.guard.hasDog) {
-    ctx.save();
-    ctx.translate(GAME.k9.x, GAME.k9.y);
-    ctx.rotate(GAME.k9.angle);
-    // Dog Body
-    ctx.fillStyle = '#b45309';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 14, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Head & Ears
-    ctx.fillStyle = '#78350f';
-    ctx.beginPath();
-    ctx.arc(10, 0, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // 6. Draw Guard & Segway
-  ctx.save();
-  ctx.translate(GAME.guard.x, GAME.guard.y);
-  ctx.rotate(GAME.guard.angle);
-
-  if (GAME.guard.onSegway) {
-    // Segway Platform & Wheels
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(-10, -18, 20, 36);
-    ctx.fillStyle = '#0284c7';
-    ctx.fillRect(-6, -14, 12, 28);
-    // Handlebar
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(6, -10); ctx.lineTo(6, 10); ctx.stroke();
-  }
-
-  // Guard Body (Security Uniform)
-  ctx.fillStyle = '#0f172a';
-  ctx.beginPath();
-  ctx.arc(0, 0, 14, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#38bdf8';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Guard Shoulders & Cap
-  ctx.fillStyle = '#1e3a8a';
-  ctx.fillRect(-4, -12, 8, 24);
-  // Cap Visor
-  ctx.fillStyle = '#38bdf8';
-  ctx.beginPath();
-  ctx.arc(6, 0, 5, -Math.PI / 2, Math.PI / 2);
-  ctx.fill();
-
-  ctx.restore();
-
-  // 7. LIGHTING & DARKNESS ENGINE (Raycast Flashlight Cone)
-  ctx.restore(); // back to screen coords
-
-  const guardScreenX = GAME.guard.x - camX;
-  const guardScreenY = GAME.guard.y - camY;
-
-  // Create darkness overlay
-  ctx.save();
-  const darkCanvas = document.createElement('canvas');
-  darkCanvas.width = cw;
-  darkCanvas.height = ch;
-  const dCtx = darkCanvas.getContext('2d');
-
-  // Fill ambient darkness
-  dCtx.fillStyle = GAME.blackout ? 'rgba(2, 4, 8, 0.96)' : 'rgba(4, 7, 12, 0.88)';
-  dCtx.fillRect(0, 0, cw, ch);
-
-  if (GAME.guard.flashlightOn) {
-    dCtx.globalCompositeOperation = 'destination-out';
-
-    // Flashlight cone
-    const coneDist = GAME.guard.hasFlashlightUpgrade ? 380 : 260;
-    const coneAngle = GAME.guard.hasFlashlightUpgrade ? 0.75 : 0.55;
-
-    dCtx.beginPath();
-    dCtx.moveTo(guardScreenX, guardScreenY);
-    dCtx.arc(
-      guardScreenX, guardScreenY,
-      coneDist,
-      GAME.guard.angle - coneAngle,
-      GAME.guard.angle + coneAngle
-    );
-    dCtx.closePath();
-    dCtx.fill();
-
-    // Small radial aura around guard
-    dCtx.beginPath();
-    dCtx.arc(guardScreenX, guardScreenY, 45, 0, Math.PI * 2);
-    dCtx.fill();
-  }
-
-  // Draw darkness over game
-  ctx.drawImage(darkCanvas, 0, 0);
-  ctx.restore();
-
-  // Strobe Flash Effect
-  if (GAME.guard.strobeActive) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.fillRect(0, 0, cw, ch);
-  }
-
-  // Draw Minimap
-  renderMinimap();
-}
-
-// --- MINIMAP RENDER ---
-function renderMinimap() {
-  const mCtx = minimapCtx;
-  const mw = minimapCanvas.width;
-  const mh = minimapCanvas.height;
-  mCtx.fillStyle = '#060b12';
-  mCtx.fillRect(0, 0, mw, mh);
-
-  const scaleX = mw / WORLD_W;
-  const scaleY = mh / WORLD_H;
-
-  // Sectors
-  GAME.sectors.forEach(sec => {
-    mCtx.fillStyle = sec.locked ? '#ef4444' : '#1e334a';
-    mCtx.fillRect(sec.x * scaleX, sec.y * scaleY, sec.w * scaleX, sec.h * scaleY);
-  });
-
-  // Checkpoints
-  GAME.checkpoints.forEach(cp => {
-    mCtx.fillStyle = cp.stamped ? '#22c55e' : '#fbbf24';
-    mCtx.beginPath();
-    mCtx.arc(cp.x * scaleX, cp.y * scaleY, 2.5, 0, Math.PI * 2);
-    mCtx.fill();
-  });
-
-  // Suspects
-  GAME.suspects.forEach(s => {
-    mCtx.fillStyle = '#ef4444';
-    mCtx.beginPath();
-    mCtx.arc(s.x * scaleX, s.y * scaleY, 3, 0, Math.PI * 2);
-    mCtx.fill();
-  });
-
-  // Guard
-  mCtx.fillStyle = '#38bdf8';
-  mCtx.beginPath();
-  mCtx.arc(GAME.guard.x * scaleX, GAME.guard.y * scaleY, 4, 0, Math.PI * 2);
-  mCtx.fill();
-}
-
-// --- RENDER CCTV FEEDS (6 Monitors) ---
-function renderCctvFeeds() {
-  if (GAME.activeView !== 'cctv') return;
-
-  for (let i = 0; i < 6; i++) {
-    const canvas = document.getElementById(`cctv${i + 1}`);
-    if (!canvas) continue;
-    const ctx = canvas.getContext('2d');
-    const sec = GAME.sectors[i];
-
-    // Clear
-    ctx.fillStyle = GAME.blackout ? '#020406' : (sec.light ? '#0a1420' : '#04070a');
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    if (GAME.blackout) {
-      // Static noise
-      ctx.fillStyle = '#1e293b';
-      ctx.font = 'bold 14px monospace';
-      ctx.fillText("NO SIGNAL // 0x000F", 40, 90);
-      continue;
-    }
-
-    // Camera view of that sector
-    ctx.save();
-    const scale = canvas.width / sec.w;
-    ctx.scale(scale, scale);
-    ctx.translate(-sec.x, -sec.y);
-
-    // Draw sector walls & floor
-    ctx.fillStyle = '#0f1d2c';
-    ctx.fillRect(sec.x, sec.y, sec.w, sec.h);
-    ctx.strokeStyle = sec.locked ? '#ef4444' : '#223d5a';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(sec.x, sec.y, sec.w, sec.h);
-
-    // Draw any suspect inside this sector
-    let suspectInCam = false;
-    GAME.suspects.forEach(s => {
-      if (s.x >= sec.x && s.x <= sec.x + sec.w && s.y >= sec.y && s.y <= sec.y + sec.h) {
-        suspectInCam = true;
-        ctx.fillStyle = s.color;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 14, 0, Math.PI * 2);
-        ctx.fill();
-
-        // AI Tracker Box if owned
-        if (GAME.guard.hasCctvAi) {
-          ctx.strokeStyle = '#ef4444';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(s.x - 20, s.y - 20, 40, 40);
+      if (o.st === 'enter') {
+        const d = moveToward(o, s.side * 12.4, s.cz, o.speed, dt); animHuman(o, o.speed);
+        if (d < 0.3) { o.st = 'steal'; o.steal = 0; displays[o.target].glass.visible = false; sfx.glass(); alarmIdx = o.target; radio(`🚨 Glasbruch-Alarm: Sektor ${s.id} – ${s.name}!`, 4); }
+      } else if (o.st === 'steal') {
+        o.steal += dt; animHuman(o, 0);
+        o.h = s.side > 0 ? Math.PI / 2 : -Math.PI / 2;
+        if (o.mesh.userData.arms) o.mesh.userData.arms[1].rotation.x = -1.2 + Math.sin(o.steal * 8) * 0.3;
+        if (o.steal > 7 - night * 0.4) {
+          o.loot = s.loot; o.mesh.userData.sack.visible = true; displays[o.target].mesh.visible = false; displays[o.target].broken = true;
+          o.st = 'flee'; o.speed = 3.9 + night * 0.12;
+        }
+      } else {
+        const ez = o.z < 0 ? -29.8 : 29.8;
+        const d = moveToward(o, 0, ez, o.speed, dt); animHuman(o, o.speed);
+        if (d < 0.6) {
+          if (o.loot) { nightStats.lost += o.loot; nightStats.thefts++; radio(`📻 Zentrale: Täter mit Beute entkommen! (−${o.loot} €) Einbrüche: ${nightStats.thefts}/3`, 4); ArcadeCore.hit(); }
+          if (alarmIdx === o.target) alarmIdx = -1;
+          removeNPC(o);
+          if (nightStats.thefts >= 3) { endNight('fired'); return; }
+          continue;
         }
       }
-    });
-
-    // Draw Guard if inside
-    if (GAME.guard.x >= sec.x && GAME.guard.x <= sec.x + sec.w && GAME.guard.y >= sec.y && GAME.guard.y <= sec.y + sec.h) {
-      ctx.fillStyle = '#38bdf8';
-      ctx.beginPath();
-      ctx.arc(GAME.guard.x, GAME.guard.y, 16, 0, Math.PI * 2);
-      ctx.fill();
+      if (o.loot && o.st !== 'steal' && o.mesh.userData.sack) o.mesh.userData.sack.visible = true;
+    } else if (o.type === 'raccoon') {
+      o.t -= dt;
+      let spd = o.speed;
+      if (dP < 5 || (P.light && dP < 9 && inCone(o.x, 0.4, o.z, 9, lampAngle()))) {
+        // flieht vom Spieler weg
+        const ax = o.x - P.x, az = o.z - P.z, l = Math.hypot(ax, az) || 1;
+        o.goal = [clamp(o.x + ax / l * 4, -16, 16), clamp(o.z + az / l * 4, -30, 30)]; spd = 4.8; o.t = 1.2;
+      }
+      if (!o.goal || o.t <= 0) {
+        const s = STORES[(Math.random() * 6) | 0];
+        o.goal = Math.random() < 0.4 ? [rnd(-3, 3), rnd(-28, 28)] : [s.side * rnd(8, 15), s.cz + rnd(-4, 4)]; o.t = rnd(4, 8);
+        if (Math.random() < 0.3) noise(0.25, 700, 0.12, 2);
+      }
+      const d = moveToward(o, o.goal[0], o.goal[1], spd, dt);
+      if (d < 0.4) o.t = 0;
+      o.mesh.userData.tail.rotation.y = Math.sin(o.walk * 0.8) * 0.4;
+      o.mesh.position.y = Math.abs(Math.sin(o.walk)) * 0.05;
+    } else {
+      // Phantom: bewegt sich nur unbeobachtet
+      const reg = regionOf(o.x, o.z);
+      const lit = (P.light && mode === 'fp' && inCone(o.x, 1.4, o.z, lampRange(), lampAngle())) || (reg >= 0 && storeLights[reg].on > 0);
+      o.frozen = lit;
+      if (lit) {
+        o.burn += dt * (reg >= 0 && storeLights[reg].on > 0 ? 0.5 : 1);
+        o.mesh.position.x = o.x + rnd(-0.03, 0.03);
+        if (o.burn > 3.2) { nightStats.phantoms++; sfx.scream(); banner('👻 Phantom gebannt! +80 €', 1.5); shake = 0.6; removeNPC(o); continue; }
+      } else {
+        moveToward(o, P.x, P.z, o.speed * (mode === 'cctv' ? 1.4 : 1), dt);
+        o.mesh.position.x = o.x;
+        // Kopf starrt den Spieler an
+        o.mesh.userData.head.rotation.y = 0;
+      }
+      o.mesh.traverse(m => { if (m.isMesh && m.material.emissive) m.material.emissive.setRGB(o.burn * 0.15, o.burn * 0.12, o.burn * 0.1); });
+      if (dP < 0.85 && !lit) { endNight('phantom'); sfx.scream(); return; }
+      if (dP < 11) { heartT -= dt * (14 - dP) / 6; if (heartT < 0) { heartT = 1; sfx.heart(); } shake = Math.max(shake, (11 - dP) / 60); }
+      o.mesh.position.z = o.z; o.mesh.rotation.y = Math.atan2(P.x - o.x, P.z - o.z);
+      continue;
     }
-
-    ctx.restore();
-
-    // Highlight card if suspect detected
-    const card = document.getElementById(`cardCam${i + 1}`);
-    if (card) {
-      card.classList.toggle('alarm-border', suspectInCam);
-    }
+    o.mesh.position.x = o.x; o.mesh.position.z = o.z; o.mesh.rotation.y = o.h;
   }
 }
-
-// --- SHOP & UPGRADES SYSTEM ---
-function openShopModal() {
-  document.getElementById('shopModal').classList.add('show');
-}
-function closeShopModal() {
-  document.getElementById('shopModal').classList.remove('show');
-}
-
-function buyUpgrade(item) {
-  if (item === 'flashlight' && GAME.cash >= 120 && !GAME.guard.hasFlashlightUpgrade) {
-    GAME.cash -= 120;
-    GAME.guard.hasFlashlightUpgrade = true;
-    document.getElementById('buyFlashlightBtn').disabled = true;
-    document.getElementById('buyFlashlightBtn').textContent = 'Purchased ✓';
-    AudioFX.radioChirp();
-    setRadioMessage("Terminal", "Mag-Beam 5000 equipped! Huge light cone activated.");
-  } else if (item === 'dog' && GAME.cash >= 250 && !GAME.guard.hasDog) {
-    GAME.cash -= 250;
-    GAME.guard.hasDog = true;
-    document.getElementById('buyDogBtn').disabled = true;
-    document.getElementById('buyDogBtn').textContent = 'Purchased ✓';
-    AudioFX.dogBark();
-    setRadioMessage("K9 Unit", "Service dog Buster is now loyally at your side!");
-  } else if (item === 'segway' && GAME.cash >= 180 && !GAME.guard.hasSegway) {
-    GAME.cash -= 180;
-    GAME.guard.hasSegway = true;
-    document.getElementById('buySegwayBtn').disabled = true;
-    document.getElementById('buySegwayBtn').textContent = 'Purchased ✓';
-    AudioFX.bellRing();
-    setRadioMessage("Terminal", "Turbo Segway unlocked! Press [E] to mount.");
-  } else if (item === 'taser_ammo' && GAME.cash >= 40) {
-    GAME.cash -= 40;
-    GAME.guard.taserAmmo += 3;
-    AudioFX.taserZap();
-    setRadioMessage("Terminal", `Taser cartridge loaded! New stock: ${GAME.guard.taserAmmo} shots.`);
-  } else if (item === 'cctv_ai' && GAME.cash >= 200 && !GAME.guard.hasCctvAi) {
-    GAME.cash -= 200;
-    GAME.guard.hasCctvAi = true;
-    document.getElementById('buyCctvAiBtn').disabled = true;
-    document.getElementById('buyCctvAiBtn').textContent = 'Active ✓';
-    AudioFX.checkpointBeep();
-    setRadioMessage("CCTV Software", "AI motion detection activated! Suspects are framed automatically.");
-  } else if (item === 'coffee' && GAME.cash >= 25) {
-    GAME.cash -= 25;
-    GAME.guard.stamina = 100;
-    GAME.guard.alertness = 100;
-    AudioFX.radioChirp();
-    setRadioMessage("Coffee", "Mmm, hot espresso! Stamina and alertness fully recharged!");
-  }
-  updateHud();
+function updateWorld(dt) {
+  clockT += dt;
+  while (spawnQueue.length && spawnQueue[0].t <= clockT) { const s = spawnQueue.shift(); spawnNPC(s.type); }
+  storeLights.forEach((s, i) => {
+    s.on = Math.max(0, s.on - dt); s.cd = Math.max(0, s.cd - dt);
+    const target = s.on > 0 ? 55 : 4;
+    s.light.intensity += (target - s.light.intensity) * Math.min(1, dt * 6);
+  });
+  checkpoints.forEach(c => { if (!c.done) c.lamp.scale.setScalar(1 + Math.sin(clockT * 6) * 0.2); });
+  displays.forEach((d, i) => { if (d.mesh.visible) d.mesh.rotation.y += dt * 0.8; });
+  if (clockT >= NIGHT_LEN) endNight(night >= NIGHTS ? 'win' : 'ok');
 }
 
+// ---------- HUD ----------
 function updateHud() {
-  document.getElementById('cashDisplay').textContent = `💰 ${GAME.cash} €`;
-  document.getElementById('nightDisplay').textContent = `🌙 Night ${GAME.night}/${GAME.maxNights}`;
-  const stampedCount = GAME.checkpoints.filter(cp => cp.stamped).length;
-  document.getElementById('cpCounter').textContent = `${stampedCount} / ${GAME.checkpoints.length}`;
-
-  const alarmBadge = document.getElementById('alarmBadge');
-  if (GAME.suspects.length > 0 || GAME.blackout) {
-    alarmBadge.className = 'hud-badge alert-red';
-    alarmBadge.textContent = '🚨 ALARM: BREAK-IN';
-  } else {
-    alarmBadge.className = 'hud-badge alert-green';
-    alarmBadge.textContent = '🟢 STATUS: NORMAL';
+  $('clock').textContent = hourStr();
+  $('night').textContent = `Nacht ${night}/${NIGHTS}`;
+  $('money').textContent = `💰 ${save.money} € · Woche ${runScore} €`;
+  $('cps').innerHTML = checkpoints.map((c, i) => `<span style="color:${c.done ? '#4ade80' : '#f87171'}">${STORES[i].id}</span>`).join(' ');
+  $('bat').style.width = P.bat + '%'; $('sta').style.width = P.sta + '%';
+  $('taser').textContent = save.up.taser ? `⚡ Taser ×${P.taser}` : '';
+  const it = state === 'play' && mode === 'fp' ? interactTarget() : null;
+  $('prompt').style.display = it ? 'block' : 'none';
+  if (it) $('prompt').textContent = it.kind === 'cuff' ? (it.o.type === 'thief' ? '✋ E – Handschellen anlegen' : '✋ E – Waschbär schnappen') : it.kind === 'stamp' ? '🖋️ E – Kontrollpunkt stempeln' : P.charging ? '🔋 Lädt…' : '🔋 E – Lampe aufladen';
+  const thief = npcs.find(o => o.type === 'thief' && (o.st === 'steal' || o.loot));
+  if (alarmIdx >= 0 || thief) {
+    const tgt = thief || npcs.find(o => o.type === 'thief' && o.target === alarmIdx);
+    $('alarm').style.display = 'block';
+    $('alarm').textContent = thief ? (thief.loot ? `🚨 Täter flieht mit Beute aus ${STORES[thief.target].id}!` : `🚨 Einbruch: Sektor ${STORES[thief.target].id} (${Math.round(thief.steal / (7 - night * 0.4) * 100)}%)`) : `🚨 Alarm Sektor ${STORES[alarmIdx].id}`;
+    if (save.up.tracker && tgt && mode === 'fp') {
+      const ang = Math.atan2(tgt.x - P.x, tgt.z - P.z), rel = ang - (P.yaw + Math.PI);
+      $('arrow').style.display = 'block'; $('arrow').style.transform = `rotate(${-rel}rad)`;
+    } else $('arrow').style.display = 'none';
+  } else { $('alarm').style.display = 'none'; $('arrow').style.display = 'none'; }
+  $('vign').style.background = `radial-gradient(ellipse at center, transparent ${45 - shake * 40}%, ${shake > 0.05 ? '#300' : '#000'}c 100%)`;
+  if (mode === 'cctv') {
+    const s = STORES[camIdx];
+    $('camLbl').textContent = `CAM 0${camIdx + 1} // ${s.id} ${s.name.toUpperCase()}${storeLights[camIdx].on > 0 ? ' · 💡' : ''}`;
+    $('camRec').style.opacity = (Math.floor(performance.now() / 500) % 2) ? 1 : 0.2;
   }
 }
 
-// --- FINISH SHIFT & MORNING REPORT ---
-function finishShift() {
-  const modal = document.getElementById('shiftReportModal');
-  const suspReward = GAME.shiftReport.arrests * 100;
-  const cpReward = GAME.shiftReport.checkpointsCount * 35;
-  const total = 150 + suspReward + cpReward + GAME.shiftReport.goodsSaved;
-
-  GAME.cash += total;
-  GAME.score += total;
-  if (window.ArcadeCore) ArcadeCore.saveScore('securityguard', GAME.score);
-
-  document.getElementById('repSuspects').textContent = `+ ${suspReward} € (${GAME.shiftReport.arrests} culprits)`;
-  document.getElementById('repCheckpoints').textContent = `+ ${cpReward} €`;
-  document.getElementById('repGoodsSaved').textContent = `+ ${GAME.shiftReport.goodsSaved} €`;
-  document.getElementById('repTotal').textContent = `+ ${total} €`;
-
-  modal.classList.add('show');
+// ---------- Loop ----------
+let last = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (state === 'play') {
+    if (mode === 'fp') updatePlayer(dt);
+    else { P.sta = Math.min(100, P.sta + 14 * dt); }
+    updateNPCs(dt);
+    if (state === 'play') updateWorld(dt);
+    radioT -= dt; if (radioT <= 0) $('radio').classList.remove('show');
+    bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show');
+    shake = Math.max(0, shake - dt * 0.8);
+  } else if (state === 'menu') {
+    P.yaw += dt * 0.08;
+  }
+  // Kamera
+  camera.position.set(P.x + rnd(-1, 1) * shake * 0.05, 1.65 + Math.sin(P.bob) * 0.045, P.z + rnd(-1, 1) * shake * 0.05);
+  camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ');
+  torch.position.set(0.21 + Math.cos(P.bob * 0.5) * 0.008, -0.2 + Math.sin(P.bob) * 0.01, -0.36);
+  if (state === 'play' || state === 'pause' || state === 'menu') updateHud();
+  if (mode === 'cctv' && state !== 'menu') {
+    guardBody.visible = true; guardBody.position.set(P.x, 0, P.z); guardBody.rotation.y = P.yaw + Math.PI;
+    torch.visible = false;
+    hemi.intensity = 1.6; scene.fog.density = 0.004;
+    const c = cctvCams[camIdx];
+    cctvBodies[camIdx].visible = false;
+    renderer.setRenderTarget(nvTarget); renderer.render(scene, c); renderer.setRenderTarget(null);
+    cctvBodies[camIdx].visible = true;
+    nvMat.uniforms.time.value = now * 0.001;
+    renderer.render(nvScene, nvCam);
+    hemi.intensity = 0.18; scene.fog.density = 0.034;
+    guardBody.visible = false; torch.visible = true;
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 
-function startNextNight() {
-  document.getElementById('shiftReportModal').classList.remove('show');
-  const finished = GAME.night >= GAME.maxNights;
-  GAME.night = finished ? 1 : GAME.night + 1;
-  GAME.timeSec = 22 * 3600; // Reset to 22:00:00
-  GAME.suspects = [];
-  GAME.blackout = false;
-  GAME.hudAlarm = false;
-  nightTimer = 0;
-  GAME.shiftOver = false;
-  GAME.guard.x = 180; GAME.guard.y = 160;
-  GAME.k9.x = 150; GAME.k9.y = 160; GAME.k9.state = 'following'; GAME.k9.targetSuspect = null;
-  GAME.checkpoints.forEach(cp => cp.stamped = false);
-  GAME.shiftReport = { arrests: 0, checkpointsCount: 0, goodsSaved: 0 };
-  updateHud();
-  setRadioMessage("Zentrale", finished
-    ? "Survived all 5 nights – you are Guard of the Year! A new round begins."
-    : `Night ${GAME.night} has begun. Heightened vigilance required!`);
+// ---------- Shop ----------
+const SHOP = [
+  ['lamp', '🔦 Mag-Beam 5000', l => `Breiterer, weiterer Kegel, längere Blendung (${l}/4)`, l => 90 + l * 70, 4],
+  ['batt', '🔋 Lithium-Akku', l => `Lampe verbraucht −${Math.round((l + 1) * 17)}% (${l}/4)`, l => 70 + l * 55, 4],
+  ['shoes', '👟 Lauf-Sohlen', l => `Schnellerer Sprint, mehr Puste (${l}/4)`, l => 60 + l * 50, 4],
+  ['taser', '⚡ Taser-Kartuschen', l => `${(l + 1) * 2} Schuss pro Nacht (Q) (${l}/3)`, l => 120 + l * 90, 3],
+  ['tracker', '📡 KI-Tracker', l => l ? 'Aktiv: Marker auf CCTV + Richtungspfeil' : 'Markiert Eindringlinge auf Kameras, zeigt Richtung', l => 200, 1]
+];
+function renderShop(id) {
+  const el = $(id);
+  el.innerHTML = `<div class="row" style="justify-content:center"><b>💰 Konto: ${save.money} €</b></div>` + SHOP.map(([k, name, desc, cost, max]) => {
+    const l = save.up[k], c = cost(l), isMax = l >= max;
+    return `<div class="row"><span><b>${name}</b><br>${desc(l)}</span><button data-k="${k}" ${isMax || save.money < c ? 'disabled' : ''}>${isMax ? 'MAX' : c + ' €'}</button></div>`;
+  }).join('');
+  el.querySelectorAll('button').forEach(b => b.onclick = () => {
+    const s = SHOP.find(x => x[0] === b.dataset.k), l = save.up[s[0]], c = s[3](l);
+    if (save.money >= c && l < s[4]) { save.money -= c; save.up[s[0]]++; persist(); ArcadeCore.powerup(); renderShop(id); npcs.forEach(o => o.mk.visible = save.up.tracker > 0); }
+  });
+  $('menuBest').textContent = best ? 'Bestwoche: ' + best + ' €' : '';
 }
 
-// --- MAIN ANIMATION LOOP ---
-function gameLoop() {
-  updateGame();
-  renderPatrol();
-  renderCctvFeeds();
-  requestAnimationFrame(gameLoop);
+// ---------- Eingabe ----------
+const canvas = $('gl');
+let touchMode = false, touchRun = false;
+const joy = { x: 0, y: 0, id: null, cx: 0, cy: 0 };
+function lockPointer() { if (!touchMode && canvas.requestPointerLock) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } }
+function unlockPointer() { if (document.pointerLockElement) document.exitPointerLock(); }
+document.addEventListener('pointerlockchange', () => {
+  if (!document.pointerLockElement && state === 'play' && mode === 'fp' && !touchMode) togglePause();
+});
+document.addEventListener('mousemove', e => {
+  if (document.pointerLockElement !== canvas || state !== 'play' || mode !== 'fp') return;
+  P.yaw -= e.movementX * 0.0022; P.pitch = clamp(P.pitch - e.movementY * 0.0022, -1.2, 1.2);
+});
+canvas.addEventListener('mousedown', e => {
+  if (touchMode) return;
+  if (state === 'play' && mode === 'fp') {
+    if (document.pointerLockElement !== canvas) { lockPointer(); return; }
+    if (e.button === 0) strobe();
+  }
+});
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase(); keys[k] = true;
+  if (['tab', ' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
+  if (e.repeat) return;
+  if (state === 'pause' && (k === 'p' || k === 'escape')) { togglePause(); return; }
+  if (state !== 'play') return;
+  if (k === 'f') { P.light = !P.light && P.bat > 0; sfx.click(); }
+  else if (k === 'e') interact();
+  else if (k === 'q') fireTaser();
+  else if (k === 'tab' || k === 'c') toggleCCTV();
+  else if (k === 'p') togglePause();
+  else if (mode === 'cctv' && k >= '1' && k <= '6') { camIdx = +k - 1; sfx.click(); renderCamBtns(); }
+  else if (mode === 'cctv' && k === 'l') sectorLight(camIdx);
+});
+addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys[k] = false; if (k === 'e') P.charging = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') togglePause(); });
+function togglePause() {
+  if (state === 'pause') { state = prevState; $('pause').style.display = 'none'; last = performance.now(); if (mode === 'fp') lockPointer(); }
+  else if (state === 'play') { prevState = state; state = 'pause'; $('pause').style.display = 'flex'; }
 }
+$('pause').addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'pause') togglePause(); });
 
-// Start Game
-resizePatrolCanvas();
-updateHud();
-requestAnimationFrame(gameLoop);
+// Touch
+addEventListener('touchstart', () => { if (!touchMode) { touchMode = true; $('touch').style.display = 'block'; unlockPointer(); } }, { passive: true });
+const joyEl = $('joy');
+joyEl.addEventListener('pointerdown', e => { joy.id = e.pointerId; const r = joyEl.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; joyEl.setPointerCapture(e.pointerId); joyMove(e); });
+joyEl.addEventListener('pointermove', e => { if (e.pointerId === joy.id) joyMove(e); });
+const joyEnd = () => { joy.id = null; joy.x = joy.y = 0; $('joyK').style.transform = ''; };
+joyEl.addEventListener('pointerup', joyEnd); joyEl.addEventListener('pointercancel', joyEnd);
+function joyMove(e) {
+  let dx = (e.clientX - joy.cx) / 50, dy = (e.clientY - joy.cy) / 50; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; }
+  joy.x = dx; joy.y = dy; $('joyK').style.transform = `translate(${dx * 40}px,${dy * 40}px)`;
+}
+let look = null;
+canvas.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') look = { id: e.pointerId, x: e.clientX, y: e.clientY }; });
+canvas.addEventListener('pointermove', e => {
+  if (!look || e.pointerId !== look.id || state !== 'play' || mode !== 'fp') return;
+  P.yaw -= (e.clientX - look.x) * 0.006; P.pitch = clamp(P.pitch - (e.clientY - look.y) * 0.006, -1.2, 1.2);
+  look.x = e.clientX; look.y = e.clientY;
+});
+canvas.addEventListener('pointerup', e => { if (look && e.pointerId === look.id) look = null; });
+const tb2 = (id, down, up) => { const el = $(id); el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('on'); down(); }); const u = () => { el.classList.remove('on'); if (up) up(); }; el.addEventListener('pointerup', u); el.addEventListener('pointercancel', u); };
+tb2('tF', () => { if (state === 'play') { P.light = !P.light && P.bat > 0; sfx.click(); } });
+tb2('tS', strobe);
+tb2('tE', interact, () => { P.charging = false; });
+tb2('tQ', fireTaser);
+tb2('tC', toggleCCTV);
+tb2('tR', () => { touchRun = true; }, () => { touchRun = false; });
+
+$('go').onclick = () => { audio(); $('menu').classList.add('hide'); newRun(); };
+$('again').onclick = () => {
+  $('over').classList.add('hide');
+  if ($('again').dataset.next === 'next') { night++; startNight(); }
+  else { newRun(); }
+};
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  cctvCams.forEach(c => { c.aspect = camera.aspect; c.updateProjectionMatrix(); });
+  renderer.setSize(innerWidth, innerHeight);
+  nvTarget.setSize(innerWidth, innerHeight);
+});
+
+renderShop('shop');
+P.x = 0; P.z = 24;
+appStarted = true;
+requestAnimationFrame(loop);
+// Test-Hooks
+window.__sg = { P, npcs, spawnNPC, get state() { return state; }, toggleCCTV, strobe };
 </script>
 </body>
 </html>
