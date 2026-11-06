@@ -49,6 +49,9 @@ button:active { transform:translateY(3px); box-shadow:0 1px 0 #6d0f08; }
 #crash { position:absolute; top:62%; left:0; right:0; text-align:center; font-size:32px; color:#d52b1e; opacity:0; transition:opacity .2s; padding:0 12px; }
 #pause { position:absolute; inset:0; background:#0008; display:none; flex-direction:column; align-items:center; justify-content:center; color:#fff; pointer-events:auto; }
 #pause b { font-size:44px; } #pause span { font-size:18px; margin-top:10px; }
+#hint { position:absolute; bottom:18%; left:0; right:0; text-align:center; font-size:24px; color:#d52b1e; padding:0 12px; }
+#mute { position:fixed; top:54px; left:12px; z-index:50; font-size:16px; margin:0; padding:4px 10px; min-height:34px; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); border-radius:20px; box-shadow:none; }
+#mute:active { transform:none; }
 .float { position:absolute; transform:translate(-50%,-50%); font-size:20px; white-space:nowrap; will-change:transform; }
 #fallbackError a { color:#fff; }
 @media (max-width:520px) { #score { font-size:20px; top:54px; } #sub { top:80px; font-size:14px; } #combo { top:100px; } .card h1 { font-size:26px; } }
@@ -64,13 +67,15 @@ button:active { transform:translateY(3px); box-shadow:0 1px 0 #6d0f08; }
   <div id="lives">🐄🐄🐄</div>
   <div id="speed" class="t">0 km/h</div>
   <div id="crash" class="t"></div>
+  <div id="hint" class="t"></div>
   <div id="pause"><b>⏸ Pause</b><span>P / Esc / Tippen = weiter</span></div>
 </div>
 <div class="overlay" id="menu"><div class="card">
   <h1>🐄 Kuh auf Ski 3D</h1>
   <p>Berta hat die Weide satt und fährt jetzt Weltcup – diesmal in echt 3D. Bremsen hat sie immer noch nicht gelernt.</p>
-  <p><b>Steuern:</b> Maus, Finger oder ← → / A D.<br><b>In der Luft:</b> Tippen oder Leertaste für einen Muh-Salto. Mehrmals = mehr Punkte, aber lande sauber!</p>
-  <p>🔔 einsammeln · 🚩 durchs Tor fahren · 🧀 Turbo · 🌲⛄🪨 ausweichen.<br>Touristen 🤳 geben Bonus, wenn du knapp vorbeirast.</p>
+  <p><b>Steuern:</b> Maus, Finger ziehen oder ← → / A D.<br><b>In der Luft:</b> Tippen oder Leertaste für einen Muh-Salto. Mehrmals = mehr Punkte, aber lande sauber!</p>
+  <p>🔔 einsammeln · 🚩 durchs Tor fahren · 🌲⛄🪨 ausweichen.<br>🧀 Käse-Turbo walzt alles nieder · 🥛 Milchkanne = Extraleben.<br>Touristen 🤳 geben Bonus, wenn du knapp vorbeirast.</p>
+  <p style="font-size:13px;color:#567">P/Esc Pause · M Ton</p>
   <p class="best" id="menuBest"></p>
   <button id="go">Muuuh!</button>
 </div></div>
@@ -82,8 +87,9 @@ button:active { transform:translateY(3px); box-shadow:0 1px 0 #6d0f08; }
 <div id="fallbackError" style="display:none;position:fixed;inset:0;background:#123;color:#fff;z-index:99999;padding:30px;text-align:center;">
   <h2>🐄 Berta steckt im Lift fest</h2>
   <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
-  <p><a href="kuhski.html">Zur 2D-Version</a> · <a href="../index.html">Zurück zum Hub</a></p>
+  <p><a href="../index.html">Zurück zum Hub</a></p>
 </div>
+<button id="mute" aria-label="Ton an/aus">🔊</button>
 
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
@@ -338,6 +344,7 @@ const M = {
   ramp: new THREE.MeshStandardMaterial({ color: "#7cc3f0", roughness: 0.3, flatShading: true }),
   skin: new THREE.MeshStandardMaterial({ color: "#f1c9a5", roughness: 0.7 }),
   phone: new THREE.MeshStandardMaterial({ color: "#222", emissive: "#ffffff", emissiveIntensity: 0 }),
+  steel: new THREE.MeshStandardMaterial({ color: "#d8dde4", roughness: 0.25, metalness: 0.8, emissive: "#334", emissiveIntensity: 0.3 }),
 };
 function mesh(geo, mat, x = 0, y = 0, z = 0, parent) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true;
@@ -435,12 +442,24 @@ const rampGeo = (() => {
   geo.computeVertexNormals();
   return geo;
 })();
-function makeRamp() {
+// Schanze: halbe Länge 1.7, Höhe 1.1 · Buckel (small): halbe Länge 1.0, Höhe 0.5
+function makeRamp(small) {
   const g = new THREE.Group();
   const r = mesh(rampGeo, M.ramp, 0, 0, 0, g); r.receiveShadow = true;
+  if (small) { r.scale.set(0.8, 0.5 / 1.1, 2 / 3.4); return g; }
   for (const sx of [-1.45, 1.45]) {
     const rail = mesh(new THREE.BoxGeometry(0.08, 0.08, 3.6), M.red, sx, 0.6, 0, g); rail.rotation.x = Math.atan2(1.1, 3.4);
   }
+  return g;
+}
+function makeMilk() {
+  const g = new THREE.Group();
+  const inner = new THREE.Group(); g.add(inner);
+  mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.7, 14), M.steel, 0, 0, 0, inner);
+  mesh(new THREE.CylinderGeometry(0.18, 0.32, 0.22, 14), M.steel, 0, 0.46, 0, inner);
+  mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 14), M.red, 0, 0.6, 0, inner);
+  mesh(new THREE.TorusGeometry(0.33, 0.04, 6, 16), M.red, 0, 0.1, 0, inner).rotation.x = Math.PI / 2;
+  g.userData.inner = inner;
   return g;
 }
 function makeBell() {
@@ -481,7 +500,8 @@ function makeTourist() {
 let best = Number(ArcadeCore.getScore(KEY)) || 0;
 let state = "menu";
 const cow = { x: 0, vx: 0, s: 0, air: 0, va: 0, rot: 0, spin: 0, tricks: 0, ramp: null, yaw: 0 };
-let things = [], floats = [], score, bells, lives, speed, spawnS, turbo, invuln, shake, targetX, keys = {}, crashT, gateIdx, overT = 0;
+let things = [], floats = [], score, bells, lives, speed, spawnS, turbo, invuln, shake, targetX, keys = {}, crashT, gateIdx, overT = 0, nextMile, jumps;
+const MILES = ["Alpe Muh", "Käsehütte", "Glockenpass", "Euterjoch", "Gipfel der Weide", "Schweizer Grenze"];
 
 const SHARED_MATS = new Set(Object.values(M));
 function disposeObj(o) {
@@ -496,7 +516,7 @@ function clearThings() { for (const t of things) disposeObj(t.obj); things = [];
 function reset() {
   clearThings();
   Object.assign(cow, { x: 0, vx: 0, s: 0, air: 0, va: 0, rot: 0, spin: 0, tricks: 0, ramp: null, yaw: 0 });
-  targetX = 0; score = 0; bells = 0; lives = 3; speed = 15; spawnS = 45; turbo = 0; invuln = 0; shake = 0; crashT = 0; gateIdx = 0;
+  targetX = 0; score = 0; bells = 0; lives = 3; speed = 15; spawnS = 45; nextMile = 500; jumps = 0; turbo = 0; invuln = 0; shake = 0; crashT = 0; gateIdx = 0;
   terrainS0 = NaN; resetDeco(); resetTrail(); trailLastS = 0;
   cowModel.visible = true; cowFlip.rotation.set(0, 0, 0);
 }
@@ -523,16 +543,32 @@ function place(t) {
 function spawn(s) {
   const lvl = Math.min(cow.s / 1500, 1);
   const rx = () => rnd(-PW + 1.5, PW - 1.5);
+  const gapS = rnd(13, 23) - lvl * 6;
+  if (lives < 3 && Math.random() < 0.03) {
+    place({ k: "milk", x: rx(), s, h: 1.0, obj: makeMilk() });
+    return gapS;
+  }
   const r = Math.random();
   if (r < 0.14) {
     const gap = Math.max(4.4, 7 - lvl * 2.6), gx = rnd(-PW + 1 + gap / 2, PW - 1 - gap / 2);
     const obj = makeGate(gap);
     obj.rotation.y = rnd(-0.15, 0.15);
     place({ k: "gate", x: gx, s, gap, obj });
-  } else if (r < 0.25) {
+  } else if (r < 0.24) {
     const x = rx();
-    place({ k: "ramp", x, s, obj: makeRamp(), tilt: true });
-    if (Math.random() < 0.6) for (let i = 0; i < 3; i++) place({ k: "bell", x: x + rnd(-0.3, 0.3), s: s + 7 + i * 3.2, h: 3.4 + Math.sin((i + 1) / 4 * Math.PI) * 1.5, obj: makeBell() });
+    place({ k: "ramp", x, s, len: 1.7, hgt: 1.1, obj: makeRamp(false), tilt: true });
+    // Bögen-Glocken folgen der Flugkurve bei aktueller Geschwindigkeit
+    if (Math.random() < 0.6) {
+      const va = 7 + speed * 0.12, T = (va + Math.sqrt(va * va + 44)) / 20;
+      for (let i = 1; i <= 3; i++) {
+        const tt = T * i / 4;
+        place({ k: "bell", x: x + rnd(-0.3, 0.3), s: s + 1.7 + speed * tt, h: 1.1 + va * tt - 10 * tt * tt + 1, obj: makeBell() });
+      }
+    }
+    return Math.max(gapS, 14 + speed * 1.3); // Landezone frei halten
+  } else if (r < 0.32) {
+    place({ k: "ramp", small: true, x: rx(), s, len: 1.0, hgt: 0.5, obj: makeRamp(true), tilt: true });
+    return Math.max(gapS, 8 + speed * 0.8);
   } else if (r < 0.48) {
     const x = rx();
     for (let i = 0; i < 4; i++) place({ k: "bell", x: clamp(x + Math.sin(i) * 1.6, -PW + 1, PW - 1), s: s + i * 3.4, h: 1.0, obj: makeBell() });
@@ -550,7 +586,7 @@ function spawn(s) {
       place({ k: "hazard", kind, x: rx(), s: s + i * 3, r: kind === "rock" ? 1.25 : kind === "snowman" ? 1.0 : 1.05, obj });
     }
   }
-  return (rnd(13, 23) - lvl * 6);
+  return gapS;
 }
 
 function crash() {
@@ -602,10 +638,14 @@ function update(dt) {
 
   // Schanze / Sprung
   if (cow.ramp) {
-    const t = cow.ramp, frac = (cow.s - (t.s - 1.7)) / 3.4;
+    const t = cow.ramp, frac = (cow.s - (t.s - t.len)) / (2 * t.len);
     if (Math.abs(cow.x - t.x) > 1.8) { cow.ramp = null; cow.va = 0; }
-    else if (frac >= 1) { cow.ramp = null; cow.air = 1.1; cow.va = 7 + speed * 0.12; moo(1.2); emit(cow.x, cowY(), -cow.s, "#ffffff", 20, 4); }
-    else cow.air = 1.1 * Math.max(0, frac);
+    else if (frac >= 1) {
+      cow.ramp = null; cow.air = t.hgt; cow.va = t.small ? 6 : 7 + speed * 0.12; jumps++;
+      if (t.small) ArcadeCore.jump(); else moo(1.2);
+      emit(cow.x, cowY(), -cow.s, "#ffffff", 20, 4);
+    }
+    else cow.air = t.hgt * Math.max(0, frac);
   } else if (cow.air > 0 || cow.va > 0) {
     cow.va -= 20 * dt; cow.air += cow.va * dt;
     if (cow.spin) cow.rot = Math.min(cow.rot + dt * 18, 6.283 * cow.spin);
@@ -620,19 +660,27 @@ function update(dt) {
     _sc.set(1, 1, 1);
     for (const sx of [-0.3, 0.3]) {
       const tx = cow.x + sx * Math.cos(cow.yaw);
-      _m.compose(_v.set(tx, gh(tx, cow.s + 0.6) + 0.03, -(cow.s + 0.6)), _q, _sc);
+      _m.compose(_v.set(tx, gh(tx, cow.s - 0.9) + 0.03, -(cow.s - 0.9)), _q, _sc);
       trail.setMatrixAt(trailI, _m); trailI = (trailI + 1) % TRAIL_N;
     }
     trail.instanceMatrix.needsUpdate = true;
   }
-  if (onGround && Math.abs(cow.vx) > 4 && Math.random() < 0.7) emit(cow.x - Math.sign(cow.vx) * 0.5, gh(cow.x, cow.s) + 0.15, -cow.s - 0.6, "#ffffff", 3, 3, 9, 0.5);
+  if (onGround && Math.abs(cow.vx) > 4 && Math.random() < 0.7) emit(cow.x - Math.sign(cow.vx) * 0.5, gh(cow.x, cow.s) + 0.15, -cow.s + 0.6, "#ffffff", 3, 3, 9, 0.5);
   if (turbo > 0) emit(cow.x, cowY() + 0.95, -cow.s + 1.6, Math.random() < 0.5 ? "#ff7a1a" : "#ffd23a", 2, 2, -2, 0.35);
 
+  // Etappen
+  if (cow.s >= nextMile) {
+    const i = nextMile / 500 - 1, pts = 250 * (i + 1); score += pts;
+    float(cow.x, cowY() + 3, cow.s + 6, "🏔️ " + nextMile + " m · " + MILES[Math.min(i, MILES.length - 1)] + "! +" + pts, "#06c");
+    yodel(); nextMile += 500;
+  }
+
   // Spawnen
-  while (spawnS < cow.s + 140) spawnS += spawn(spawnS);
+  while (spawnS < cow.s + 165) spawnS += spawn(spawnS);
 
   const cyA = cow.air;
   for (const t of things) {
+    if (state !== "play") break;
     if (t.k === "tourist" && !t.gone) {
       t.x += t.vx * dt; if (t.x < -PW + 1 || t.x > PW - 1) t.vx *= -1;
       t.obj.position.set(t.x, gh(t.x, t.s), -t.s);
@@ -642,10 +690,10 @@ function update(dt) {
       if (t.panic > 0) { t.panic -= dt; t.obj.position.y += Math.abs(Math.sin(t.panic * 14)) * 0.5; }
     }
     if (t.k === "bell" && !t.gone) { t.obj.userData.inner.rotation.y += dt * 2.5; t.obj.userData.inner.rotation.z = Math.sin(performance.now() / 120 + t.s) * 0.25; }
-    if (t.k === "cheese" && !t.gone) { t.obj.userData.inner.rotation.y += dt * 2; t.obj.position.y = gh(t.x, t.s) + 1 + Math.sin(performance.now() / 300) * 0.15; }
+    if ((t.k === "cheese" || t.k === "milk") && !t.gone) { t.obj.userData.inner.rotation.y += dt * 2; t.obj.position.y = gh(t.x, t.s) + 1 + Math.sin(performance.now() / 300) * 0.15; }
     if (t.fall !== undefined) { t.fall = Math.min(1.45, t.fall + dt * 6); t.pole.rotation.x = -t.fall; }
     if (t.gone && t.k !== "gate" && t.k !== "ramp" && t.k !== "tourist") continue;
-    const dx = Math.abs(t.x - cow.x), passing = prevS < t.s && cow.s >= t.s, close = Math.abs(t.s - cow.s) < 1.0;
+    const dx = Math.abs(t.x - cow.x), passing = prevS < t.s && cow.s >= t.s, close = Math.abs(t.s - cow.s) < 1.0 || passing;
     if (t.k === "gate" && !t.gone) {
       for (const pole of t.obj.userData.poles) {
         const px = t.x + pole.position.x;
@@ -655,27 +703,34 @@ function update(dt) {
       }
       if (passing) {
         t.gone = true;
-        if (onGround && dx < t.gap / 2 && t.fall === undefined) {
+        if (cyA < 2 && dx < t.gap / 2 && t.fall === undefined) {
           gateIdx++; const pts = 50 + gateIdx * 10; score += pts;
           float(cow.x, cowY() + 2.6, cow.s, "Tor! +" + pts, "#d52b1e"); ArcadeCore.coin();
         } else gateIdx = 0;
       }
-    } else if (t.k === "ramp" && !t.gone && !cow.ramp && onGround && cow.s > t.s - 1.7 && cow.s < t.s && dx < 1.5) {
+    } else if (t.k === "ramp" && !t.gone && !cow.ramp && onGround && cow.s >= t.s - t.len && prevS < t.s + t.len * 0.5 && dx < (t.small ? 1.2 : 1.5)) {
       t.gone = true; cow.ramp = t;
-    } else if (t.k === "bell" && Math.abs(t.s - cow.s) < 1.3 && dx < 1.3 && Math.abs(cyA + 1 - t.h) < 1.5) {
+    } else if (t.k === "bell" && (Math.abs(t.s - cow.s) < 1.3 || passing) && dx < 1.3 && Math.abs(cyA + 1 - t.h) < 1.5) {
       t.gone = true; t.obj.visible = false; bells++; score += 15;
       emit(t.x, gh(t.x, t.s) + t.h, -t.s, "#ffd23a", 14, 4, 4, 0.5);
       ArcadeCore.playTone(rnd(1100, 1400), 0.12, "sine", 0.14);
     } else if (t.k === "cheese" && close && dx < 1.4 && cyA < 2) {
       t.gone = true; t.obj.visible = false; turbo = 3.2;
-      float(cow.x, cowY() + 2.6, cow.s, "KÄSE-TURBO!", "#e89b00"); ArcadeCore.powerup();
+      float(cow.x, cowY() + 2.6, cow.s, "KÄSE-TURBO! Alles platt!", "#e89b00"); ArcadeCore.powerup();
+    } else if (t.k === "milk" && close && dx < 1.4 && cyA < 2) {
+      t.gone = true; t.obj.visible = false; lives = Math.min(3, lives + 1);
+      emit(t.x, gh(t.x, t.s) + 1, -t.s, "#ffffff", 20, 4, 4, 0.6);
+      float(cow.x, cowY() + 2.6, cow.s, "Frische Milch! +1 🐄", "#06c"); ArcadeCore.powerup();
     } else if (t.k === "hazard" && close && dx < t.r && cyA < (t.kind === "tree" ? 3.5 : 2)) {
-      if (invuln > 0) continue;
+      if (invuln > 0 && turbo <= 0) continue;
       t.gone = true;
       const y = gh(t.x, t.s) + 1.5;
       emit(t.x, y, -t.s, t.kind === "tree" ? "#2c6a43" : t.kind === "rock" ? "#7d8590" : "#ffffff", 26, 7);
       t.obj.visible = false;
-      crash();
+      if (turbo > 0) {
+        score += 75; shake = Math.max(shake, 0.25);
+        float(t.x, y + 1.2, t.s, "KRAWUMM! +75", "#e85d00"); ArcadeCore.explosion();
+      } else crash();
     } else if (t.k === "tourist" && !t.gone) {
       if (close && dx < 0.8 && cyA < 1.6 && invuln <= 0) {
         t.gone = true; float(t.x, gh(t.x, t.s) + 2.6, t.s, "Das Handy ist hin!", "#555");
@@ -695,15 +750,15 @@ function update(dt) {
 // ---------- Kamera & Darstellung ----------
 const camPos = new THREE.Vector3(0, 6, 10), camLook = new THREE.Vector3();
 let camInit = false;
-function placeCow(time) {
+function placeCow(time, dt) {
   const ground = gh(cow.x, cow.s);
   cowRoot.position.set(cow.x, ground + cow.air, -cow.s);
   const pitch = cow.ramp ? Math.atan(dghds(cow.x, cow.s)) + 0.31 : Math.atan(dghds(cow.x, cow.s)) * (cow.air > 0 ? 0.3 : 1);
-  cow.yaw += ((-cow.vx * 0.035) - cow.yaw) * 0.25;
+  cow.yaw += ((-cow.vx * 0.035) - cow.yaw) * Math.min(1, dt * 15);
   cowRoot.rotation.set(pitch, clamp(cow.yaw, -0.5, 0.5), clamp(-cow.vx * 0.03, -0.45, 0.45));
   cowFlip.rotation.x = -cow.rot;
   cowFlip.rotation.z = crashT > 0 && state === "play" ? Math.sin(crashT * 30) * 0.5 * crashT : 0;
-  if (state === "over") { cowFlip.rotation.y += 0.15; cowFlip.rotation.z = 0.3; }
+  if (state === "over") { cowFlip.rotation.y += dt * 9; cowFlip.rotation.z = 0.3; }
   else cowFlip.rotation.y = 0;
   cowModel.visible = !(invuln > 0 && Math.floor(invuln * 10) % 2);
   flame.visible = turbo > 0;
@@ -759,13 +814,15 @@ function updateFloats(dt) {
 function updateHud() {
   $("hud").style.visibility = state === "menu" ? "hidden" : "";
   $("score").textContent = Math.floor(score) + " Pkt.";
-  $("sub").textContent = "🔔 " + bells + " · " + Math.floor(cow.s) + " m";
+  $("sub").textContent = "🔔 " + bells + " · " + Math.floor(cow.s) + " m" + (best ? " · 🏆 " + best : "");
   $("lives").textContent = "🐄".repeat(Math.max(lives, 0)) || "💀";
   const sp = $("speed");
   sp.textContent = Math.round((speed + (turbo > 0 ? 12 : 0)) * 3.6) + " km/h" + (turbo > 0 ? " 🧀🔥" : "");
   sp.classList.toggle("turbo", turbo > 0);
   $("combo").textContent = gateIdx > 1 ? "🚩 Tor-Serie ×" + gateIdx : "";
   $("crash").style.opacity = crashT > 0 && state === "play" ? Math.min(1, crashT * 2) : 0;
+  const inAir = state === "play" && cow.air > 0 && !cow.ramp;
+  $("hint").textContent = !inAir ? "" : cow.tricks > 0 ? "🌀 Salto ×" + cow.tricks : jumps <= 3 ? "Tippen / Leertaste = Muh-Salto!" : "";
 }
 
 // ---------- Loop ----------
@@ -776,7 +833,7 @@ function loop(ts) {
   if (state === "play") update(dt);
   updateTerrain(cow.s);
   updateDeco(cow.s);
-  placeCow(time);
+  placeCow(time, state === "pause" ? 0 : dt);
   updateParts(state === "pause" ? 0 : dt);
   updateCamera(state === "pause" ? 0 : dt, time);
   updateFlakes(time);
@@ -800,22 +857,35 @@ $("pause").addEventListener("pointerdown", e => { e.stopPropagation(); setPause(
 document.addEventListener("visibilitychange", () => { if (document.hidden) setPause(true); });
 addEventListener("blur", () => { keys = {}; setPause(true); });
 function screenToX(cx) { return clamp((cx / innerWidth * 2 - 1) * (PW + 1), -PW + 0.8, PW - 0.8); }
-let ptrDownTime = 0, ptrDownX = 0, ptrDownY = 0;
+// Tippen = Salto, Ziehen = Lenken. In der Luft springt die Kuh beim Tippen nicht zur Fingerposition.
+let ptr = null;
 canvas.addEventListener("pointerdown", e => {
   if (state !== "play") return;
-  targetX = screenToX(e.clientX);
-  ptrDownTime = performance.now(); ptrDownX = e.clientX; ptrDownY = e.clientY;
+  if (!(cow.air > 0 || cow.ramp)) targetX = screenToX(e.clientX);
+  ptr = { id: e.pointerId, t: performance.now(), x: e.clientX, y: e.clientY, drag: false };
 });
-addEventListener("pointermove", e => { if (state === "play" && (e.pointerType === "mouse" || e.buttons)) targetX = screenToX(e.clientX); });
+addEventListener("pointermove", e => {
+  if (state !== "play") return;
+  if (ptr && ptr.id === e.pointerId) {
+    if (!ptr.drag && Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) >= 12) ptr.drag = true;
+    if (ptr.drag) targetX = screenToX(e.clientX);
+  } else if (e.pointerType === "mouse") targetX = screenToX(e.clientX);
+});
 addEventListener("pointerup", e => {
-  const d = performance.now() - ptrDownTime;
-  if (d < 220 && Math.hypot(e.clientX - ptrDownX, e.clientY - ptrDownY) < 12) trick();
+  if (!ptr || ptr.id !== e.pointerId) return;
+  if (!ptr.drag && performance.now() - ptr.t < 250) trick();
+  ptr = null;
 });
+addEventListener("pointercancel", () => { ptr = null; });
+function syncMute() { $("mute").textContent = ArcadeCore.isMuted() ? "🔇" : "🔊"; }
+$("mute").addEventListener("click", e => { ArcadeCore.toggleMute(); syncMute(); e.currentTarget.blur(); });
+syncMute();
 addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
   if (k === "arrowleft" || k === "a") keys.left = true;
   if (k === "arrowright" || k === "d") keys.right = true;
-  if (e.code === "Space" && state === "play") { e.preventDefault(); trick(); }
+  if (e.code === "Space" && (state === "play" || state === "pause")) { e.preventDefault(); if (!e.repeat) trick(); }
+  if (k === "m" && !e.repeat) { ArcadeCore.toggleMute(); syncMute(); }
   if ((k === "p" || k === "escape") && !e.repeat && (state === "play" || state === "pause")) { e.preventDefault(); togglePause(); }
   if ((k === "enter" || e.code === "Space") && !e.repeat && (state === "menu" || (state === "over" && !$("over").classList.contains("hide")))) { e.preventDefault(); start(); }
 });
@@ -825,7 +895,8 @@ addEventListener("keyup", e => {
   if (k === "arrowright" || k === "d") keys.right = false;
 });
 function start() {
-  reset(); state = "play"; moo(); camInit = false;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  reset(); state = "play"; moo(); camInit = false; keys = {}; ptr = null;
   $("menu").classList.add("hide"); $("over").classList.add("hide");
 }
 $("go").onclick = start; $("again").onclick = start;

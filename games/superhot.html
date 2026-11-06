@@ -1,2935 +1,774 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>SUPERHOT 2D — Time Moves Only When You Move | Browser Game</title>
-<meta name="description" content="TIME MOVES ONLY WHEN YOU MOVE! Tactical 2D shooter: dodge frozen bullets, throw weapons, slice projectiles and use Hotswitch!">
-<meta name="keywords" content="superhot 2d, superhot online, superhot kostenlos spielen, zeitlupe shooter">
-<meta name="robots" content="index, follow">
-<meta property="og:type" content="website">
-<meta property="og:title" content="SUPERHOT 2D — Time Moves Only When You Move | Browser Game">
-<meta property="og:description" content="TIME MOVES ONLY WHEN YOU MOVE! Tactical 2D shooter: dodge frozen bullets, throw weapons, slice projectiles and use Hotswitch!">
-<meta property="og:locale" content="de_DE">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="SUPERHOT 2D — Time Moves Only When You Move | Browser Game">
-<meta name="twitter:description" content="TIME MOVES ONLY WHEN YOU MOVE! Tactical 2D shooter: dodge frozen bullets, throw weapons, slice projectiles and use Hotswitch!">
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "VideoGame",
-  "name": "SUPERHOT 2D — Time Moves Only When You Move | Browser Game",
-  "description": "TIME MOVES ONLY WHEN YOU MOVE! Tactical 2D shooter: dodge frozen bullets, throw weapons, slice projectiles and use Hotswitch!",
-  "inLanguage": "en",
-  "applicationCategory": "Game",
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "EUR"
-  }
-}
-</script>
-<link rel="stylesheet" href="../style.css">
+<title>Stillstand 3D</title>
+<meta name="description" content="Im Uhrwerkturm läuft die Zeit nur, wenn du dich bewegst. Weiche eingefrorenen Kugeln aus und zerlege Messing-Automaten.">
+<meta name="theme-color" content="#10131c">
 <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
 <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) {
+    if (msg) document.getElementById('fallbackMsg').textContent = msg;
+    fb.style.display = 'block';
+  }
+};
+window.addEventListener('error', function(e) {
+  if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar'));
+});
+setTimeout(function() {
+  if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).');
+}, 8000);
+</script>
 <style>
-  * {
-    box-sizing: border-box;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: none;
-  }
-  body {
-    margin: 0;
-    padding: 0;
-    background: #0d0d0f;
-    color: #111;
-    font-family: 'Courier New', Courier, monospace;
-    overflow: hidden;
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-
-  #game-wrapper {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #dcdce0;
-    overflow: hidden;
-  }
-
-  canvas#gameCanvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-    max-width: 100vw;
-    max-height: 100vh;
-    border-radius: 0;
-    box-shadow: none;
-    cursor: crosshair;
-    background: #e8e8ec;
-  }
-
-  /* CRT Scanline & Vignette Overlay */
-  .crt-overlay {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 15;
-    background:
-      linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.08) 50%),
-      radial-gradient(circle at center, transparent 58%, rgba(0, 0, 0, 0.38) 100%);
-    background-size: 100% 4px, 100% 100%;
-  }
-
-  /* Top HUD */
-  .hud-bar {
-    position: fixed;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 20;
-    display: flex;
-    gap: 14px;
-    align-items: center;
-    background: rgba(15, 15, 18, 0.88);
-    color: #f5f5f7;
-    padding: 8px 18px;
-    border: 2px solid #ff1e1e;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-    font-weight: 900;
-    letter-spacing: 1.5px;
-    font-size: 13px;
-    text-transform: uppercase;
-    pointer-events: auto;
-  }
-  .hud-stat {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .hud-stat span.val {
-    color: #ff2a2a;
-    font-size: 15px;
-  }
-  .hud-divider {
-    width: 2px;
-    height: 18px;
-    background: rgba(255, 255, 255, 0.2);
-  }
-  .hud-btn {
-    background: #ff1e1e;
-    color: #fff;
-    border: none;
-    padding: 4px 10px;
-    font-family: inherit;
-    font-weight: 900;
-    font-size: 11px;
-    letter-spacing: 1px;
-    cursor: pointer;
-    text-transform: uppercase;
-    transition: transform 0.1s, background 0.15s;
-  }
-  .hud-btn:hover {
-    background: #fff;
-    color: #000;
-  }
-
-  /* Time Meter Bar */
-  .time-meter-wrap {
-    position: fixed;
-    bottom: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-    pointer-events: none;
-  }
-  .time-meter-label {
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: 2px;
-    color: #111;
-    background: rgba(255,255,255,0.85);
-    padding: 2px 10px;
-    border: 1px solid #111;
-  }
-  .time-meter-track {
-    width: 260px;
-    height: 7px;
-    background: rgba(0, 0, 0, 0.22);
-    border: 1px solid #111;
-    overflow: hidden;
-  }
-  .time-meter-fill {
-    height: 100%;
-    width: 5%;
-    background: #ff1e1e;
-    transition: width 0.05s linear;
-  }
-
-  /* Controls Legend Desktop */
-  .controls-hint {
-    position: fixed;
-    bottom: 16px;
-    left: 16px;
-    z-index: 20;
-    background: rgba(15, 15, 18, 0.86);
-    color: #e4e4e8;
-    padding: 10px 14px;
-    border-left: 4px solid #ff1e1e;
-    font-size: 11px;
-    line-height: 1.65;
-    letter-spacing: 0.5px;
-    pointer-events: none;
-  }
-  .controls-hint b {
-    color: #ff3b3b;
-  }
-
-  /* Giant SUPER / HOT Flash Overlay */
-  #superhot-flash {
-    position: fixed;
-    inset: 0;
-    z-index: 25;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    flex-direction: column;
-  }
-  #superhot-flash .big-word {
-    font-family: Impact, 'Arial Black', sans-serif;
-    font-size: clamp(82px, 19vw, 230px);
-    font-weight: 900;
-    color: #ff1414;
-    letter-spacing: 8px;
-    line-height: 0.9;
-    text-transform: uppercase;
-    text-shadow:
-      -6px -6px 0 #000,
-       6px -6px 0 #000,
-      -6px  6px 0 #000,
-       6px  6px 0 #000,
-       0 0 60px rgba(255, 20, 20, 0.75);
-    transform: scale(1.06);
-  }
-  #superhot-flash .sub-banner {
-    margin-top: 16px;
-    background: #0d0d10;
-    color: #fff;
-    border: 2px solid #ff1e1e;
-    padding: 8px 20px;
-    font-size: 14px;
-    font-weight: 900;
-    letter-spacing: 3px;
-    pointer-events: auto;
-    cursor: pointer;
-  }
-
-  /* piOS Terminal Modal */
-  #terminal-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    background: radial-gradient(circle at center, #19191f 0%, #070709 100%);
-    color: #f0f0f5;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-  .terminal-window {
-    width: 100%;
-    max-width: 840px;
-    max-height: 90vh;
-    background: #0d0d11;
-    border: 2px solid #ff1e1e;
-    box-shadow: 0 0 50px rgba(255, 20, 20, 0.25), inset 0 0 30px rgba(255, 20, 20, 0.07);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .terminal-header {
-    background: #ff1e1e;
-    color: #000;
-    padding: 8px 16px;
-    font-weight: 900;
-    font-size: 13px;
-    letter-spacing: 2px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .terminal-body {
-    padding: 22px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
-  .title-logo {
-    text-align: center;
-    margin: 4px 0;
-  }
-  .title-logo h1 {
-    margin: 0;
-    font-family: Impact, 'Arial Black', sans-serif;
-    font-size: clamp(44px, 8vw, 76px);
-    letter-spacing: 6px;
-    color: #fff;
-    line-height: 1;
-  }
-  .title-logo h1 span {
-    color: #ff1e1e;
-  }
-  .title-logo p {
-    margin: 8px 0 0;
-    color: #ff4747;
-    font-weight: 900;
-    letter-spacing: 4px;
-    font-size: 13px;
-    text-transform: uppercase;
-  }
-
-  .mechanic-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
-    gap: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 30, 30, 0.35);
-    padding: 12px;
-    font-size: 12px;
-  }
-  .mechanic-card {
-    padding: 8px;
-    border-left: 3px solid #ff1e1e;
-    background: rgba(0, 0, 0, 0.4);
-  }
-  .mechanic-card strong {
-    display: block;
-    color: #ff3b3b;
-    margin-bottom: 3px;
-    font-size: 12px;
-    letter-spacing: 1px;
-  }
-
-  .level-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
-    gap: 10px;
-  }
-  .level-card {
-    background: #15151b;
-    border: 1px solid #333;
-    padding: 12px 14px;
-    cursor: pointer;
-    transition: all 0.14s ease;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    position: relative;
-  }
-  .level-card:hover, .level-card.active {
-    border-color: #ff1e1e;
-    background: #221215;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(255, 30, 30, 0.25);
-  }
-  .level-card .lvl-code {
-    font-size: 11px;
-    color: #ff3b3b;
-    font-weight: 900;
-    letter-spacing: 1.5px;
-  }
-  .level-card .lvl-name {
-    font-size: 15px;
-    font-weight: 900;
-    color: #fff;
-  }
-  .level-card .lvl-desc {
-    font-size: 11px;
-    color: #aaa;
-    line-height: 1.35;
-  }
-  .level-card .lvl-badge {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 10px;
-    padding: 2px 6px;
-    background: #ff1e1e;
-    color: #000;
-    font-weight: 900;
-  }
-
-  /* Mobile Touch Controls */
-  .mobile-controls {
-    position: fixed;
-    bottom: 20px;
-    left: 16px;
-    right: 16px;
-    z-index: 30;
-    display: none;
-    justify-content: space-between;
-    align-items: flex-end;
-    pointer-events: none;
-  }
-  @media (max-width: 900px), (pointer: coarse) {
-    .mobile-controls {
-      display: flex;
-    }
-    .controls-hint {
-      display: none;
-    }
-    .hud-bar {
-      top: 52px;
-      padding: 6px 10px;
-      font-size: 11px;
-      gap: 8px;
-    }
-  }
-  .joy-zone {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    background: rgba(15, 15, 20, 0.45);
-    border: 2px solid rgba(255, 30, 30, 0.7);
-    position: relative;
-    pointer-events: auto;
-    touch-action: none;
-  }
-  .joy-knob {
-    width: 46px;
-    height: 46px;
-    border-radius: 50%;
-    background: #ff1e1e;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    box-shadow: 0 0 14px rgba(255, 30, 30, 0.8);
-  }
-  .action-Cluster {
-    display: grid;
-    grid-template-columns: repeat(2, 68px);
-    gap: 10px;
-    pointer-events: auto;
-  }
-  .m-btn {
-    height: 54px;
-    background: rgba(15, 15, 20, 0.82);
-    border: 2px solid #ff1e1e;
-    color: #fff;
-    font-family: inherit;
-    font-weight: 900;
-    font-size: 11px;
-    letter-spacing: 1px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    cursor: pointer;
-    user-select: none;
-  }
-  .m-btn:active {
-    background: #ff1e1e;
-    color: #000;
-  }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#10131c; color:#f3e6c4; font-family:Georgia,"Times New Roman",serif; }
+canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#f3e6c4; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid #c9a14a88; padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; min-height:36px; font-family:system-ui,sans-serif; }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#05070cbb; z-index:20; padding:16px; }
+.overlay.hide { display:none; }
+.card { background:#1a1e2a; color:#f3e6c4; border-radius:6px; padding:22px 28px; max-width:500px; text-align:center; border:2px solid #c9a14a; box-shadow:0 0 0 6px #1a1e2a, 0 0 0 8px #c9a14a55, 0 12px 40px #000; }
+.card h1 { margin:0 0 8px; font-size:32px; letter-spacing:3px; color:#e8c26a; }
+.card p { margin:8px 0; line-height:1.45; font-family:system-ui,sans-serif; font-size:15px; }
+.card .best { color:#6fe3ff; font-weight:700; }
+button { font:inherit; font-weight:700; font-size:19px; letter-spacing:2px; color:#1a1e2a; background:linear-gradient(#f0d48a,#b98a2e); border:0; border-radius:4px; padding:12px 30px; margin-top:10px; cursor:pointer; box-shadow:0 4px 0 #6a4c12; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #6a4c12; }
+#hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+#vig { position:fixed; inset:0; pointer-events:none; z-index:9; background:radial-gradient(ellipse at center, transparent 55%, #0a1a2a 120%); transition:opacity .2s; }
+#xh { position:fixed; left:50%; top:50%; width:8px; height:8px; margin:-4px 0 0 -4px; border-radius:50%; border:2px solid #f3e6c4; box-shadow:0 0 4px #000; }
+.t { position:absolute; text-shadow:0 2px 4px #000; }
+#lvl { top:14px; right:18px; font-size:22px; letter-spacing:2px; color:#e8c26a; }
+#left { top:44px; right:18px; font-size:15px; font-family:system-ui,sans-serif; }
+#ammo { bottom:18px; right:20px; font-size:26px; color:#e8c26a; }
+#tsWrap { bottom:22px; left:50%; transform:translateX(-50%); width:min(260px,60vw); height:8px; border:1px solid #c9a14a; background:#0008; }
+#ts { height:100%; width:0%; background:#6fe3ff; }
+#tsLbl { bottom:34px; left:50%; transform:translateX(-50%); font-size:12px; letter-spacing:3px; font-family:system-ui,sans-serif; opacity:.8; }
+#word { top:40%; left:50%; transform:translate(-50%,-50%); font-size:min(16vw,120px); letter-spacing:8px; color:#e8c26a; font-weight:700; opacity:0; white-space:nowrap; text-shadow:0 0 30px #c9a14a88, 0 4px 0 #000; }
+#hint { bottom:52px; left:50%; transform:translateX(-50%); font-size:13px; font-family:system-ui,sans-serif; opacity:.8; white-space:nowrap; }
+#flash { position:fixed; inset:0; background:#ff3a20; opacity:0; pointer-events:none; z-index:11; transition:opacity .5s; }
+#lock { position:fixed; inset:0; z-index:15; display:none; align-items:center; justify-content:center; flex-direction:column; background:#0007; font-size:26px; letter-spacing:2px; }
+#lock span { font-size:14px; font-family:system-ui,sans-serif; margin-top:8px; }
+#touch { position:fixed; inset:0; z-index:12; display:none; }
+#touch .b { position:absolute; width:74px; height:74px; border-radius:50%; background:#c9a14a33; border:2px solid #c9a14a; color:#f3e6c4; display:flex; align-items:center; justify-content:center; font-size:15px; font-family:system-ui,sans-serif; touch-action:none; }
+#stick { position:absolute; left:30px; bottom:30px; width:120px; height:120px; border-radius:50%; border:2px solid #c9a14a77; background:#0003; touch-action:none; }
+#knob { position:absolute; left:40px; top:40px; width:40px; height:40px; border-radius:50%; background:#c9a14a88; }
 </style>
 </head>
 <body>
-
-<a href="../index.html" class="back" style="z-index: 50;">← Arcade</a>
-
-<div class="crt-overlay"></div>
-
-<!-- Top HUD -->
-<div class="hud-bar" id="hudBar">
-  <div class="hud-stat">NODE: <span class="val" id="hudLevel">01_ALLEY.EXE</span></div>
-  <div class="hud-divider"></div>
-  <div class="hud-stat">WEAPON: <span class="val" id="hudWeapon">PISTOL [5]</span></div>
-  <div class="hud-divider"></div>
-  <div class="hud-stat">HOSTILES: <span class="val" id="hudEnemies">0</span></div>
-  <div class="hud-divider"></div>
-  <div class="hud-stat" id="hudHotswitchWrap">HOTSWITCH [Q]: <span class="val" id="hudHotswitch">READY</span></div>
-  <div class="hud-divider"></div>
-  <button class="hud-btn" id="btnOpenTerminal">piOS MENU [ESC]</button>
+<a class="back" href="../index.html">← Hub</a>
+<canvas id="gl"></canvas>
+<div id="vig"></div>
+<div id="flash"></div>
+<div id="hud">
+  <div id="xh"></div>
+  <div id="lvl" class="t">EBENE 1</div>
+  <div id="left" class="t"></div>
+  <div id="ammo" class="t"></div>
+  <div id="tsLbl" class="t">ZEITFLUSS</div>
+  <div id="tsWrap" class="t"><div id="ts"></div></div>
+  <div id="hint" class="t">WASD bewegen · Maus zielen · Klick schießen · Rechtsklick/Q werfen</div>
+  <div id="word" class="t"></div>
+</div>
+<div id="lock"><b>⏸ Die Uhr wartet</b><span>Klicken zum Weitermachen</span></div>
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="b" id="tFire" style="right:24px;bottom:110px">FEUER</div>
+  <div class="b" id="tThrow" style="right:108px;bottom:40px">WURF</div>
+</div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>⚙ STILLSTAND</h1>
+  <p>Im Uhrwerkturm gehorcht die Zeit nur dir: <b>Sie läuft, wenn du dich bewegst.</b> Stehst du still, hängen die Kugeln der Messing-Automaten in der Luft.</p>
+  <p><b>Bewegen:</b> WASD / Pfeile · <b>Zielen:</b> Maus · <b>Schießen:</b> Linksklick<br><b>Waffe werfen:</b> Rechtsklick oder Q · leere Hand = Faustschlag<br>Besiegte Automaten lassen ihre Pistole fallen – drüberlaufen zum Aufheben.</p>
+  <p>Ein Treffer und du bist raus. 10 Ebenen bis zur Turmspitze.</p>
+  <p class="best" id="menuBest"></p>
+  <button id="go">UHR AUFZIEHEN</button>
+</div></div>
+<div class="overlay hide" id="over"><div class="card">
+  <h1 id="otitle"></h1>
+  <p id="otext"></p>
+  <button id="again">NOCHMAL</button>
+</div></div>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#10131c;color:#f3e6c4;z-index:99999;padding:30px;text-align:center;">
+  <h2>⚙ Das Uhrwerk klemmt</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#6fe3ff">Zurück zum Hub</a></p>
 </div>
 
-<!-- Time Scale Bar -->
-<div class="time-meter-wrap">
-  <div class="time-meter-label" id="timeStateLabel">TIME FROZEN — MOVE TO ADVANCE TIME</div>
-  <div class="time-meter-track">
-    <div class="time-meter-fill" id="timeMeterFill"></div>
-  </div>
-</div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
 
-<!-- Desktop Controls Legend -->
-<div class="controls-hint">
-  <div><b>WASD / ARROWS</b> : Move (Advances Time 1.0x)</div>
-  <div><b>L-CLICK / SPACE</b> : Shoot / Punch / Slice</div>
-  <div><b>R-CLICK / E / F</b> : Throw Weapon / Grab Mid-Air</div>
-  <div><b>Q</b> : Hotswitch Body-Transfer &nbsp;|&nbsp; <b>SHIFT</b> : Flow Time</div>
-  <div><b>R</b> : Instant Restart</div>
-</div>
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const KEY = 'superhot';
+const MAX_LVL = 10, EYE = 1.6, PR = 0.35;
 
-<!-- Giant SUPER / HOT Overlay -->
-<div id="superhot-flash">
-  <div class="big-word" id="superhotWord">SUPER</div>
-  <div class="sub-banner" id="superhotSub">REAL-TIME REPLAY ACTIVE — CLICK OR PRESS [SPACE] FOR NEXT NODE</div>
-</div>
+// ---------- Renderer ----------
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x10131c);
+scene.fog = new THREE.Fog(0x10131c, 18, 55);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 200);
+camera.rotation.order = 'YXZ';
+scene.add(camera);
 
-<!-- Mobile Touch Controls -->
-<div class="mobile-controls" id="mobileControls">
-  <div class="joy-zone" id="joyZone">
-    <div class="joy-knob" id="joyKnob"></div>
-  </div>
-  <div class="action-Cluster">
-    <div class="m-btn" id="mBtnFire">FIRE / HIT</div>
-    <div class="m-btn" id="mBtnThrow">THROW / GRAB</div>
-    <div class="m-btn" id="mBtnHot">HOTSWITCH</div>
-    <div class="m-btn" id="mBtnWait">FLOW TIME</div>
-  </div>
-</div>
+scene.add(new THREE.HemisphereLight(0x8fa8d8, 0x3a2a18, 1.0));
+const key = new THREE.DirectionalLight(0xffe2b0, 1.8);
+key.position.set(8, 18, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0006;
+scene.add(key);
+const moon = new THREE.PointLight(0x6fa8ff, 30, 40); moon.position.set(0, 8, 0); scene.add(moon);
 
-<!-- piOS Level Selection Terminal -->
-<div id="terminal-modal">
-  <div class="terminal-window">
-    <div class="terminal-header">
-      <span>piOS v2.1.01 // MIND IS SOFTWARE // superhot.exe</span>
-      <span id="terminalProgressText">CLEARED: 0 / 10</span>
-    </div>
-    <div class="terminal-body">
-      <div class="title-logo">
-        <h1>SUPER<span>HOT</span> 2D</h1>
-        <p>TIME MOVES ONLY WHEN YOU MOVE</p>
-      </div>
+function canvasTex(w, h, draw, rx, ry) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  if (rx) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry || rx); }
+  t.anisotropy = 4;
+  return t;
+}
 
-      <div class="mechanic-strip">
-        <div class="mechanic-card">
-          <strong>⏳ CHRONO-LOCK</strong>
-          Stand still and bullets freeze mid-air. Step between trajectories and plan every micro-second.
-        </div>
-        <div class="mechanic-card">
-          <strong>🔫 THROW & CATCH</strong>
-          Out of ammo? Throw your gun (<b>Right-Click / E</b>) at a Red Guy to launch their loaded weapon into the air and catch it!
-        </div>
-        <div class="mechanic-card">
-          <strong>🗡️ BULLET SLICE</strong>
-          Katanas can slice oncoming bullets in half and impale enemies when thrown across the room.
-        </div>
-        <div class="mechanic-card">
-          <strong>🧠 HOTSWITCH [Q]</strong>
-          Transfer your mind into any targeted Red Guy's body to survive impossible crossfire.
-        </div>
-      </div>
+// ---------- Materialien ----------
+const brass = new THREE.MeshStandardMaterial({ color: 0xc9a14a, metalness: 0.85, roughness: 0.35 });
+const copper = new THREE.MeshStandardMaterial({ color: 0xb06a3a, metalness: 0.8, roughness: 0.4 });
+const steel = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, metalness: 0.7, roughness: 0.45 });
+const darkSteel = new THREE.MeshStandardMaterial({ color: 0x1e2128, metalness: 0.6, roughness: 0.5 });
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0x6fe3ff });
+const eyeAimMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a });
+const bulletMat = new THREE.MeshBasicMaterial({ color: 0xff7a2a });
+const myBulletMat = new THREE.MeshBasicMaterial({ color: 0x9ff0ff });
+const floorTex = canvasTex(256, 256, (g, w, h) => {
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { g.fillStyle = (x + y) % 2 ? '#2a2e3a' : '#353a48'; g.fillRect(x * 64, y * 64, 64, 64); }
+  g.strokeStyle = '#c9a14a55'; g.lineWidth = 2; for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, h); g.moveTo(0, i * 64); g.lineTo(w, i * 64); g.stroke(); }
+}, 1);
+const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.6, metalness: 0.2 });
+const wallTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#3b2f2a'; g.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y += 32) for (let x = (y / 32) % 2 * 32; x < w + 64; x += 64) { g.fillStyle = `hsl(15,${20 + Math.random() * 10}%,${18 + Math.random() * 8}%)`; g.fillRect(x - 64 + 2, y + 2, 60, 28); }
+}, 1);
+const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.9 });
+const crateTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = '#5a4128'; g.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y += 16) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.25})`; g.fillRect(0, y, w, 2); }
+  g.strokeStyle = '#c9a14a'; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
+  g.fillStyle = '#c9a14a'; for (const [x, y] of [[10, 10], [w - 10, 10], [10, h - 10], [w - 10, h - 10]]) { g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); }
+});
+const crateMat = new THREE.MeshStandardMaterial({ map: crateTex, roughness: 0.8 });
 
-      <div class="level-grid" id="levelGrid"></div>
-    </div>
-  </div>
-</div>
-
-<div id="game-wrapper">
-  <canvas id="gameCanvas"></canvas>
-</div>
-
-<script>
-(() => {
-  // ============================================================================
-  // WEB AUDIO SYNTHESIZER (Time-Stretched Superhot Sound Engine)
-  // ============================================================================
-  class SoundEngine {
-    constructor() {
-      this.ctx = null;
-      this.droneOsc = null;
-      this.droneGain = null;
-    }
-    init() {
-      if (this.ctx) {
-        if (this.ctx.state === 'suspended') this.ctx.resume();
-        return;
-      }
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      this.ctx = new AudioCtx();
-
-      // Subtle low chrono-drone that reacts to timeScale
-      this.droneOsc = this.ctx.createOscillator();
-      this.droneGain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 140;
-      this.droneOsc.type = 'sawtooth';
-      this.droneOsc.frequency.value = 48;
-      this.droneGain.gain.value = 0.025;
-      this.droneOsc.connect(filter);
-      filter.connect(this.droneGain);
-      this.droneGain.connect(this.ctx.destination);
-      this.droneOsc.start();
-    }
-
-    updateTimeScale(ts) {
-      if (!this.ctx || !this.droneOsc) return;
-      const now = this.ctx.currentTime;
-      this.droneOsc.frequency.setTargetAtTime(42 + ts * 38, now, 0.05);
-      this.droneGain.gain.setTargetAtTime(0.015 + ts * 0.025, now, 0.05);
-    }
-
-    playShoot(type = 'pistol', ts = 1) {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const dur = (type === 'shotgun' ? 0.34 : 0.19) * (1.25 - ts * 0.25);
-
-      // Noise burst
-      const bufferSize = Math.floor(this.ctx.sampleRate * dur);
-      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.28));
-      }
-      const noise = this.ctx.createBufferSource();
-      noise.buffer = buffer;
-
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(type === 'shotgun' ? 620 : 1100, now);
-      filter.frequency.exponentialRampToValueAtTime(160, now + dur);
-
-      const gain = this.ctx.createGain();
-      gain.gain.setValueAtTime(type === 'shotgun' ? 0.42 : 0.28, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-
-      noise.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.ctx.destination);
-      noise.start(now);
-
-      // Punchy sub-kick
-      const osc = this.ctx.createOscillator();
-      const oGain = this.ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(type === 'shotgun' ? 150 : 210, now);
-      osc.frequency.exponentialRampToValueAtTime(32, now + 0.14);
-      oGain.gain.setValueAtTime(0.35, now);
-      oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-      osc.connect(oGain);
-      oGain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.15);
-    }
-
-    playKatana() {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1900, now);
-      osc.frequency.exponentialRampToValueAtTime(520, now + 0.14);
-      gain.gain.setValueAtTime(0.22, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.15);
-    }
-
-    playShatter(isGlass = false) {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const baseFreqs = isGlass ? [2400, 3100, 4200, 5100] : [980, 1420, 1950, 2680, 3400];
-      baseFreqs.forEach((f, idx) => {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = idx % 2 === 0 ? 'triangle' : 'sine';
-        const start = now + idx * 0.018;
-        osc.frequency.setValueAtTime(f + (Math.random() - 0.5) * 220, start);
-        osc.frequency.exponentialRampToValueAtTime(f * 0.45, start + 0.18);
-        gain.gain.setValueAtTime(0.14, start);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.19);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(start);
-        osc.stop(start + 0.2);
-      });
-    }
-
-    playCatch() {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(320, now);
-      osc.frequency.setValueAtTime(640, now + 0.04);
-      gain.gain.setValueAtTime(0.14, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.1);
-    }
-
-    playHotswitch() {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(140, now);
-      osc.frequency.exponentialRampToValueAtTime(980, now + 0.22);
-      gain.gain.setValueAtTime(0.25, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.25);
-    }
-
-    playSuperHotBeat(isHot = false) {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(isHot ? 95 : 130, now);
-      osc.frequency.exponentialRampToValueAtTime(42, now + 0.28);
-      gain.gain.setValueAtTime(0.38, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.31);
-    }
-
-    playDryClick() {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(800, now);
-      gain.gain.setValueAtTime(0.1, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.035);
-    }
+function gearGeo(r, teeth, th) {
+  const s = new THREE.Shape();
+  for (let i = 0; i < teeth * 2; i++) {
+    const a0 = i / (teeth * 2) * Math.PI * 2, a1 = (i + 1) / (teeth * 2) * Math.PI * 2;
+    const rr = i % 2 ? r : r * 1.18;
+    if (i === 0) s.moveTo(Math.cos(a0) * rr, Math.sin(a0) * rr); else s.lineTo(Math.cos(a0) * rr, Math.sin(a0) * rr);
+    s.lineTo(Math.cos(a1) * rr, Math.sin(a1) * rr);
   }
+  const hole = new THREE.Path(); hole.absarc(0, 0, r * 0.35, 0, Math.PI * 2, true); s.holes.push(hole);
+  return new THREE.ExtrudeGeometry(s, { depth: th, bevelEnabled: false });
+}
+const smallGear = gearGeo(0.12, 8, 0.04);
 
-  const sfx = new SoundEngine();
-
-  // ============================================================================
-  // WEAPON DEFINITIONS
-  // ============================================================================
-  const WEAPONS = {
-    fists:   { name: 'FISTS',   ammo: Infinity, cooldown: 0.28, speed: 0,    pellets: 0, spread: 0,    melee: true,  range: 46, lethalMelee: false },
-    pistol:  { name: 'PISTOL',  ammo: 5,        cooldown: 0.42, speed: 680,  pellets: 1, spread: 0.03, melee: false, color: '#111' },
-    shotgun: { name: 'SHOTGUN', ammo: 3,        cooldown: 0.78, speed: 620,  pellets: 6, spread: 0.24, melee: false, color: '#111' },
-    rifle:   { name: 'RIFLE',   ammo: 9,        cooldown: 0.52, speed: 760,  pellets: 3, spread: 0.07, melee: false, burst: true, color: '#111' },
-    katana:  { name: 'KATANA',  ammo: Infinity, cooldown: 0.34, speed: 0,    pellets: 0, spread: 0,    melee: true,  range: 68, lethalMelee: true, canSliceBullets: true },
-    bat:     { name: 'BAT',     ammo: Infinity, cooldown: 0.38, speed: 0,    pellets: 0, spread: 0,    melee: true,  range: 58, lethalMelee: true },
-    bottle:  { name: 'BOTTLE',  ammo: 1,        cooldown: 0.30, speed: 0,    pellets: 0, spread: 0,    melee: true,  range: 44, lethalMelee: false, throwableProp: true }
+// ---------- Level-Geometrie ----------
+let levelGroup = null, boxes = [], arenaHalf = 14, wallGears = [], clockHands = null, spawnPts = [];
+function buildArena(lvl) {
+  if (levelGroup) { scene.remove(levelGroup); levelGroup.traverse(o => { if (o.geometry && o.geometry !== smallGear) o.geometry.dispose(); }); }
+  levelGroup = new THREE.Group(); scene.add(levelGroup);
+  boxes = []; wallGears = []; spawnPts = [];
+  arenaHalf = 12 + Math.min(lvl, 8);
+  const S = arenaHalf * 2, H = 7;
+  floorTex.repeat.set(S / 4, S / 4);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(S, S), floorMat);
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; levelGroup.add(floor);
+  wallTex.repeat.set(S / 6, H / 6);
+  for (const [x, z, r] of [[0, -arenaHalf, 0], [0, arenaHalf, Math.PI], [-arenaHalf, 0, Math.PI / 2], [arenaHalf, 0, -Math.PI / 2]]) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(S, H), wallMat);
+    w.position.set(x, H / 2, z); w.rotation.y = r; w.receiveShadow = true; levelGroup.add(w);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(S, 0.25, 0.25), brass); trim.position.set(x, 0.12, z); trim.rotation.y = r; levelGroup.add(trim);
+    const trim2 = trim.clone(); trim2.position.y = H - 0.1; levelGroup.add(trim2);
+  }
+  // Riesige Uhr an der Nordwand
+  const clock = new THREE.Group();
+  const face = new THREE.Mesh(new THREE.CircleGeometry(3.2, 48), new THREE.MeshStandardMaterial({ map: canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#e9dcb8'; g.beginPath(); g.arc(256, 256, 250, 0, 7); g.fill();
+    g.strokeStyle = '#3a2a18'; g.lineWidth = 10; g.stroke();
+    g.fillStyle = '#3a2a18'; g.font = 'bold 54px Georgia'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const R = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+    R.forEach((t, i) => { const a = i / 12 * Math.PI * 2 - Math.PI / 2; g.fillText(t, 256 + Math.cos(a) * 195, 256 + Math.sin(a) * 195); });
+  }), roughness: 0.7 }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(3.25, 0.18, 10, 48), brass);
+  const hourH = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.7, 0.05), darkSteel); hourH.geometry.translate(0, 0.75, 0);
+  const minH = new THREE.Mesh(new THREE.BoxGeometry(0.11, 2.6, 0.05), darkSteel); minH.geometry.translate(0, 1.2, 0);
+  hourH.position.z = minH.position.z = 0.06; minH.position.z = 0.1;
+  clock.add(face, rim, hourH, minH);
+  clock.position.set(0, 3.8, -arenaHalf + 0.05); levelGroup.add(clock);
+  clockHands = { hourH, minH };
+  // Wandzahnräder
+  for (let i = 0; i < 6; i++) {
+    const r = rnd(0.6, 1.4), g = new THREE.Mesh(gearGeo(r, 10 + (r * 6 | 0), 0.2), i % 2 ? brass : copper);
+    const side = i % 3, t = rnd(-arenaHalf + 3, arenaHalf - 3), y = rnd(2, 5.5);
+    if (side === 0) { g.position.set(-arenaHalf + 0.1, y, t); g.rotation.y = Math.PI / 2; }
+    else if (side === 1) { g.position.set(arenaHalf - 0.1, y, t); g.rotation.y = -Math.PI / 2; }
+    else { g.position.set(t < 0 ? t - 4 : t + 4, y, -arenaHalf + 0.1); }
+    levelGroup.add(g); wallGears.push({ g, s: rnd(0.4, 1.2) * (i % 2 ? 1 : -1) });
+  }
+  // Hindernisse
+  const add = (x, z, w, d, h, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, h / 2, z); m.castShadow = m.receiveShadow = true; levelGroup.add(m);
+    boxes.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2, h });
   };
-
-  // ============================================================================
-  // 10 CAMPAIGN LEVELS + ENDLESS MODE
-  // Coordinate system: virtual arena 1200 x 750
-  // ============================================================================
-  const LEVELS = [
-    {
-      code: '01_ALLEY.EXE',
-      name: 'ALLEYWAY',
-      desc: 'Two armed guards in a narrow concrete alley. Step aside as bullets freeze.',
-      player: { x: 600, y: 630, weapon: 'pistol', ammo: 5 },
-      hotswitch: false,
-      walls: [
-        { x: 260, y: 60, w: 40, h: 630 },
-        { x: 900, y: 60, w: 40, h: 630 },
-        { x: 260, y: 60, w: 680, h: 40 },
-        { x: 430, y: 360, w: 90, h: 35 },
-        { x: 680, y: 360, w: 90, h: 35 }
-      ],
-      glass: [],
-      enemies: [
-        { x: 490, y: 190, weapon: 'pistol' },
-        { x: 710, y: 190, weapon: 'pistol' },
-        { x: 600, y: 130, weapon: 'pistol' }
-      ],
-      pickups: []
-    },
-    {
-      code: '02_BARFIGHT.EXE',
-      name: 'PICK UP THE GUN',
-      desc: 'Start unarmed! Throw bottles [R-Click / E] to disarm Red Guys and catch their guns mid-air!',
-      player: { x: 600, y: 590, weapon: 'bottle', ammo: 1 },
-      hotswitch: false,
-      walls: [
-        { x: 180, y: 80, w: 840, h: 35 },
-        { x: 180, y: 80, w: 35, h: 590 },
-        { x: 985, y: 80, w: 35, h: 590 },
-        { x: 370, y: 280, w: 460, h: 32 } // Bar counter
-      ],
-      glass: [
-        { x: 460, y: 440, w: 280, h: 14 }
-      ],
-      enemies: [
-        { x: 440, y: 200, weapon: 'pistol' },
-        { x: 760, y: 200, weapon: 'shotgun' },
-        { x: 290, y: 380, weapon: 'bat' },
-        { x: 910, y: 380, weapon: 'pistol' }
-      ],
-      pickups: [
-        { x: 490, y: 560, weapon: 'bottle', ammo: 1 },
-        { x: 710, y: 560, weapon: 'bottle', ammo: 1 },
-        { x: 600, y: 340, weapon: 'pistol', ammo: 4 }
-      ]
-    },
-    {
-      code: '03_CORRIDOR.EXE',
-      name: 'GLASS CROSSFIRE',
-      desc: 'Shatter glass partitions, dodge 12-gauge buckshot spreads and flank the hallway.',
-      player: { x: 170, y: 375, weapon: 'pistol', ammo: 4 },
-      hotswitch: false,
-      walls: [
-        { x: 80, y: 120, w: 1040, h: 35 },
-        { x: 80, y: 595, w: 1040, h: 35 },
-        { x: 390, y: 155, w: 35, h: 150 },
-        { x: 390, y: 445, w: 35, h: 150 },
-        { x: 740, y: 260, w: 35, h: 230 }
-      ],
-      glass: [
-        { x: 400, y: 305, w: 14, h: 140 },
-        { x: 750, y: 155, w: 14, h: 105 },
-        { x: 750, y: 490, w: 14, h: 105 }
-      ],
-      enemies: [
-        { x: 560, y: 230, weapon: 'pistol' },
-        { x: 560, y: 520, weapon: 'shotgun' },
-        { x: 920, y: 220, weapon: 'rifle' },
-        { x: 960, y: 375, weapon: 'shotgun' },
-        { x: 920, y: 530, weapon: 'pistol' }
-      ],
-      pickups: [
-        { x: 330, y: 220, weapon: 'shotgun', ammo: 3 }
-      ]
-    },
-    {
-      code: '04_DOJO.EXE',
-      name: 'THE KATANA',
-      desc: 'Wield the Katana: Slice bullets out of mid-air [L-Click] or throw it [R-Click] to impale!',
-      player: { x: 600, y: 375, weapon: 'katana', ammo: Infinity },
-      hotswitch: false,
-      walls: [
-        { x: 360, y: 210, w: 45, h: 45 },
-        { x: 795, y: 210, w: 45, h: 45 },
-        { x: 360, y: 495, w: 45, h: 45 },
-        { x: 795, y: 495, w: 45, h: 45 }
-      ],
-      glass: [
-        { x: 480, y: 180, w: 240, h: 12 },
-        { x: 480, y: 558, w: 240, h: 12 }
-      ],
-      enemies: [
-        { x: 240, y: 170, weapon: 'pistol' },
-        { x: 960, y: 170, weapon: 'pistol' },
-        { x: 240, y: 580, weapon: 'shotgun' },
-        { x: 960, y: 580, weapon: 'rifle' },
-        { x: 600, y: 95,  weapon: 'katana' },
-        { x: 600, y: 655, weapon: 'pistol' }
-      ],
-      pickups: [
-        { x: 450, y: 375, weapon: 'katana', ammo: Infinity }
-      ]
-    },
-    {
-      code: '05_ELEVATOR.EXE',
-      name: 'ELEVATOR DROP',
-      desc: 'Surrounded at point-blank range inside an atrium lift. Every millisecond counts.',
-      player: { x: 600, y: 375, weapon: 'fists', ammo: Infinity },
-      hotswitch: false,
-      walls: [
-        { x: 330, y: 130, w: 210, h: 30 },
-        { x: 660, y: 130, w: 210, h: 30 },
-        { x: 330, y: 590, w: 210, h: 30 },
-        { x: 660, y: 590, w: 210, h: 30 },
-        { x: 330, y: 130, w: 30, h: 490 },
-        { x: 840, y: 130, w: 30, h: 490 }
-      ],
-      glass: [
-        { x: 540, y: 138, w: 120, h: 14 },
-        { x: 540, y: 598, w: 120, h: 14 }
-      ],
-      enemies: [
-        { x: 430, y: 225, weapon: 'pistol' },
-        { x: 770, y: 225, weapon: 'pistol' },
-        { x: 430, y: 525, weapon: 'bat' },
-        { x: 770, y: 525, weapon: 'shotgun' },
-        { x: 600, y: 65,  weapon: 'rifle' }
-      ],
-      pickups: [
-        { x: 600, y: 305, weapon: 'bottle', ammo: 1 }
-      ]
-    },
-    {
-      code: '06_OFFICES.EXE',
-      name: 'HOTSWITCH PROTOCOL',
-      desc: 'NEW ABILITY: Aim at any Red Guy and press [Q] to transfer your consciousness into their body!',
-      player: { x: 180, y: 610, weapon: 'pistol', ammo: 3 },
-      hotswitch: true,
-      walls: [
-        { x: 350, y: 400, w: 30, h: 300 },
-        { x: 350, y: 80,  w: 30, h: 200 },
-        { x: 750, y: 220, w: 30, h: 320 },
-        { x: 520, y: 350, w: 140, h: 30 }
-      ],
-      glass: [
-        { x: 358, y: 280, w: 14, h: 120 },
-        { x: 758, y: 80,  w: 14, h: 140 },
-        { x: 758, y: 540, w: 14, h: 150 }
-      ],
-      enemies: [
-        { x: 220, y: 180, weapon: 'shotgun' },
-        { x: 560, y: 180, weapon: 'rifle' },
-        { x: 560, y: 550, weapon: 'pistol' },
-        { x: 960, y: 200, weapon: 'rifle' },
-        { x: 980, y: 380, weapon: 'katana' },
-        { x: 960, y: 560, weapon: 'shotgun' }
-      ],
-      pickups: [
-        { x: 590, y: 410, weapon: 'katana', ammo: Infinity }
-      ]
-    },
-    {
-      code: '07_BALLROOM.EXE',
-      name: 'RED RAIN',
-      desc: 'Grand pillared hall. Use Hotswitch [Q], mid-air weapon catches and pillar cover.',
-      player: { x: 600, y: 375, weapon: 'shotgun', ammo: 3 },
-      hotswitch: true,
-      walls: [
-        { x: 340, y: 200, w: 55, h: 55 },
-        { x: 805, y: 200, w: 55, h: 55 },
-        { x: 340, y: 495, w: 55, h: 55 },
-        { x: 805, y: 495, w: 55, h: 55 },
-        { x: 572, y: 160, w: 55, h: 55 },
-        { x: 572, y: 535, w: 55, h: 55 }
-      ],
-      glass: [],
-      enemies: [
-        { x: 150, y: 140, weapon: 'rifle' },
-        { x: 1050, y: 140, weapon: 'rifle' },
-        { x: 150, y: 610, weapon: 'shotgun' },
-        { x: 1050, y: 610, weapon: 'shotgun' },
-        { x: 140, y: 375, weapon: 'katana' },
-        { x: 1060, y: 375, weapon: 'katana' },
-        { x: 600, y: 80,  weapon: 'pistol' }
-      ],
-      pickups: [
-        { x: 470, y: 375, weapon: 'pistol', ammo: 5 },
-        { x: 730, y: 375, weapon: 'katana', ammo: Infinity }
-      ]
-    },
-    {
-      code: '08_SUBWAY.EXE',
-      name: 'PLATFORM RUSH',
-      desc: 'Locked on the station platform between incoming riflemen and katana sprinters.',
-      player: { x: 600, y: 610, weapon: 'pistol', ammo: 5 },
-      hotswitch: true,
-      walls: [
-        { x: 100, y: 240, w: 300, h: 35 },
-        { x: 800, y: 240, w: 300, h: 35 },
-        { x: 280, y: 450, w: 70,  h: 70 },
-        { x: 850, y: 450, w: 70,  h: 70 },
-        { x: 565, y: 450, w: 70,  h: 70 }
-      ],
-      glass: [
-        { x: 400, y: 250, w: 400, h: 14 }
-      ],
-      enemies: [
-        { x: 200, y: 130, weapon: 'rifle' },
-        { x: 600, y: 120, weapon: 'shotgun' },
-        { x: 1000, y: 130, weapon: 'rifle' },
-        { x: 160, y: 360, weapon: 'katana' },
-        { x: 1040, y: 360, weapon: 'katana' },
-        { x: 440, y: 340, weapon: 'pistol' },
-        { x: 760, y: 340, weapon: 'pistol' }
-      ],
-      pickups: [
-        { x: 600, y: 390, weapon: 'shotgun', ammo: 3 }
-      ]
-    },
-    {
-      code: '09_SERVER_ROOM.EXE',
-      name: 'MIND IS SOFTWARE',
-      desc: 'Glass server racks and heavy burst-rifle crossfire. Chain Hotswitches to survive.',
-      player: { x: 120, y: 375, weapon: 'katana', ammo: Infinity },
-      hotswitch: true,
-      walls: [
-        { x: 310, y: 120, w: 35, h: 200 },
-        { x: 310, y: 430, w: 35, h: 200 },
-        { x: 600, y: 210, w: 35, h: 330 },
-        { x: 890, y: 120, w: 35, h: 200 },
-        { x: 890, y: 430, w: 35, h: 200 }
-      ],
-      glass: [
-        { x: 320, y: 320, w: 14, h: 110 },
-        { x: 610, y: 90,  w: 14, h: 120 },
-        { x: 610, y: 540, w: 14, h: 120 },
-        { x: 900, y: 320, w: 14, h: 110 }
-      ],
-      enemies: [
-        { x: 460, y: 170, weapon: 'rifle' },
-        { x: 460, y: 580, weapon: 'shotgun' },
-        { x: 750, y: 250, weapon: 'rifle' },
-        { x: 750, y: 500, weapon: 'rifle' },
-        { x: 1040, y: 180, weapon: 'shotgun' },
-        { x: 1060, y: 375, weapon: 'katana' },
-        { x: 1040, y: 570, weapon: 'rifle' }
-      ],
-      pickups: [
-        { x: 230, y: 200, weapon: 'pistol', ammo: 5 },
-        { x: 750, y: 375, weapon: 'shotgun', ammo: 3 }
-      ]
-    },
-    {
-      code: '10_CORE.EXE',
-      name: 'SYSTEM LIBERATION',
-      desc: 'FINAL NODE: Eliminate all guardians of the Red Pyramid Core. BODIES ARE DISPOSABLE.',
-      player: { x: 600, y: 640, weapon: 'rifle', ammo: 9 },
-      hotswitch: true,
-      walls: [
-        { x: 545, y: 320, w: 110, h: 110 }, // Central Core Pyramid
-        { x: 260, y: 180, w: 50, h: 130 },
-        { x: 890, y: 180, w: 50, h: 130 },
-        { x: 260, y: 440, w: 50, h: 130 },
-        { x: 890, y: 440, w: 50, h: 130 }
-      ],
-      glass: [
-        { x: 440, y: 240, w: 320, h: 14 },
-        { x: 440, y: 496, w: 320, h: 14 }
-      ],
-      enemies: [
-        { x: 420, y: 130, weapon: 'rifle' },
-        { x: 780, y: 130, weapon: 'rifle' },
-        { x: 160, y: 280, weapon: 'shotgun' },
-        { x: 1040, y: 280, weapon: 'shotgun' },
-        { x: 160, y: 520, weapon: 'katana' },
-        { x: 1040, y: 520, weapon: 'katana' },
-        { x: 420, y: 375, weapon: 'shotgun' },
-        { x: 780, y: 375, weapon: 'rifle' },
-        { x: 600, y: 110, weapon: 'katana' }
-      ],
-      pickups: [
-        { x: 600, y: 540, weapon: 'katana', ammo: Infinity },
-        { x: 360, y: 375, weapon: 'shotgun', ammo: 4 },
-        { x: 840, y: 375, weapon: 'pistol', ammo: 5 }
-      ]
-    },
-    {
-      code: 'ENDLESS.EXE',
-      name: 'ENDLESS ARENA',
-      desc: 'Infinite waves of Red Guys, falling weapons, and non-stop Hotswitch choreography.',
-      player: { x: 600, y: 375, weapon: 'pistol', ammo: 5 },
-      hotswitch: true,
-      endless: true,
-      walls: [
-        { x: 310, y: 190, w: 65, h: 65 },
-        { x: 825, y: 190, w: 65, h: 65 },
-        { x: 310, y: 495, w: 65, h: 65 },
-        { x: 825, y: 495, w: 65, h: 65 }
-      ],
-      glass: [
-        { x: 500, y: 220, w: 200, h: 14 },
-        { x: 500, y: 516, w: 200, h: 14 }
-      ],
-      enemies: [
-        { x: 160, y: 160, weapon: 'pistol' },
-        { x: 1040, y: 160, weapon: 'shotgun' },
-        { x: 160, y: 590, weapon: 'katana' },
-        { x: 1040, y: 590, weapon: 'rifle' }
-      ],
-      pickups: [
-        { x: 460, y: 375, weapon: 'katana', ammo: Infinity },
-        { x: 740, y: 375, weapon: 'shotgun', ammo: 3 }
-      ]
-    }
-  ];
-
-  // ============================================================================
-  // GAME STATE & ENTITIES
-  // ============================================================================
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
-  const VIRTUAL_W = 1200;
-  const VIRTUAL_H = 750;
-
-  let currentLevelIdx = 0;
-  let clearedLevels = new Set();
-  try {
-    const saved = JSON.parse(localStorage.getItem('superhot2d_cleared') || '[]');
-    saved.forEach(i => clearedLevels.add(i));
-  } catch (e) {}
-
-  let endlessKills = 0;
-  let endlessHighscore = Number(localStorage.getItem('superhot2d_endless_best') || 0);
-
-  let state = 'MENU'; // 'PLAYING', 'WON', 'DEAD', 'MENU'
-  let timeScale = 0.025;
-  let targetTimeScale = 0.025;
-  let actionTimeBoost = 0; // decays over real time
-  let screenShake = 0;
-  let redFlash = 0;
-  let whiteFlash = 0;
-  let deathReason = '';
-
-  // Replay recording buffer (stores snapshots in game-time so replay runs at 1.0x real speed!)
-  let replayFrames = [];
-  let replayTimer = 0;
-  let replayIndex = 0;
-  let superhotChantTimer = 0;
-  let superhotWordState = false;
-
-  const keys = {};
-  const mouse = { x: 600, y: 375, worldX: 600, worldY: 375, down: false, movedRecently: 0 };
-  const joy = { active: false, dx: 0, dy: 0, id: null };
-  let mobileWaitHeld = false;
-
-  let player = null;
-  let enemies = [];
-  let bullets = [];
-  let thrownItems = [];
-  let pickups = [];
-  let shards = []; // Persistent crystal & glass shards on floor
-  let particles = [];
-  let floatingTexts = [];
-  let slashArcs = [];
-  let walls = [];
-  let glasses = [];
-  let endlessSpawnTimer = 0;
-
-  // ============================================================================
-  // GEOMETRY & COLLISION HELPERS
-  // ============================================================================
-  function dist(x1, y1, x2, y2) {
-    return Math.hypot(x2 - x1, y2 - y1);
+  const n = 6 + lvl;
+  let tries = 0;
+  while (boxes.length < n && tries++ < 300) {
+    const pillar = Math.random() < 0.3;
+    const w = pillar ? 1 : rnd(1, 2.8), d = pillar ? 1 : rnd(1, 2.8), h = pillar ? H : rnd(1.0, 2.6);
+    const x = rnd(-arenaHalf + 2.5, arenaHalf - 2.5), z = rnd(-arenaHalf + 2.5, arenaHalf - 4);
+    if (Math.hypot(x, z - (arenaHalf - 2.5)) < 4.5) continue;
+    if (boxes.some(b => x + w / 2 + 1.4 > b.x0 && x - w / 2 - 1.4 < b.x1 && z + d / 2 + 1.4 > b.z0 && z - d / 2 - 1.4 < b.z1)) continue;
+    add(x, z, w, d, h, pillar ? steel : crateMat);
+    if (pillar) { const cap = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.3, 1.3), brass); cap.position.set(x, 0.15, z); levelGroup.add(cap); }
   }
-
-  function circleRectCollide(cx, cy, cr, rx, ry, rw, rh) {
-    const closestX = Math.max(rx, Math.min(cx, rx + rw));
-    const closestY = Math.max(ry, Math.min(cy, ry + rh));
-    const dx = cx - closestX;
-    const dy = cy - closestY;
-    return (dx * dx + dy * dy) < (cr * cr);
+  // Spawnpunkte (weit weg vom Start)
+  for (let i = 0; i < 40 && spawnPts.length < 10; i++) {
+    const x = rnd(-arenaHalf + 1.5, arenaHalf - 1.5), z = rnd(-arenaHalf + 1.5, arenaHalf * 0.2);
+    if (!insideBox(x, z, 0.8)) spawnPts.push({ x, z });
   }
-
-  function resolveCircleRect(ent, r, rect) {
-    const closestX = Math.max(rect.x, Math.min(ent.x, rect.x + rect.w));
-    const closestY = Math.max(rect.y, Math.min(ent.y, rect.y + rect.h));
-    let dx = ent.x - closestX;
-    let dy = ent.y - closestY;
-    const d2 = dx * dx + dy * dy;
+  key.shadow.camera.left = key.shadow.camera.bottom = -arenaHalf - 2;
+  key.shadow.camera.right = key.shadow.camera.top = arenaHalf + 2;
+  key.shadow.camera.far = 60; key.shadow.camera.updateProjectionMatrix();
+}
+function insideBox(x, z, m = 0, y = 0.5) {
+  for (const b of boxes) if (x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m && y < b.h) return b;
+  return null;
+}
+function pushOut(o, r) {
+  for (const b of boxes) {
+    const cx = clamp(o.x, b.x0, b.x1), cz = clamp(o.z, b.z0, b.z1);
+    const dx = o.x - cx, dz = o.z - cz, d2 = dx * dx + dz * dz;
     if (d2 < r * r) {
-      const d = Math.sqrt(d2) || 0.001;
-      const overlap = r - d;
-      ent.x += (dx / d) * overlap;
-      ent.y += (dy / d) * overlap;
+      if (d2 > 1e-8) { const d = Math.sqrt(d2); o.x = cx + dx / d * r; o.z = cz + dz / d * r; }
+      else { // innen: kürzeste Achse raus
+        const ex = [o.x - b.x0, b.x1 - o.x, o.z - b.z0, b.z1 - o.z], m = Math.min(...ex), k = ex.indexOf(m);
+        if (k === 0) o.x = b.x0 - r; else if (k === 1) o.x = b.x1 + r; else if (k === 2) o.z = b.z0 - r; else o.z = b.z1 + r;
+      }
     }
   }
+  const L = arenaHalf - r;
+  o.x = clamp(o.x, -L, L); o.z = clamp(o.z, -L, L);
+}
+// Segment gegen Boxen (Slab-Test)
+function segBlocked(ax, ay, az, bx, by, bz) {
+  const dx = bx - ax, dy = by - ay, dz = bz - az;
+  for (const b of boxes) {
+    let t0 = 0, t1 = 1, ok = true;
+    for (const [o, d, lo, hi] of [[ax, dx, b.x0, b.x1], [ay, dy, 0, b.h], [az, dz, b.z0, b.z1]]) {
+      if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) { ok = false; break; } }
+      else { let ta = (lo - o) / d, tb = (hi - o) / d; if (ta > tb) [ta, tb] = [tb, ta]; t0 = Math.max(t0, ta); t1 = Math.min(t1, tb); if (t0 > t1) { ok = false; break; } }
+    }
+    if (ok) return true;
+  }
+  return false;
+}
 
-  function lineIntersectsRect(x1, y1, x2, y2, rx, ry, rw, rh) {
-    // Liang-Barsky line-rect intersection
-    let t0 = 0, t1 = 1;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const p = [-dx, dx, -dy, dy];
-    const q = [x1 - rx, rx + rw - x1, y1 - ry, ry + rh - y1];
-    for (let i = 0; i < 4; i++) {
-      if (p[i] === 0) {
-        if (q[i] < 0) return false;
+// ---------- Waffen ----------
+function makeGun() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.28), darkSteel); body.position.z = -0.04; g.add(body);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.26, 10), brass); barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.025, -0.24); g.add(barrel);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.08), copper); grip.position.set(0, -0.1, 0.06); grip.rotation.x = 0.3; g.add(grip);
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8), brass); drum.rotation.x = Math.PI / 2; drum.position.set(0, 0.01, -0.06); g.add(drum);
+  return g;
+}
+// Viewmodel
+const viewGun = makeGun(); viewGun.scale.setScalar(0.9);
+const viewHand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.22), new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.8 }));
+viewHand.position.set(0, -0.15, 0.08); viewGun.add(viewHand);
+const fist = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.16), viewHand.material);
+const VG_POS = new THREE.Vector3(0.2, -0.19, -0.5), FIST_POS = new THREE.Vector3(0.2, -0.22, -0.45);
+viewGun.position.copy(VG_POS); fist.position.copy(FIST_POS);
+camera.add(viewGun, fist);
+viewGun.traverse(o => { o.renderOrder = 10; });
+
+// ---------- Partikel / Effekte ----------
+const shards = [];
+const shardGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+function shatter(x, y, z, vx, vz) {
+  for (let i = 0; i < 26; i++) {
+    const gear = Math.random() < 0.4;
+    const m = new THREE.Mesh(gear ? smallGear : shardGeo, gear ? brass : (Math.random() < 0.5 ? copper : brass));
+    m.scale.setScalar(gear ? rnd(0.8, 2) : rnd(0.5, 1.6));
+    m.position.set(x + rnd(-0.3, 0.3), y + rnd(-0.6, 0.6), z + rnd(-0.3, 0.3));
+    m.castShadow = true; scene.add(m);
+    shards.push({ m, vx: vx * 0.3 + rnd(-3, 3), vy: rnd(1, 6), vz: vz * 0.3 + rnd(-3, 3), sx: rnd(-8, 8), sy: rnd(-8, 8), life: rnd(4, 7) });
+  }
+}
+const sparks = [];
+function spark(x, y, z, col = 0xffc070, n = 8) {
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), new THREE.MeshBasicMaterial({ color: col }));
+    m.position.set(x, y, z); scene.add(m);
+    sparks.push({ m, vx: rnd(-4, 4), vy: rnd(0, 5), vz: rnd(-4, 4), life: rnd(0.3, 0.6) });
+  }
+}
+
+// ---------- Audio ----------
+let actx = null;
+function audio() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (actx && actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function noise(dur, freq, vol, type = 'lowpass') {
+  const a = audio(); if (!a || (ArcadeCore.isMuted && ArcadeCore.isMuted())) return;
+  const len = Math.floor(a.sampleRate * dur), buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  const src = a.createBufferSource(); src.buffer = buf;
+  const f = a.createBiquadFilter(); f.type = type; f.frequency.value = freq;
+  const gn = a.createGain(); gn.gain.value = vol;
+  src.connect(f).connect(gn).connect(a.destination); src.start();
+}
+const sfx = {
+  shot() { noise(0.18, 1800, 0.4); ArcadeCore.playTone(90, 0.1, 'square', 0.1); },
+  enemyShot() { noise(0.14, 900, 0.18); },
+  shatter() { noise(0.5, 4000, 0.35, 'highpass'); for (let i = 0; i < 4; i++) setTimeout(() => ArcadeCore.playTone(rnd(1200, 2400), 0.08, 'triangle', 0.06), i * 40); },
+  tick() { ArcadeCore.playTone(1800, 0.02, 'square', 0.03); },
+  thud() { ArcadeCore.playTone(120, 0.1, 'sine', 0.2); noise(0.08, 600, 0.2); },
+  pick() { ArcadeCore.playTone(700, 0.05, 'triangle', 0.1); ArcadeCore.playTone(1050, 0.08, 'triangle', 0.1); },
+  click() { ArcadeCore.playTone(2200, 0.02, 'square', 0.05); },
+  bell() { ArcadeCore.playTone(523, 0.6, 'sine', 0.18); ArcadeCore.playTone(1046, 0.5, 'sine', 0.06); },
+};
+
+// ---------- Zustand ----------
+let state = 'menu', level = 1, enemies = [], bullets = [], thrown = [], pickups = [], toSpawn = 0;
+let ts = 0.05, pulse = 0, wtime = 0, deadT = 0, clearT = 0, tickAcc = 0;
+let yaw = 0, pitch = 0, lookRate = 0, recoil = 0, punchT = 0, spawnCd = 0;
+const pl = { x: 0, z: 0, gun: null, ammo: 0, cd: 0, bob: 0 };
+let bestLvl = Number(ArcadeCore.getScore(KEY)) || 0;
+const keys = {};
+const tmp = new THREE.Vector3();
+
+function makeEnemy(x, z, armed) {
+  const g = new THREE.Group();
+  const legs = [];
+  for (const s of [-1, 1]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.85, 8), steel); l.geometry.translate(0, -0.42, 0); l.position.set(s * 0.15, 0.85, 0); l.castShadow = true; g.add(l); legs.push(l); }
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.75, 12), brass); body.position.y = 1.2; body.castShadow = true; g.add(body);
+  const gear = new THREE.Mesh(smallGear, copper); gear.scale.setScalar(1.6); gear.position.set(0, 1.25, 0.27); g.add(gear);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), copper); head.position.y = 1.78; head.castShadow = true; g.add(head);
+  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.2, 12), darkSteel); hat.position.y = 2.0; g.add(hat);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), eyeMat); eye.position.set(0, 1.8, 0.18); g.add(eye);
+  const arm = new THREE.Group(); arm.position.set(0.32, 1.45, 0); g.add(arm);
+  const armM = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.55, 8), steel); armM.rotation.x = Math.PI / 2; armM.position.z = 0.25; arm.add(armM);
+  const gun = makeGun(); gun.position.set(0, 0.05, 0.55); gun.rotation.y = Math.PI; arm.add(gun);
+  gun.visible = armed;
+  const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.55, 8), steel); arm2.position.set(-0.32, 1.25, 0); g.add(arm2);
+  g.position.set(x, 0, z); g.scale.setScalar(0.01);
+  scene.add(g);
+  return { g, legs, eye, arm, gun, x, z, armed, ammo: 99, fireCd: rnd(1.2, 2.4), aimT: 0, stun: 0, spawnT: 0.7, walk: rnd(0, 6), side: Math.random() < 0.5 ? 1 : -1, punchT: 0, h: 0 };
+}
+
+function startLevel() {
+  for (const e of enemies) scene.remove(e.g);
+  for (const b of bullets) scene.remove(b.m);
+  for (const t of thrown) scene.remove(t.m);
+  for (const p of pickups) scene.remove(p.m);
+  for (const s of shards) scene.remove(s.m);
+  for (const s of sparks) scene.remove(s.m);
+  enemies = []; bullets = []; thrown = []; pickups = []; shards.length = 0; sparks.length = 0;
+  buildArena(level);
+  pl.x = 0; pl.z = arenaHalf - 2.5; yaw = 0; pitch = 0;
+  pl.gun = true; pl.ammo = 6; pl.cd = 0;
+  toSpawn = 2 + level + Math.floor(level / 3);
+  spawnCd = 0;
+  // Start: zwei sofort
+  for (let i = 0; i < Math.min(2 + (level > 4 ? 1 : 0), toSpawn); i++) spawnEnemy();
+  ts = 0.05; wtime = 0;
+  state = 'play';
+  $('flash').style.opacity = 0;
+  $('xh').style.display = 'block';
+  updateHud();
+}
+function spawnEnemy() {
+  if (toSpawn <= 0) return;
+  const cands = spawnPts.filter(p => Math.hypot(p.x - pl.x, p.z - pl.z) > 9 && !enemies.some(e => Math.hypot(e.x - p.x, e.z - p.z) < 1.5));
+  const p = cands.length ? cands[(Math.random() * cands.length) | 0] : spawnPts[0];
+  if (!p) return;
+  const armed = level < 2 ? true : Math.random() < 0.8;
+  enemies.push(makeEnemy(p.x, p.z, armed));
+  toSpawn--;
+}
+
+// ---------- Aktionen ----------
+function fire() {
+  if (state !== 'play') return;
+  if (!pl.gun) { punch(); return; }
+  if (pl.cd > 0) return;
+  if (pl.ammo <= 0) { sfx.click(); pulse = 0.12; return; }
+  pl.ammo--; pl.cd = 0.45; recoil = 1; pulse = 0.22;
+  const dir = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
+  const o = new THREE.Vector3(0.18, -0.12, -0.6).applyEuler(camera.rotation).add(camera.position);
+  addBullet(o, dir, 45, true);
+  sfx.shot();
+}
+function addBullet(o, dir, speed, mine) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, mine ? 0.5 : 0.35, 6), mine ? myBulletMat : bulletMat);
+  m.geometry.rotateX(Math.PI / 2);
+  m.position.copy(o); m.lookAt(tmp.copy(o).add(dir));
+  scene.add(m);
+  let glow = null;
+  if (!mine) {
+    glow = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.7 }));
+    m.add(glow);
+  }
+  bullets.push({ m, v: dir.clone().multiplyScalar(speed), mine, life: 4 });
+}
+function throwGun() {
+  if (state !== 'play' || !pl.gun) return;
+  pl.gun = false; pulse = 0.25;
+  const dir = new THREE.Vector3(0, 0.08, -1).applyEuler(camera.rotation).normalize();
+  const m = makeGun(); m.scale.setScalar(2);
+  m.position.copy(new THREE.Vector3(0.2, -0.15, -0.5).applyEuler(camera.rotation).add(camera.position));
+  scene.add(m);
+  thrown.push({ m, v: dir.multiplyScalar(17), spin: 14, life: 3, hit: false });
+  sfx.thud();
+}
+function punch() {
+  if (punchT > 0) return;
+  punchT = 0.35; pulse = 0.25;
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  for (const e of enemies) {
+    if (e.spawnT > 0) continue;
+    const dx = e.x - pl.x, dz = e.z - pl.z, d = Math.hypot(dx, dz);
+    if (d < 2.3 && (dx * fx + dz * fz) / (d || 1) > 0.55) { killEnemy(e, fx * 4, fz * 4); sfx.thud(); return; }
+  }
+}
+function killEnemy(e, vx, vz) {
+  shatter(e.x, 1.2, e.z, vx, vz);
+  scene.remove(e.g);
+  enemies.splice(enemies.indexOf(e), 1);
+  if (e.armed) dropGun(e.x, e.z, 4);
+  sfx.shatter();
+  ArcadeCore.playTone(300, 0.1, 'sine', 0.06);
+}
+function dropGun(x, z, ammo) {
+  const m = makeGun(); m.scale.setScalar(2); m.position.set(x, 0.12, z); m.rotation.set(Math.PI / 2, 0, rnd(0, 6));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.42, 24), new THREE.MeshBasicMaterial({ color: 0x6fe3ff, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.02, z);
+  scene.add(m, ring);
+  pickups.push({ m, ring, x, z, ammo });
+}
+function die() {
+  if (state !== 'play') return;
+  state = 'dead'; deadT = 0;
+  $('flash').style.opacity = 0.55;
+  $('xh').style.display = 'none';
+  ArcadeCore.gameOver();
+  setTimeout(() => {
+    $('otitle').textContent = 'ZU LANGSAM';
+    $('otext').innerHTML = `Ebene ${level} · Bestleistung: Ebene ${bestLvl || '–'}<br><small>Tipp: Wer stillsteht, hat Zeit zum Nachdenken.</small>`;
+    $('again').textContent = 'EBENE ' + level + ' NEU';
+    $('over').classList.remove('hide');
+    if (document.pointerLockElement) document.exitPointerLock();
+  }, 1200);
+}
+function levelClear() {
+  state = 'clear'; clearT = 0;
+  if (level > bestLvl) { bestLvl = level; ArcadeCore.saveScore(KEY, bestLvl); }
+  sfx.bell();
+  const words = level >= MAX_LVL ? ['DIE', 'ZEIT', 'GEHÖRT', 'DIR'] : ['ZEIT', 'STEHT', 'STILL'];
+  words.forEach((w, i) => setTimeout(() => { const el = $('word'); el.textContent = w; el.style.opacity = 1; sfx.bell(); setTimeout(() => el.style.opacity = 0, 520); }, 300 + i * 650));
+  setTimeout(() => {
+    if (level >= MAX_LVL) {
+      $('otitle').textContent = '⚙ TURMSPITZE ERREICHT';
+      $('otext').innerHTML = 'Alle 10 Ebenen geschafft. Die Uhr schlägt für dich.';
+      $('again').textContent = 'VON VORN';
+      level = 0;
+      $('over').classList.remove('hide');
+      if (document.pointerLockElement) document.exitPointerLock();
+    } else { level++; startLevel(); }
+  }, 300 + words.length * 650 + 300);
+}
+
+// ---------- Eingabe ----------
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase(); keys[k] = true;
+  if (k === 'q' || k === 'f') throwGun();
+  if (k === ' ') { e.preventDefault(); fire(); }
+  if (k === 'r' && (state === 'dead' || state === 'play')) { $('over').classList.add('hide'); startLevel(); requestLock(); }
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+let lockOk = true, dragging = false, lastMx = 0, lastMy = 0, dragDist = 0;
+function requestLock() {
+  if (touchMode || !lockOk) return;
+  try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => { lockOk = false; }); } catch (e) { lockOk = false; }
+}
+document.addEventListener('pointerlockchange', () => {
+  const locked = document.pointerLockElement === canvas;
+  $('lock').style.display = !locked && state === 'play' && lockOk && !touchMode ? 'flex' : 'none';
+});
+document.addEventListener('pointerlockerror', () => { lockOk = false; $('lock').style.display = 'none'; });
+$('lock').addEventListener('click', () => { $('lock').style.display = 'none'; requestLock(); });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('mousedown', e => {
+  if (state !== 'play' || touchMode) return;
+  if (document.pointerLockElement === canvas) { if (e.button === 0) fire(); else if (e.button === 2) throwGun(); return; }
+  if (lockOk) { requestLock(); return; }
+  if (e.button === 2) { throwGun(); return; }
+  dragging = true; dragDist = 0; lastMx = e.clientX; lastMy = e.clientY;
+});
+addEventListener('mouseup', e => { if (dragging && dragDist < 6 && e.button === 0) fire(); dragging = false; });
+addEventListener('mousemove', e => {
+  if (state !== 'play') return;
+  let dx = 0, dy = 0;
+  if (document.pointerLockElement === canvas) { dx = e.movementX; dy = e.movementY; }
+  else if (dragging) { dx = e.clientX - lastMx; dy = e.clientY - lastMy; lastMx = e.clientX; lastMy = e.clientY; dragDist += Math.abs(dx) + Math.abs(dy); }
+  else return;
+  look(dx, dy);
+});
+function look(dx, dy) {
+  yaw -= dx * 0.0022; pitch = clamp(pitch - dy * 0.0022, -1.4, 1.4);
+  lookRate += Math.hypot(dx, dy);
+}
+// Touch
+let touchMode = false;
+const stick = { id: null, x: 0, y: 0, cx: 0, cy: 0 }, lookT = { id: null, x: 0, y: 0 };
+addEventListener('touchstart', () => { if (!touchMode) { touchMode = true; $('touch').style.display = 'block'; $('hint').textContent = 'Links: laufen · Rechts ziehen: zielen'; } }, { passive: true });
+$('touch').addEventListener('pointerdown', e => {
+  if (e.target.id === 'tFire') { fire(); return; }
+  if (e.target.id === 'tThrow') { throwGun(); return; }
+  if (e.clientX < innerWidth / 2 && stick.id === null) {
+    const r = $('stick').getBoundingClientRect();
+    stick.id = e.pointerId; stick.cx = r.left + r.width / 2; stick.cy = r.top + r.height / 2; stick.x = stick.y = 0;
+  } else if (lookT.id === null) { lookT.id = e.pointerId; lookT.x = e.clientX; lookT.y = e.clientY; }
+});
+$('touch').addEventListener('pointermove', e => {
+  if (e.pointerId === stick.id) {
+    let dx = e.clientX - stick.cx, dy = e.clientY - stick.cy; const d = Math.hypot(dx, dy), m = 50;
+    if (d > m) { dx = dx / d * m; dy = dy / d * m; }
+    stick.x = dx / m; stick.y = dy / m;
+    $('knob').style.transform = `translate(${dx}px,${dy}px)`;
+  } else if (e.pointerId === lookT.id) {
+    look((e.clientX - lookT.x) * 1.6, (e.clientY - lookT.y) * 1.6); lookT.x = e.clientX; lookT.y = e.clientY;
+  }
+});
+const tUp = e => {
+  if (e.pointerId === stick.id) { stick.id = null; stick.x = stick.y = 0; $('knob').style.transform = ''; }
+  if (e.pointerId === lookT.id) lookT.id = null;
+};
+$('touch').addEventListener('pointerup', tUp); $('touch').addEventListener('pointercancel', tUp);
+
+$('go').onclick = () => { audio(); $('menu').classList.add('hide'); level = 1; startLevel(); requestLock(); };
+$('again').onclick = () => { $('over').classList.add('hide'); if (level === 0) level = 1; startLevel(); requestLock(); };
+$('menuBest').textContent = bestLvl ? 'Höchste Ebene: ' + bestLvl + '/' + MAX_LVL : '';
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ---------- Update ----------
+function updateHud() {
+  $('lvl').textContent = 'EBENE ' + level + '/' + MAX_LVL;
+  $('left').textContent = '⚙ ' + (enemies.length + toSpawn) + ' Automaten';
+  $('ammo').textContent = pl.gun ? '●'.repeat(pl.ammo) + '○'.repeat(Math.max(0, 6 - pl.ammo)) : '✊ Faust';
+  $('ts').style.width = (ts * 100).toFixed(0) + '%';
+  $('vig').style.opacity = 1 - ts * 0.8;
+}
+
+function stepWorld(wdt, rdt) {
+  wtime += wdt;
+  // Uhr / Zahnräder laufen nur mit der Weltzeit
+  if (clockHands) { clockHands.minH.rotation.z = -wtime * 0.5; clockHands.hourH.rotation.z = -wtime * 0.5 / 12; }
+  for (const w of wallGears) w.g.rotation.z += w.s * wdt;
+  tickAcc += wdt; if (tickAcc > 0.5) { tickAcc = 0; if (state === 'play') sfx.tick(); }
+
+  // Spawns
+  if (state === 'play') {
+    spawnCd -= wdt;
+    if (toSpawn > 0 && spawnCd <= 0 && enemies.length < 2 + Math.min(3, Math.floor(level / 2))) { spawnEnemy(); spawnCd = 2.5; }
+  }
+  // Gegner
+  for (const e of [...enemies]) {
+    if (e.spawnT > 0) { e.spawnT -= wdt; e.g.scale.setScalar(clamp(1 - e.spawnT / 0.7, 0.01, 1)); continue; }
+    const dx = pl.x - e.x, dz = pl.z - e.z, d = Math.hypot(dx, dz) || 1;
+    e.h = Math.atan2(dx, dz);
+    e.g.rotation.y = e.h;
+    if (e.stun > 0) { e.stun -= wdt; e.g.rotation.z = Math.sin(e.stun * 20) * 0.1; continue; }
+    e.g.rotation.z = 0;
+    const sees = !segBlocked(e.x, 1.6, e.z, pl.x, 1.4, pl.z);
+    let moveSp = e.armed ? (sees && d < 9 ? 0.6 : 1.9) : 2.8;
+    if (e.aimT > 0) moveSp = 0;
+    let mx = dx / d, mz = dz / d;
+    // Ausweichen um Hindernisse
+    if (insideBox(e.x + mx * 0.9, e.z + mz * 0.9, 0.3)) { const s = e.side; [mx, mz] = [-mz * s, mx * s]; }
+    if (d > (e.armed ? 3 : 0.9)) { e.x += mx * moveSp * wdt; e.z += mz * moveSp * wdt; e.walk += wdt * moveSp * 4; }
+    for (const o of enemies) if (o !== e) { const ox = e.x - o.x, oz = e.z - o.z, od = Math.hypot(ox, oz); if (od < 0.8 && od > 0) { e.x += ox / od * (0.8 - od) * 0.5; e.z += oz / od * (0.8 - od) * 0.5; } }
+    pushOut(e, 0.35);
+    e.g.position.set(e.x, 0, e.z);
+    e.legs[0].rotation.x = Math.sin(e.walk) * 0.5; e.legs[1].rotation.x = -Math.sin(e.walk) * 0.5;
+    if (e.armed) {
+      e.arm.rotation.x = -Math.atan2(1.4 - 1.45, d) * 0.3;
+      if (e.aimT > 0) {
+        e.aimT -= wdt;
+        if (e.aimT <= 0) {
+          const o = new THREE.Vector3(0.32, 1.5, 0.95).applyAxisAngle(new THREE.Vector3(0, 1, 0), e.h).add(e.g.position);
+          const tgt = new THREE.Vector3(pl.x + rnd(-0.15, 0.15), 1.35, pl.z + rnd(-0.15, 0.15));
+          addBullet(o, tgt.sub(o).normalize(), 11 + level * 0.4, false);
+          sfx.enemyShot(); e.eye.material = eyeMat;
+          e.fireCd = rnd(1.6, 2.8) - Math.min(level * 0.08, 0.6);
+          spark(o.x, o.y, o.z, 0xffa040, 5);
+        }
       } else {
-        const t = q[i] / p[i];
-        if (p[i] < 0) {
-          if (t > t1) return false;
-          if (t > t0) t0 = t;
-        } else {
-          if (t < t0) return false;
-          if (t < t1) t1 = t;
-        }
+        e.fireCd -= wdt;
+        if (e.fireCd <= 0 && sees && d < 26) { e.aimT = 0.45; e.eye.material = eyeAimMat; }
       }
-    }
-    return t0 <= t1;
-  }
-
-  function hasLineOfSight(x1, y1, x2, y2) {
-    for (const w of walls) {
-      if (lineIntersectsRect(x1, y1, x2, y2, w.x, w.y, w.w, w.h)) return false;
-    }
-    return true;
-  }
-
-  // ============================================================================
-  // LEVEL INITIALIZATION
-  // ============================================================================
-  function loadLevel(idx) {
-    currentLevelIdx = idx;
-    const lvl = LEVELS[idx];
-    state = 'PLAYING';
-    timeScale = 0.025;
-    targetTimeScale = 0.025;
-    actionTimeBoost = 0.35; // brief entry motion
-    screenShake = 0;
-    redFlash = 0;
-    whiteFlash = 0.4;
-    endlessKills = 0;
-    endlessSpawnTimer = 2.5;
-
-    walls = lvl.walls.map(w => ({ ...w }));
-    // Add outer arena bounds
-    walls.push(
-      { x: 0, y: 0, w: VIRTUAL_W, h: 28, border: true },
-      { x: 0, y: VIRTUAL_H - 28, w: VIRTUAL_W, h: 28, border: true },
-      { x: 0, y: 0, w: 28, h: VIRTUAL_H, border: true },
-      { x: VIRTUAL_W - 28, y: 0, w: 28, h: VIRTUAL_H, border: true }
-    );
-
-    glasses = (lvl.glass || []).map(g => ({ ...g, broken: false }));
-
-    player = {
-      x: lvl.player.x,
-      y: lvl.player.y,
-      vx: 0,
-      vy: 0,
-      radius: 17,
-      angle: -Math.PI / 2,
-      weapon: lvl.player.weapon,
-      ammo: lvl.player.ammo,
-      cooldown: 0,
-      hotswitchUnlocked: !!lvl.hotswitch,
-      hotswitchCd: 0,
-      alive: true
-    };
-
-    enemies = lvl.enemies.map(e => createEnemy(e.x, e.y, e.weapon));
-    pickups = (lvl.pickups || []).map(p => ({
-      x: p.x,
-      y: p.y,
-      weapon: p.weapon,
-      ammo: p.ammo !== undefined ? p.ammo : WEAPONS[p.weapon].ammo,
-      angle: Math.random() * Math.PI * 2,
-      bob: Math.random() * Math.PI * 2
-    }));
-
-    bullets = [];
-    thrownItems = [];
-    shards = [];
-    particles = [];
-    floatingTexts = [];
-    slashArcs = [];
-    replayFrames = [];
-    replayTimer = 0;
-    replayIndex = 0;
-
-    document.getElementById('superhot-flash').style.display = 'none';
-    document.getElementById('terminal-modal').style.display = 'none';
-    updateHUD();
-  }
-
-  function createEnemy(x, y, weaponType) {
-    const wDef = WEAPONS[weaponType];
-    return {
-      x,
-      y,
-      vx: 0,
-      vy: 0,
-      radius: 18,
-      angle: Math.random() * Math.PI * 2,
-      weapon: weaponType,
-      ammo: wDef.ammo,
-      cooldown: 0.35 + Math.random() * 0.45,
-      burstRemaining: 0,
-      burstTimer: 0,
-      stunTimer: 0,
-      knockVx: 0,
-      knockVy: 0,
-      aiSeed: Math.random() * 100,
-      facetPhase: Math.random() * Math.PI * 2
-    };
-  }
-
-  // ============================================================================
-  // SHATTER & FX SPAWNERS
-  // ============================================================================
-  function spawnCrystalShatter(x, y, dirAngle, count = 24, isRed = true) {
-    sfx.playShatter(!isRed);
-    for (let i = 0; i < count; i++) {
-      const spread = (Math.random() - 0.5) * 1.9;
-      const a = dirAngle + spread;
-      const spd = 90 + Math.random() * 340;
-      const size = 5 + Math.random() * 10;
-      const pts = [];
-      const sides = 3 + (i % 2);
-      for (let s = 0; s < sides; s++) {
-        const sa = (s / sides) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
-        const sr = size * (0.65 + Math.random() * 0.55);
-        pts.push({ x: Math.cos(sa) * sr, y: Math.sin(sa) * sr });
-      }
-      const colors = isRed
-        ? ['#ff1414', '#d90416', '#ff4d4d', '#9e000d', '#ff2222']
-        : ['rgba(180,225,245,0.78)', 'rgba(220,245,255,0.85)', 'rgba(130,190,220,0.65)'];
-      shards.push({
-        x: x + (Math.random() - 0.5) * 14,
-        y: y + (Math.random() - 0.5) * 14,
-        vx: Math.cos(a) * spd,
-        vy: Math.sin(a) * spd,
-        rot: Math.random() * Math.PI * 2,
-        vRot: (Math.random() - 0.5) * 14,
-        pts,
-        color: colors[i % colors.length],
-        stroke: isRed ? '#4a0006' : 'rgba(255,255,255,0.9)'
-      });
-    }
-  }
-
-  function breakGlass(g, impactX, impactY, dirAngle) {
-    if (g.broken) return;
-    g.broken = true;
-    const steps = Math.max(4, Math.floor(Math.max(g.w, g.h) / 18));
-    for (let i = 0; i <= steps; i++) {
-      const gx = g.w > g.h ? g.x + (g.w * i) / steps : g.x + g.w / 2;
-      const gy = g.h > g.w ? g.y + (g.h * i) / steps : g.y + g.h / 2;
-      spawnCrystalShatter(gx, gy, dirAngle, 4, false);
-    }
-  }
-
-  function addFloatingText(x, y, text, color = '#ff1414') {
-    floatingTexts.push({ x, y, text, color, life: 0.95, maxLife: 0.95 });
-  }
-
-  // ============================================================================
-  // PLAYER ACTIONS: SHOOT, MELEE, THROW, CATCH, HOTSWITCH
-  // ============================================================================
-  function triggerPlayerFire() {
-    if (state !== 'PLAYING' || !player.alive) return;
-    if (player.cooldown > 0) return;
-
-    const wDef = WEAPONS[player.weapon];
-    const aimAngle = Math.atan2(mouse.worldY - player.y, mouse.worldX - player.x);
-    player.angle = aimAngle;
-
-    // Action advances time!
-    actionTimeBoost = Math.max(actionTimeBoost, 0.26);
-
-    if (wDef.melee) {
-      player.cooldown = wDef.cooldown;
-      if (player.weapon === 'katana') {
-        sfx.playKatana();
-      } else {
-        sfx.playCatch();
-      }
-
-      slashArcs.push({
-        x: player.x,
-        y: player.y,
-        angle: aimAngle,
-        radius: wDef.range,
-        life: 0.16,
-        maxLife: 0.16,
-        color: player.weapon === 'katana' ? '#ff1414' : '#111'
-      });
-
-      // Check glass break
-      for (const g of glasses) {
-        if (!g.broken && circleRectCollide(
-          player.x + Math.cos(aimAngle) * (wDef.range * 0.6),
-          player.y + Math.sin(aimAngle) * (wDef.range * 0.6),
-          28, g.x, g.y, g.w, g.h
-        )) {
-          breakGlass(g, player.x, player.y, aimAngle);
-        }
-      }
-
-      // Katana can slice bullets in mid-air!
-      if (wDef.canSliceBullets) {
-        for (let i = bullets.length - 1; i >= 0; i--) {
-          const b = bullets[i];
-          if (b.fromPlayer) continue;
-          const d = dist(player.x, player.y, b.x, b.y);
-          const bAngle = Math.atan2(b.y - player.y, b.x - player.x);
-          const diff = Math.abs(Math.atan2(Math.sin(bAngle - aimAngle), Math.cos(bAngle - aimAngle)));
-          if (d <= wDef.range + 18 && diff < 1.15) {
-            bullets.splice(i, 1);
-            spawnCrystalShatter(b.x, b.y, aimAngle, 6, true);
-            addFloatingText(b.x, b.y - 12, 'BULLET SLICED!', '#ff1414');
-            screenShake = Math.max(screenShake, 6);
-          }
-        }
-      }
-
-      // Check enemies hit in melee cone
-      for (let i = enemies.length - 1; i >= 0; i--) {
-        const e = enemies[i];
-        const d = dist(player.x, player.y, e.x, e.y);
-        const eAngle = Math.atan2(e.y - player.y, e.x - player.x);
-        const diff = Math.abs(Math.atan2(Math.sin(eAngle - aimAngle), Math.cos(eAngle - aimAngle)));
-        if (d <= wDef.range + e.radius && diff < 1.05) {
-          if (wDef.lethalMelee || e.stunTimer > 0) {
-            killEnemy(i, aimAngle, player.weapon === 'katana' ? 'SLICED' : 'SHATTERED');
-          } else {
-            // Fist / Bottle punch: Stun enemy & launch their weapon toward player!
-            e.stunTimer = 1.8;
-            e.knockVx = Math.cos(aimAngle) * 260;
-            e.knockVy = Math.sin(aimAngle) * 260;
-            disarmEnemyIntoAir(e);
-            spawnCrystalShatter(e.x, e.y, aimAngle, 7, true);
-            addFloatingText(e.x, e.y - 18, 'DISARMED!', '#ff1414');
-            screenShake = Math.max(screenShake, 7);
-            if (player.weapon === 'bottle') {
-              spawnCrystalShatter(e.x, e.y, aimAngle, 8, false);
-              player.weapon = 'fists';
-              player.ammo = Infinity;
-            }
-          }
-        }
-      }
-      updateHUD();
-      return;
-    }
-
-    // Ranged firearm
-    if (player.ammo <= 0) {
-      sfx.playDryClick();
-      addFloatingText(player.x, player.y - 24, 'EMPTY! THROW [R-CLICK / E]', '#111');
-      return;
-    }
-
-    player.cooldown = wDef.cooldown;
-    player.ammo--;
-    sfx.playShoot(player.weapon, timeScale);
-    screenShake = Math.max(screenShake, player.weapon === 'shotgun' ? 11 : 5);
-
-    const count = wDef.pellets || 1;
-    for (let p = 0; p < count; p++) {
-      const spreadAngle = aimAngle + (Math.random() - 0.5) * wDef.spread;
-      const speedVar = wDef.speed * (0.94 + Math.random() * 0.12);
-      spawnBullet(
-        player.x + Math.cos(aimAngle) * 22,
-        player.y + Math.sin(aimAngle) * 22,
-        spreadAngle,
-        speedVar,
-        true
-      );
-    }
-
-    updateHUD();
-  }
-
-  function triggerThrowOrGrab() {
-    if (state !== 'PLAYING' || !player.alive) return;
-    const aimAngle = Math.atan2(mouse.worldY - player.y, mouse.worldX - player.x);
-    player.angle = aimAngle;
-
-    // 1. If unarmed, try to grab nearest mid-air thrown weapon or floor pickup!
-    if (player.weapon === 'fists') {
-      if (tryGrabWeapon()) return;
-    }
-
-    // 2. If holding a weapon, throw it at high speed AND if a weapon is within catch range, snatch it immediately!
-    if (player.weapon !== 'fists') {
-      const thrownWeapon = player.weapon;
-      const thrownAmmo = player.ammo;
-      player.weapon = 'fists';
-      player.ammo = Infinity;
-      actionTimeBoost = Math.max(actionTimeBoost, 0.22);
-      sfx.playCatch();
-
-      thrownItems.push({
-        x: player.x + Math.cos(aimAngle) * 20,
-        y: player.y + Math.sin(aimAngle) * 20,
-        vx: Math.cos(aimAngle) * 820,
-        vy: Math.sin(aimAngle) * 820,
-        weapon: thrownWeapon,
-        ammo: thrownAmmo,
-        rot: aimAngle,
-        vRot: 18,
-        fromPlayer: true,
-        catchable: false
-      });
-
-      // Immediately check if we can also grab a nearby weapon in the same fluid motion
-      tryGrabWeapon();
-      updateHUD();
-    }
-  }
-
-  function tryGrabWeapon() {
-    // Priority 1: Catch flying weapon in mid-air!
-    let bestAirIdx = -1;
-    let bestAirDist = 92; // generous magnetic air-catch radius
-    for (let i = 0; i < thrownItems.length; i++) {
-      const item = thrownItems[i];
-      if (!item.catchable) continue;
-      const d = dist(player.x, player.y, item.x, item.y);
-      if (d < bestAirDist) {
-        bestAirDist = d;
-        bestAirIdx = i;
-      }
-    }
-    if (bestAirIdx !== -1) {
-      const item = thrownItems.splice(bestAirIdx, 1)[0];
-      player.weapon = item.weapon;
-      player.ammo = item.ammo;
-      player.cooldown = 0.05;
-      sfx.playCatch();
-      actionTimeBoost = Math.max(actionTimeBoost, 0.14);
-      addFloatingText(player.x, player.y - 24, `AIR CATCH: ${WEAPONS[item.weapon].name}!`, '#ff1414');
-      updateHUD();
-      return true;
-    }
-
-    // Priority 2: Grab floor pickup
-    let bestFloorIdx = -1;
-    let bestFloorDist = 78;
-    for (let i = 0; i < pickups.length; i++) {
-      const p = pickups[i];
-      const d = dist(player.x, player.y, p.x, p.y);
-      if (d < bestFloorDist) {
-        bestFloorDist = d;
-        bestFloorIdx = i;
-      }
-    }
-    if (bestFloorIdx !== -1) {
-      const p = pickups.splice(bestFloorIdx, 1)[0];
-      player.weapon = p.weapon;
-      player.ammo = p.ammo;
-      player.cooldown = 0.06;
-      sfx.playCatch();
-      actionTimeBoost = Math.max(actionTimeBoost, 0.14);
-      addFloatingText(player.x, player.y - 22, `GRABBED ${WEAPONS[p.weapon].name}`, '#111');
-      updateHUD();
-      return true;
-    }
-    return false;
-  }
-
-  function triggerHotswitch() {
-    if (state !== 'PLAYING' || !player.alive) return;
-    if (!player.hotswitchUnlocked) {
-      addFloatingText(player.x, player.y - 24, 'HOTSWITCH LOCKED UNTIL NODE 06', '#111');
-      return;
-    }
-    if (player.hotswitchCd > 0) {
-      sfx.playDryClick();
-      addFloatingText(player.x, player.y - 24, `COOLDOWN ${player.hotswitchCd.toFixed(1)}s`, '#111');
-      return;
-    }
-
-    // Find enemy closest to mouse cursor with line of sight
-    let bestIdx = -1;
-    let bestCursorDist = 180;
-    for (let i = 0; i < enemies.length; i++) {
-      const e = enemies[i];
-      const d = dist(mouse.worldX, mouse.worldY, e.x, e.y);
-      if (d < bestCursorDist && hasLineOfSight(player.x, player.y, e.x, e.y)) {
-        bestCursorDist = d;
-        bestIdx = i;
-      }
-    }
-
-    if (bestIdx === -1) {
-      addFloatingText(mouse.worldX, mouse.worldY - 15, 'AIM AT VISIBLE RED GUY [Q]', '#111');
-      return;
-    }
-
-    const target = enemies[bestIdx];
-    const oldX = player.x;
-    const oldY = player.y;
-    const jumpAngle = Math.atan2(target.y - oldY, target.x - oldX);
-
-    // Old body shatters into red crystal
-    spawnCrystalShatter(oldX, oldY, jumpAngle + Math.PI, 20, true);
-
-    // Target enemy drops their weapon into air so player can grab it, and enemy body becomes player!
-    disarmEnemyIntoAir(target, true);
-
-    player.x = target.x;
-    player.y = target.y;
-    player.weapon = 'fists';
-    player.ammo = Infinity;
-    player.hotswitchCd = 4.5;
-    enemies.splice(bestIdx, 1);
-    if (LEVELS[currentLevelIdx].endless) endlessKills++;
-
-    // Draw lightning trail particles between old body and new body
-    const steps = 16;
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps;
-      particles.push({
-        x: oldX + (player.x - oldX) * t,
-        y: oldY + (player.y - oldY) * t,
-        vx: (Math.random() - 0.5) * 40,
-        vy: (Math.random() - 0.5) * 40,
-        size: 5,
-        color: '#ff1414',
-        life: 0.35,
-        maxLife: 0.35
-      });
-    }
-
-    sfx.playHotswitch();
-    whiteFlash = 0.65;
-    screenShake = 12;
-    actionTimeBoost = 0.25;
-    addFloatingText(player.x, player.y - 26, 'HOTSWITCH!', '#ff1414');
-    checkVictoryCondition();
-    updateHUD();
-  }
-
-  function disarmEnemyIntoAir(enemy, dropOnSpot = false) {
-    if (!enemy.weapon || enemy.weapon === 'fists') return;
-    const wType = enemy.weapon;
-    const wDef = WEAPONS[wType];
-    enemy.weapon = 'fists';
-
-    // Launch gun in an arc toward the player so the player can catch it mid-air!
-    const toPlayerAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x) + (Math.random() - 0.5) * 0.25;
-    const spd = dropOnSpot ? 120 : 310;
-    thrownItems.push({
-      x: enemy.x,
-      y: enemy.y,
-      vx: Math.cos(toPlayerAngle) * spd,
-      vy: Math.sin(toPlayerAngle) * spd,
-      weapon: wType,
-      ammo: wDef.ammo, // Freshly Popped magazine when disarmed!
-      rot: Math.random() * Math.PI * 2,
-      vRot: 11,
-      fromPlayer: false,
-      catchable: true
-    });
-  }
-
-  function killEnemy(idx, hitAngle, label = 'SUPER') {
-    const e = enemies[idx];
-    if (!e) return;
-    spawnCrystalShatter(e.x, e.y, hitAngle, 26, true);
-    disarmEnemyIntoAir(e, false);
-    enemies.splice(idx, 1);
-    screenShake = Math.max(screenShake, 9);
-    redFlash = Math.max(redFlash, 0.18);
-    addFloatingText(e.x, e.y - 20, label, '#ff1414');
-
-    if (LEVELS[currentLevelIdx].endless) {
-      endlessKills++;
-      if (endlessKills > endlessHighscore) {
-        endlessHighscore = endlessKills;
-        localStorage.setItem('superhot2d_endless_best', String(endlessHighscore));
-      }
-    }
-    checkVictoryCondition();
-    updateHUD();
-  }
-
-  function checkVictoryCondition() {
-    if (LEVELS[currentLevelIdx].endless) return;
-    if (enemies.length === 0 && state === 'PLAYING') {
-      state = 'WON';
-      clearedLevels.add(currentLevelIdx);
-      try {
-        localStorage.setItem('superhot2d_cleared', JSON.stringify([...clearedLevels]));
-      } catch (e) {}
-
-      const flashEl = document.getElementById('superhot-flash');
-      flashEl.style.display = 'flex';
-      document.getElementById('superhotWord').textContent = 'SUPER';
-      document.getElementById('superhotSub').textContent =
-        currentLevelIdx < LEVELS.length - 2
-          ? 'REAL-TIME REPLAY ACTIVE — CLICK OR PRESS [SPACE] FOR NEXT NODE'
-          : 'ALL NODES LIBERATED — CLICK OR PRESS [SPACE] FOR ENDLESS MODE';
-      superhotChantTimer = 0;
-      superhotWordState = false;
-      sfx.playSuperHotBeat(false);
-    }
-  }
-
-  function killPlayer(reason = 'SHOT IN THE HEAD') {
-    if (state !== 'PLAYING' || !player.alive) return;
-    player.alive = false;
-    state = 'DEAD';
-    deathReason = reason;
-    spawnCrystalShatter(player.x, player.y, Math.random() * Math.PI * 2, 30, true);
-    redFlash = 0.75;
-    screenShake = 18;
-    const flashEl = document.getElementById('superhot-flash');
-    flashEl.style.display = 'flex';
-    document.getElementById('superhotWord').textContent = 'DEAD';
-    document.getElementById('superhotSub').textContent = `${reason} — CLICK OR PRESS [R / SPACE] TO RESTART`;
-  }
-
-  function spawnBullet(x, y, angle, speed, fromPlayer) {
-    bullets.push({
-      x,
-      y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      angle,
-      speed,
-      fromPlayer,
-      trail: [{ x, y }]
-    });
-  }
-
-  // ============================================================================
-  // MAIN UPDATE LOOP (CHRONO-LOCK ENGINE)
-  // ============================================================================
-  function update(realDt) {
-    if (state === 'MENU') return;
-
-    // Screen shake & flash decay in real time
-    screenShake = Math.max(0, screenShake - realDt * 35);
-    redFlash = Math.max(0, redFlash - realDt * 1.8);
-    whiteFlash = Math.max(0, whiteFlash - realDt * 2.2);
-
-    // Victory SUPER / HOT rhythmic chant & Real-time Replay
-    if (state === 'WON') {
-      superhotChantTimer += realDt;
-      if (superhotChantTimer >= 0.62) {
-        superhotChantTimer = 0;
-        superhotWordState = !superhotWordState;
-        document.getElementById('superhotWord').textContent = superhotWordState ? 'HOT' : 'SUPER';
-        sfx.playSuperHotBeat(superhotWordState);
-      }
-      if (replayFrames.length > 0) {
-        replayTimer += realDt * 60; // Play recorded frames at 60fps real-time!
-        replayIndex = Math.floor(replayTimer) % replayFrames.length;
-      }
-      return;
-    }
-
-    if (state === 'DEAD') return;
-
-    // ------------------------------------------------------------------------
-    // CALCULATE PLAYER MOVEMENT & TIME SCALE ("TIME MOVES ONLY WHEN YOU MOVE")
-    // ------------------------------------------------------------------------
-    let moveX = 0;
-    let moveY = 0;
-    if (keys['KeyW'] || keys['ArrowUp']) moveY -= 1;
-    if (keys['KeyS'] || keys['ArrowDown']) moveY += 1;
-    if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
-    if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
-
-    if (joy.active) {
-      moveX += joy.dx;
-      moveY += joy.dy;
-    }
-
-    const moveMag = Math.min(1, Math.hypot(moveX, moveY));
-    if (moveMag > 0.01) {
-      moveX = (moveX / Math.hypot(moveX, moveY)) * moveMag;
-      moveY = (moveY / Math.hypot(moveX, moveY)) * moveMag;
-    }
-
-    actionTimeBoost = Math.max(0, actionTimeBoost - realDt);
-    mouse.movedRecently = Math.max(0, mouse.movedRecently - realDt);
-
-    const manualFlow = keys['ShiftLeft'] || keys['ShiftRight'] || mobileWaitHeld;
-
-    // Determine targetTimeScale
-    if (moveMag > 0.05) {
-      targetTimeScale = Math.max(0.25, moveMag * 1.0);
-    } else if (manualFlow) {
-      targetTimeScale = 0.65;
-    } else if (actionTimeBoost > 0) {
-      targetTimeScale = 0.82;
-    } else if (mouse.movedRecently > 0) {
-      targetTimeScale = 0.09; // Subtle micro-crawl when sweeping aim
     } else {
-      targetTimeScale = 0.022; // Deep bullet-time crawl when completely still
-    }
-
-    // Smoothly interpolate timeScale
-    const lerpSpeed = targetTimeScale > timeScale ? 18 : 11;
-    timeScale += (targetTimeScale - timeScale) * Math.min(1, realDt * lerpSpeed);
-    sfx.updateTimeScale(timeScale);
-
-    // Update Time Meter UI
-    const fillPct = Math.min(100, Math.max(3, Math.round(timeScale * 100)));
-    document.getElementById('timeMeterFill').style.width = fillPct + '%';
-    const labelEl = document.getElementById('timeStateLabel');
-    if (timeScale > 0.45) {
-      labelEl.textContent = `TIME FLOWING (${(timeScale).toFixed(2)}x)`;
-      labelEl.style.color = '#ff1414';
-    } else {
-      labelEl.textContent = 'TIME FROZEN — MOVE TO ADVANCE TIME';
-      labelEl.style.color = '#111';
-    }
-
-    // Game-world delta time scaled by timeScale!
-    const dt = realDt * timeScale;
-
-    // Update Player Position
-    const playerSpeed = 285;
-    player.vx = moveX * playerSpeed;
-    player.vy = moveY * playerSpeed;
-    player.x += player.vx * dt;
-    player.y += player.vy * dt;
-    player.angle = Math.atan2(mouse.worldY - player.y, mouse.worldX - player.x);
-
-    if (player.cooldown > 0) player.cooldown = Math.max(0, player.cooldown - dt);
-    if (player.hotswitchCd > 0) {
-      player.hotswitchCd = Math.max(0, player.hotswitchCd - dt);
-      updateHUD();
-    }
-
-    // Player Wall & Glass Collisions
-    for (const w of walls) resolveCircleRect(player, player.radius, w);
-    for (const g of glasses) {
-      if (!g.broken) resolveCircleRect(player, player.radius, g);
-    }
-
-    // Auto-catch mid-air weapon if player walks directly into it while unarmed
-    if (player.weapon === 'fists') {
-      for (let i = thrownItems.length - 1; i >= 0; i--) {
-        const item = thrownItems[i];
-        if (item.catchable && dist(player.x, player.y, item.x, item.y) < player.radius + 22) {
-          player.weapon = item.weapon;
-          player.ammo = item.ammo;
-          thrownItems.splice(i, 1);
-          sfx.playCatch();
-          addFloatingText(player.x, player.y - 22, `CAUGHT ${WEAPONS[item.weapon].name}!`, '#ff1414');
-          updateHUD();
-          break;
-        }
-      }
-    }
-
-    // ------------------------------------------------------------------------
-    // UPDATE THROWN WEAPONS / FLYING GUNS
-    // ------------------------------------------------------------------------
-    for (let i = thrownItems.length - 1; i >= 0; i--) {
-      const t = thrownItems[i];
-      t.x += t.vx * dt;
-      t.y += t.vy * dt;
-      t.rot += t.vRot * dt;
-
-      // Friction for disarmed weapons popped into air
-      if (!t.fromPlayer) {
-        t.vx *= Math.pow(0.22, dt);
-        t.vy *= Math.pow(0.22, dt);
-        if (Math.hypot(t.vx, t.vy) < 35) {
-          // Settle onto floor as pickup
-          pickups.push({
-            x: t.x,
-            y: t.y,
-            weapon: t.weapon,
-            ammo: t.ammo,
-            angle: t.rot,
-            bob: 0
-          });
-          thrownItems.splice(i, 1);
-          continue;
-        }
-      }
-
-      // Break glass with thrown item
-      for (const g of glasses) {
-        if (!g.broken && circleRectCollide(t.x, t.y, 12, g.x, g.y, g.w, g.h)) {
-          breakGlass(g, t.x, t.y, Math.atan2(t.vy, t.vx));
-        }
-      }
-
-      // Thrown weapon hits enemy!
-      if (t.fromPlayer) {
-        let hitEnemy = false;
-        for (let j = enemies.length - 1; j >= 0; j--) {
-          const e = enemies[j];
-          if (dist(t.x, t.y, e.x, e.y) < e.radius + 16) {
-            const hitAngle = Math.atan2(t.vy, t.vx);
-            if (t.weapon === 'katana' || e.stunTimer > 0) {
-              // Thrown Katana impales and kills immediately!
-              killEnemy(j, hitAngle, t.weapon === 'katana' ? 'IMPALED!' : 'KO!');
-            } else {
-              // Blunt throw: Stuns enemy and launches THEIR weapon into the air toward you!
-              e.stunTimer = 2.1;
-              e.knockVx = Math.cos(hitAngle) * 280;
-              e.knockVy = Math.sin(hitAngle) * 280;
-              disarmEnemyIntoAir(e, false);
-              spawnCrystalShatter(e.x, e.y, hitAngle, 8, true);
-              addFloatingText(e.x, e.y - 20, 'STUNNED! CATCH GUN [E/R-CLICK]', '#ff1414');
-              screenShake = Math.max(screenShake, 8);
-            }
-            hitEnemy = true;
-            break;
-          }
-        }
-        if (hitEnemy) {
-          if (t.weapon !== 'bottle') {
-            pickups.push({ x: t.x, y: t.y, weapon: t.weapon, ammo: t.ammo, angle: t.rot, bob: 0 });
-          } else {
-            spawnCrystalShatter(t.x, t.y, Math.atan2(t.vy, t.vx), 8, false);
-          }
-          thrownItems.splice(i, 1);
-          continue;
-        }
-      }
-
-      // Wall bounce / drop
-      let hitWall = false;
-      for (const w of walls) {
-        if (circleRectCollide(t.x, t.y, 10, w.x, w.y, w.w, w.h)) {
-          hitWall = true;
-          break;
-        }
-      }
-      if (hitWall) {
-        if (t.weapon !== 'bottle') {
-          pickups.push({
-            x: t.x - Math.sign(t.vx) * 12,
-            y: t.y - Math.sign(t.vy) * 12,
-            weapon: t.weapon,
-            ammo: t.ammo,
-            angle: t.rot,
-            bob: 0
-          });
-        } else {
-          spawnCrystalShatter(t.x, t.y, Math.atan2(-t.vy, -t.vx), 8, false);
-        }
-        thrownItems.splice(i, 1);
-      }
-    }
-
-    // ------------------------------------------------------------------------
-    // UPDATE ENEMIES ("RED GUYS" AI)
-    // ------------------------------------------------------------------------
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
-      e.facetPhase += dt * 3;
-
-      if (e.stunTimer > 0) {
-        e.stunTimer = Math.max(0, e.stunTimer - dt);
-        e.x += e.knockVx * dt;
-        e.y += e.knockVy * dt;
-        e.knockVx *= Math.pow(0.05, dt);
-        e.knockVy *= Math.pow(0.05, dt);
-        for (const w of walls) resolveCircleRect(e, e.radius, w);
-        continue;
-      }
-
-      const toPlayerX = player.x - e.x;
-      const toPlayerY = player.y - e.y;
-      const dToPlayer = Math.hypot(toPlayerX, toPlayerY);
-      const targetAngle = Math.atan2(toPlayerY, toPlayerX);
-      const canSee = hasLineOfSight(e.x, e.y, player.x, player.y);
-
-      // Smoothly turn towards player
-      const angleDiff = Math.atan2(Math.sin(targetAngle - e.angle), Math.cos(targetAngle - e.angle));
-      e.angle += angleDiff * Math.min(1, dt * 7);
-
-      const wDef = WEAPONS[e.weapon];
-
-      // If unarmed, try to run to nearest pickup on floor; otherwise rush player with fists
-      if (e.weapon === 'fists' && pickups.length > 0) {
-        let nearestP = null;
-        let nearestDist = 320;
-        let nearestIdx = -1;
-        for (let pIdx = 0; pIdx < pickups.length; pIdx++) {
-          if (pickups[pIdx].ammo <= 0) continue;
-          const d = dist(e.x, e.y, pickups[pIdx].x, pickups[pIdx].y);
-          if (d < nearestDist) {
-            nearestDist = d;
-            nearestP = pickups[pIdx];
-            nearestIdx = pIdx;
-          }
-        }
-        if (nearestP) {
-          const pa = Math.atan2(nearestP.y - e.y, nearestP.x - e.x);
-          e.x += Math.cos(pa) * 195 * dt;
-          e.y += Math.sin(pa) * 195 * dt;
-          if (nearestDist < 26) {
-            e.weapon = nearestP.weapon;
-            e.ammo = nearestP.ammo;
-            e.cooldown = 0.45;
-            pickups.splice(nearestIdx, 1);
-          }
-        } else {
-          e.x += Math.cos(targetAngle) * 185 * dt;
-          e.y += Math.sin(targetAngle) * 185 * dt;
-        }
-      } else if (wDef.melee) {
-        // Melee sprinter (Katana / Bat / Fists)
-        const rushSpd = e.weapon === 'katana' ? 225 : 195;
-        e.x += Math.cos(targetAngle) * rushSpd * dt;
-        e.y += Math.sin(targetAngle) * rushSpd * dt;
-        if (dToPlayer < e.radius + player.radius + 14) {
-          killPlayer(`SLICED BY RED GUY (${wDef.name})`);
-          return;
-        }
-      } else {
-        // Gunman AI: Advance until optimal firing distance or line of sight
-        const idealDist = e.weapon === 'shotgun' ? 210 : 340;
-        const strafeDir = Math.sin(e.aiSeed + performance.now() * 0.0005) > 0 ? 1 : -1;
-        let moveSpd = 135;
-        if (!canSee || dToPlayer > idealDist) {
-          e.x += Math.cos(targetAngle) * moveSpd * dt;
-          e.y += Math.sin(targetAngle) * moveSpd * dt;
-        } else if (dToPlayer < 130) {
-          e.x -= Math.cos(targetAngle) * (moveSpd * 0.6) * dt;
-          e.y -= Math.sin(targetAngle) * (moveSpd * 0.6) * dt;
-        }
-        // Tactical strafe
-        if (canSee) {
-          e.x += Math.cos(targetAngle + Math.PI / 2 * strafeDir) * 55 * dt;
-          e.y += Math.sin(targetAngle + Math.PI / 2 * strafeDir) * 55 * dt;
-        }
-
-        // Firing logic
-        e.cooldown -= dt;
-        if (e.burstRemaining > 0) {
-          e.burstTimer -= dt;
-          if (e.burstTimer <= 0) {
-            e.burstRemaining--;
-            e.burstTimer = 0.09;
-            spawnBullet(
-              e.x + Math.cos(e.angle) * 20,
-              e.y + Math.sin(e.angle) * 20,
-              e.angle + (Math.random() - 0.5) * 0.08,
-              520,
-              false
-            );
-            sfx.playShoot('rifle', timeScale);
-          }
-        } else if (canSee && e.cooldown <= 0 && Math.abs(angleDiff) < 0.35) {
-          if (e.weapon === 'shotgun') {
-            e.cooldown = 1.45;
-            for (let p = 0; p < 5; p++) {
-              spawnBullet(
-                e.x + Math.cos(e.angle) * 22,
-                e.y + Math.sin(e.angle) * 22,
-                e.angle + (Math.random() - 0.5) * 0.25,
-                460,
-                false
-              );
-            }
-            sfx.playShoot('shotgun', timeScale);
-          } else if (e.weapon === 'rifle') {
-            e.cooldown = 1.35;
-            e.burstRemaining = 2;
-            e.burstTimer = 0.09;
-            spawnBullet(
-              e.x + Math.cos(e.angle) * 20,
-              e.y + Math.sin(e.angle) * 20,
-              e.angle + (Math.random() - 0.5) * 0.06,
-              520,
-              false
-            );
-            sfx.playShoot('rifle', timeScale);
-          } else {
-            e.cooldown = 1.15;
-            spawnBullet(
-              e.x + Math.cos(e.angle) * 20,
-              e.y + Math.sin(e.angle) * 20,
-              e.angle + (Math.random() - 0.5) * 0.04,
-              490,
-              false
-            );
-            sfx.playShoot('pistol', timeScale);
-          }
-        }
-      }
-
-      // Enemy-enemy separation
-      for (let j = 0; j < enemies.length; j++) {
-        if (i === j) continue;
-        const o = enemies[j];
-        const d = dist(e.x, e.y, o.x, o.y);
-        if (d < e.radius + o.radius && d > 0.01) {
-          const push = (e.radius + o.radius - d) * 0.5;
-          e.x += ((e.x - o.x) / d) * push;
-          e.y += ((e.y - o.y) / d) * push;
-        }
-      }
-
-      for (const w of walls) resolveCircleRect(e, e.radius, w);
-      for (const g of glasses) {
-        if (!g.broken) resolveCircleRect(e, e.radius, g);
-      }
-    }
-
-    // ------------------------------------------------------------------------
-    // UPDATE BULLETS & RED TRAILS
-    // ------------------------------------------------------------------------
-    for (let i = bullets.length - 1; i >= 0; i--) {
-      const b = bullets[i];
-      const prevX = b.x;
-      const prevY = b.y;
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
-
-      // Record trail points for the iconic Superhot red ribbon
-      const lastPt = b.trail[b.trail.length - 1];
-      if (dist(lastPt.x, lastPt.y, b.x, b.y) > 8) {
-        b.trail.push({ x: b.x, y: b.y });
-        if (b.trail.length > 22) b.trail.shift();
-      }
-
-      // Check Glass Collision (shatters glass and bullet continues!)
-      for (const g of glasses) {
-        if (!g.broken && lineIntersectsRect(prevX, prevY, b.x, b.y, g.x, g.y, g.w, g.h)) {
-          breakGlass(g, b.x, b.y, b.angle);
-        }
-      }
-
-      // Check Wall Collision
-      let hitWall = false;
-      for (const w of walls) {
-        if (lineIntersectsRect(prevX, prevY, b.x, b.y, w.x, w.y, w.w, w.h)) {
-          hitWall = true;
-          break;
-        }
-      }
-      if (hitWall) {
-        for (let p = 0; p < 5; p++) {
-          particles.push({
-            x: b.x,
-            y: b.y,
-            vx: (Math.random() - 0.5) * 180,
-            vy: (Math.random() - 0.5) * 180,
-            size: 3,
-            color: '#111',
-            life: 0.25,
-            maxLife: 0.25
-          });
-        }
-        bullets.splice(i, 1);
-        continue;
-      }
-
-      // Bullet-vs-Bullet collision in mid-air!
-      if (b.fromPlayer) {
-        let shotBullet = false;
-        for (let k = bullets.length - 1; k >= 0; k--) {
-          if (i === k || bullets[k].fromPlayer) continue;
-          if (dist(b.x, b.y, bullets[k].x, bullets[k].y) < 13) {
-            spawnCrystalShatter(b.x, b.y, b.angle, 6, true);
-            addFloatingText(b.x, b.y - 12, 'BULLET CLASH!', '#ff1414');
-            bullets.splice(Math.max(i, k), 1);
-            bullets.splice(Math.min(i, k), 1);
-            shotBullet = true;
-            break;
-          }
-        }
-        if (shotBullet) continue;
-      }
-
-      // Check Hit on Enemy (even enemy friendly-fire can kill stunned enemies if player dodges in front!)
-      let hitSomeone = false;
-      for (let j = enemies.length - 1; j >= 0; j--) {
-        const e = enemies[j];
-        if (!b.fromPlayer && e.stunTimer <= 0) continue; // normal enemy bullets don't hit unstunned allies immediately
-        if (dist(b.x, b.y, e.x, e.y) < e.radius + 4) {
-          killEnemy(j, b.angle, 'HOT');
-          bullets.splice(i, 1);
-          hitSomeone = true;
-          break;
-        }
-      }
-      if (hitSomeone) continue;
-
-      // Check Hit on Player
-      if (!b.fromPlayer && dist(b.x, b.y, player.x, player.y) < player.radius - 3) {
-        killPlayer('PIERCED BY RED TRAIL');
-        return;
-      }
-    }
-
-    // ------------------------------------------------------------------------
-    // UPDATE SHARDS, PARTICLES, SLASH ARCS & ENDLESS SPAWNS
-    // ------------------------------------------------------------------------
-    for (const s of shards) {
-      if (Math.hypot(s.vx, s.vy) > 4) {
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
-        s.rot += s.vRot * dt;
-        s.vx *= Math.pow(0.03, dt);
-        s.vy *= Math.pow(0.03, dt);
-        s.vRot *= Math.pow(0.03, dt);
-      }
-    }
-    if (shards.length > 260) shards.splice(0, shards.length - 260);
-
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.life -= dt;
-      if (p.life <= 0) particles.splice(i, 1);
-    }
-
-    for (let i = slashArcs.length - 1; i >= 0; i--) {
-      slashArcs[i].life -= dt;
-      if (slashArcs[i].life <= 0) slashArcs.splice(i, 1);
-    }
-
-    for (let i = floatingTexts.length - 1; i >= 0; i--) {
-      const ft = floatingTexts[i];
-      ft.y -= 32 * dt;
-      ft.life -= realDt * 0.75;
-      if (ft.life <= 0) floatingTexts.splice(i, 1);
-    }
-
-    // Endless Mode Wave Spawner
-    if (LEVELS[currentLevelIdx].endless) {
-      endlessSpawnTimer -= dt;
-      if (endlessSpawnTimer <= 0 || enemies.length === 0) {
-        endlessSpawnTimer = Math.max(1.6, 3.8 - endlessKills * 0.05);
-        const doors = [
-          { x: 90, y: 375 },
-          { x: 1110, y: 375 },
-          { x: 600, y: 80 },
-          { x: 600, y: 670 }
-        ];
-        const door = doors[Math.floor(Math.random() * doors.length)];
-        const pool = ['pistol', 'pistol', 'shotgun', 'rifle', 'katana', 'bat'];
-        if (enemies.length < 9) {
-          enemies.push(createEnemy(door.x, door.y, pool[Math.floor(Math.random() * pool.length)]));
-          updateHUD();
-        }
-      }
-    }
-
-    // Record frame in game-time for real-time replay!
-    if (timeScale > 0.08 && replayFrames.length < 1800) {
-      replayFrames.push({
-        px: player.x,
-        py: player.y,
-        pa: player.angle,
-        pw: player.weapon,
-        enemies: enemies.map(e => ({ x: e.x, y: e.y, a: e.angle, w: e.weapon, s: e.stunTimer > 0 })),
-        bullets: bullets.map(b => ({ x: b.x, y: b.y, tx: b.trail[0].x, ty: b.trail[0].y }))
-      });
+      // Nahkampf
+      if (d < 1.2) { e.punchT += wdt; e.arm.rotation.x = -e.punchT * 2; if (e.punchT > 0.45) die(); }
+      else e.punchT = Math.max(0, e.punchT - wdt);
     }
   }
-
-  // ============================================================================
-  // RENDERING (MINIMALIST ARCHITECTURAL WHITE + CRYSTALLINE RED + BLACK)
-  // ============================================================================
-  function render() {
-    const cw = canvas.width;
-    const ch = canvas.height;
-    ctx.save();
-    ctx.clearRect(0, 0, cw, ch);
-
-    // Compute responsive letterbox transform for 1200x750 virtual arena
-    const scale = Math.min(cw / VIRTUAL_W, ch / VIRTUAL_H);
-    const offsetX = (cw - VIRTUAL_W * scale) / 2;
-    const offsetY = (ch - VIRTUAL_H * scale) / 2;
-
-    // Screen Shake
-    const shakeX = (Math.random() - 0.5) * screenShake;
-    const shakeY = (Math.random() - 0.5) * screenShake;
-
-    ctx.translate(offsetX + shakeX, offsetY + shakeY);
-    ctx.scale(scale, scale);
-
-    // 1. Minimalist White/Gray Architectural Floor with subtle grid
-    ctx.fillStyle = '#ebebf0';
-    ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
-
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.045)';
-    ctx.lineWidth = 1;
-    const gridSize = 60;
-    ctx.beginPath();
-    for (let x = 0; x <= VIRTUAL_W; x += gridSize) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, VIRTUAL_H);
-    }
-    for (let y = 0; y <= VIRTUAL_H; y += gridSize) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(VIRTUAL_W, y);
-    }
-    ctx.stroke();
-
-    // If in WON state and replay frames exist, render the Real-Time Action Replay!
-    if (state === 'WON' && replayFrames.length > 0) {
-      renderReplayFrame(replayFrames[replayIndex]);
-      ctx.restore();
-      return;
-    }
-
-    // 2. Settled Crystal & Glass Shards on Floor
-    for (const s of shards) {
-      ctx.save();
-      ctx.translate(s.x, s.y);
-      ctx.rotate(s.rot);
-      ctx.fillStyle = s.color;
-      ctx.strokeStyle = s.stroke;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      s.pts.forEach((pt, idx) => {
-        if (idx === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      });
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 3. Floor Weapon Pickups
-    const nowSec = performance.now() * 0.004;
-    for (const p of pickups) {
-      const d = player ? dist(player.x, player.y, p.x, p.y) : 999;
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      if (d < 78) {
-        ctx.strokeStyle = '#ff1414';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, 22 + Math.sin(nowSec * 3) * 3, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = '#111';
-        ctx.font = 'bold 11px Courier New';
-        ctx.textAlign = 'center';
-        ctx.fillText(`[R-CLICK / E] ${WEAPONS[p.weapon].name}`, 0, -28);
-      }
-      ctx.rotate(p.angle);
-      drawWeaponSprite(ctx, p.weapon, 0, 0);
-      ctx.restore();
-    }
-
-    // 4. Bullet Trajectory Preview Lines (visible when time is frozen!)
-    const freezeAlpha = Math.max(0, (0.35 - timeScale) * 1.8);
-    if (freezeAlpha > 0.02) {
-      ctx.save();
-      ctx.setLineDash([6, 6]);
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = `rgba(255, 20, 20, ${freezeAlpha * 0.55})`;
-      for (const b of bullets) {
-        if (b.fromPlayer) continue;
-        ctx.beginPath();
-        ctx.moveTo(b.x, b.y);
-        ctx.lineTo(b.x + Math.cos(b.angle) * 280, b.y + Math.sin(b.angle) * 280);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    // 5. Bullets & Iconic Glowing Red Velocity Ribbons
-    for (const b of bullets) {
-      if (b.trail.length > 1) {
-        for (let t = 1; t < b.trail.length; t++) {
-          const p0 = b.trail[t - 1];
-          const p1 = b.trail[t];
-          const ratio = t / b.trail.length;
-          ctx.strokeStyle = b.fromPlayer
-            ? `rgba(20, 20, 25, ${ratio * 0.85})`
-            : `rgba(255, 18, 18, ${ratio * 0.92})`;
-          ctx.lineWidth = 2 + ratio * 5;
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.stroke();
+  // Kugeln
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i], p = b.m.position;
+    const steps = Math.ceil(b.v.length() * wdt / 0.2) || 1;
+    let dead = false;
+    for (let s = 0; s < steps && !dead; s++) {
+      p.addScaledVector(b.v, wdt / steps);
+      if (Math.abs(p.x) > arenaHalf || Math.abs(p.z) > arenaHalf || p.y < 0 || p.y > 7 || insideBox(p.x, p.z, 0, p.y)) { spark(p.x, p.y, p.z); dead = true; break; }
+      if (b.mine) {
+        for (const e of enemies) {
+          if (e.spawnT > 0) continue;
+          if (Math.hypot(p.x - e.x, p.z - e.z) < 0.42 && p.y > 0.1 && p.y < 2.15) { killEnemy(e, b.v.x * 0.15, b.v.z * 0.15); dead = true; break; }
         }
-      }
-      // Bullet slug
-      ctx.save();
-      ctx.translate(b.x, b.y);
-      ctx.rotate(b.angle);
-      ctx.fillStyle = '#09090b';
-      ctx.strokeStyle = '#ff1414';
-      ctx.lineWidth = 1.5;
-      ctx.fillRect(-7, -3, 14, 6);
-      ctx.strokeRect(-7, -3, 14, 6);
-      ctx.restore();
-    }
-
-    // 6. Thrown / Mid-Air Catchable Weapons
-    for (const item of thrownItems) {
-      ctx.save();
-      ctx.translate(item.x, item.y);
-      if (item.catchable) {
-        ctx.strokeStyle = '#ff1414';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.arc(0, 0, 24, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#ff1414';
-        ctx.font = 'bold 11px Courier New';
-        ctx.textAlign = 'center';
-        ctx.fillText('[CATCH]', 0, -28);
-      }
-      ctx.rotate(item.rot);
-      drawWeaponSprite(ctx, item.weapon, 0, 0);
-      ctx.restore();
-    }
-
-    // 7. Melee Slash Arcs
-    for (const arc of slashArcs) {
-      const alpha = arc.life / arc.maxLife;
-      ctx.save();
-      ctx.translate(arc.x, arc.y);
-      ctx.rotate(arc.angle);
-      ctx.strokeStyle = arc.color === '#ff1414'
-        ? `rgba(255, 20, 20, ${alpha})`
-        : `rgba(15, 15, 18, ${alpha})`;
-      ctx.lineWidth = 6 * alpha;
-      ctx.beginPath();
-      ctx.arc(0, 0, arc.radius, -0.85, 0.85);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 8. Enemies ("Red Guys" with Faceted Low-Poly Crystal Shading)
-    for (const e of enemies) {
-      ctx.save();
-      ctx.translate(e.x, e.y);
-
-      // Soft ground shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.16)';
-      ctx.beginPath();
-      ctx.arc(4, 5, e.radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Hotswitch Target Reticle if cursor is near
-      if (player && player.hotswitchUnlocked && player.hotswitchCd <= 0) {
-        const dMouse = dist(mouse.worldX, mouse.worldY, e.x, e.y);
-        if (dMouse < 75 && hasLineOfSight(player.x, player.y, e.x, e.y)) {
-          ctx.strokeStyle = '#ff1414';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(-26, -26, 52, 52);
-          ctx.fillStyle = '#ff1414';
-          ctx.font = 'bold 10px Courier New';
-          ctx.textAlign = 'center';
-          ctx.fillText('[Q] HOTSWITCH', 0, -32);
+        // eigene Kugel zerschießt gegnerische
+        for (let j = bullets.length - 1; j >= 0 && !dead; j--) {
+          const o = bullets[j]; if (o.mine) continue;
+          if (o.m.position.distanceTo(p) < 0.25) { spark(p.x, p.y, p.z, 0x9ff0ff, 10); scene.remove(o.m); bullets.splice(j, 1); if (j < i) i--; dead = true; }
         }
-      }
-
-      ctx.rotate(e.angle);
-
-      // Crystalline Octagon Body with faceted triangles
-      const r = e.radius;
-      const pts = [];
-      for (let s = 0; s < 8; s++) {
-        const a = (s / 8) * Math.PI * 2;
-        pts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
-      }
-      const facetShades = ['#ff1a1a', '#d60012', '#ff4747', '#a8000d', '#eb091c', '#c20010', '#ff3333', '#8f0009'];
-      for (let s = 0; s < 8; s++) {
-        const p1 = pts[s];
-        const p2 = pts[(s + 1) % 8];
-        ctx.fillStyle = e.stunTimer > 0 && s % 2 === 0 ? '#ffffff' : facetShades[s];
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = '#5c0006';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      // Held Weapon
-      if (e.weapon !== 'fists') {
-        drawWeaponSprite(ctx, e.weapon, 16, 6);
-      }
-
-      ctx.restore();
-
-      if (e.stunTimer > 0) {
-        ctx.fillStyle = '#111';
-        ctx.font = 'bold 11px Courier New';
-        ctx.textAlign = 'center';
-        ctx.fillText('STUNNED', e.x, e.y - 24);
+      } else if (state === 'play') {
+        if (Math.hypot(p.x - pl.x, p.z - pl.z) < PR && p.y < 1.85) { die(); dead = true; }
       }
     }
-
-    // 9. Player (Obsidian Black & Crisp White Faceted Operative + Laser Sightline)
-    if (player && player.alive) {
-      ctx.save();
-      // Subtle aim sightline
-      ctx.strokeStyle = 'rgba(20, 20, 25, 0.22)';
-      ctx.setLineDash([4, 6]);
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(player.x, player.y);
-      ctx.lineTo(mouse.worldX, mouse.worldY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.translate(player.x, player.y);
-      ctx.rotate(player.angle);
-
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.22)';
-      ctx.beginPath();
-      ctx.arc(4, 5, player.radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Player Crystalline Body (Black/Charcoal facets with white core)
-      const r = player.radius;
-      for (let s = 0; s < 8; s++) {
-        const a1 = (s / 8) * Math.PI * 2;
-        const a2 = ((s + 1) / 8) * Math.PI * 2;
-        ctx.fillStyle = s % 2 === 0 ? '#111115' : '#272730';
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(Math.cos(a1) * r, Math.sin(a1) * r);
-        ctx.lineTo(Math.cos(a2) * r, Math.sin(a2) * r);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      // Held Weapon
-      if (player.weapon !== 'fists') {
-        drawWeaponSprite(ctx, player.weapon, 17, 6);
-      }
-      ctx.restore();
-    }
-
-    // 10. Architectural Walls & Central Core Pyramid (in Level 10)
-    for (const w of walls) {
-      // Drop shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.14)';
-      ctx.fillRect(w.x + 6, w.y + 8, w.w, w.h);
-
-      if (currentLevelIdx === 9 && w.w === 110 && w.h === 110) {
-        // Red Pyramid Core in Node 10
-        const cx = w.x + w.w / 2;
-        const cy = w.y + w.h / 2;
-        const corners = [
-          { x: w.x, y: w.y },
-          { x: w.x + w.w, y: w.y },
-          { x: w.x + w.w, y: w.y + w.h },
-          { x: w.x, y: w.y + w.h }
-        ];
-        const pCols = ['#ff1414', '#b8000f', '#80000a', '#e00b19'];
-        for (let c = 0; c < 4; c++) {
-          const c1 = corners[c];
-          const c2 = corners[(c + 1) % 4];
-          ctx.fillStyle = pCols[c];
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.lineTo(c1.x, c1.y);
-          ctx.lineTo(c2.x, c2.y);
-          ctx.closePath();
-          ctx.fill();
-          ctx.strokeStyle = '#000';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-      } else {
-        ctx.fillStyle = w.border ? '#18181c' : '#c8c8d0';
-        ctx.fillRect(w.x, w.y, w.w, w.h);
-        ctx.strokeStyle = '#18181c';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(w.x, w.y, w.w, w.h);
-      }
-    }
-
-    // 11. Breakable Glass Partitions
-    for (const g of glasses) {
-      if (g.broken) continue;
-      ctx.fillStyle = 'rgba(150, 215, 245, 0.55)';
-      ctx.fillRect(g.x, g.y, g.w, g.h);
-      ctx.strokeStyle = '#3898c8';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(g.x, g.y, g.w, g.h);
-    }
-
-    // 12. Particles & Floating Combat Text
-    for (const p of particles) {
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
-    }
-    ctx.globalAlpha = 1;
-
-    for (const ft of floatingTexts) {
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, ft.life / ft.maxLife);
-      ctx.font = '900 14px Courier New';
-      ctx.fillStyle = ft.color;
-      ctx.textAlign = 'center';
-      ctx.fillText(ft.text, ft.x, ft.y);
-      ctx.restore();
-    }
-
-    // Screen Flashes
-    if (redFlash > 0) {
-      ctx.fillStyle = `rgba(255, 20, 20, ${redFlash * 0.45})`;
-      ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
-    }
-    if (whiteFlash > 0) {
-      ctx.fillStyle = `rgba(255, 255, 255, ${whiteFlash * 0.65})`;
-      ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
-    }
-
-    ctx.restore();
+    b.life -= wdt;
+    if (dead || b.life <= 0) { scene.remove(b.m); bullets.splice(i, 1); }
   }
-
-  function drawWeaponSprite(ctx, weapon, ox, oy) {
-    ctx.save();
-    ctx.translate(ox, oy);
-    ctx.fillStyle = '#09090b';
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    if (weapon === 'pistol') {
-      ctx.fillRect(-4, -3, 14, 6);
-      ctx.strokeRect(-4, -3, 14, 6);
-    } else if (weapon === 'shotgun') {
-      ctx.fillRect(-6, -4, 22, 7);
-      ctx.strokeRect(-6, -4, 22, 7);
-    } else if (weapon === 'rifle') {
-      ctx.fillRect(-7, -4, 25, 7);
-      ctx.fillRect(2, -7, 5, 4);
-      ctx.strokeRect(-7, -4, 25, 7);
-    } else if (weapon === 'katana') {
-      ctx.fillStyle = '#111';
-      ctx.fillRect(-8, -2, 8, 4);
-      ctx.fillStyle = '#ff1414';
-      ctx.fillRect(0, -2, 28, 3.5);
-    } else if (weapon === 'bat') {
-      ctx.fillStyle = '#222';
-      ctx.fillRect(-6, -3, 24, 6);
-    } else if (weapon === 'bottle') {
-      ctx.fillStyle = '#1e7a44';
-      ctx.fillRect(-5, -4, 13, 8);
-    }
-    ctx.restore();
-  }
-
-  function renderReplayFrame(f) {
-    if (!f) return;
-    // Render walls
-    for (const w of walls) {
-      ctx.fillStyle = w.border ? '#18181c' : '#c8c8d0';
-      ctx.fillRect(w.x, w.y, w.w, w.h);
-      ctx.strokeStyle = '#18181c';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(w.x, w.y, w.w, w.h);
-    }
-    // Render bullets
-    for (const b of f.bullets) {
-      ctx.strokeStyle = '#ff1414';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(b.tx, b.ty);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-      ctx.fillStyle = '#000';
-      ctx.fillRect(b.x - 4, b.y - 4, 8, 8);
-    }
-    // Render enemies
-    for (const e of f.enemies) {
-      ctx.fillStyle = '#ff1414';
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, 18, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Render player
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.arc(f.px, f.py, 17, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Replay watermark
-    ctx.fillStyle = '#111';
-    ctx.font = '900 16px Courier New';
-    ctx.fillText('● REC // 1.00x REAL-TIME PLAYBACK', 48, 56);
-  }
-
-  // ============================================================================
-  // HUD & TERMINAL MENU
-  // ============================================================================
-  function updateHUD() {
-    if (!player) return;
-    const lvl = LEVELS[currentLevelIdx];
-    document.getElementById('hudLevel').textContent = lvl.code;
-    const wDef = WEAPONS[player.weapon];
-    const ammoStr = wDef.ammo === Infinity ? '∞' : player.ammo;
-    document.getElementById('hudWeapon').textContent = `${wDef.name} [${ammoStr}]`;
-
-    if (lvl.endless) {
-      document.getElementById('hudEnemies').textContent = `KILLS: ${endlessKills} (BEST: ${endlessHighscore})`;
-    } else {
-      document.getElementById('hudEnemies').textContent = enemies.length;
-    }
-
-    const hsWrap = document.getElementById('hudHotswitchWrap');
-    const hsVal = document.getElementById('hudHotswitch');
-    if (!player.hotswitchUnlocked) {
-      hsWrap.style.opacity = '0.4';
-      hsVal.textContent = 'LOCKED';
-    } else {
-      hsWrap.style.opacity = '1';
-      hsVal.textContent = player.hotswitchCd <= 0 ? 'READY' : `${player.hotswitchCd.toFixed(1)}s`;
-    }
-  }
-
-  function renderTerminalMenu() {
-    const grid = document.getElementById('levelGrid');
-    document.getElementById('terminalProgressText').textContent =
-      `CLEARED: ${clearedLevels.size} / 10  |  ENDLESS BEST: ${endlessHighscore}`;
-    grid.innerHTML = LEVELS.map((lvl, idx) => {
-      const isCleared = clearedLevels.has(idx);
-      const badge = lvl.endless
-        ? `<span class="lvl-badge">BEST: ${endlessHighscore}</span>`
-        : isCleared
-          ? `<span class="lvl-badge" style="background:#25d366;">CLEARED</span>`
-          : '';
-      return `
-        <div class="level-card ${idx === currentLevelIdx ? 'active' : ''}" data-idx="${idx}">
-          ${badge}
-          <div class="lvl-code">${lvl.code}</div>
-          <div class="lvl-name">${lvl.name}</div>
-          <div class="lvl-desc">${lvl.desc}</div>
-        </div>
-      `;
-    }).join('');
-
-    grid.querySelectorAll('.level-card').forEach(card => {
-      card.addEventListener('click', () => {
-        const idx = Number(card.getAttribute('data-idx'));
-        sfx.init();
-        loadLevel(idx);
-      });
-    });
-  }
-
-  // ============================================================================
-  // INPUT LISTENERS (DESKTOP + MOBILE)
-  // ============================================================================
-  function updateMouseWorld() {
-    const cw = canvas.width;
-    const ch = canvas.height;
-    const scale = Math.min(cw / VIRTUAL_W, ch / VIRTUAL_H);
-    const offsetX = (cw - VIRTUAL_W * scale) / 2;
-    const offsetY = (ch - VIRTUAL_H * scale) / 2;
-    mouse.worldX = (mouse.x - offsetX) / scale;
-    mouse.worldY = (mouse.y - offsetY) / scale;
-  }
-
-  window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    updateMouseWorld();
-  });
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-
-  window.addEventListener('mousemove', e => {
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
-    mouse.movedRecently = 0.06;
-    updateMouseWorld();
-  });
-
-  window.addEventListener('mousedown', e => {
-    if (e.target.closest('#hudBar, #terminal-modal, #mobileControls, .back, #superhotSub')) return;
-    if (state === 'MENU') return;
-    sfx.init();
-    if (state === 'WON') {
-      const nextIdx = (currentLevelIdx + 1) % LEVELS.length;
-      loadLevel(nextIdx);
-      return;
-    }
-    if (state === 'DEAD') {
-      loadLevel(currentLevelIdx);
-      return;
-    }
-    if (e.button === 0) {
-      triggerPlayerFire();
-    } else if (e.button === 2) {
-      triggerThrowOrGrab();
-    }
-  });
-
-  window.addEventListener('contextmenu', e => e.preventDefault());
-
-  window.addEventListener('keydown', e => {
-    keys[e.code] = true;
-    if (e.code === 'Escape') {
-      const modal = document.getElementById('terminal-modal');
-      if (state === 'MENU') {
-        if (!player || !player.alive || enemies.length === 0) {
-          loadLevel(currentLevelIdx);
-        } else {
-          modal.style.display = 'none';
-          state = 'PLAYING';
-        }
-      } else {
-        document.getElementById('superhot-flash').style.display = 'none';
-        renderTerminalMenu();
-        modal.style.display = 'flex';
-        state = 'MENU';
+  // Geworfene Waffen
+  for (let i = thrown.length - 1; i >= 0; i--) {
+    const t = thrown[i], p = t.m.position;
+    t.v.y -= 9 * wdt; p.addScaledVector(t.v, wdt);
+    t.m.rotation.x += t.spin * wdt;
+    let done = false;
+    if (!t.hit) for (const e of enemies) {
+      if (e.spawnT > 0) continue;
+      if (Math.hypot(p.x - e.x, p.z - e.z) < 0.55 && p.y < 2.1) {
+        t.hit = true; e.stun = 1.6; sfx.thud(); spark(p.x, p.y, p.z, 0xffd080, 10);
+        if (e.armed) { e.armed = false; e.gun.visible = false; e.aimT = 0; e.eye.material = eyeMat; dropGun(e.x + rnd(-0.6, 0.6), e.z + rnd(-0.6, 0.6), 4); }
+        t.v.multiplyScalar(-0.2); break;
       }
-      return;
     }
-    if (state === 'WON' && e.code === 'Space') {
-      e.preventDefault();
-      loadLevel((currentLevelIdx + 1) % LEVELS.length);
-      return;
-    }
-    if (state === 'DEAD' && (e.code === 'KeyR' || e.code === 'Space')) {
-      e.preventDefault();
-      loadLevel(currentLevelIdx);
-      return;
-    }
-    if (state !== 'PLAYING') return;
-
-    if (e.code === 'Space') {
-      e.preventDefault();
-      triggerPlayerFire();
-    } else if (e.code === 'KeyE' || e.code === 'KeyF') {
-      triggerThrowOrGrab();
-    } else if (e.code === 'KeyQ') {
-      triggerHotswitch();
-    } else if (e.code === 'KeyR') {
-      loadLevel(currentLevelIdx);
-    }
-  });
-
-  window.addEventListener('keyup', e => {
-    keys[e.code] = false;
-  });
-
-  document.getElementById('btnOpenTerminal').addEventListener('click', () => {
-    document.getElementById('superhot-flash').style.display = 'none';
-    renderTerminalMenu();
-    document.getElementById('terminal-modal').style.display = 'flex';
-    state = 'MENU';
-  });
-
-  document.getElementById('superhotSub').addEventListener('click', () => {
-    if (state === 'WON') {
-      loadLevel((currentLevelIdx + 1) % LEVELS.length);
-    } else if (state === 'DEAD') {
-      loadLevel(currentLevelIdx);
-    }
-  });
-
-  // Mobile Virtual Joystick & Action Buttons
-  const joyZone = document.getElementById('joyZone');
-  const joyKnob = document.getElementById('joyKnob');
-
-  joyZone.addEventListener('pointerdown', e => {
-    joy.active = true;
-    joy.id = e.pointerId;
-    joyZone.setPointerCapture(e.pointerId);
-    updateJoystick(e);
-  });
-  joyZone.addEventListener('pointermove', e => {
-    if (joy.active && e.pointerId === joy.id) updateJoystick(e);
-  });
-  const endJoy = e => {
-    if (e.pointerId === joy.id) {
-      joy.active = false;
-      joy.dx = 0;
-      joy.dy = 0;
-      joyKnob.style.transform = 'translate(-50%, -50%)';
-    }
-  };
-  joyZone.addEventListener('pointerup', endJoy);
-  joyZone.addEventListener('pointercancel', endJoy);
-
-  function updateJoystick(e) {
-    const rect = joyZone.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    let dx = e.clientX - cx;
-    let dy = e.clientY - cy;
-    const maxR = rect.width / 2 - 16;
-    const d = Math.hypot(dx, dy);
-    if (d > maxR) {
-      dx = (dx / d) * maxR;
-      dy = (dy / d) * maxR;
-    }
-    joy.dx = dx / maxR;
-    joy.dy = dy / maxR;
-    joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-    if (player && d > 8) {
-      mouse.worldX = player.x + joy.dx * 220;
-      mouse.worldY = player.y + joy.dy * 220;
-    }
+    if (p.y < 0.1 || insideBox(p.x, p.z, 0, p.y) || Math.abs(p.x) > arenaHalf || Math.abs(p.z) > arenaHalf) done = true;
+    t.life -= wdt;
+    if (done || t.life <= 0) { scene.remove(t.m); thrown.splice(i, 1); }
   }
-
-  // Canvas touch-to-aim on mobile
-  canvas.addEventListener('touchstart', e => {
-    if (e.touches.length > 0) {
-      const t = e.touches[0];
-      mouse.x = t.clientX;
-      mouse.y = t.clientY;
-      updateMouseWorld();
-    }
-  }, { passive: true });
-  canvas.addEventListener('touchmove', e => {
-    if (e.touches.length > 0) {
-      const t = e.touches[0];
-      mouse.x = t.clientX;
-      mouse.y = t.clientY;
-      mouse.movedRecently = 0.06;
-      updateMouseWorld();
-    }
-  }, { passive: true });
-
-  document.getElementById('mBtnFire').addEventListener('pointerdown', e => {
-    e.stopPropagation();
-    sfx.init();
-    triggerPlayerFire();
-  });
-  document.getElementById('mBtnThrow').addEventListener('pointerdown', e => {
-    e.stopPropagation();
-    sfx.init();
-    triggerThrowOrGrab();
-  });
-  document.getElementById('mBtnHot').addEventListener('pointerdown', e => {
-    e.stopPropagation();
-    sfx.init();
-    triggerHotswitch();
-  });
-  const mWait = document.getElementById('mBtnWait');
-  mWait.addEventListener('pointerdown', e => { e.stopPropagation(); mobileWaitHeld = true; });
-  mWait.addEventListener('pointerup', e => { e.stopPropagation(); mobileWaitHeld = false; });
-  mWait.addEventListener('pointercancel', e => { e.stopPropagation(); mobileWaitHeld = false; });
-
-  // ============================================================================
-  // BOOTSTRAP & MAIN LOOP
-  // ============================================================================
-  renderTerminalMenu();
-
-  let lastTime = performance.now();
-  function loop(now) {
-    const realDt = Math.min(0.05, (now - lastTime) / 1000);
-    lastTime = now;
-    update(realDt);
-    render();
-    requestAnimationFrame(loop);
+  // Splitter
+  for (let i = shards.length - 1; i >= 0; i--) {
+    const s = shards[i], m = s.m;
+    s.vy -= 12 * wdt;
+    m.position.x += s.vx * wdt; m.position.y += s.vy * wdt; m.position.z += s.vz * wdt;
+    m.rotation.x += s.sx * wdt; m.rotation.y += s.sy * wdt;
+    if (m.position.y < 0.05) { m.position.y = 0.05; s.vy *= -0.3; s.vx *= 0.6; s.vz *= 0.6; s.sx *= 0.5; s.sy *= 0.5; }
+    s.life -= wdt;
+    if (s.life <= 0) { scene.remove(m); shards.splice(i, 1); }
   }
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i];
+    s.vy -= 10 * wdt; s.m.position.x += s.vx * wdt; s.m.position.y += s.vy * wdt; s.m.position.z += s.vz * wdt;
+    s.life -= wdt;
+    if (s.life <= 0) { scene.remove(s.m); s.m.geometry.dispose(); sparks.splice(i, 1); }
+  }
+  for (const p of pickups) { p.m.rotation.z += rdt * 1.5; p.ring.material.opacity = 0.4 + Math.sin(performance.now() / 200) * 0.25; }
+}
+
+let last = performance.now();
+function loop(t) {
   requestAnimationFrame(loop);
-})();
+  const rdt = Math.min((t - last) / 1000, 0.05); last = t;
+  if (state === 'menu') {
+    const a = t / 6000;
+    camera.position.set(Math.sin(a) * 8, 3, Math.cos(a) * 8); camera.lookAt(0, 2, 0);
+    if (!levelGroup) buildArena(3);
+    stepWorld(rdt * 0.3, rdt);
+    renderer.render(scene, camera); return;
+  }
+  const paused = state === 'play' && $('lock').style.display === 'flex';
+  // Bewegung
+  let mx = 0, mz = 0;
+  if (state === 'play' && !paused) {
+    const f = (keys['w'] || keys['arrowup'] ? 1 : 0) - (keys['s'] || keys['arrowdown'] ? 1 : 0) - stick.y;
+    const r = (keys['d'] || keys['arrowright'] ? 1 : 0) - (keys['a'] || keys['arrowleft'] ? 1 : 0) + stick.x;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    mx = fx * f + rx * r; mz = fz * f + rz * r;
+    const ml = Math.hypot(mx, mz);
+    if (ml > 1) { mx /= ml; mz /= ml; }
+  }
+  const moveAmt = Math.hypot(mx, mz);
+  // Zeitfluss
+  pulse = Math.max(0, pulse - rdt);
+  const lookTs = Math.min(lookRate / Math.max(rdt, 1e-3) * 0.0006, 0.3);
+  lookRate = 0;
+  let target = state === 'play' ? Math.max(0.02, moveAmt, lookTs, pulse > 0 ? 0.9 : 0) : state === 'dead' ? 0.08 : 1;
+  if (paused) target = 0;
+  ts += (target - ts) * Math.min(1, rdt * (target > ts ? 14 : 8));
+  const wdt = rdt * ts;
+
+  if (state === 'play' && !paused) {
+    pl.x += mx * 5 * rdt; pl.z += mz * 5 * rdt;
+    pushOut(pl, PR);
+    pl.bob += moveAmt * rdt * 9;
+    pl.cd -= wdt;
+    // Waffe aufheben
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const p = pickups[i];
+      if (Math.hypot(p.x - pl.x, p.z - pl.z) < 1.0 && (!pl.gun || pl.ammo === 0)) {
+        pl.gun = true; pl.ammo = p.ammo; pl.cd = 0.2; scene.remove(p.m, p.ring); pickups.splice(i, 1); sfx.pick();
+      }
+    }
+  }
+  if (!paused) stepWorld(wdt, rdt);
+  if (state === 'play' && enemies.length === 0 && toSpawn === 0) levelClear();
+
+  // Kamera
+  camera.position.set(pl.x, EYE + Math.sin(pl.bob) * 0.04, pl.z);
+  if (state === 'dead') { deadT += rdt; camera.position.y = Math.max(0.4, EYE - deadT * 1.2); camera.rotation.z = Math.min(deadT * 0.8, 0.7); }
+  else camera.rotation.z = 0;
+  camera.rotation.y = yaw; camera.rotation.x = pitch;
+  // Viewmodel
+  recoil = Math.max(0, recoil - rdt * 6);
+  punchT = Math.max(0, punchT - rdt);
+  viewGun.visible = !!pl.gun; fist.visible = !pl.gun;
+  viewGun.position.set(VG_POS.x + Math.sin(pl.bob * 0.5) * 0.01, VG_POS.y + Math.abs(Math.cos(pl.bob * 0.5)) * 0.01 + recoil * 0.03, VG_POS.z + recoil * 0.08);
+  viewGun.rotation.x = recoil * 0.35;
+  fist.position.set(FIST_POS.x - (punchT > 0 ? Math.sin(punchT / 0.35 * Math.PI) * 0.1 : 0), FIST_POS.y, FIST_POS.z - (punchT > 0 ? Math.sin(punchT / 0.35 * Math.PI) * 0.35 : 0));
+  moon.position.set(pl.x, 6, pl.z);
+  if (state !== 'menu') updateHud();
+  renderer.render(scene, camera);
+}
+
+appStarted = true;
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
