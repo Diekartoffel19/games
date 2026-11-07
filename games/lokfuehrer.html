@@ -993,12 +993,12 @@
 
       playSifaAlarm() {
         if (ArcadeCore.isMuted()) return;
-        ArcadeCore.Sounds.playTone(880, 0.14, 'square', 0.2);
+        ArcadeCore.sounds.playTone(880, 0.14, 'square', 0.2);
       }
 
       playCoffeeSpill() {
         if (ArcadeCore.isMuted()) return;
-        ArcadeCore.Sounds.hit();
+        ArcadeCore.sounds.hit();
       }
     }
 
@@ -1164,6 +1164,11 @@
     let eventActive = false;
     let eventTimer = 0;
     let cowHonked = false;
+    let overspeedPenaltyAcc = 0;  // fractional overspeed penalty points
+
+    // Platform window around the stop marker in which doors may open (m, + = before marker)
+    const PLATFORM_WINDOW_BEFORE = 70;
+    const PLATFORM_WINDOW_AFTER = 30;
 
     // --- 4. Setup Scene & Renderer ---
     function initThree() {
@@ -1193,6 +1198,7 @@
       dirLight.shadow.camera.top = 60;
       dirLight.shadow.camera.bottom = -60;
       scene.add(dirLight);
+      scene.add(dirLight.target);
 
       // Train Spotlight (Headlight)
       spotLight = new THREE.SpotLight(0xffffff, 2.5, 180, Math.PI / 6, 0.4, 1.2);
@@ -1559,8 +1565,7 @@
         const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
 
         dummy.position.copy(pt).addScaledVector(normal, 0.06);
-        const rotMat = new THREE.Matrix4().makeBasis(binormal, normal, tangent);
-        dummy.setRotationFromMatrix(rotMat);
+        dummy.setRotationFromMatrix(trackRotation(tangent, false));
         dummy.updateMatrix();
         sleepersMesh.setMatrixAt(i, dummy.matrix);
       }
@@ -1654,6 +1659,18 @@
       return texture;
     }
 
+    // Proper (det = +1) rotation for objects placed along the track.
+    // Local +X = right of travel, +Y = up, +Z = back toward the oncoming train.
+    // upright = true keeps the object vertical (stations, signals, boards) on graded track.
+    function trackRotation(tangent, upright) {
+      const t = tangent.clone();
+      if (upright) t.y = 0;
+      t.normalize();
+      const b = new THREE.Vector3().crossVectors(t, new THREE.Vector3(0, 1, 0)).normalize();
+      const n = new THREE.Vector3().crossVectors(b, t).normalize();
+      return new THREE.Matrix4().makeBasis(b, n, t.negate());
+    }
+
     function buildStations(stations) {
       stations.forEach((st, idx) => {
         const u = Math.min(0.999, st.dist / trackLength);
@@ -1719,8 +1736,8 @@
 
         const hTex = new THREE.CanvasTexture(hCanvas);
         const hSign = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.0), new THREE.MeshBasicMaterial({ map: hTex }));
-        hSign.position.set(-1.8, 1.5, platLen / 2 - 2);
-        hSign.rotation.y = Math.PI;
+        // Stop marker at the far (departure) end of the platform, facing the oncoming train
+        hSign.position.set(-1.8, 1.5, -(platLen / 2 - 2));
         stGroup.add(hSign);
 
         // Waiting Passenger Figures (Capsules: Cylinder + Sphere)
@@ -1752,8 +1769,7 @@
 
         // Position Station to the right of track
         stGroup.position.copy(pt).addScaledVector(binormal, 3.2);
-        const rotMat = new THREE.Matrix4().makeBasis(binormal, new THREE.Vector3(0, 1, 0), tangent);
-        stGroup.setRotationFromMatrix(rotMat);
+        stGroup.setRotationFromMatrix(trackRotation(tangent, true));
 
         scene.add(stGroup);
         stationObjects.push(stGroup);
@@ -1809,12 +1825,16 @@
           lampRed,
           lampYel,
           lampGrn,
-          state: 'GREEN' // 'RED', 'YELLOW', 'GREEN'
+          state: 'GREEN', // 'RED', 'YELLOW', 'GREEN'
+          // Every other signal shows Halt until the block ahead clears
+          holdsTrain: idx % 2 === 0,
+          clearTimer: 0,
+          overrun: false
         };
 
         sigGroup.position.copy(pt).addScaledVector(binormal, 2.6);
-        const rotMat = new THREE.Matrix4().makeBasis(binormal, new THREE.Vector3(0, 1, 0), tangent);
-        sigGroup.setRotationFromMatrix(rotMat);
+        // Lamps sit on local +Z, which trackRotation points at the oncoming train
+        sigGroup.setRotationFromMatrix(trackRotation(tangent, true));
 
         scene.add(sigGroup);
         signalObjects.push(sigGroup);
@@ -1843,12 +1863,10 @@
         const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true });
         const signMesh = new THREE.Mesh(signGeo, signMat);
         signMesh.position.set(0, 2.2, 0);
-        signMesh.rotation.y = Math.PI;
         boardGroup.add(signMesh);
 
         boardGroup.position.copy(pt).addScaledVector(binormal, 2.4);
-        const rotMat = new THREE.Matrix4().makeBasis(binormal, new THREE.Vector3(0, 1, 0), tangent);
-        boardGroup.setRotationFromMatrix(rotMat);
+        boardGroup.setRotationFromMatrix(trackRotation(tangent, true));
 
         scene.add(boardGroup);
         signalObjects.push(boardGroup);
@@ -2034,8 +2052,7 @@
           }
 
           seg.position.copy(pt);
-          const rotMat = new THREE.Matrix4().makeBasis(binormal, normal, tangent);
-          seg.setRotationFromMatrix(rotMat);
+          seg.setRotationFromMatrix(trackRotation(tangent, false));
           scene.add(seg);
           sceneryMeshes.push(seg);
         }
@@ -2053,8 +2070,7 @@
             new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.9 })
           );
           portal.position.copy(ppt).addScaledVector(pnorm, 3.9);
-          const rotMat = new THREE.Matrix4().makeBasis(pbin, pnorm, ptan);
-          portal.setRotationFromMatrix(rotMat);
+          portal.setRotationFromMatrix(trackRotation(ptan, false));
           scene.add(portal);
           sceneryMeshes.push(portal);
         });
@@ -2214,10 +2230,10 @@
       }
 
       // Speed Limit Check
-      checkSpeedLimits();
+      checkSpeedLimits(dt);
 
       // Signals Check
-      checkSignals();
+      checkSignals(dt);
 
       // Cow Encounter on Route 1
       if (currentRoute.hasCow && !cowHonked && Math.abs(trainDist - currentRoute.cowDist) < 120) {
@@ -2234,7 +2250,7 @@
       gameTimeSeconds += dt * 8;
     }
 
-    function checkSpeedLimits() {
+    function checkSpeedLimits(dt) {
       const limits = currentRoute.speedLimits;
       for (let i = limits.length - 1; i >= 0; i--) {
         if (trainDist >= limits[i].dist) {
@@ -2246,27 +2262,52 @@
       const speedKmH = trainSpeed * 3.6;
       if (speedKmH > targetSpeedLimit + 4) {
         document.getElementById('hud-speed').classList.add('overspeed');
-        totalScore = Math.max(0, totalScore - Math.floor(15 * 0.016)); // small deduction
+        // 15 Pkt per second of overspeed, accumulated so short frames still count
+        overspeedPenaltyAcc += 15 * dt;
+        const whole = Math.floor(overspeedPenaltyAcc);
+        if (whole > 0) {
+          overspeedPenaltyAcc -= whole;
+          totalScore = Math.max(0, totalScore - whole);
+        }
       } else {
         document.getElementById('hud-speed').classList.remove('overspeed');
       }
     }
 
-    function checkSignals() {
+    function checkSignals(dt) {
       signalObjects.forEach(sig => {
-        const delta = sig.userData.dist - trainDist;
+        const data = sig.userData;
+        if (!data.lampRed) return; // speed boards share this list
+        const delta = data.dist - trainDist;
 
-        // Dynamic behavior: turn Yellow 400m before, Green 120m before
-        if (delta > 0 && delta < 450) {
-          if (delta > 140) {
-            setSignalState(sig, 'YELLOW');
-          } else {
-            setSignalState(sig, 'GREEN');
+        if (data.holdsTrain) {
+          // Halt signal: shows RED once the train is near, clears after the block is free
+          // Warn early enough to stop with the service brake, even at ICE speeds
+          const warnDist = Math.max(600, (trainSpeed * trainSpeed) / 2.0 + 200);
+          if (data.clearTimer > 0 || (delta > 0 && delta < warnDist)) {
+            if (data.state !== 'RED' && data.clearTimer === 0) {
+              setSignalState(sig, 'RED');
+              showAnnouncement("🔴 Signal zeigt Halt! Vor dem Signal anhalten und auf Fahrt warten.");
+            }
+            data.clearTimer += dt;
+            // Block clears faster once the train is waiting in front of the signal
+            const waiting = trainSpeed < 0.5 && delta < 250;
+            if (data.clearTimer > 14 || (waiting && data.clearTimer > 5)) {
+              data.holdsTrain = false;
+              setSignalState(sig, 'GREEN');
+              trainAudio.playGong();
+              showAnnouncement("🟢 Signal zeigt Fahrt. Weiterfahren!");
+            }
           }
+        } else if (delta > 0 && delta < 450) {
+          // Dynamic behavior: Yellow (Vorsicht) far out, Green close in
+          setSignalState(sig, delta > 140 ? 'YELLOW' : 'GREEN');
         }
 
-        // If player overruns RED signal
-        if (sig.userData.state === 'RED' && delta < 0 && delta > -15 && trainSpeed > 2) {
+        // Overrunning a RED signal: one PZB penalty per signal
+        if (data.state === 'RED' && !data.overrun && delta < 0 && delta > -15) {
+          data.overrun = true;
+          data.holdsTrain = false;
           triggerZwangsbremsung("ROTES SIGNAL ÜBERFAHREN! PZB-Zwangsbremsung!");
           totalScore = Math.max(0, totalScore - 800);
         }
@@ -2278,7 +2319,7 @@
       trainNotch = -6;
       showAnnouncement(`🛑 ${reason} (-250 Pkt)`);
       totalScore = Math.max(0, totalScore - 250);
-      ArcadeCore.Sounds.hit();
+      ArcadeCore.sounds.hit();
     }
 
     function triggerCoffeeSpill() {
@@ -2304,6 +2345,30 @@
 
       const distToStop = st.dist - trainDist;
 
+      // Advance if station 0 was departed or station was missed
+      // Past the platform window the doors can no longer open, so the stop counts as missed
+      if (distToStop < (currentStationIdx === 0 ? -50 : -PLATFORM_WINDOW_AFTER) && !doorsOpen) {
+        if (currentStationIdx === 0) {
+          currentStationIdx = 1;
+        } else {
+          showAnnouncement(`❌ Halt in ${st.name} verpasst! (-500 Pkt)`);
+          totalScore = Math.max(0, totalScore - 500);
+          stationReviews.push({
+            name: st.name,
+            missed: true,
+            distDelta: Math.abs(distToStop),
+            delay: 0,
+            stars: 1,
+            points: 0
+          });
+          currentStationIdx++;
+          if (currentStationIdx >= currentRoute.stations.length) {
+            showEndScreen();
+            return;
+          }
+        }
+      }
+
       // Approaching gong announcement
       if (distToStop < 350 && distToStop > 320 && !st.announced) {
         st.announced = true;
@@ -2313,14 +2378,16 @@
 
       // Prompt to brake
       const promptEl = document.getElementById('hud-prompt');
-      if (distToStop < 70 && distToStop > -30) {
+      if (currentStationIdx > 0 && distToStop < PLATFORM_WINDOW_BEFORE && distToStop > -PLATFORM_WINDOW_AFTER) {
         if (trainSpeed < 0.2) {
           // Train has stopped at platform!
           promptEl.classList.add('active');
           if (!doorsOpen) {
             promptEl.textContent = "Halt erreicht! Drücke [T] zum Türen öffnen";
+          } else if (boardingTimer >= 4) {
+            promptEl.textContent = "Einsteigen beendet! Drücke [T] zum Türen schließen";
           } else {
-            promptEl.textContent = `Fahrgäste steigen ein... (${Math.ceil(5 - boardingTimer)}s)`;
+            promptEl.textContent = `Fahrgäste steigen ein... (${Math.ceil(4 - boardingTimer)}s)`;
           }
         } else {
           promptEl.classList.remove('active');
@@ -2337,9 +2404,24 @@
 
     // --- 8. Station Review & Passenger Boarding Logic ---
     function toggleDoors() {
+      if (gameState !== 'RUNNING') return;
       if (trainSpeed > 0.5) {
         showAnnouncement("⚠️ Türen können bei fahrendem Zug nicht geöffnet werden!");
         return;
+      }
+
+      // Doors may only open at the platform of the next scheduled stop
+      if (!doorsOpen) {
+        const st = currentRoute.stations[currentStationIdx];
+        const distToStop = st ? st.dist - trainDist : Infinity;
+        if (currentStationIdx === 0) {
+          showAnnouncement("Abfahrt erteilt! Türen erst am nächsten Bahnsteig freigeben.");
+          return;
+        }
+        if (!(distToStop < PLATFORM_WINDOW_BEFORE && distToStop > -PLATFORM_WINDOW_AFTER)) {
+          showAnnouncement("⚠️ Kein Bahnsteig! Türen nur am Halt freigeben.");
+          return;
+        }
       }
 
       doorsOpen = !doorsOpen;
@@ -2445,7 +2527,7 @@
       document.getElementById('rev-points').textContent = `+${stationTotal} Pkt`;
 
       document.getElementById('modal-station').classList.add('active');
-      ArcadeCore.Sounds.coin();
+      ArcadeCore.sounds.coin();
     }
 
     function continueAfterStation() {
@@ -2476,7 +2558,7 @@
     // --- 9. End Screen & Highscore ---
     function showEndScreen() {
       gameState = 'FINISHED';
-      ArcadeCore.Sounds.powerup();
+      ArcadeCore.sounds.powerup();
 
       // Average Stars
       const avg = stationReviews.length > 0
@@ -2493,8 +2575,8 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${r.name}</td>
-          <td>${r.distDelta.toFixed(1)} m</td>
-          <td>+${Math.round(r.delay / 60)} min</td>
+          <td>${r.missed ? 'verpasst' : r.distDelta.toFixed(1) + ' m'}</td>
+          <td>${r.missed ? '—' : '+' + Math.round(r.delay / 60) + ' min'}</td>
           <td>${'★'.repeat(r.stars)}</td>
         `;
         tbody.appendChild(tr);
@@ -2710,7 +2792,7 @@
         case 'arrowup':
           if (trainNotch < 5 && !emergencyBraking) {
             trainNotch++;
-            ArcadeCore.Sounds.playTone(400 + trainNotch * 40, 0.05, 'sine', 0.1);
+            ArcadeCore.sounds.playTone(400 + trainNotch * 40, 0.05, 'sine', 0.1);
           }
           break;
 
@@ -2718,14 +2800,14 @@
         case 'arrowdown':
           if (trainNotch > -5) {
             trainNotch--;
-            ArcadeCore.Sounds.playTone(350 + trainNotch * 30, 0.05, 'sine', 0.1);
+            ArcadeCore.sounds.playTone(350 + trainNotch * 30, 0.05, 'sine', 0.1);
           }
           break;
 
         case ' ': // Space: Emergency Brake
           emergencyBraking = true;
           trainNotch = -6;
-          ArcadeCore.Sounds.hit();
+          ArcadeCore.sounds.hit();
           showAnnouncement("🛑 NOTBREMSE AUSGELÖST!");
           break;
 
@@ -2733,7 +2815,7 @@
           if (sifaTimer > 2) {
             sifaTimer = 0;
             sifaAlarmActive = false;
-            ArcadeCore.Sounds.playTone(600, 0.06, 'triangle', 0.1);
+            ArcadeCore.sounds.playTone(600, 0.06, 'triangle', 0.1);
           }
           break;
 
@@ -2751,11 +2833,11 @@
 
         case 'h': // Horn
           trainAudio.playHorn();
-          if (currentRoute.hasCow && Math.abs(trainDist - currentRoute.cowDist) < 150) {
+          if (currentRoute.hasCow && !cowHonked && Math.abs(trainDist - currentRoute.cowDist) < 150) {
             cowHonked = true;
             totalScore += 200;
             showAnnouncement("🐮 Muh! Die Kuh springt glücklich auf die Weide! (+200 Pkt)");
-            ArcadeCore.Sounds.coin();
+            ArcadeCore.sounds.coin();
           }
           break;
 
@@ -2807,7 +2889,7 @@
     document.getElementById('touch-horn').addEventListener('pointerdown', () => {
       trainAudio.init();
       trainAudio.playHorn();
-      if (currentRoute.hasCow && Math.abs(trainDist - currentRoute.cowDist) < 150) {
+      if (currentRoute.hasCow && !cowHonked && Math.abs(trainDist - currentRoute.cowDist) < 150) {
         cowHonked = true;
         totalScore += 200;
         showAnnouncement("🐮 Muh! Die Kuh springt auf die Weide! (+200 Pkt)");
@@ -2877,7 +2959,19 @@
       stationReviews = [];
       coffeeLevel = 1.0;
       cowHonked = false;
-      gameTimeSeconds = 8 * 3600;
+      doorsOpen = false;
+      boardingTimer = 0;
+      emergencyBraking = false;
+      sifaTimer = 0;
+      sifaAlarmActive = false;
+      document.getElementById('sifa-warning').style.display = 'none';
+      coffeeSpillCooldown = 0;
+      overspeedPenaltyAcc = 0;
+      acceleration = 0;
+      prevAcceleration = 0;
+      // Clock starts at the first station's departure, so every route has a real timetable
+      gameTimeSeconds = timeStrToSeconds(route.stations[0].planDep);
+      route.stations.forEach(st => { st.announced = false; });
 
       buildRoute(route);
       gameState = 'RUNNING';

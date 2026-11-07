@@ -594,20 +594,21 @@
     <div class="modal-title" style="color:var(--ice-cyan);">Thermal Nomad 3D</div>
     <div class="status-badge" style="margin-bottom:12px;">Arctic Prototype // Milestone 5 Trek Loop</div>
     <div class="modal-desc">
-      Traverse a 1.5 km frozen glacial canyon towards the colossal <b>Heat Spire</b> moving convoy ($0.8\text{ m/s}$).
+      Traverse a 1.5 km frozen glacial canyon towards the colossal <b>Heat Spire</b> moving convoy (0.8 m/s).
       Your body and suit respond in real time to the physical differential equations:
       <div class="math-quote">
         dT<sub>surf</sub>/dt = k<sub>conv</sub>(T<sub>amb</sub> - T<sub>surf</sub>) + α · I<sub>sun</sub>(1 - 𝒪) + ∑Φ<sub>local</sub> - εσ(T<sub>surf</sub>+273.15)⁴<br>
         dT<sub>core</sub>/dt = k<sub>suit</sub>(T<sub>surf</sub> - T<sub>core</sub>) + Q̇<sub>base</sub>
       </div>
       • Deep shadows drop ambient air to <b>-40.0°C</b>. Survivable open freeze window &le; 45 seconds.<br>
-      • Deploy <b>Mirrors [1]</b> to reflect specular sunlight ($R = L - 2(L\cdot N)N$) into shadow gorges.<br>
-      • Drop <b>Thermal Shields [2]</b> to block wind chill (drops $k_{conv}$ by 60%) and generate shade.<br>
+      • Deploy <b>Mirrors [1]</b> to reflect specular sunlight (R = L − 2(L·N)N) into shadow gorges.<br>
+      • Drop <b>Thermal Shields [2]</b> to block wind chill (drops k<sub>conv</sub> by 60%) and generate shade.<br>
       • Pop <b>Aerosol Cans [3]</b> to clamp local ambient to +15°C and scatter lethal radiation.<br>
       • Fire your <b>Sled Radiator [F]</b> to burn fuel and emit a 4 m warm thermal sanctuary.<br>
       • Board the Heat Spire hatch before your core freezes (&lt;30°C) or overheats (&gt;42°C)!
     </div>
     <button class="btn-primary" onclick="Game.start()">Engage Trek Mission</button>
+    <p style="text-align:center;margin:12px 0 0;"><a href="../index.html" style="color:var(--ice-cyan);">← Back to Hub</a></p>
   </div>
 </div>
 
@@ -618,6 +619,7 @@
     <div id="end-desc" class="modal-desc"></div>
     <div class="math-quote" id="end-stats"></div>
     <button class="btn-primary" onclick="location.reload()">Re-attempt Trek</button>
+    <p style="text-align:center;margin:12px 0 0;"><a href="../index.html" style="color:var(--ice-cyan);">← Back to Hub</a></p>
   </div>
 </div>
 
@@ -629,12 +631,16 @@
  */
 const Game = (() => {
   // --- Mathematical & Physical Constants from TDD ---
+  // Balanced so open sun settles near T_surf ≈ +20°C and the core at
+  // T_surf + Q_BASE / K_SUIT ≈ 37°C,
+  // while full shadow drops the core from 37°C to 32°C in roughly 35-45 s.
   const K_CONV = 0.08;          // Convective heat transfer coefficient s^-1
   const ALPHA_SUIT = 0.75;      // Suit solar absorptivity [0, 1]
-  const I_SUN = 120.0;          // Solar irradiance (°C/s equiv flux)
-  const K_SUIT = 0.05;          // Suit insulation conduction coefficient
-  const Q_BASE = 0.015;         // Basal metabolic heat generation °C/s
-  const STEFAN_BOLTZMANN = 5.67e-8 * 0.9 * 0.001; // Radiative scaling factor
+  const I_SUN = 7.0;            // Solar irradiance (°C/s equiv flux)
+  const K_SUIT = 0.0025;        // Suit insulation conduction coefficient
+  const Q_BASE = 0.0425;        // Basal metabolic heat generation °C/s (= 17°C * K_SUIT)
+  const Q_SPRINT = 0.04;        // Extra metabolic heat while sprinting °C/s
+  const STEFAN_BOLTZMANN = 1.0e-10; // Radiative scaling factor
   const T_SKY_KELVIN = 233.15;  // -40°C deep sky
   const SIGMA_EXT = 1.2;        // Aerosol smoke extinction coefficient m^2/g
   const MIRROR_ETA = 0.88;      // Specular reflection efficiency
@@ -822,6 +828,7 @@ const Game = (() => {
     sunLight.shadow.camera.bottom = -shadowD;
     sunLight.shadow.bias = -0.0005;
     scene.add(sunLight);
+    scene.add(sunLight.target);
 
     buildCanyonLevel();
     buildPlayer();
@@ -1082,7 +1089,10 @@ const Game = (() => {
     const canvas = document.getElementById('webgl-canvas');
     canvas.addEventListener('click', () => {
       if (!isPointerLocked) {
-        canvas.requestPointerLock();
+        try {
+          const p = canvas.requestPointerLock();
+          if (p && p.catch) p.catch(() => {});
+        } catch (e) {}
       }
     });
 
@@ -1213,7 +1223,7 @@ const Game = (() => {
       mirrorGroup.add(beamMesh);
 
       scene.add(mirrorGroup);
-      activeMirrors.push({ group: mirrorGroup, pos: spawnPos });
+      activeMirrors.push({ group: mirrorGroup, pos: spawnPos, beam: beamMesh });
       playDeploySound();
     }
     else if (slot === 2 && inventory.shields > 0) {
@@ -1306,7 +1316,11 @@ const Game = (() => {
     const playerWorldPos = playerGroup.position;
     const rayLength = 300.0;
 
-    debugRayLines.forEach(line => scene.remove(line));
+    debugRayLines.forEach(line => {
+      scene.remove(line);
+      line.geometry.dispose();
+      line.material.dispose();
+    });
     debugRayLines.length = 0;
 
     for (let i = 0; i < sampleSockets.length; i++) {
@@ -1418,7 +1432,7 @@ const Game = (() => {
       const radBubble = 4.0;
       if (distToSled <= radBubble) {
         const falloff = 1.0 - (distToSled / radBubble);
-        localConvectiveFlux += 75.0 * falloff;
+        localConvectiveFlux += 8.0 * falloff;
       }
       if (sled.fuel <= 0) toggleRadiator();
     }
@@ -1426,7 +1440,6 @@ const Game = (() => {
     // Heat Spire Safe Core Aura & Periodic Shockwaves
     const distToSpire = spire.pos.distanceTo(playerPos);
     if (distToSpire <= 40.0) {
-      localConvectiveFlux += 50.0;
       ambientTemp = THREE.MathUtils.lerp(ambientTemp, 22.0, 0.85);
     }
 
@@ -1439,31 +1452,34 @@ const Game = (() => {
 
       if (distToSpire < 150.0) {
         if (occlusionFactor < 0.5 && windDampening < 0.4) {
-          surfaceTemp += 18.0;
+          surfaceTemp += 35.0;
           playTone(80, 0.3, 'sawtooth', 0.4);
         }
       }
     }
 
     // 6. Sample Reflected Mirror Flux (Specular Beam)
+    // The mirror is tilted so its sunlit face bounces light horizontally along
+    // its local +Z beam (the visible cone). It only works while the mirror
+    // itself stands in direct sun.
     localReflectedFlux = 0.0;
     for (let m of activeMirrors) {
       const normal = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), m.group.rotation.y);
-      const nDotMinusL = normal.dot(sunDirection.clone().negate());
+      raycaster.set(m.pos.clone().add(new THREE.Vector3(0, 1.0, 0)), sunDirection);
+      raycaster.far = 300.0;
+      const mirrorLit = raycaster.intersectObjects(canyonWalls, false).length === 0;
+      m.beam.visible = mirrorLit;
+      if (!mirrorLit) continue;
 
-      if (nDotMinusL > 0.05) {
-        const reflectedDir = sunDirection.clone().negate().reflect(normal).normalize();
-        const toPlayer = playerPos.clone().sub(m.pos);
-        const dist = toPlayer.length();
+      const toPlayer = playerPos.clone().sub(m.pos);
+      toPlayer.y = 0;
+      const dist = toPlayer.length();
 
-        if (dist > 0.1 && dist < 35.0) {
-          const normToPlayer = toPlayer.clone().normalize();
-          const cosTheta = reflectedDir.dot(normToPlayer);
-
-          if (cosTheta > Math.cos(THREE.MathUtils.degToRad(18.0))) {
-            const flux = I_SUN * MIRROR_ETA * nDotMinusL * (cosTheta / Math.max(1.0, MIRROR_BETA * dist * dist));
-            localReflectedFlux += flux;
-          }
+      if (dist > 0.1 && dist < 35.0) {
+        const cosTheta = normal.dot(toPlayer.normalize());
+        if (cosTheta > Math.cos(THREE.MathUtils.degToRad(18.0))) {
+          const flux = I_SUN * MIRROR_ETA * (cosTheta / Math.max(1.0, MIRROR_BETA * dist * dist * 0.05));
+          localReflectedFlux += flux;
         }
       }
     }
@@ -1484,7 +1500,7 @@ const Game = (() => {
 
     // 8. Core Body Temperature Step (Differential Conduction)
     // dT_core/dt = k_suit(T_surf - T_core) + Q_base
-    const coreDelta = (K_SUIT * (surfaceTemp - coreTemp) + Q_BASE) * dt;
+    const coreDelta = (K_SUIT * (surfaceTemp - coreTemp) + Q_BASE + (isSprinting ? Q_SPRINT : 0)) * dt;
     coreTemp += coreDelta;
 
     // 9. Threshold Debuffs
@@ -1546,7 +1562,7 @@ const Game = (() => {
     }
 
     const distToSpire = spire.pos.distanceTo(playerGroup.position);
-    if (distToSpire < 18.0 && !isGameOver) {
+    if (distToSpire < 26.0 && !isGameOver) {
       triggerGameOver(true, "Boarding Hatch Secured! You have successfully reached the mobile Heat Spire convoy with viable core biometrics.");
     }
   }
@@ -1609,7 +1625,11 @@ const Game = (() => {
       sled.mesh.lookAt(harnessPos.x, sled.pos.y, harnessPos.z);
     }
 
-    sled.tetherLine.geometry.setFromPoints([harnessPos, hitchPos]);
+    const tp = sled.tetherLine.geometry.attributes.position;
+    tp.setXYZ(0, harnessPos.x, harnessPos.y, harnessPos.z);
+    tp.setXYZ(1, hitchPos.x, hitchPos.y, hitchPos.z);
+    tp.needsUpdate = true;
+    sled.tetherLine.geometry.computeBoundingSphere();
   }
 
   // --- Player Movement & Grounding ---
@@ -1668,6 +1688,15 @@ const Game = (() => {
     spire.mesh.position.copy(spire.pos);
   }
 
+  // Keep the shadow-casting sun centred on the player so canyon shadows
+  // exist along the whole 1.5 km trek (shadow frustum is only ±150 m).
+  function updateSunLight() {
+    const p = playerGroup.position;
+    sunLight.target.position.set(p.x, 0, p.z);
+    sunLight.position.set(p.x, 0, p.z).add(sunDirection.clone().multiplyScalar(500));
+    sunLight.target.updateMatrixWorld();
+  }
+
   function updateHUD() {
     elCoreTemp.textContent = `${coreTemp.toFixed(1)}°C`;
     elSurfTemp.textContent = `${surfaceTemp.toFixed(1)}°C`;
@@ -1685,7 +1714,7 @@ const Game = (() => {
     elSubHeatFlux.textContent = `Local Flux: +${(localConvectiveFlux + localReflectedFlux).toFixed(1)}°C/s`;
 
     const spireDist = Math.max(0, Math.round(spire.pos.distanceTo(playerGroup.position)));
-    elSpireDist.textContent = `${spireDist.toLocaleString()} m`;
+    elSpireDist.textContent = `${spireDist.toLocaleString('en-US')} m`;
 
     const sledDist = sled.pos.distanceTo(playerGroup.position);
     elSledDist.textContent = `${sledDist.toFixed(1)} m`;
@@ -1710,6 +1739,7 @@ const Game = (() => {
       updateHUD();
     }
 
+    updateSunLight();
     updateCamera();
     renderer.render(scene, camera);
   }
@@ -1731,7 +1761,10 @@ const Game = (() => {
       isRunning = true;
       lastTime = performance.now();
       const canvas = document.getElementById('webgl-canvas');
-      canvas.requestPointerLock();
+      try {
+        const p = canvas.requestPointerLock();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {}
     },
     deployItem,
     toggleRadiator
