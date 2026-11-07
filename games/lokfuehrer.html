@@ -1149,7 +1149,7 @@
     let emergencyBraking = false;
     let doorsOpen = false;
     let boardingTimer = 0;
-    let currentStationIdx = 0;
+    let currentStationIdx = 1;
 
     let coffeeLevel = 1.0;
     let coffeeSpillCooldown = 0;
@@ -1166,9 +1166,9 @@
     let cowHonked = false;
     let overspeedPenaltyAcc = 0;  // fractional overspeed penalty points
 
-    // Platform window around the stop marker in which doors may open (m, + = before marker)
-    const PLATFORM_WINDOW_BEFORE = 70;
-    const PLATFORM_WINDOW_AFTER = 30;
+    // Platform stopping window: platform extends 75m behind H-Tafel, allows 15m overshoot
+    const PLATFORM_WINDOW_BEFORE = 75;
+    const PLATFORM_WINDOW_AFTER = 15;
 
     // --- 4. Setup Scene & Renderer ---
     function initThree() {
@@ -1369,7 +1369,7 @@
       trainDist = 0;
       trainSpeed = 0;
       trainNotch = 0;
-      currentStationIdx = 0;
+      currentStationIdx = 1;
       targetSpeedLimit = route.speedLimits[0].limit;
 
       // Clear existing track meshes
@@ -1681,28 +1681,29 @@
         const stGroup = new THREE.Group();
 
         // Platform (Bahnsteig)
+        // H-Tafel is located at st.dist (local z = 0). Platform extends behind it (+Z) for 80m.
         const platLen = 80;
         const platGeo = new THREE.BoxGeometry(4.0, 0.75, platLen);
         const platMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.85, flatShading: true });
         const platform = new THREE.Mesh(platGeo, platMat);
-        platform.position.set(0, 0.35, 0);
+        platform.position.set(0, 0.35, 36);
         stGroup.add(platform);
 
         // Yellow safety line on platform edge
         const lineGeo = new THREE.BoxGeometry(0.12, 0.02, platLen);
         const lineMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
         const yellowLine = new THREE.Mesh(lineGeo, lineMat);
-        yellowLine.position.set(-1.65, 0.73, 0);
+        yellowLine.position.set(-1.65, 0.73, 36);
         stGroup.add(yellowLine);
 
-        // Platform Roof & Pillars
+        // Platform Roof & Pillars (covers central platform area z = 12 to 60)
         const roofMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 });
         const roofGeo = new THREE.BoxGeometry(4.2, 0.15, platLen * 0.6);
         const roof = new THREE.Mesh(roofGeo, roofMat);
-        roof.position.set(0, 3.8, 0);
+        roof.position.set(0, 3.8, 36);
         stGroup.add(roof);
 
-        for (let pz = -20; pz <= 20; pz += 10) {
+        for (let pz = 16; pz <= 56; pz += 10) {
           const pillarGeo = new THREE.CylinderGeometry(0.08, 0.08, 3.2, 8);
           const pillar = new THREE.Mesh(pillarGeo, roofMat);
           pillar.position.set(0.6, 2.0, pz);
@@ -1714,11 +1715,11 @@
         const signMat = new THREE.MeshBasicMaterial({ map: signTex });
         const signGeo = new THREE.PlaneGeometry(3.2, 0.8);
         const sign = new THREE.Mesh(signGeo, signMat);
-        sign.position.set(0, 2.7, 0);
+        sign.position.set(0, 2.7, 36);
         sign.rotation.y = -Math.PI / 2;
         stGroup.add(sign);
 
-        // Stop Marker (H-Tafel)
+        // Stop Marker (H-Tafel) at z = 0 (exact st.dist target), facing the oncoming train (+Z)
         const hCanvas = document.createElement('canvas');
         hCanvas.width = 128;
         hCanvas.height = 180;
@@ -1736,9 +1737,14 @@
 
         const hTex = new THREE.CanvasTexture(hCanvas);
         const hSign = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.0), new THREE.MeshBasicMaterial({ map: hTex }));
-        // Stop marker at the far (departure) end of the platform, facing the oncoming train
-        hSign.position.set(-1.8, 1.5, -(platLen / 2 - 2));
+        hSign.position.set(-1.8, 1.5, 0);
         stGroup.add(hSign);
+
+        const postGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.0, 8);
+        const postMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+        const hPost = new THREE.Mesh(postGeo, postMat);
+        hPost.position.set(-1.8, 0.5, 0);
+        stGroup.add(hPost);
 
         // Waiting Passenger Figures (Capsules: Cylinder + Sphere)
         const passengerGroup = new THREE.Group();
@@ -1760,7 +1766,7 @@
           fig.position.set(
             (Math.random() - 0.5) * 1.8 + 0.2,
             1.15,
-            (Math.random() - 0.5) * (platLen - 12)
+            6 + Math.random() * 60
           );
           passengerGroup.add(fig);
         }
@@ -2345,27 +2351,23 @@
 
       const distToStop = st.dist - trainDist;
 
-      // Advance if station 0 was departed or station was missed
+      // Advance if station was missed
       // Past the platform window the doors can no longer open, so the stop counts as missed
-      if (distToStop < (currentStationIdx === 0 ? -50 : -PLATFORM_WINDOW_AFTER) && !doorsOpen) {
-        if (currentStationIdx === 0) {
-          currentStationIdx = 1;
-        } else {
-          showAnnouncement(`❌ Halt in ${st.name} verpasst! (-500 Pkt)`);
-          totalScore = Math.max(0, totalScore - 500);
-          stationReviews.push({
-            name: st.name,
-            missed: true,
-            distDelta: Math.abs(distToStop),
-            delay: 0,
-            stars: 1,
-            points: 0
-          });
-          currentStationIdx++;
-          if (currentStationIdx >= currentRoute.stations.length) {
-            showEndScreen();
-            return;
-          }
+      if (distToStop < -PLATFORM_WINDOW_AFTER && !doorsOpen) {
+        showAnnouncement(`❌ Halt in ${st.name} verpasst! (-500 Pkt)`);
+        totalScore = Math.max(0, totalScore - 500);
+        stationReviews.push({
+          name: st.name,
+          missed: true,
+          distDelta: Math.abs(distToStop),
+          delay: 0,
+          stars: 1,
+          points: 0
+        });
+        currentStationIdx++;
+        if (currentStationIdx >= currentRoute.stations.length) {
+          showEndScreen();
+          return;
         }
       }
 
@@ -2378,7 +2380,7 @@
 
       // Prompt to brake
       const promptEl = document.getElementById('hud-prompt');
-      if (currentStationIdx > 0 && distToStop < PLATFORM_WINDOW_BEFORE && distToStop > -PLATFORM_WINDOW_AFTER) {
+      if (distToStop < PLATFORM_WINDOW_BEFORE && distToStop > -PLATFORM_WINDOW_AFTER) {
         if (trainSpeed < 0.2) {
           // Train has stopped at platform!
           promptEl.classList.add('active');
@@ -2413,11 +2415,8 @@
       // Doors may only open at the platform of the next scheduled stop
       if (!doorsOpen) {
         const st = currentRoute.stations[currentStationIdx];
-        const distToStop = st ? st.dist - trainDist : Infinity;
-        if (currentStationIdx === 0) {
-          showAnnouncement("Abfahrt erteilt! Türen erst am nächsten Bahnsteig freigeben.");
-          return;
-        }
+        if (!st) return;
+        const distToStop = st.dist - trainDist;
         if (!(distToStop < PLATFORM_WINDOW_BEFORE && distToStop > -PLATFORM_WINDOW_AFTER)) {
           showAnnouncement("⚠️ Kein Bahnsteig! Türen nur am Halt freigeben.");
           return;
@@ -2646,6 +2645,7 @@
             .addScaledVector(normal, 2.3 + shakeY)
             .addScaledVector(binormal, 0.35 + shakeX);
 
+          camera.up.copy(normal);
           camera.position.copy(eyePos);
           const lookTarget = eyePos.clone().addScaledVector(tangent, 30);
           camera.lookAt(lookTarget);
@@ -2751,6 +2751,9 @@
         document.getElementById('hud-station-name').textContent = `🚆 ${nextSt.name}`;
         const dist = Math.max(0, Math.round(nextSt.dist - trainDist));
         document.getElementById('hud-station-dist').textContent = `${dist} m`;
+      } else {
+        document.getElementById('hud-station-name').textContent = '🏁 Endstation';
+        document.getElementById('hud-station-dist').textContent = '0 m';
       }
 
       // Clock & Delay
