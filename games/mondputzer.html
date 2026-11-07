@@ -236,6 +236,13 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // ---------- Helfer ----------
 const $ = id => document.getElementById(id);
+// DOM nur anfassen, wenn sich der Wert wirklich ändert (spart Layout/Style-Neuberechnung pro Frame)
+const _domC = new Map();
+function dset(id, key, v) {
+  const k = id + '|' + key; if (_domC.get(k) === v) return; _domC.set(k, v);
+  const el = $(id);
+  if (key === 'text') el.textContent = v; else if (key === 'html') el.innerHTML = v; else if (key === 'class') el.className = v; else el.style[key] = v;
+}
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -395,13 +402,32 @@ function scrub(c, angR, amt, tier) {
 }
 function deposit(c, angR, amt) { eachCell(c, angR, (idx, f) => { if (mask[idx]) amount[idx] = Math.min(1, amount[idx] + amt * (0.3 + f)); }); }
 function maskOut(c, angR) { eachCell(c, angR, idx => { mask[idx] = 0; amount[idx] = 0; }); }
+let dirtFull = true; // nächster Upload komplett (z. B. nach Mondwechsel)
+// Nur die geänderten Zeilen per texSubImage2D hochladen statt der ganzen Textur jedes Frame
+function uploadRows(tex, data, glFormat, bpp, r0, r1) {
+  const p = renderer.properties.get(tex);
+  if (!p.__webglTexture || p.__version !== tex.version) return false;
+  const gl = renderer.getContext(), st = renderer.state;
+  st.activeTexture(gl.TEXTURE0); st.bindTexture(gl.TEXTURE_2D, p.__webglTexture);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0); gl.pixelStorei(gl.UNPACK_SKIP_ROWS, 0); gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 0);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, r0, GW, r1 - r0 + 1, glFormat, gl.UNSIGNED_BYTE, data.subarray(r0 * GW * bpp, (r1 + 1) * GW * bpp));
+  if (tex.generateMipmaps && tex.minFilter !== THREE.LinearFilter) gl.generateMipmap(gl.TEXTURE_2D);
+  return true;
+}
 function refreshDirt() {
   if (dirtyJ1 < dirtyJ0) return;
   for (let j = dirtyJ0; j <= dirtyJ1; j++) {
     const o = j * GW, po = (GH - 1 - j) * GW * 4 + 3, ho = (GH - 1 - j) * GW;
     for (let i = 0; i < GW; i++) { const a = amount[o + i]; texData[po + i * 4] = a > 0 ? 70 + a * 185 : 0; heightData[ho + i] = a > 0 ? 50 + a * 205 : 0; }
   }
-  dirtTex.needsUpdate = true; heightTex.needsUpdate = true; dirtyJ0 = GH; dirtyJ1 = -1;
+  const r0 = GH - 1 - dirtyJ1, r1 = GH - 1 - dirtyJ0;
+  let ok = false;
+  if (!dirtFull && renderer.capabilities.isWebGL2) {
+    try { const gl = renderer.getContext(); ok = uploadRows(dirtTex, texData, gl.RGBA, 4, r0, r1) && uploadRows(heightTex, heightData, gl.RED, 1, r0, r1); } catch (e) { ok = false; }
+  }
+  if (!ok) { dirtTex.needsUpdate = true; heightTex.needsUpdate = true; }
+  dirtFull = false; dirtyJ0 = GH; dirtyJ1 = -1;
 }
 function computeClean() {
   let s = 0;
@@ -457,13 +483,17 @@ const jumpV = () => jumpVL(save.up.jet);
 
 // ---------- 3D-Szene & Grafiken ----------
 const canvas = $('gl');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Kein Canvas-MSAA: geglättet wird im MSAA-Rendertarget des Composers (spart einen kompletten Resolve)
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+// Adaptive Auflösung: startet bei max. 1,5× und regelt bei Ruckeln automatisch herunter
+const PR_MAX = Math.min(window.devicePixelRatio || 1, 1.5), PR_MIN = Math.min(PR_MAX, 0.6);
+let prScale = PR_MAX;
+renderer.setPixelRatio(prScale);
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x02040b);
@@ -472,7 +502,7 @@ const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 1
 scene.add(camera);
 
 // Post-Processing (Bloom für Sterne, Sonne, Laser & Glanz)
-let composer = null;
+let composer = null, bloomPass = null;
 try {
   // MSAA-Rendertarget (sonst geht die Kantenglättung im Composer verloren)
   const pr = renderer.getPixelRatio();
@@ -480,12 +510,15 @@ try {
   composer = new EffectComposer(renderer, rt);
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
-  const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(innerWidth, innerHeight),
+  // Bloom in halber Auflösung: sieht fast gleich aus, kostet ein Viertel
+  bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(innerWidth / 2, innerHeight / 2),
     0.45, // strength
     0.35, // radius
     0.85  // threshold
   );
+  const bloomSetSize = bloomPass.setSize.bind(bloomPass);
+  bloomPass.setSize = (w, h) => bloomSetSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
   composer.addPass(bloomPass);
   // OutputPass: ACES-Tonemapping + sRGB-Umrechnung (ohne wirkt das Bild flau und zu dunkel)
   composer.addPass(new OutputPass());
@@ -500,7 +533,7 @@ const hemi = new THREE.HemisphereLight(0x64748b, 0x05070d, 0.85); scene.add(hemi
 const SUN_DIR = new V3(0.65, 0.45, 0.6).normalize();
 const sun = new THREE.DirectionalLight(0xfff8ee, 3.8);
 sun.castShadow = true;
-sun.shadow.mapSize.width = 2048; sun.shadow.mapSize.height = 2048;
+sun.shadow.mapSize.width = 1536; sun.shadow.mapSize.height = 1536;
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.02;
 scene.add(sun); scene.add(sun.target);
@@ -959,7 +992,7 @@ function buildMoon(idx, grid) {
   maskOut(M.station, 4.6 / R);
   for (const o of M.obs) if (o.kind !== 'station') maskOut(o.d, (o.r + 0.15) / R);
   if (grid && grid.length === GN) for (let i = 0; i < GN; i++) if (mask[i]) amount[i] = grid[i] / 255;
-  dirtyJ0 = 0; dirtyJ1 = GH - 1;
+  dirtyJ0 = 0; dirtyJ1 = GH - 1; dirtFull = true;
   let tv = 0; for (let i = 0; i < GN; i++) tv += amount[i] * rowArea[(i / GW) | 0] * VAL[hard[i]];
   M.totalValue = tv * M.R2 * M.valMult;
   M.clean = computeClean();
@@ -1529,7 +1562,7 @@ function makePool(n, size, additive, map) {
   const mat = new THREE.PointsMaterial({ size, map, transparent: true, opacity: 0.85, vertexColors: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
   const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; scene.add(pts);
   const vel = new Float32Array(n * 3), life = new Float32Array(n), maxL = new Float32Array(n);
-  return { pts, n, cur: 0, pos, col, vel, life, maxL };
+  return { pts, n, cur: 0, pos, col, vel, life, maxL, alive: 0, colDirty: false };
 }
 const dustP = makePool(400, 0.45, false, dotTex);
 const sparkP = makePool(250, 0.55, true, starTex);
@@ -1539,20 +1572,26 @@ function emit(pool, p, vx, vy, vz, dur, r = 1, g = 1, b = 1) {
   pool.pos[i * 3] = p.x; pool.pos[i * 3 + 1] = p.y; pool.pos[i * 3 + 2] = p.z;
   pool.vel[i * 3] = vx; pool.vel[i * 3 + 1] = vy; pool.vel[i * 3 + 2] = vz;
   pool.col[i * 3] = r; pool.col[i * 3 + 1] = g; pool.col[i * 3 + 2] = b;
-  pool.life[i] = dur; pool.maxL[i] = dur;
+  pool.life[i] = dur; pool.maxL[i] = dur; pool.colDirty = true; pool.alive = 1;
 }
 function updatePool(pool, dt, grav = 3) {
+  // Leere Pools nicht jedes Frame neu zur GPU schicken
+  if (!pool.alive) return;
   const { pos, vel, life, maxL } = pool;
+  let alive = 0;
   for (let i = 0; i < pool.n; i++) {
     if (life[i] <= 0) continue;
     life[i] -= dt;
     if (life[i] <= 0) { pos[i * 3] = 9999; continue; }
+    alive++;
     const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2], l = Math.hypot(x, y, z) || 1;
     vel[i * 3] -= x / l * grav * dt; vel[i * 3 + 1] -= y / l * grav * dt; vel[i * 3 + 2] -= z / l * grav * dt;
     pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
     if (M && l < M.R) { pos[i * 3] *= M.R / l; pos[i * 3 + 1] *= M.R / l; pos[i * 3 + 2] *= M.R / l; vel[i * 3] *= 0.3; vel[i * 3 + 1] *= 0.3; vel[i * 3 + 2] *= 0.3; }
   }
-  pool.pts.geometry.attributes.position.needsUpdate = true; pool.pts.geometry.attributes.color.needsUpdate = true;
+  pool.alive = alive;
+  pool.pts.geometry.attributes.position.needsUpdate = true;
+  if (pool.colDirty) { pool.pts.geometry.attributes.color.needsUpdate = true; pool.colDirty = false; }
 }
 const _pe = new V3(), _pv = new V3();
 function burst(pool, at, n, speed, life, col, up) {
@@ -1650,7 +1689,7 @@ const sfx = {
 };
 
 // ---------- HUD-Helfer ----------
-let toastT = 0, bannerT = 0, sayT = 0, shake = 0, hardToastT = 0, fullToastT = 0, rateAcc = 0, hudT = 0;
+let hurtA = 0, toastT = 0, bannerT = 0, sayT = 0, shake = 0, hardToastT = 0, fullToastT = 0, rateAcc = 0, hudT = 0;
 function toast(msg, t = 3) { $('toast').innerHTML = msg; $('toast').classList.add('show'); toastT = t; }
 function banner(msg, t = 2) { $('banner').innerHTML = msg; $('banner').classList.add('show'); bannerT = t; }
 const moodEmoji = () => M.clean < 50 ? '🌚' : M.clean < 75 ? '🌕' : '🌝';
@@ -1725,14 +1764,14 @@ function impact(m) {
     const lost = P.tank.u * 0.3; P.tank.u -= lost; P.tank.v *= 0.7;
     _rt.copy(P.d).addScaledVector(m.d, -P.d.dot(m.d)); if (_rt.lengthSq() < 1e-8) _rt.copy(P.f); _rt.normalize();
     P.kv.copy(_rt).multiplyScalar(8); P.vh = 6; P.h = Math.max(P.h, 0.05);
-    $('hurt').style.opacity = 0.9;
+    hurtA = 0.9;
     toast(`☄️ Volltreffer! ${lost > 0.5 ? fmt(lost) + ' Liter Dreck verschüttet.' : 'Zum Glück war der Tank leer.'}`, 3);
   }
   if (dist < 22 && Math.random() < 0.6) say(pick(LINES.meteor), 3.5);
 }
 
 // Sphärischer Raycast auf den Mond
-const _rayDir = new V3(), _camPos = new V3(), _hitPos = new V3();
+const _rayDir = new V3(), _camPos = new V3(), _hitPos = new V3(), _sprayC = new THREE.Color();
 function raycastMoon(camPos, dir, R) {
   const b = camPos.dot(dir);
   const c = camPos.lengthSq() - R * R;
@@ -1833,7 +1872,7 @@ function updatePlayer(dt, now) {
       }
       // Hochdruck-Wasserstrahl / Laser / Kometen-Partikel
       if (isWiping && (T.id === 'washer' || T.id === 'laser' || T.id === 'comet')) {
-        const c = new THREE.Color(T.id === 'washer' ? 0x7dd3fc : T.id === 'laser' ? 0xf472b6 : 0x67e8f9);
+        const c = _sprayC.setHex(T.id === 'washer' ? 0x7dd3fc : T.id === 'laser' ? 0xf472b6 : 0x67e8f9);
         emit(sprayP, hp, rnd(-2, 2), rnd(-2, 2), rnd(-2, 2), 0.45, c.r, c.g, c.b);
       }
       // Glanz-Funkeln bei frisch gereinigtem Mondgestein
@@ -1869,12 +1908,9 @@ function updatePlayer(dt, now) {
   updateRing(P.ringC, T.r / R);
 
   // Reticle UI (Fadenkreuz)
-  const retEl = $('reticle');
-  if (retEl) {
-    if (blockedRing) { retEl.className = 'blocked'; $('reticleHint').textContent = 'ZU HART'; }
-    else if (isWiping && P.active) { retEl.className = 'active'; $('reticleHint').textContent = tempo > 1.15 ? `TEMPO ×${tempo.toFixed(1).replace('.', ',')} 🔥` : 'WISCHT ✨ – hin & her!'; }
-    else { retEl.className = ''; $('reticleHint').textContent = '🧽 SCHRUBBEN'; }
-  }
+  if (blockedRing) { dset('reticle', 'class', 'blocked'); dset('reticleHint', 'text', 'ZU HART'); }
+  else if (isWiping && P.active) { dset('reticle', 'class', 'active'); dset('reticleHint', 'text', tempo > 1.15 ? `TEMPO ×${tempo.toFixed(1).replace('.', ',')} 🔥` : 'WISCHT ✨ – hin & her!'); }
+  else { dset('reticle', 'class', ''); dset('reticleHint', 'text', '🧽 SCHRUBBEN'); }
 
   // Verkaufen an Mondbasis
   if (onPad && P.tank.u > 0.01) sellTank(false);
@@ -2130,7 +2166,7 @@ function updateCamera(dt, now) {
 
     camera.position.copy(_pp);
     if (shake > 0) camera.position.add(_pv.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(shake * 0.25));
-    _m4.makeBasis(_camRight, _camUp, _lookDir.clone().negate());
+    _m4.makeBasis(_camRight, _camUp, _lookDir.negate());
     camera.quaternion.setFromRotationMatrix(_m4);
     // Leichtes Neigen beim Seitwärtslaufen
     camRoll += (-P.side * 0.028 - camRoll) * (1 - Math.exp(-dt * 6));
@@ -2158,7 +2194,7 @@ function updateHud(dt) {
   toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show');
   bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show');
   sayT -= dt; if (sayT <= 0) $('say').classList.remove('show');
-  $('hurt').style.opacity = Math.max(0, parseFloat($('hurt').style.opacity || 0) - dt * 1.4);
+  hurtA = Math.max(0, hurtA - dt * 1.4); dset('hurt', 'opacity', hurtA > 0 ? hurtA.toFixed(2) : '0');
 
   for (let i = pops.length - 1; i >= 0; i--) {
     const p = pops[i]; p.t -= dt; p.p.addScaledVector(P.d, dt * 1.2); _pv.copy(p.p).project(camera);
@@ -2173,37 +2209,37 @@ function updateHud(dt) {
       _pv.copy(P.ringC).multiplyScalar(M.R + 0.05).project(camera);
       if (_pv.z < 1) { rx = (_pv.x * 0.5 + 0.5) * innerWidth; ry = (-_pv.y * 0.5 + 0.5) * innerHeight; }
     }
-    const re = $('reticle'); re.style.left = rx + 'px'; re.style.top = ry + 'px';
+    dset('reticle', 'left', Math.round(rx) + 'px'); dset('reticle', 'top', Math.round(ry) + 'px');
   }
   rateAcc *= Math.exp(-dt / 4);
   hudT -= dt; if (hudT > 0) return; hudT = 0.1;
 
   const cl = M.clean;
-  $('moonTxt').innerHTML = `${moodEmoji()} <b>${M.name}</b>, ${M.def.title} · <b style="color:${save.m90 ? '#fde047' : '#e9d5ff'}">${f1(Math.floor(cl * 10) / 10)} %</b> sauber${save.m90 ? ' ✨' : ' · Ziel 90 %'}`;
-  $('cleanFill').style.width = cl + '%';
-  $('money').textContent = '🪙 ' + fmt(save.money);
-  $('rate').textContent = `⚡ ${f1(rateAcc / 4 * charm())} 🪙/s` + (robots.length ? ` · 🤖 ${robots.length}` : '');
+  dset('moonTxt', 'html', `${moodEmoji()} <b>${M.name}</b>, ${M.def.title} · <b style="color:${save.m90 ? '#fde047' : '#e9d5ff'}">${f1(Math.floor(cl * 10) / 10)} %</b> sauber${save.m90 ? ' ✨' : ' · Ziel 90 %'}`);
+  dset('cleanFill', 'width', cl.toFixed(1) + '%');
+  dset('money', 'text', '🪙 ' + fmt(save.money));
+  dset('rate', 'text', `⚡ ${f1(rateAcc / 4 * charm())} 🪙/s` + (robots.length ? ` · 🤖 ${robots.length}` : ''));
 
   const cap = tankCap(), full = P.tank.u >= cap - 1e-6;
-  $('tankTxt').innerHTML = `🎒 Dreck-Tank <b>${fmt(P.tank.u)} / ${fmt(cap)} L</b> · Wert ${fmt(P.tank.v * charm())} 🪙`;
-  $('tankFill').style.width = Math.min(100, P.tank.u / cap * 100) + '%';
-  $('tankFill').style.background = full ? '#ef4444' : `rgb(${M.def.soft.col.map(c => Math.min(255, c + 40)).join(',')})`;
+  dset('tankTxt', 'html', `🎒 Dreck-Tank <b>${fmt(P.tank.u)} / ${fmt(cap)} L</b> · Wert ${fmt(P.tank.v * charm())} 🪙`);
+  dset('tankFill', 'width', Math.min(100, P.tank.u / cap * 100).toFixed(1) + '%');
+  dset('tankFill', 'background', full ? '#ef4444' : `rgb(${M.def.soft.col.map(c => Math.min(255, c + 40)).join(',')})`);
   $('tank').classList.toggle('full', full);
 
-  $('bSell').style.display = save.up.beam ? '' : 'none'; $('tSell').style.display = save.up.beam && touchMode ? 'flex' : 'none';
-  $('bTravel').style.display = save.m90 ? '' : 'none';
-  if (save.m90) $('bTravel').textContent = `🚀 Weiter zu ${moonName(M.idx + 1)}`;
+  dset('bSell', 'display', save.up.beam ? '' : 'none'); dset('tSell', 'display', save.up.beam && touchMode ? 'flex' : 'none');
+  dset('bTravel', 'display', save.m90 ? '' : 'none');
+  if (save.m90) dset('bTravel', 'text', `🚀 Weiter zu ${moonName(M.idx + 1)}`);
 
   let pr = '';
   const atBase = P.d.dot(M.station) < Math.cos(2.2 / M.R) && P.d.dot(M.station) > Math.cos(5 / M.R);
   if (atBase && P.tank.u > 0) pr = '♻️ Stell dich auf das grüne Pad zum Verkaufen';
   else if (P.d.dot(M.station) > Math.cos(2.2 / M.R)) pr = '♻️ Mondbasis · <b>B</b>: Shop öffnen';
-  $('prompt').style.display = pr ? 'block' : 'none'; $('prompt').innerHTML = pr;
+  dset('prompt', 'display', pr ? 'block' : 'none'); dset('prompt', 'html', pr);
 
   // Kompass-Peilung zur Mondbasis
   const angleToBase = Math.acos(clamp(P.d.dot(M.station), -1, 1));
   const distM = Math.round(angleToBase * M.R);
-  $('compassDist').textContent = distM;
+  dset('compassDist', 'text', String(distM));
   _toBaseTang.copy(M.station).addScaledVector(P.d, -M.station.dot(P.d)).normalize();
   const fwdDot = P.f.dot(_toBaseTang);
   const rightDot = _rv.crossVectors(P.f, P.d).dot(_toBaseTang);
@@ -2211,7 +2247,7 @@ function updateHud(dt) {
   if (fwdDot < -0.6) arrowSym = '▼';
   else if (rightDot > 0.4) arrowSym = '►';
   else if (rightDot < -0.4) arrowSym = '◄';
-  $('compassArrow').textContent = arrowSym;
+  dset('compassArrow', 'text', arrowSym);
 }
 
 // ---------- Shop ----------
@@ -2442,12 +2478,44 @@ addEventListener('resize', () => {
   if (composer) composer.setSize(innerWidth, innerHeight);
 });
 
+// Adaptive Qualität: Auflösung runter bei < 48 FPS, wieder hoch bei stabilen ~60 FPS; ganz unten zusätzlich Bloom aus
+const perf = { acc: 0, n: 0, good: 0, cool: 2, ceil: 9 };
+function setRenderScale(s) {
+  s = Math.round(clamp(s, PR_MIN, PR_MAX) * 100) / 100;
+  if (s === prScale) return false;
+  prScale = s; renderer.setPixelRatio(s); renderer.setSize(innerWidth, innerHeight);
+  if (composer) { composer.setPixelRatio(s); composer.setSize(innerWidth, innerHeight); }
+  return true;
+}
+function adaptQuality(rawDt) {
+  if (rawDt > 0.25 || state === 'pause' || document.hidden) return; // Tab-Wechsel/Pause nicht mitzählen
+  perf.acc += rawDt; perf.n++;
+  if (perf.acc < 1) return;
+  const fps = perf.n / perf.acc; perf.acc = 0; perf.n = 0;
+  if (perf.cool > 0) { perf.cool--; return; }
+  if (fps < 48) {
+    perf.good = 0;
+    // Stufe, an der es ruckelte, merken – sonst pendelt die Auflösung ständig hoch und runter
+    perf.ceil = Math.min(perf.ceil, prScale - 0.05);
+    if (!setRenderScale(prScale - 0.15) && bloomPass && bloomPass.enabled) bloomPass.enabled = false;
+    perf.cool = 1;
+  } else if (fps > 57) {
+    if (++perf.good >= 4) {
+      perf.good = 0;
+      if (prScale + 0.1 <= perf.ceil) setRenderScale(prScale + 0.1);
+      perf.cool = 1;
+    }
+  } else perf.good = 0;
+}
+
 // ---------- Hauptschleife ----------
 let last = performance.now();
 const _eyeT = new V3();
 function loop(now) {
   requestAnimationFrame(loop);
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const rawDt = (now - last) / 1000;
+  const dt = Math.min(0.05, rawDt); last = now;
+  adaptQuality(rawDt);
   if (state === 'play') { updatePlayer(dt, now); updateWorld(dt, now); shake = Math.max(0, shake - dt * 1.5); }
   updateAstro(dt, now);
   updateCamera(dt, now);
