@@ -92,7 +92,7 @@ button.gold { background:linear-gradient(#facc15,#ca8a04); box-shadow:0 4px 0 #8
   position:absolute; inset:0;
   background:linear-gradient(rgba(18,16,38,0) 50%, rgba(0,0,0,0.2) 50%), linear-gradient(90deg, rgba(255,0,0,0.015), rgba(0,255,0,0.01), rgba(0,0,255,0.015));
   background-size:100% 4px, 6px 100%;
-  pointer-events:none; opacity:0.65;
+  pointer-events:none; opacity:0.22;
 }
 .visor-glass {
   position:absolute; top:3%; right:5%; width:35%; height:24%;
@@ -198,8 +198,8 @@ body.touch #prompt { bottom:auto; top:210px; }
   <h1>🌝 Mondputzer 3D</h1>
   <p>Der Mond wurde seit 4,5 Milliarden Jahren nicht geputzt – die Erde lacht schon über ihn! In der <b>3D Ego-Perspektive</b> schrubbst du mit deinen eigenen Händen den Mondstaub, Käseschimmel und Krater-Schmutz weg.</p>
   <p>Verkauf den Dreck an der <b>Mondbasis am Nordpol</b> und rüste von der <b>Zahnbürste</b> über <b>Schwämme</b> und <b>Hochdruckreiniger</b> bis zum <b>Kometen-Kärcher 9000</b> auf. Bei 90 % Sauberkeit reist du zum nächsten Mond weiter!</p>
-  <p><b>Laufen:</b> W/A/S/D · <b>Kamera:</b> Maus bewegen (Klick für Ego-Lock)<br>
-  <b>Staub abwischen:</b> Linksklick halten (oder 🧽 / E) und Maus flott <b>hin und her</b> – je schneller, desto mehr Putzkraft!<br>
+  <p><b>Laufen:</b> W/S vor/zurück · A/D seitwärts · <b>Shift</b> sprinten · <b>Kamera:</b> Maus (Klick für Maus-Lock, Esc = Pause)<br>
+  <b>Staub abwischen:</b> Linksklick halten (oder 🧽 / E) – der Putzkopf folgt der Maus. Flott <b>hin und her</b> wischen = mehr Putzkraft!<br>
   <b>Hüpfen:</b> Leertaste / Rechtsklick (mit Jetpack: Stampf-Putz) · <b>Ansicht:</b> C (Ego / 3D-Verfolger)<br>
   <b>B:</b> Shop · <b>1–8 / Rad:</b> Gerät wechseln · <b>P:</b> Pause · <b>M:</b> Ton</p>
   <p class="stats" id="menuStats"></p>
@@ -232,6 +232,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // ---------- Helfer ----------
 const $ = id => document.getElementById(id);
@@ -473,7 +474,10 @@ scene.add(camera);
 // Post-Processing (Bloom für Sterne, Sonne, Laser & Glanz)
 let composer = null;
 try {
-  composer = new EffectComposer(renderer);
+  // MSAA-Rendertarget (sonst geht die Kantenglättung im Composer verloren)
+  const pr = renderer.getPixelRatio();
+  const rt = new THREE.WebGLRenderTarget(innerWidth * pr, innerHeight * pr, { type: THREE.HalfFloatType, samples: renderer.capabilities.isWebGL2 ? 4 : 0 });
+  composer = new EffectComposer(renderer, rt);
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
   const bloomPass = new UnrealBloomPass(
@@ -483,6 +487,8 @@ try {
     0.85  // threshold
   );
   composer.addPass(bloomPass);
+  // OutputPass: ACES-Tonemapping + sRGB-Umrechnung (ohne wirkt das Bild flau und zu dunkel)
+  composer.addPass(new OutputPass());
 } catch (e) {
   console.warn('Bloom/Composer nicht aktiv:', e);
   composer = null;
@@ -726,13 +732,13 @@ function makeBaseTexture(def, rng) {
   return canvasTex(2048, 1024, (g, W, H) => {
     const noise = makeNoise2D(8888 + (def.R | 0));
     g.fillStyle = def.base1; g.fillRect(0, 0, W, H);
-    
+
     // 1. Großräumige Maria (dunkle Basalt-Ebenen) vs Hochland-Terrassen
     const imgData = g.getImageData(0, 0, W, H), pix = imgData.data;
     const c1 = parseInt(def.base1.slice(1), 16), c2 = parseInt(def.base2.slice(1), 16);
     const r1 = (c1 >> 16) & 255, g1 = (c1 >> 8) & 255, b1 = c1 & 255;
     const r2 = (c2 >> 16) & 255, g2 = (c2 >> 8) & 255, b2 = c2 & 255;
-    
+
     for (let y = 0; y < H; y++) {
       const ny = y / H * 8;
       for (let x = 0; x < W; x++) {
@@ -741,7 +747,7 @@ function makeBaseTexture(def, rng) {
         const nMid = noise(nx * 1.5, ny * 1.5) * 0.5;
         const nHigh = noise(nx * 5.0, ny * 5.0) * 0.25;
         const f = clamp(0.5 + (nLow + nMid + nHigh) * 0.45, 0, 1);
-        
+
         const idx = (y * W + x) * 4;
         pix[idx] = clamp(r1 * (1 - f) + r2 * f + (Math.random() - 0.5) * 14, 0, 255);
         pix[idx + 1] = clamp(g1 * (1 - f) + g2 * f + (Math.random() - 0.5) * 14, 0, 255);
@@ -889,7 +895,7 @@ function buildMoon(idx, grid) {
   M = { idx, def, loop, R, R2: R * R, valMult: Math.pow(5, loop), name: moonName(idx), group: new THREE.Group(), obs: [], eyes: [], mouth: null, mouthM: 99,
     clean: 0, meteorT: 50, junkT: 8, idleT: 30, ms: 0, station: new V3(0, 1, 0), face: { th0: Math.PI / 2 - 0.04, ph0: Math.PI / 2 } };
   scene.add(M.group);
-  
+
   M.baseTex = makeBaseTexture(def, rng); M.baseTex.wrapS = THREE.RepeatWrapping;
   M.bumpTex = makeBumpTexture(def, rng); M.bumpTex.wrapS = THREE.RepeatWrapping;
 
@@ -932,13 +938,13 @@ function buildMoon(idx, grid) {
     displacementBias: -0.05
   });
   const dm = new THREE.Mesh(new THREE.SphereGeometry(R + 0.025, 384, 192), M.dirtMat); dm.receiveShadow = true; dm.renderOrder = 1; M.group.add(dm);
-  
+
   const old = skyPlanet.material.map; skyPlanet.material.map = planetTex(def.planet); skyPlanet.material.needsUpdate = true; if (old) old.dispose();
   skyPlanet.position.copy(def.planet.d); skyPlanet.scale.setScalar(def.planet.r);
   skyPlanetGlowMat.uniforms.cColor.value.set(def.planet.col);
-  
+
   buildStation(); buildFace(); buildRocks(rng);
-  
+
   // Dreck erzeugen
   const fA = makeField(rng, 12, 1.6, 10), fB = makeField(rng, 12, 1.3, 7);
   const nh = new Float32Array(GN); for (let i = 0; i < GN; i++) nh[i] = fB(DX[i], DY[i], DZ[i]);
@@ -958,7 +964,7 @@ function buildMoon(idx, grid) {
   M.totalValue = tv * M.R2 * M.valMult;
   M.clean = computeClean();
   M.ms = [25, 50, 75].filter(x => M.clean >= x).length;
-  
+
   // Licht & Schatten
   sun.position.copy(SUN_DIR).multiplyScalar(R + 40); sun.target.position.set(0, 0, 0);
   sunGroup.position.copy(SUN_DIR).multiplyScalar(R + 250); sunGroup.lookAt(0, 0, 0);
@@ -966,7 +972,7 @@ function buildMoon(idx, grid) {
   sun.shadow.camera.updateProjectionMatrix();
   for (let k = 0; k < 10 + Math.min(8, idx); k++) spawnJunk();
   M.meteorT = 45;
-  
+
   // Spieler an Basis
   P.d.copy(sph(1.3 / R, Math.PI / 2)); P.f.set(0, -Math.sin(1.3 / R), Math.cos(1.3 / R)); P.h = 0; P.vh = 0; P.kv.set(0, 0, 0);
   for (const r of robots) placeRobot(r);
@@ -1075,7 +1081,7 @@ function randomFreeDir(minNorth = 5) {
 }
 
 // ---------- Spieler & Astronaut (3D & Ego) ----------
-const P = { d: new V3(0, 1, 0), f: new V3(0, 0, 1), h: 0, vh: 0, kv: new V3(), walk: 0, tank: { u: 0, v: 0 }, cleanC: new V3(), ringC: new V3(), active: false, scrubbing: false, bumpT: 0 };
+const P = { d: new V3(0, 1, 0), f: new V3(0, 0, 1), h: 0, vh: 0, kv: new V3(), mv: new V3(), speed: 0, moving: false, side: 0, sprint: false, landDip: 0, walk: 0, tank: { u: 0, v: 0 }, cleanC: new V3(), ringC: new V3(), active: false, scrubbing: false, bumpT: 0 };
 let camMode = '1st'; // Standardmäßig First-Person!
 let lookPitch = -0.3; // Blick leicht auf den Boden gerichtet
 let isWiping = false;
@@ -1083,6 +1089,25 @@ let isMouseDown = false;
 let isTouchWiping = false;
 let isPointerLocked = false;
 let fpWipePhase = 0;
+// Wisch-Zielen: beim Wischen bewegt die Maus den Putzkopf (Offset zum Blick), erst am Rand dreht die Kamera mit
+const AIM_X = 0.32, AIM_Y = 0.22, LOOK_SENS = 0.0024;
+const wipeAim = { x: 0, y: 0 };
+let aimHit = false, camRoll = 0;
+function lookBy(dx, dy, sens) {
+  if (!dx && !dy) return;
+  if (isWiping && camMode === '1st') {
+    const k = sens * 1.15;
+    const nx = wipeAim.x + dx * k, ny = wipeAim.y - dy * k;
+    wipeAim.x = clamp(nx, -AIM_X, AIM_X); wipeAim.y = clamp(ny, -AIM_Y, AIM_Y);
+    // Überlauf am Rand + leichtes Mitziehen dreht die Kamera
+    const ox = (nx - wipeAim.x) + dx * sens * 0.12, oy = (ny - wipeAim.y) - dy * sens * 0.12;
+    if (ox) { _q.setFromAxisAngle(P.d, -ox); P.f.applyQuaternion(_q); }
+    lookPitch = clamp(lookPitch + oy, -1.25, 1.15);
+  } else {
+    _q.setFromAxisAngle(P.d, -dx * sens); P.f.applyQuaternion(_q);
+    lookPitch = clamp(lookPitch - dy * sens, -1.25, 1.15);
+  }
+}
 // Wisch-Tempo: je flotter die Maus beim Wischen hin und her geht, desto mehr Kraft
 const TEMPO_MAX = 2.5;
 let swipeE = 0, swipeDir = 0, tempo = 1;
@@ -1222,7 +1247,7 @@ function buildFpTool() {
   const add = (geo, mat, x = 0, y = 0, z = 0, parent = fpToolSlot) => {
     const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m;
   };
-  
+
   switch (t.id) {
     case 'brush': {
       // Ergonomische Zahnbürste mit transluzenten Borsten und Schaum
@@ -1724,25 +1749,39 @@ function raycastMoon(camPos, dir, R) {
 
 function updatePlayer(dt, now) {
   const R = M.R;
-  let fwd = 0, turn = 0;
+  // Ego: A/D = seitwärts (Maus dreht) · Verfolger: A/D = drehen · Pfeile links/rechts drehen immer
+  const fps = camMode === '1st';
+  let fwd = 0, turn = 0, side = 0;
   if (keys.w || keys.arrowup) fwd += 1; if (keys.s || keys.arrowdown) fwd -= 1;
-  if (keys.a || keys.arrowleft) turn += 1; if (keys.d || keys.arrowright) turn -= 1;
-  fwd = clamp(fwd - joy.y, -1, 1); turn = clamp(turn - joy.x * 0.9, -1, 1);
+  if (keys.arrowleft) turn += 1; if (keys.arrowright) turn -= 1;
+  if (fps) { if (keys.a) side -= 1; if (keys.d) side += 1; side += joy.x; }
+  else { if (keys.a) turn += 1; if (keys.d) turn -= 1; turn -= joy.x * 0.9; }
+  fwd = clamp(fwd - joy.y, -1, 1); turn = clamp(turn, -1, 1); side = clamp(side, -1, 1);
   const ta = turn * 2.5 * dt + dragTurn; dragTurn = 0;
   if (ta) { _q.setFromAxisAngle(P.d, ta); P.f.applyQuaternion(_q); }
-  const spd = walkSpeed() * (fwd < 0 ? 0.6 : 1);
+  P.sprint = !!keys.shift && fwd > 0.2;
+  const spd = walkSpeed() * (P.sprint ? 1.5 : 1) * (isWiping ? 0.75 : 1);
+  // Wunschgeschwindigkeit (tangential), weich beschleunigen – in der Luft kaum Kontrolle
+  _hu.crossVectors(P.f, P.d);
+  _pv.copy(P.f).multiplyScalar(fwd * (fwd < 0 ? 0.65 : 1)).addScaledVector(_hu, side * 0.85);
+  if (_pv.lengthSq() > 1) _pv.normalize();
+  _pv.multiplyScalar(spd);
+  P.mv.addScaledVector(P.d, -P.mv.dot(P.d));
+  P.mv.lerp(_pv, 1 - Math.exp(-dt * (P.h > 0 ? 1.5 : (_pv.lengthSq() > 0.01 ? 9 : 12))));
+  P.speed = P.mv.length(); P.side = side;
   P.kv.addScaledVector(P.d, -P.kv.dot(P.d)).multiplyScalar(Math.exp(-dt * (P.h > 0 ? 0.8 : 4)));
-  _disp.copy(P.f).multiplyScalar(fwd * spd * dt).addScaledVector(P.kv, dt);
+  _disp.copy(P.mv).multiplyScalar(dt).addScaledVector(P.kv, dt);
   moveOnSphere(P.d, P.f, _disp, R + P.h);
   const hit = collide(P.d, P.f, 0.36, P.h);
   if (hit && (hit.kind === 'eye' || hit.kind === 'nose')) moonBump(hit);
   P.bumpT -= dt;
   if (P.h > 0 || P.vh > 0) {
     P.vh -= GRAV * dt; P.h += P.vh * dt;
-    if (P.h <= 0) { if (P.vh < -2.5) { sfx.land(); burst(dustP, P.d.clone().multiplyScalar(R + 0.1), 14, 1.6, 0.8, M.def.soft.col.map(c => c / 255), P.d); if (P.vh < -4) { P.h = 0; stomp(); } } P.h = 0; P.vh = 0; }
+    if (P.h <= 0) { P.landDip = Math.max(P.landDip, Math.min(0.22, -P.vh * 0.03)); if (P.vh < -2.5) { sfx.land(); burst(dustP, P.d.clone().multiplyScalar(R + 0.1), 14, 1.6, 0.8, M.def.soft.col.map(c => c / 255), P.d); if (P.vh < -4) { P.h = 0; stomp(); } } P.h = 0; P.vh = 0; }
   }
-  const moving = Math.abs(fwd) > 0.05 && P.h <= 0;
-  if (moving) { const before = Math.floor(P.walk / Math.PI); P.walk += dt * spd * 2.4 * Math.abs(fwd); if (Math.floor(P.walk / Math.PI) !== before) sfx.step(); }
+  const moving = P.speed > 0.35 && P.h <= 0; P.moving = moving;
+  if (moving) { const before = Math.floor(P.walk / Math.PI); P.walk += dt * P.speed * 2.4; if (Math.floor(P.walk / Math.PI) !== before) sfx.step(); }
+  P.landDip *= Math.exp(-dt * 7);
 
   // Putz-Zentren & Zielpunkt ermitteln
   const T = tool(), onGround = P.h < 0.04, full = P.tank.u >= tankCap() - 1e-6;
@@ -1753,8 +1792,11 @@ function updatePlayer(dt, now) {
   let targetCleanDir = P.cleanC;
   if (camMode === '1st') {
     _camPos.copy(P.d).multiplyScalar(R + P.h + 1.25);
-    _rayDir.copy(P.f).multiplyScalar(Math.cos(lookPitch)).addScaledVector(P.d, Math.sin(lookPitch)).normalize();
+    _q.setFromAxisAngle(P.d, -wipeAim.x); _ld.copy(P.f).applyQuaternion(_q);
+    const pa = clamp(lookPitch + wipeAim.y, -1.4, 1.3);
+    _rayDir.copy(_ld).multiplyScalar(Math.cos(pa)).addScaledVector(P.d, Math.sin(pa)).normalize();
     const hitDir = raycastMoon(_camPos, _rayDir, R);
+    aimHit = !!hitDir;
     if (hitDir) {
       targetCleanDir = hitDir;
       P.ringC.copy(hitDir);
@@ -1763,6 +1805,7 @@ function updatePlayer(dt, now) {
   }
 
   isWiping = isMouseDown || isTouchWiping || !!keys.e || !!keys.f;
+  if (!isWiping) { const k = Math.exp(-dt * 7); wipeAim.x *= k; wipeAim.y *= k; }
   swipeE *= Math.exp(-dt * (isWiping ? 2.2 : 6));
   tempo = 1 + swipeE;
   P.active = onGround && !full && !onPad;
@@ -1773,17 +1816,17 @@ function updatePlayer(dt, now) {
     // Wenn aktiv gewischt wird (Mausklick/Halten), 2.2x Turboschub + Staub-Explosion
     const powerMult = isWiping ? 1.6 * tempo : (moving ? 1.0 : 0.6);
     const res = scrub(targetCleanDir, T.r / R, T.p * soapMult() * powerMult * dt, T.tier);
-    
+
     if (res.u > 1e-5) {
       collectDirt(res);
       P.scrubbing = res.u > dt * 0.01;
-      
+
       const hp = _hp.copy(targetCleanDir).multiplyScalar(R + 0.15), col = (res.blocked ? M.def.hard : M.def.soft).col;
       // Dreck-Flocken fliegen vom Werkzeug weg – mehr, je flotter gewischt wird
       _ld.copy(P.f).multiplyScalar(-1).addScaledVector(_hu, swipeDir * 0.8);
       let fl = Math.min(4, res.u * (isWiping ? 9 : 4) * tempo / Math.max(dt * 60, 0.5));
       while (fl > 0) { if (Math.random() < fl) { _pe.copy(hp).addScaledVector(_hu, rnd(-0.5, 0.5) * T.r); emitFlake(_pe, targetCleanDir, _ld, isWiping ? 1.2 + tempo * 0.5 : 0.9, col); } fl -= 1; }
-      
+
       // Sichtbare Staubwolken, die beim Wischen aufwirbeln!
       if (Math.random() < (isWiping ? 0.95 : 0.7)) {
         emit(dustP, hp.addScaledVector(_hu, rnd(-0.4, 0.4) * T.r), rnd(-1.5, 1.5), rnd(-1.5, 1.5), rnd(-1.5, 1.5), 0.75, col[0] / 255, col[1] / 255, col[2] / 255);
@@ -1883,16 +1926,20 @@ function updateFpRig(dt, now, moving) {
 
   const T = tool();
   const breathe = Math.sin(now * 0.003) * 0.005;
-  const walkBobX = moving ? Math.cos(P.walk * 0.5) * 0.012 : 0;
-  const walkBobY = moving ? Math.abs(Math.sin(P.walk)) * 0.015 : 0;
+  const bob = moving ? clamp(P.speed / walkSpeed(), 0, 1.5) : 0;
+  const walkBobX = Math.cos(P.walk * 0.5) * 0.014 * bob;
+  const walkBobY = Math.abs(Math.sin(P.walk)) * 0.016 * bob;
+  // Mausgeführtes Wischen: Hand folgt dem Ziel, Auto-Animation nur gedämpft
+  const aimed = Math.min(1, (Math.abs(wipeAim.x) + Math.abs(wipeAim.y)) * 12);
+  const auto = 1 - aimed * 0.7;
 
   let wipeX = 0, wipeY = 0, wipeZ = 0, wipeRotZ = 0, wipeRotX = 0;
   if (isWiping) {
     fpWipePhase += dt * (T.id === 'brush' ? 18 : 13) * (0.7 + tempo * 0.3);
-    wipeX = Math.sin(fpWipePhase) * 0.08;
-    wipeY = Math.abs(Math.cos(fpWipePhase)) * 0.035 - 0.04;
-    wipeZ = Math.sin(fpWipePhase * 2) * 0.04;
-    wipeRotZ = Math.sin(fpWipePhase) * 0.28;
+    wipeX = Math.sin(fpWipePhase) * 0.08 * auto;
+    wipeY = Math.abs(Math.cos(fpWipePhase)) * 0.035 * auto - 0.04;
+    wipeZ = Math.sin(fpWipePhase * 2) * 0.04 * auto;
+    wipeRotZ = Math.sin(fpWipePhase) * 0.28 * auto;
     wipeRotX = -0.15 + Math.abs(Math.sin(fpWipePhase)) * 0.12;
 
     if (fpSpinPad) fpSpinPad.rotation.y += dt * 35;
@@ -1912,35 +1959,36 @@ function updateFpRig(dt, now, moving) {
     fpBeam.material.opacity = (isWiping && P.active) ? 0.75 + Math.random() * 0.25 : 0;
   }
 
-  fpArmGroup.position.set(0.24 + walkBobX + wipeX, -0.22 + breathe - walkBobY + wipeY, -0.44 + wipeZ);
-  fpArmGroup.rotation.set(-0.1 + wipeRotX, 0.05, wipeRotZ);
+  const ax = wipeAim.x * 0.62, ay = wipeAim.y * 0.55;
+  fpArmGroup.position.set(0.24 + walkBobX + wipeX + ax, -0.22 + breathe - walkBobY + wipeY + ay, -0.44 + wipeZ);
+  fpArmGroup.rotation.set(-0.1 + wipeRotX + wipeAim.y * 0.6, 0.05 - wipeAim.x * 0.9, wipeRotZ - wipeAim.x * 0.5);
 }
 
 function updateAstro(dt, now) {
   const R = M.R;
   if (state !== 'play') brushCenters(now, false);
-  
+
   // Im Ego-Modus blenden wir den Körper aus, damit keine Kamera-Überschneidungen entstehen
   astro.visible = (camMode === '3rd');
   astro.position.copy(P.d).multiplyScalar(R + P.h);
   orientUp(astro, P.d, P.f);
-  
-  const moving = Math.abs((keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0) - joy.y) > 0.05;
+
+  const moving = P.moving;
   const sw = P.h > 0 ? 0 : moving ? Math.sin(P.walk) * 0.6 : 0;
   legs[0].rotation.x = P.h > 0 ? -0.5 : sw; legs[1].rotation.x = P.h > 0 ? 0.3 : -sw;
   body.position.y = moving && P.h <= 0 ? Math.abs(Math.sin(P.walk)) * 0.06 : 0;
-  
+
   const T = tool(), off = T.r * 0.55 + 0.6, scrubA = (P.active || isWiping) ? Math.sin(now * 0.02) * 0.25 : 0;
   if (TV.beam) { const a = -(Math.PI / 2 - Math.atan2(0.95, off)); arms[0].rotation.set(a, 0, 0); arms[1].rotation.set(a + 0.25, 0, -0.35); }
   else { arms[0].rotation.set(-0.85 + scrubA, 0, 0); arms[1].rotation.set(-0.75 - scrubA * 0.5, 0, 0.3); }
-  
+
   for (let k = 0; k < 2; k++) { const f = clamp(P.tank.u / tankCap(), 0.001, 1); tankFills[k].scale.y = f * 0.42; tankFills[k].position.y = 0.69 + f * 0.21; }
   astro.updateMatrixWorld(true);
   handAnchor.getWorldPosition(_ha);
-  
+
   if (P.h > 0.04) _hp.copy(astro.position).addScaledVector(P.f, 0.8).addScaledVector(P.d, 0.2);
   else _hp.copy(P.cleanC).multiplyScalar(R + 0.03);
-  
+
   if (TV.head) {
     TV.head.visible = (camMode === '3rd');
     TV.head.position.copy(_hp); _rt.copy(_hp).normalize(); orientUp(TV.head, _rt, P.f);
@@ -2061,6 +2109,9 @@ const _lookDir = new V3(), _camRight = new V3(), _camUp = new V3();
 
 function updateCamera(dt, now) {
   const R = M.R;
+  // FOV-Kick beim Sprinten
+  const fovT = 65 + (state === 'play' && P.sprint && P.moving ? 7 : 0);
+  if (Math.abs(camera.fov - fovT) > 0.01) { camera.fov += (fovT - camera.fov) * (1 - Math.exp(-dt * 6)); camera.updateProjectionMatrix(); }
   if (state === 'menu') {
     const a = Math.sin(now * 0.00012) * 0.7;
     _cd.set(Math.sin(a) * R * 2.9, R * 0.45, Math.cos(a) * R * 2.9); _cl.set(0, 0, 0); _cu.set(0, 1, 0);
@@ -2069,17 +2120,21 @@ function updateCamera(dt, now) {
   } else if (camMode === '1st') {
     // Exakte First-Person Ego-Kamera auf der Kugeloberfläche
     _pp.copy(P.d).multiplyScalar(R + P.h + 1.25);
-    const moving = Math.abs((keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0) - joy.y) > 0.05;
-    if (moving && P.h <= 0) _pp.addScaledVector(P.d, Math.abs(Math.sin(P.walk)) * 0.05);
-    
     _lookDir.copy(P.f).multiplyScalar(Math.cos(lookPitch)).addScaledVector(P.d, Math.sin(lookPitch)).normalize();
     _camRight.crossVectors(_lookDir, P.d).normalize();
     _camUp.crossVectors(_camRight, _lookDir).normalize();
-    
+    // Kopfwippen (vertikal + seitlich, skaliert mit Tempo) und Einknicken bei der Landung
+    const bob = P.moving ? clamp(P.speed / walkSpeed(), 0, 1.5) : 0;
+    _pp.addScaledVector(P.d, Math.abs(Math.sin(P.walk)) * 0.05 * bob - P.landDip);
+    _pp.addScaledVector(_camRight, Math.cos(P.walk) * 0.025 * bob);
+
     camera.position.copy(_pp);
     if (shake > 0) camera.position.add(_pv.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(shake * 0.25));
     _m4.makeBasis(_camRight, _camUp, _lookDir.clone().negate());
     camera.quaternion.setFromRotationMatrix(_m4);
+    // Leichtes Neigen beim Seitwärtslaufen
+    camRoll += (-P.side * 0.028 - camRoll) * (1 - Math.exp(-dt * 6));
+    if (Math.abs(camRoll) > 1e-4) camera.rotateZ(camRoll);
   } else {
     // 3D-Verfolgerkamera
     const z = cam.zoom += (cam.zoomT - cam.zoom) * (1 - Math.exp(-dt * 3));
@@ -2087,7 +2142,7 @@ function updateCamera(dt, now) {
     _cd.copy(_pp).addScaledVector(P.d, lerp(7.2, R * 2.3, z)).addScaledVector(P.f, -lerp(4.3, R * 0.5, z)).addScaledVector(_rv, -1.1 * (1 - z));
     _cl.copy(_pp).addScaledVector(P.d, 0.2).addScaledVector(P.f, 2.3 * (1 - z)).addScaledVector(_rv, 0.35 * (1 - z)).multiplyScalar(1 - z * 0.85);
     _cu.copy(P.d).lerp(P.f, z * 0.9).normalize();
-    
+
     const k = cam.snap ? 1 : 1 - Math.exp(-dt * 5);
     cam.snap = false;
     cam.pos.lerp(_cd, k); cam.look.lerp(_cl, k); cam.up.lerp(_cu, k).normalize();
@@ -2104,31 +2159,41 @@ function updateHud(dt) {
   bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show');
   sayT -= dt; if (sayT <= 0) $('say').classList.remove('show');
   $('hurt').style.opacity = Math.max(0, parseFloat($('hurt').style.opacity || 0) - dt * 1.4);
-  
+
   for (let i = pops.length - 1; i >= 0; i--) {
     const p = pops[i]; p.t -= dt; p.p.addScaledVector(P.d, dt * 1.2); _pv.copy(p.p).project(camera);
     if (p.t <= 0 || _pv.z > 1) { p.el.remove(); pops.splice(i, 1); continue; }
     p.el.style.left = (_pv.x * 0.5 + 0.5) * innerWidth + 'px'; p.el.style.top = (-_pv.y * 0.5 + 0.5) * innerHeight + 'px'; p.el.style.opacity = Math.min(1, p.t * 2);
   }
+  // Fadenkreuz sitzt dort, wo der Putzkopf wirklich trifft
+  if (camMode === '1st') {
+    let rx = innerWidth / 2, ry = innerHeight / 2;
+    if (aimHit && (Math.abs(wipeAim.x) + Math.abs(wipeAim.y)) > 0.002) {
+      camera.updateMatrixWorld();
+      _pv.copy(P.ringC).multiplyScalar(M.R + 0.05).project(camera);
+      if (_pv.z < 1) { rx = (_pv.x * 0.5 + 0.5) * innerWidth; ry = (-_pv.y * 0.5 + 0.5) * innerHeight; }
+    }
+    const re = $('reticle'); re.style.left = rx + 'px'; re.style.top = ry + 'px';
+  }
   rateAcc *= Math.exp(-dt / 4);
   hudT -= dt; if (hudT > 0) return; hudT = 0.1;
-  
+
   const cl = M.clean;
   $('moonTxt').innerHTML = `${moodEmoji()} <b>${M.name}</b>, ${M.def.title} · <b style="color:${save.m90 ? '#fde047' : '#e9d5ff'}">${f1(Math.floor(cl * 10) / 10)} %</b> sauber${save.m90 ? ' ✨' : ' · Ziel 90 %'}`;
   $('cleanFill').style.width = cl + '%';
   $('money').textContent = '🪙 ' + fmt(save.money);
   $('rate').textContent = `⚡ ${f1(rateAcc / 4 * charm())} 🪙/s` + (robots.length ? ` · 🤖 ${robots.length}` : '');
-  
+
   const cap = tankCap(), full = P.tank.u >= cap - 1e-6;
   $('tankTxt').innerHTML = `🎒 Dreck-Tank <b>${fmt(P.tank.u)} / ${fmt(cap)} L</b> · Wert ${fmt(P.tank.v * charm())} 🪙`;
   $('tankFill').style.width = Math.min(100, P.tank.u / cap * 100) + '%';
   $('tankFill').style.background = full ? '#ef4444' : `rgb(${M.def.soft.col.map(c => Math.min(255, c + 40)).join(',')})`;
   $('tank').classList.toggle('full', full);
-  
+
   $('bSell').style.display = save.up.beam ? '' : 'none'; $('tSell').style.display = save.up.beam && touchMode ? 'flex' : 'none';
   $('bTravel').style.display = save.m90 ? '' : 'none';
   if (save.m90) $('bTravel').textContent = `🚀 Weiter zu ${moonName(M.idx + 1)}`;
-  
+
   let pr = '';
   const atBase = P.d.dot(M.station) < Math.cos(2.2 / M.R) && P.d.dot(M.station) > Math.cos(5 / M.R);
   if (atBase && P.tank.u > 0) pr = '♻️ Stell dich auf das grüne Pad zum Verkaufen';
@@ -2195,14 +2260,14 @@ function shopAction(ds) {
   renderShop();
 }
 function equip(i) { if (!save.tools[i] || save.tool === i) return; save.tool = i; buildToolVis(); tone(500, 0.05, 'square', 0.05); persist(); if (state === 'shop') renderShop(); }
-function openShop() { if (state !== 'play') return; state = 'shop'; keys.w = keys.s = keys.a = keys.d = false; isMouseDown = false; isWiping = false; scrubSound(false, 0); renderShop(); $('shopO').classList.remove('hide'); }
+function openShop() { if (state !== 'play') return; state = 'shop'; unlockPointer(); keys.w = keys.s = keys.a = keys.d = false; isMouseDown = false; isWiping = false; scrubSound(false, 0); renderShop(); $('shopO').classList.remove('hide'); }
 function closeShop() { if (state !== 'shop') return; $('shopO').classList.add('hide'); state = 'play'; }
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => { shopTab = b.dataset.tab; renderShop(); });
 $('shopClose').onclick = closeShop;
 
 function travel() {
   if (!save.m90 || state !== 'play') return;
-  state = 'travel'; scrubSound(false, 0); isMouseDown = false; isWiping = false;
+  state = 'travel'; scrubSound(false, 0); isMouseDown = false; isWiping = false; unlockPointer();
   const next = M.idx + 1;
   $('fade').innerHTML = `🚀 Flug zu ${moonName(next)}…<br><span style="font-size:18px;color:#c4b5fd">${moonDef(next).title}</span>`; $('fade').classList.add('on');
   setTimeout(() => {
@@ -2216,13 +2281,13 @@ function travel() {
 }
 
 // ---------- Eingabe-Steuerung ----------
-let touchMode = false;
+let touchMode = false, pausedAt = 0;
 const joy = { x: 0, y: 0, id: null, cx: 0, cy: 0 };
 function jump() { if (state !== 'play' || P.h > 0) return; P.vh = jumpV(); P.h = 0.001; sfx.jump(); }
 function beamSell() { if (state !== 'play') return; if (!save.up.beam) { toast('📡 Beam-Verkauf gibt es im Shop unter Upgrades.', 2); return; } if (P.tank.u > 0.01) sellTank(true); }
 function togglePause() {
   if (state === 'pause') { state = prevState; $('pause').style.display = 'none'; last = performance.now(); }
-  else if (state === 'play') { prevState = 'play'; state = 'pause'; scrubSound(false, 0); isMouseDown = false; isWiping = false; $('pause').style.display = 'flex'; persist(); }
+  else if (state === 'play') { prevState = 'play'; state = 'pause'; pausedAt = performance.now(); unlockPointer(); scrubSound(false, 0); isMouseDown = false; isWiping = false; $('pause').style.display = 'flex'; persist(); }
 }
 const zoomToggle = () => { cam.zoomT = cam.zoomT > 0.5 ? 0 : 1; };
 
@@ -2232,7 +2297,8 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (k === 'm') { ArcadeCore.toggleMute(); toast(ArcadeCore.isMuted() ? '🔇 Ton aus' : '🔊 Ton an', 1.2); return; }
   if (state === 'shop') { if (k === 'b' || k === 'escape') closeShop(); return; }
-  if (state === 'pause') { if (k === 'p' || k === 'escape') togglePause(); return; }
+  // Kurz nach dem Pausieren (z. B. durch Esc beim Maus-Lock) Esc nicht gleich wieder als "weiter" werten
+  if (state === 'pause') { if ((k === 'p' || k === 'escape') && performance.now() - pausedAt > 350) togglePause(); return; }
   if (state !== 'play') return;
   if (k === ' ') jump();
   else if (k === 'b') openShop();
@@ -2264,16 +2330,22 @@ addEventListener('wheel', e => {
 
 // Pointer Lock & Maus-Steuerung
 document.addEventListener('pointerlockchange', () => {
+  const was = isPointerLocked;
   isPointerLocked = (document.pointerLockElement === canvas);
+  // Esc beendet den Maus-Lock im Browser (keydown kommt nicht an) -> pausieren
+  if (was && !isPointerLocked && state === 'play') togglePause();
 });
+const unlockPointer = () => { if (document.pointerLockElement) try { document.exitPointerLock(); } catch (e) {} };
+const lockPointer = () => {
+  if (touchMode || camMode !== '1st' || isPointerLocked) return;
+  try { const pl = canvas.requestPointerLock(); if (pl && pl.catch) pl.catch(() => {}); } catch (err) {}
+};
 
 canvas.addEventListener('mousedown', e => {
   if (state !== 'play') return;
   if (e.button === 0) {
     isMouseDown = true;
-    if (camMode === '1st' && !isPointerLocked && !touchMode) {
-      try { const pl = canvas.requestPointerLock(); if (pl && pl.catch) pl.catch(() => {}); } catch (err) {}
-    }
+    lockPointer();
   } else if (e.button === 2) {
     jump();
   }
@@ -2281,13 +2353,12 @@ canvas.addEventListener('mousedown', e => {
 window.addEventListener('mouseup', e => {
   if (e.button === 0) isMouseDown = false;
 });
+// Fallback: bei Pointer-Capture kommt mouseup nicht immer an
+window.addEventListener('pointerup', e => { if (e.pointerType === 'mouse' && e.button === 0) isMouseDown = false; });
 window.addEventListener('mousemove', e => {
   if (state !== 'play' || !isPointerLocked) return;
   addSwipe(e.movementX);
-  const sens = 0.0024 * (isWiping ? 0.4 : 1);
-  _q.setFromAxisAngle(P.d, -e.movementX * sens);
-  P.f.applyQuaternion(_q);
-  lookPitch = clamp(lookPitch - e.movementY * sens, -1.25, 1.15);
+  lookBy(e.movementX, e.movementY, LOOK_SENS);
 });
 
 // Touch & Dragging Fallback
@@ -2305,10 +2376,9 @@ canvas.addEventListener('pointermove', e => {
   if (state === 'play') {
     const dx = e.clientX - drag.x;
     const dy = e.clientY - drag.y;
-    addSwipe(dx * (e.pointerType === 'touch' ? 1.6 : 1));
-    const damp = isWiping ? 0.4 : 1;
-    dragTurn -= dx * (e.pointerType === 'touch' ? 0.007 : 0.005) * damp;
-    lookPitch = clamp(lookPitch - dy * (e.pointerType === 'touch' ? 0.005 : 0.004) * damp, -1.25, 1.15);
+    const touch = e.pointerType === 'touch';
+    addSwipe(dx * (touch ? 1.6 : 1));
+    lookBy(dx, dy * (touch ? 0.75 : 0.85), touch ? 0.006 : 0.0045);
   }
   drag.x = e.clientX; drag.y = e.clientY;
 });
@@ -2347,12 +2417,12 @@ $('bSell').onclick = beamSell;
 $('bZoom').onclick = zoomToggle;
 $('bTravel').onclick = travel;
 $('bView').onclick = toggleView;
-$('pause').addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'pause') togglePause(); });
+$('pause').addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'pause') { togglePause(); lockPointer(); } });
 
 $('go').onclick = () => {
   audio(); $('menu').classList.add('hide'); state = 'play'; last = performance.now();
   if (!save.seen) {
-    setTimeout(() => toast('Lauf mit <b>W/A/S/D</b> los – halte <b>Linksklick</b> oder <b>🧽</b> und wisch flott <b>hin und her</b> – je schneller, desto mehr Putzkraft!', 8), 600);
+    setTimeout(() => toast('Lauf mit <b>W/A/S/D</b> los (<b>Shift</b> = sprinten) – halte <b>Linksklick</b> oder <b>🧽</b> und wisch flott <b>hin und her</b> – je schneller, desto mehr Putzkraft!', 8), 600);
     setTimeout(() => say(M.def.intro, 6), 2800);
   } else {
     setTimeout(() => say(pick(LINES.idle)), 1500);
@@ -2410,7 +2480,7 @@ appStarted = true;
 requestAnimationFrame(loop);
 
 // Test-Hooks
-window.__mond = { P, save, robots, junk, meteors, keys, cam, flakes, stomp, get tempo() { return tempo; }, get M() { return M; }, get state() { return state; }, computeClean, scrub, spawnMeteor, spawnJunk, travel, openShop, closeShop, shopAction, sellTank, equip, jump, persist, amount, mask, hard, toggleView };
+window.__mond = { P, save, robots, junk, meteors, keys, cam, flakes, stomp, get tempo() { return tempo; }, get M() { return M; }, get state() { return state; }, computeClean, scrub, spawnMeteor, spawnJunk, travel, openShop, closeShop, shopAction, sellTank, equip, jump, persist, amount, mask, hard, toggleView, wipeAim, get aimHit() { return aimHit; } };
 </script>
 </body>
 </html>
