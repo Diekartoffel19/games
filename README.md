@@ -1,4 +1,4 @@
-# 🕹️ Game Arcade & Web Tools
+﻿# 🕹️ Game Arcade & Web Tools
 
 Eine umfassende, eigenständige Sammlung von **über 65 Browser-Games, interaktiven Web-Tools und Lern-Apps** — komplett clientseitig in HTML5, Canvas und modernem Vanilla JavaScript umgesetzt, ohne Build-Step, Bundler oder externe Backend-Abhängigkeiten.
 
@@ -13,6 +13,7 @@ Eine umfassende, eigenständige Sammlung von **über 65 Browser-Games, interakti
 Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Audio API via [`src/arcade-core.js`](src/arcade-core.js)) und Touch-/Keyboard-Steuerung:
 
 * **Physik & Ragdoll:**
+  * [games/thermal_nomad.html](games/thermal_nomad.html) — *Thermal Nomad 3D: Arctic Survival (Exakte Euler-Thermodynamik mit Tsurf & Tcore, Sonnen-Raycasting, Reflektions-Spiegeln, Thermoschilden, Aerosol-Nebel & physikalischem Lastenschlitten)*
   * [`games/ballistics.html`](games/ballistics.html) — *Panzer-Querschnitt: Slow-Mo Ballistik & Zerstörungs-Simulator (Mehrschicht-Panzerung, ERA, Keramik, Spalling & Röntgen-Kill-Cam)*
   * [`games/magnet.html`](games/magnet.html) — *Magnet-Puzzler: Polaritäts-Panik (Coulomb-Physik, Decken-Anziehung & Büroklammern-Abwehr)*
   * [`games/kofferstapler.html`](games/kofferstapler.html) — *Koffer-Stapler Extreme (Airport Jenga mit Matter.js-Physik & Turbulenzen-Test)*
@@ -36,6 +37,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/superhot.html`](games/superhot.html) — *SUPERHOT 2D (Time moves only when you move)*
   * [`games/buckshot.html`](games/buckshot.html) — *Buckshot Roulette*
 * **Racing & 3D:**
+  * [`games/lokfuehrer.html`](games/lokfuehrer.html) — *ICE-Lokführer 3D: Bitte zurückbleiben! (Führerstand-Simulation, Spline-Gleise, Sifa, Bahnsteighalte & Verspätungen)*
   * [`games/stadiumrush.html`](games/stadiumrush.html) — *Stadium Rush (Polytrack & Trackmania 3D-Zeitfahren)*
   * [`games/buerostuhl.html`](games/buerostuhl.html) — *Bürostuhl GP*
   * [`games/skytower.html`](games/skytower.html) — *Sky Tower 3D Stack Master*

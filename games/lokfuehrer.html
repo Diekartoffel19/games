@@ -1,0 +1,2898 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ICE-Lokführer 3D – Bitte zurückbleiben! 🚅</title>
+  <meta name="description" content="ICE-Lokführer 3D: Fahre den ICE im Führerstand aus der Ego-Perspektive! Halte den Fahrplan ein, beachte Signale, meistere die Sifa und halte millimetergenau am Bahnsteig.">
+  <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+  <link rel="stylesheet" href="../style.css">
+  <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+  <script src="../src/arcade-core.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --db-red: #ec1c24;
+      --db-dark-red: #b90f16;
+      --db-blue: #0b1a30;
+      --db-ice-white: #f5f6f8;
+      --db-panel: rgba(11, 26, 48, 0.88);
+      --db-border: rgba(255, 255, 255, 0.15);
+      --db-yellow: #f59e0b;
+      --db-green: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #060a12;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+
+    /* Top HUD */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: env(safe-area-inset-top, 12px) 16px env(safe-area-inset-bottom, 12px) 16px;
+    }
+
+    .hud-row-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .hud-card {
+      background: var(--db-panel);
+      border: 1px solid var(--db-border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-radius: 10px;
+      padding: 8px 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .station-badge {
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 2px;
+    }
+    .station-name {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .station-dist {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--db-yellow);
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Center Schedule & Delay */
+    .schedule-card {
+      text-align: center;
+      min-width: 170px;
+    }
+    .clock-display {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      font-variant-numeric: tabular-nums;
+      color: #fff;
+    }
+    .delay-pill {
+      display: inline-block;
+      margin-top: 3px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--db-green);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .delay-pill.delayed {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--db-yellow);
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+    .delay-pill.late {
+      background: rgba(236, 28, 36, 0.25);
+      color: #ff6b6b;
+      border-color: rgba(236, 28, 36, 0.5);
+    }
+
+    /* Score & Quick Actions */
+    .actions-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+    }
+    .score-badge {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      margin-right: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--db-border);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.15s;
+    }
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Announcement Marquee Ticker */
+    #announcement {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(92%, 680px);
+      background: linear-gradient(90deg, rgba(11,26,48,0.95), rgba(15,35,64,0.95));
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-left: 4px solid var(--db-red);
+      border-radius: 8px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    #announcement.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    #announcement-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Center Prompts (Sifa, Door, Departure) */
+    #center-alert {
+      position: absolute;
+      top: 42%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: none;
+      z-index: 25;
+    }
+    .sifa-box {
+      background: rgba(236, 28, 36, 0.9);
+      border: 3px solid #fff;
+      border-radius: 12px;
+      padding: 14px 28px;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #fff;
+      animation: sifaPulse 0.4s infinite alternate;
+      box-shadow: 0 0 35px rgba(236, 28, 36, 0.8);
+      display: none;
+    }
+    @keyframes sifaPulse {
+      0% { transform: scale(0.96); filter: brightness(1); }
+      100% { transform: scale(1.05); filter: brightness(1.3); }
+    }
+
+    .prompt-box {
+      background: rgba(11, 26, 48, 0.94);
+      border: 2px solid var(--db-yellow);
+      border-radius: 10px;
+      padding: 12px 24px;
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      display: none;
+    }
+    .prompt-box.active {
+      display: block;
+      animation: popIn 0.25s ease-out;
+    }
+    @keyframes popIn {
+      from { transform: scale(0.85); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    /* Bottom Cockpit HUD Panel */
+    .hud-row-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    /* Speedometer & LZB */
+    .speed-cluster {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--db-panel);
+      border: 1px solid var(--db-border);
+      backdrop-filter: blur(8px);
+      border-radius: 12px;
+      padding: 10px 18px;
+    }
+    .speed-dial {
+      text-align: center;
+    }
+    .speed-num {
+      font-size: 42px;
+      font-weight: 900;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      color: #fff;
+    }
+    .speed-unit {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 1px;
+    }
+    .speed-num.overspeed {
+      color: var(--db-red);
+      animation: shake 0.2s infinite;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      50% { transform: translateX(2px); }
+    }
+
+    .lzb-box {
+      border-left: 1px solid rgba(255, 255, 255, 0.15);
+      padding-left: 14px;
+      text-align: center;
+    }
+    .lzb-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 1px;
+    }
+    .lzb-target {
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--db-yellow);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Driving Lever & Pressure */
+    .instrument-cluster {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--db-panel);
+      border: 1px solid var(--db-border);
+      backdrop-filter: blur(8px);
+      border-radius: 12px;
+      padding: 10px 16px;
+    }
+    .gauge-item {
+      text-align: center;
+    }
+    .gauge-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .notch-badge {
+      display: inline-block;
+      margin-top: 2px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+    .notch-badge.power { color: var(--db-green); background: rgba(16, 185, 129, 0.15); }
+    .notch-badge.brake { color: var(--db-yellow); background: rgba(245, 158, 11, 0.15); }
+    .notch-badge.emergency { color: #ff4d4d; background: rgba(236, 28, 36, 0.3); }
+
+    /* Coffee Cup Mini Widget */
+    .coffee-widget {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--db-panel);
+      border: 1px solid var(--db-border);
+      backdrop-filter: blur(8px);
+      border-radius: 12px;
+      padding: 10px 14px;
+    }
+    .coffee-mug {
+      width: 24px;
+      height: 28px;
+      border: 2px solid #e2e8f0;
+      border-radius: 0 0 6px 6px;
+      position: relative;
+      background: rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+    }
+    .coffee-mug::after {
+      content: "";
+      position: absolute;
+      right: -6px;
+      top: 4px;
+      width: 6px;
+      height: 12px;
+      border: 2px solid #e2e8f0;
+      border-left: none;
+      border-radius: 0 4px 4px 0;
+    }
+    .coffee-liquid {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 90%;
+      background: #8b5a2b;
+      transition: height 0.3s, background 0.3s;
+    }
+    .coffee-spill {
+      animation: coffeeSlosh 0.3s ease;
+      background: #b90f16 !important;
+    }
+    @keyframes coffeeSlosh {
+      0%, 100% { transform: rotate(0); }
+      30% { transform: rotate(-15deg); }
+      70% { transform: rotate(15deg); }
+    }
+
+    /* Mobile Controls */
+    .mobile-controls {
+      display: none;
+      gap: 8px;
+      align-items: center;
+    }
+    .touch-btn {
+      min-width: 44px;
+      height: 44px;
+      padding: 0 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid var(--db-border);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+    .touch-btn:active {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(0.95);
+    }
+    .touch-btn.danger {
+      background: rgba(236, 28, 36, 0.7);
+      border-color: #ff6b6b;
+    }
+    .touch-btn.sifa-btn {
+      background: rgba(245, 158, 11, 0.7);
+      border-color: #fde047;
+    }
+
+    @media (max-width: 768px) {
+      .mobile-controls { display: flex; }
+      .speed-num { font-size: 32px; }
+      .lzb-target { font-size: 20px; }
+      .station-name { font-size: 15px; }
+      .clock-display { font-size: 18px; }
+      .coffee-widget { display: none; }
+    }
+
+    /* Fullscreen Overlays (Start, Stop Review, Game Over, Pause) */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 10, 18, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease-out;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: #0f1d33;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 16px;
+      max-width: 580px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+      text-align: center;
+    }
+    .modal-title {
+      font-size: 28px;
+      font-weight: 900;
+      margin: 0 0 6px 0;
+      color: #fff;
+    }
+    .modal-subtitle {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.1s, filter 0.15s, background 0.15s;
+      text-decoration: none;
+    }
+    .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--db-red); color: #fff; }
+    .btn-secondary { background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid var(--db-border); }
+
+    .route-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 18px 0;
+      text-align: left;
+    }
+    .route-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .route-card.selected {
+      border-color: var(--db-red);
+      background: rgba(236, 28, 36, 0.12);
+    }
+    .route-card.locked {
+      opacity: 0.5;
+      cursor: not-allowed;
+      border-style: dashed;
+    }
+    .route-title { font-size: 15px; font-weight: 800; color: #fff; }
+    .route-info { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+    .weather-options {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .weather-btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--db-border);
+      background: rgba(255, 255, 255, 0.06);
+      color: #cbd5e1;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .weather-btn.active {
+      background: #fff;
+      color: #0b1a30;
+      border-color: #fff;
+    }
+
+    .key-table {
+      margin: 16px 0;
+      font-size: 12px;
+      text-align: left;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+    .key-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .key-row:last-child { border: none; }
+    .kbd {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Station Evaluation Card */
+    .rating-stars {
+      font-size: 32px;
+      color: #ffd700;
+      margin: 10px 0;
+      letter-spacing: 4px;
+    }
+    .review-quote {
+      font-style: italic;
+      color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.06);
+      border-left: 3px solid var(--db-red);
+      padding: 10px 14px;
+      border-radius: 4px;
+      margin: 14px 0;
+      font-size: 14px;
+      text-align: left;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 6px 0;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+    .stat-val { font-weight: 800; color: #fff; }
+
+    /* Station list in summary */
+    .station-summary-table {
+      width: 100%;
+      margin: 14px 0;
+      font-size: 13px;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    .station-summary-table th, .station-summary-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .station-summary-table th { color: #94a3b8; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <canvas id="webgl-canvas"></canvas>
+
+  <!-- HUD Overlay -->
+  <div id="hud">
+    <!-- Top Row -->
+    <div class="hud-row-top">
+      <div class="hud-card">
+        <div class="station-badge">Nächster Halt</div>
+        <div class="station-name" id="hud-station-name">🚆 Initialisierung...</div>
+        <div class="station-dist" id="hud-station-dist">-- m</div>
+      </div>
+
+      <div class="hud-card schedule-card">
+        <div class="clock-display" id="hud-clock">08:00:00</div>
+        <div class="delay-pill" id="hud-delay">Pünktlich +0 min</div>
+      </div>
+
+      <div class="hud-card actions-card">
+        <div class="score-badge" id="hud-score">0 Pkt</div>
+        <button class="icon-btn" id="btn-mute" title="Ton stummschalten (M)">🔊</button>
+        <button class="icon-btn" id="btn-pause" title="Pause (P / Esc)">⏸️</button>
+      </div>
+    </div>
+
+    <!-- Announcement Ticker -->
+    <div id="announcement">
+      <span style="font-size:18px;">📢</span>
+      <div id="announcement-text">Willkommen an Bord des ICE!</div>
+    </div>
+
+    <!-- Center Alerts -->
+    <div id="center-alert">
+      <div class="sifa-box" id="sifa-warning">⚠️ SIFA! TASTE Q DRÜCKEN!</div>
+      <div class="prompt-box" id="hud-prompt">Drücke [T] zum Türen öffnen</div>
+    </div>
+
+    <!-- Bottom Row (Cockpit Instruments) -->
+    <div class="hud-row-bottom">
+      <div class="speed-cluster">
+        <div class="speed-dial">
+          <div class="speed-num" id="hud-speed">0</div>
+          <div class="speed-unit">KM/H IST</div>
+        </div>
+        <div class="lzb-box">
+          <div class="lzb-label">LZB SOLL</div>
+          <div class="lzb-target" id="hud-lzb">80</div>
+        </div>
+      </div>
+
+      <div class="instrument-cluster">
+        <div class="gauge-item">
+          <div class="gauge-label">Fahrhebel</div>
+          <div class="notch-badge" id="hud-notch">0</div>
+        </div>
+        <div class="gauge-item">
+          <div class="gauge-label">Bremsdruck</div>
+          <div class="notch-badge" id="hud-brake">5.0 bar</div>
+        </div>
+      </div>
+
+      <div class="coffee-widget">
+        <div class="coffee-mug" id="coffee-mug">
+          <div class="coffee-liquid" id="coffee-liquid"></div>
+        </div>
+        <div>
+          <div class="gauge-label">Bistro-Kaffee</div>
+          <div style="font-size:13px; font-weight:800;" id="coffee-status">Voll ☕</div>
+        </div>
+      </div>
+
+      <!-- Touch Controls (Mobile) -->
+      <div class="mobile-controls">
+        <button class="touch-btn" id="touch-power" title="Fahrhebel hoch">▲ +</button>
+        <button class="touch-btn" id="touch-brake" title="Fahrhebel runter">▼ −</button>
+        <button class="touch-btn danger" id="touch-ebrake" title="Schnellbremse">STOP</button>
+        <button class="touch-btn sifa-btn" id="touch-sifa" title="Sifa bestätigen">SIFA</button>
+        <button class="touch-btn" id="touch-doors" title="Türen">🚪 T</button>
+        <button class="touch-btn" id="touch-horn" title="Makrofon">📢 H</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start Modal -->
+  <div class="modal-overlay active" id="modal-start">
+    <div class="modal-card">
+      <div style="font-size: 40px; margin-bottom: 8px;">🚅</div>
+      <h1 class="modal-title">ICE-Lokführer 3D</h1>
+      <div class="modal-subtitle">„Bitte zurückbleiben – Einsteigen bitte!"</div>
+
+      <div style="text-align:left; font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase;">Streckenauswahl:</div>
+      <div class="route-grid">
+        <div class="route-card selected" id="opt-route-1">
+          <div class="route-title">RB 42 Bummel-Express</div>
+          <div class="route-info">Regionalstrecke • 5 Stationen • Vmax 120 km/h • Gemütlich & Kurvig</div>
+        </div>
+        <div class="route-card locked" id="opt-route-2">
+          <div class="route-title">ICE 904 Sprinter (theoretisch)</div>
+          <div class="route-info" id="opt-route-2-desc">🔒 Gesperrt (Benötigt Ø ≥ 3.0 ★ auf Strecke 1)</div>
+        </div>
+      </div>
+
+      <div style="text-align:left; font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:6px;">Wetter & Tageszeit:</div>
+      <div class="weather-options">
+        <button class="weather-btn active" data-weather="day">☀️ Tag</button>
+        <button class="weather-btn" data-weather="night">🌙 Nacht (Scheinwerfer)</button>
+        <button class="weather-btn" data-weather="rain">🌧️ Regen & Wischer</button>
+      </div>
+
+      <div class="key-table">
+        <div class="key-row"><span>Fahrhebel stufenweise (+/-)</span><span><span class="kbd">W</span> / <span class="kbd">S</span> oder <span class="kbd">↑</span> / <span class="kbd">↓</span></span></div>
+        <div class="key-row"><span>Schnellbremse (Notbremse)</span><span><span class="kbd">Leertaste</span></span></div>
+        <div class="key-row"><span>Sifa-Bedienung (alle 30s!)</span><span><span class="kbd">Q</span></span></div>
+        <div class="key-row"><span>Türen öffnen / schließen</span><span><span class="kbd">T</span></span></div>
+        <div class="key-row"><span>Abfahrt bestätigen</span><span><span class="kbd">Enter</span></span></div>
+        <div class="key-row"><span>Makrofon (Zweiklanghorn)</span><span><span class="kbd">H</span></span></div>
+      </div>
+
+      <div style="margin-bottom: 18px; font-size: 13px; color: #94a3b8;">
+        Highscore: <strong id="start-highscore" style="color: #fff;">0</strong> Punkte
+      </div>
+
+      <div style="display:flex; justify-content:center; gap:12px;">
+        <a href="../index.html" class="btn btn-secondary">← Zurück</a>
+        <button class="btn btn-primary" id="btn-start-game">Zugfahrt starten ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Station Review Modal -->
+  <div class="modal-overlay" id="modal-station">
+    <div class="modal-card">
+      <div style="font-size: 32px; margin-bottom: 4px;">🏁</div>
+      <h2 class="modal-title" id="rev-station-name">Bad Verspätungen</h2>
+      <div class="rating-stars" id="rev-stars">★★★★☆</div>
+
+      <div class="review-quote" id="rev-quote">
+        „Pünktlich?! Ich muss träumen! Sofort DB-Aktien kaufen."
+      </div>
+
+      <div style="background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; margin: 16px 0;">
+        <div class="stat-row"><span>Haltegenauigkeit:</span><span class="stat-val" id="rev-accuracy">+0.4 m (Perfekt)</span></div>
+        <div class="stat-row"><span>Pünktlichkeit:</span><span class="stat-val" id="rev-punctuality">+0:15 min (+300 Pkt)</span></div>
+        <div class="stat-row"><span>Fahrkomfort (Kaffee):</span><span class="stat-val" id="rev-comfort">Sanft & Knitterfrei</span></div>
+        <div class="stat-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top:6px; margin-top:6px;">
+          <span>Stationspunkte:</span><span class="stat-val" id="rev-points" style="color:var(--db-yellow);">+850 Pkt</span>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-station-continue">Weiterfahren [Enter] ▶</button>
+    </div>
+  </div>
+
+  <!-- Game Over / Terminus Modal -->
+  <div class="modal-overlay" id="modal-end">
+    <div class="modal-card">
+      <div style="font-size: 40px; margin-bottom: 6px;">🏆</div>
+      <h2 class="modal-title">Endstation erreicht!</h2>
+      <div class="modal-subtitle">„Wir bedanken uns für Ihre Reise mit der Deutschen Bahn."</div>
+
+      <div class="rating-stars" id="end-stars">★★★★☆</div>
+      <div style="font-size: 16px; font-weight:800; color: #fff; margin-bottom: 12px;" id="end-avg-stars">
+        Durchschnitt: 4.2 Sterne
+      </div>
+
+      <table class="station-summary-table">
+        <thead>
+          <tr>
+            <th>Station</th>
+            <th>Abstand</th>
+            <th>Verspätung</th>
+            <th>★</th>
+          </tr>
+        </thead>
+        <tbody id="end-summary-rows"></tbody>
+      </table>
+
+      <div style="background: rgba(236,28,36,0.15); border: 1px solid rgba(236,28,36,0.3); border-radius: 8px; padding: 12px; margin: 16px 0;">
+        <div class="stat-row"><span>Gesamtpunkte:</span><span class="stat-val" id="end-total-score" style="font-size:18px; color:#ffd700;">4.850 Pkt</span></div>
+        <div class="stat-row"><span>Bisheriger Rekord:</span><span class="stat-val" id="end-highscore">3.200 Pkt</span></div>
+      </div>
+
+      <div id="end-unlock-banner" style="display:none; background:rgba(16,185,129,0.2); border:1px solid var(--db-green); border-radius:8px; padding:10px; margin-bottom:16px; font-weight:700; color:#fff;">
+        🎉 Schnellfahrstrecke ICE 904 (300 km/h) wurde freigeschaltet!
+      </div>
+
+      <div style="display:flex; justify-content:center; gap:12px;">
+        <button class="btn btn-secondary" id="btn-end-menu">Hauptmenü</button>
+        <button class="btn btn-primary" id="btn-end-retry">Nochmal fahren 🔄</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause Modal -->
+  <div class="modal-overlay" id="modal-pause">
+    <div class="modal-card" style="max-width: 360px;">
+      <h2 class="modal-title">Pause</h2>
+      <div class="modal-subtitle">Der Zug wartet auf Signalüberholung...</div>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
+        <button class="btn btn-primary" id="btn-resume">Weiterfahren (P)</button>
+        <button class="btn btn-secondary" id="btn-pause-menu">Zum Hauptmenü</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       ICE-LOKFÜHRER 3D — Vanilla Three.js Simulation
+       ========================================================================== */
+
+    // --- 1. Sound & Web Audio System (ArcadeCore Integration) ---
+    class TrainAudio {
+      constructor() {
+        this.ctx = null;
+        this.engineOsc = null;
+        this.engineGain = null;
+        this.engineSubOsc = null;
+        this.clickTimer = 0;
+        this.isInitialized = false;
+      }
+
+      init() {
+        if (this.isInitialized) return;
+        this.ctx = ArcadeCore.getAudioContext();
+        if (!this.ctx) return;
+
+        try {
+          // Engine Hum Synthesizer
+          this.engineGain = this.ctx.createGain();
+          this.engineGain.gain.setValueAtTime(0, this.ctx.currentTime);
+          this.engineGain.connect(this.ctx.destination);
+
+          this.engineOsc = this.ctx.createOscillator();
+          this.engineOsc.type = 'sawtooth';
+          this.engineOsc.frequency.setValueAtTime(45, this.ctx.currentTime);
+
+          // Sub rumble
+          this.engineSubOsc = this.ctx.createOscillator();
+          this.engineSubOsc.type = 'triangle';
+          this.engineSubOsc.frequency.setValueAtTime(30, this.ctx.currentTime);
+
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(140, this.ctx.currentTime);
+
+          this.engineOsc.connect(filter);
+          this.engineSubOsc.connect(filter);
+          filter.connect(this.engineGain);
+
+          this.engineOsc.start();
+          this.engineSubOsc.start();
+          this.isInitialized = true;
+        } catch (e) {
+          console.warn("Audio init warning:", e);
+        }
+      }
+
+      update(speedKmH, notch, dt) {
+        if (!this.isInitialized) return;
+        if (ArcadeCore.isMuted() || !this.ctx) {
+          if (this.engineGain) this.engineGain.gain.value = 0;
+          return;
+        }
+
+        const now = this.ctx.currentTime;
+        // Pitch scales with speed and power notch
+        const baseFreq = 42 + (speedKmH / 300) * 160 + (notch > 0 ? notch * 4 : 0);
+        this.engineOsc.frequency.setTargetAtTime(baseFreq, now, 0.1);
+        this.engineSubOsc.frequency.setTargetAtTime(baseFreq * 0.5, now, 0.1);
+
+        // Volume scales with speed and throttle
+        const targetVol = Math.min(0.22, 0.03 + (speedKmH / 300) * 0.12 + Math.abs(notch) * 0.015);
+        this.engineGain.gain.setTargetAtTime(targetVol, now, 0.1);
+
+        // Rail Joint "Ta-damm" clicks
+        if (speedKmH > 8) {
+          const clickInterval = Math.max(0.25, 25 / (speedKmH / 3.6));
+          this.clickTimer += dt;
+          if (this.clickTimer >= clickInterval) {
+            this.clickTimer = 0;
+            this.playRailClick();
+          }
+        }
+      }
+
+      playRailClick() {
+        if (ArcadeCore.isMuted() || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [0, 0.08].forEach(offset => {
+          try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(80, now + offset);
+            osc.frequency.exponentialRampToValueAtTime(30, now + offset + 0.05);
+            gain.gain.setValueAtTime(0.08, now + offset);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.05);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + offset);
+            osc.stop(now + offset + 0.06);
+          } catch(e){}
+        });
+      }
+
+      playHorn() {
+        if (ArcadeCore.isMuted() || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Two-tone German DB Makrofon chord: 370 Hz (F#4) & 440 Hz (A4)
+        [370, 440].forEach(freq => {
+          try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(0.18, now);
+            gain.gain.linearRampToValueAtTime(0.16, now + 0.6);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.85);
+          } catch(e){}
+        });
+      }
+
+      playGong() {
+        if (ArcadeCore.isMuted() || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        // DB Station 4-tone chime: G4 - E4 - C4 - G3
+        const notes = [392.00, 329.63, 261.63, 196.00];
+        notes.forEach((freq, idx) => {
+          try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            const t = now + idx * 0.22;
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(0.15, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.52);
+          } catch(e){}
+        });
+      }
+
+      playDoorBeep() {
+        if (ArcadeCore.isMuted() || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        for (let i = 0; i < 3; i++) {
+          try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            const t = now + i * 0.25;
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(1175, t);
+            gain.gain.setValueAtTime(0.1, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.14);
+          } catch(e){}
+        }
+      }
+
+      playSifaAlarm() {
+        if (ArcadeCore.isMuted()) return;
+        ArcadeCore.Sounds.playTone(880, 0.14, 'square', 0.2);
+      }
+
+      playCoffeeSpill() {
+        if (ArcadeCore.isMuted()) return;
+        ArcadeCore.Sounds.hit();
+      }
+    }
+
+    const trainAudio = new TrainAudio();
+
+    // --- 2. Strecken-Definitionen & Fahrpläne ---
+    const ROUTES = [
+      {
+        id: 'regio',
+        name: 'RB 42 Bummel-Express',
+        maxSpeed: 120,
+        length: 3600,
+        curvePoints: [
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(40, 0, -400),
+          new THREE.Vector3(120, 2, -800),     // Station 2
+          new THREE.Vector3(300, 5, -1300),
+          new THREE.Vector3(380, 6, -1700),    // Station 3
+          new THREE.Vector3(260, 2, -2200),    // Brücke
+          new THREE.Vector3(100, 8, -2600),    // Station 4
+          new THREE.Vector3(20, 4, -3000),     // Tunnel
+          new THREE.Vector3(-60, 0, -3500),
+          new THREE.Vector3(-80, 0, -3700)     // Station 5
+        ],
+        stations: [
+          { name: "Kleinkleckersdorf", dist: 0, planArr: "08:00:00", planDep: "08:00:30" },
+          { name: "Hintertupfingen Süd", dist: 800, planArr: "08:02:00", planDep: "08:02:40" },
+          { name: "Bad Verspätungen", dist: 1700, planArr: "08:04:30", planDep: "08:05:10" },
+          { name: "Wanne-Eickel Hbf", dist: 2600, planArr: "08:07:00", planDep: "08:07:45" },
+          { name: "Ersatzverkehr-Ende", dist: 3500, planArr: "08:09:30", planDep: "08:10:00" }
+        ],
+        speedLimits: [
+          { dist: 0, limit: 80 },
+          { dist: 400, limit: 120 },
+          { dist: 1400, limit: 90 },
+          { dist: 2200, limit: 110 },
+          { dist: 3100, limit: 60 }
+        ],
+        hasCow: true,
+        cowDist: 1250,
+        bridgeDist: 2150,
+        tunnelDist: 2950
+      },
+      {
+        id: 'sfs',
+        name: 'ICE 904 Sprinter (theoretisch)',
+        maxSpeed: 300,
+        length: 7400,
+        curvePoints: [
+          new THREE.Vector3(0, 5, 0),
+          new THREE.Vector3(0, 5, -800),
+          new THREE.Vector3(80, 10, -1800),    // Station 2
+          new THREE.Vector3(250, 18, -2700),   // Tunnel 1
+          new THREE.Vector3(400, 22, -3600),   // Station 3
+          new THREE.Vector3(420, 35, -4600),   // Megaviadukt
+          new THREE.Vector3(250, 15, -5500),   // Station 4
+          new THREE.Vector3(50, 8, -6300),     // Tunnel 2
+          new THREE.Vector3(0, 0, -7100),
+          new THREE.Vector3(0, 0, -7500)      // Station 5
+        ],
+        stations: [
+          { name: "Großstadt Hbf", dist: 0, planArr: "12:00:00", planDep: "12:00:30" },
+          { name: "Tunnelblick Neubaustrecke", dist: 1800, planArr: "12:02:30", planDep: "12:03:10" },
+          { name: "Verspätungstal", dist: 3600, planArr: "12:05:00", planDep: "12:05:40" },
+          { name: "Weichenstörung Süd", dist: 5400, planArr: "12:07:30", planDep: "12:08:10" },
+          { name: "Prellbock Hbf", dist: 7100, planArr: "12:10:00", planDep: "12:10:30" }
+        ],
+        speedLimits: [
+          { dist: 0, limit: 100 },
+          { dist: 600, limit: 250 },
+          { dist: 2200, limit: 300 },
+          { dist: 4800, limit: 220 },
+          { dist: 6400, limit: 120 }
+        ],
+        hasCow: false,
+        cowDist: 0,
+        bridgeDist: 4500,
+        tunnelDist: 2650
+      }
+    ];
+
+    // Humorous passenger quotes by star rating
+    const PASSENGER_QUOTES = {
+      5: [
+        "„Pünktlich?! Ich muss träumen! Sofort DB-Aktien kaufen.“",
+        "„Perfekt gehalten! Mein Kaffee hat sich keinen Millimeter bewegt.“",
+        "„So pünktlich war die Bahn seit der Erfindung des Rades nicht mehr.“",
+        "„Bist du ein Schweizer Lokführer im Austauschprogramm?! Genial!“"
+      ],
+      4: [
+        "„Gute Fahrt! Nur das WLAN im Tunnel war natürlich wie immer weg.“",
+        "„Der Lokführer hat beim Aussteigen freundlich gegrüßt. Fast unheimlich.“",
+        "„Solide Bremsung. Die Zeitung konnte ich durchgehend lesen.“"
+      ],
+      3: [
+        "„Typisch Bahn, bisschen ruckelig. Aber immerhin fährt das Ding.“",
+        "„Der Halt war okay, aber warum hat die Tür 10 Sekunden gezischt?“",
+        "„Ein Schluck Kaffee ist auf meine Hose geschwappt, sonst passabel.“"
+      ],
+      2: [
+        "„Mein Schoko-Croissant klebt jetzt an der Frontscheibe!“",
+        "„Warum halten wir gefühlt 20 Meter vor dem Bahnsteigdach im Regen?!“",
+        "„Die Notbremsung hat meine Bandscheibe neu justiert.“"
+      ],
+      1: [
+        "„Mein heißer Kaffee ist jetzt komplett auf dem Laptop meines Nachbarn!“",
+        "„Signal überfahren?! Ich verlange meine 25% Fahrgastrechte zurück!“",
+        "„Bahnsteig komplett verfehlt. Wir sind mitten im Acker gelandet!“"
+      ]
+    };
+
+    // --- 3. Three.js Scene, Camera, World & Lights ---
+    let scene, camera, renderer;
+    let trackSpline = null;
+    let trackLength = 0;
+    let trackPoints = [];
+    let trackTangents = [];
+    let trackNormals = [];
+    let trackBinormals = [];
+
+    // Meshes & Collections
+    let railsMesh, ballastMesh, sleepersMesh, catenaryMesh;
+    let sceneryMeshes = [];
+    let stationObjects = [];
+    let signalObjects = [];
+    let cowMesh = null;
+    let dirLight, hemiLight, spotLight;
+
+    // Cockpit 3D Group & Parts
+    let cockpitGroup, wiperArmMesh, throttleLeverMesh, coffeeCupMesh, coffeeFluidMesh;
+    let rainParticles = null;
+
+    // Simulation State
+    let currentRoute = ROUTES[0];
+    let selectedWeather = 'day';
+    let gameState = 'START'; // 'START', 'RUNNING', 'STATION_STOP', 'PAUSED', 'FINISHED'
+
+    let trainDist = 0;          // s in meters
+    let trainSpeed = 0;         // m/s
+    let trainNotch = 0;         // -5 ... 0 ... +5, -6 = Emergency
+    let brakePressure = 5.0;    // bar
+    let acceleration = 0;
+    let prevAcceleration = 0;
+
+    let targetSpeedLimit = 80;
+    let sifaTimer = 0;
+    let sifaAlarmActive = false;
+    let emergencyBraking = false;
+    let doorsOpen = false;
+    let boardingTimer = 0;
+    let currentStationIdx = 0;
+
+    let coffeeLevel = 1.0;
+    let coffeeSpillCooldown = 0;
+
+    // Scoring & Stats
+    let totalScore = 0;
+    let currentDelaySeconds = 0;
+    let stationReviews = [];
+    let gameTimeSeconds = 8 * 3600; // starts at 08:00:00
+
+    // Random DB Events
+    let eventActive = false;
+    let eventTimer = 0;
+    let cowHonked = false;
+
+    // --- 4. Setup Scene & Renderer ---
+    function initThree() {
+      const canvas = document.getElementById('webgl-canvas');
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 800);
+
+      // Lights
+      hemiLight = new THREE.HemisphereLight(0xddeeff, 0x223344, 0.6);
+      scene.add(hemiLight);
+
+      dirLight = new THREE.DirectionalLight(0xfff8ee, 0.9);
+      dirLight.position.set(100, 180, 80);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
+      dirLight.shadow.camera.near = 10;
+      dirLight.shadow.camera.far = 400;
+      dirLight.shadow.camera.left = -60;
+      dirLight.shadow.camera.right = 60;
+      dirLight.shadow.camera.top = 60;
+      dirLight.shadow.camera.bottom = -60;
+      scene.add(dirLight);
+
+      // Train Spotlight (Headlight)
+      spotLight = new THREE.SpotLight(0xffffff, 2.5, 180, Math.PI / 6, 0.4, 1.2);
+      spotLight.castShadow = true;
+      scene.add(spotLight);
+      scene.add(spotLight.target);
+
+      buildCockpit();
+      applyWeather(selectedWeather);
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function applyWeather(type) {
+      selectedWeather = type;
+      if (type === 'day') {
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.FogExp2(0x87ceeb, 0.0018);
+        hemiLight.intensity = 0.65;
+        dirLight.intensity = 0.9;
+        dirLight.color.setHex(0xfff8ee);
+        spotLight.intensity = 0.8;
+      } else if (type === 'night') {
+        scene.background = new THREE.Color(0x040812);
+        scene.fog = new THREE.FogExp2(0x040812, 0.004);
+        hemiLight.intensity = 0.12;
+        dirLight.intensity = 0.08;
+        spotLight.intensity = 3.5;
+      } else if (type === 'rain') {
+        scene.background = new THREE.Color(0x4a5568);
+        scene.fog = new THREE.FogExp2(0x4a5568, 0.007);
+        hemiLight.intensity = 0.4;
+        dirLight.intensity = 0.4;
+        spotLight.intensity = 2.5;
+        initRain();
+      }
+    }
+
+    function initRain() {
+      if (rainParticles) scene.remove(rainParticles);
+      const count = 1200;
+      const geom = new THREE.BufferGeometry();
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count * 3; i += 3) {
+        pos[i] = (Math.random() - 0.5) * 60;
+        pos[i + 1] = Math.random() * 35;
+        pos[i + 2] = (Math.random() - 0.5) * 60;
+      }
+      geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({
+        color: 0x90cdf4,
+        size: 0.18,
+        transparent: true,
+        opacity: 0.6
+      });
+      rainParticles = new THREE.Points(geom, mat);
+      scene.add(rainParticles);
+    }
+
+    // --- 5. Cockpit 3D Model (First-Person View) ---
+    function buildCockpit() {
+      cockpitGroup = new THREE.Group();
+
+      // Dashboard Desk
+      const deskMat = new THREE.MeshStandardMaterial({ color: 0x1a2332, roughness: 0.8, flatShading: true });
+      const deskGeo = new THREE.BoxGeometry(2.4, 0.5, 1.2);
+      const desk = new THREE.Mesh(deskGeo, deskMat);
+      desk.position.set(0, -0.4, -0.7);
+      desk.rotation.x = 0.15;
+      cockpitGroup.add(desk);
+
+      // Console monitors on desk
+      const screenMat = new THREE.MeshStandardMaterial({ color: 0x05162a, emissive: 0x082846, roughness: 0.3 });
+      const screenGeo = new THREE.BoxGeometry(0.65, 0.35, 0.04);
+      const screen = new THREE.Mesh(screenGeo, screenMat);
+      screen.position.set(0, -0.15, -0.65);
+      screen.rotation.x = -0.2;
+      cockpitGroup.add(screen);
+
+      // Windshield A-Pillars & Frame
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0x0d131f, roughness: 0.7, flatShading: true });
+      
+      const pillarLeftGeo = new THREE.BoxGeometry(0.12, 1.4, 0.15);
+      const pillarLeft = new THREE.Mesh(pillarLeftGeo, frameMat);
+      pillarLeft.position.set(-1.15, 0.25, -0.7);
+      pillarLeft.rotation.z = -0.18;
+      cockpitGroup.add(pillarLeft);
+
+      const pillarRight = pillarLeft.clone();
+      pillarRight.position.x = 1.15;
+      pillarRight.rotation.z = 0.18;
+      cockpitGroup.add(pillarRight);
+
+      const roofEdgeGeo = new THREE.BoxGeometry(2.4, 0.15, 0.4);
+      const roofEdge = new THREE.Mesh(roofEdgeGeo, frameMat);
+      roofEdge.position.set(0, 0.85, -0.7);
+      cockpitGroup.add(roofEdge);
+
+      // Front Aerodynamic ICE Nose (visible outside through bottom window)
+      const noseMat = new THREE.MeshStandardMaterial({ color: 0xe8ecf2, roughness: 0.3, flatShading: true });
+      const noseGeo = new THREE.ConeGeometry(0.9, 3.2, 4);
+      const nose = new THREE.Mesh(noseGeo, noseMat);
+      nose.rotation.x = Math.PI / 2;
+      nose.rotation.y = Math.PI / 4;
+      nose.position.set(0, -0.85, -2.6);
+      cockpitGroup.add(nose);
+
+      // Red DB Stripe on Nose
+      const stripeMat = new THREE.MeshStandardMaterial({ color: 0xec1c24, roughness: 0.4, flatShading: true });
+      const stripeGeo = new THREE.BoxGeometry(1.2, 0.14, 2.0);
+      const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+      stripe.position.set(0, -0.82, -2.4);
+      cockpitGroup.add(stripe);
+
+      // Animated Wiper Arm
+      const wiperMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+      const wiperGeo = new THREE.BoxGeometry(0.04, 0.75, 0.02);
+      wiperArmMesh = new THREE.Mesh(wiperGeo, wiperMat);
+      wiperArmMesh.geometry.translate(0, 0.35, 0); // pivot at base
+      wiperArmMesh.position.set(0, -0.22, -0.92);
+      wiperArmMesh.rotation.z = -0.9;
+      cockpitGroup.add(wiperArmMesh);
+
+      // 3D Throttle Lever
+      const leverBaseGeo = new THREE.CylinderGeometry(0.04, 0.05, 0.04, 8);
+      const leverBase = new THREE.Mesh(leverBaseGeo, frameMat);
+      leverBase.position.set(0.65, -0.25, -0.5);
+      cockpitGroup.add(leverBase);
+
+      const leverStickGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.22, 6);
+      const leverKnobGeo = new THREE.SphereGeometry(0.035, 8, 8);
+      const knobMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.4 });
+      throttleLeverMesh = new THREE.Group();
+      const stick = new THREE.Mesh(leverStickGeo, frameMat);
+      stick.position.y = 0.1;
+      const knob = new THREE.Mesh(leverKnobGeo, knobMat);
+      knob.position.y = 0.2;
+      throttleLeverMesh.add(stick);
+      throttleLeverMesh.add(knob);
+      throttleLeverMesh.position.set(0.65, -0.25, -0.5);
+      cockpitGroup.add(throttleLeverMesh);
+
+      // Coffee Cup on Desk
+      const cupMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+      const cupGeo = new THREE.CylinderGeometry(0.045, 0.035, 0.09, 12);
+      coffeeCupMesh = new THREE.Mesh(cupGeo, cupMat);
+      coffeeCupMesh.position.set(-0.62, -0.22, -0.48);
+
+      const fluidMat = new THREE.MeshStandardMaterial({ color: 0x4a2a12, roughness: 0.2 });
+      const fluidGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.01, 12);
+      coffeeFluidMesh = new THREE.Mesh(fluidGeo, fluidMat);
+      coffeeFluidMesh.position.y = 0.038;
+      coffeeCupMesh.add(coffeeFluidMesh);
+      cockpitGroup.add(coffeeCupMesh);
+
+      scene.add(cockpitGroup);
+    }
+
+    // --- 6. Procedural Track, Rails, Catenary & Scenery ---
+    function buildRoute(route) {
+      currentRoute = route;
+      trainDist = 0;
+      trainSpeed = 0;
+      trainNotch = 0;
+      currentStationIdx = 0;
+      targetSpeedLimit = route.speedLimits[0].limit;
+
+      // Clear existing track meshes
+      if (railsMesh) scene.remove(railsMesh);
+      if (ballastMesh) scene.remove(ballastMesh);
+      if (sleepersMesh) scene.remove(sleepersMesh);
+      if (catenaryMesh) scene.remove(catenaryMesh);
+      if (catenaryArmMesh) scene.remove(catenaryArmMesh);
+      if (contactWireMesh) scene.remove(contactWireMesh);
+      stationObjects.forEach(obj => scene.remove(obj));
+      signalObjects.forEach(obj => scene.remove(obj));
+      sceneryMeshes.forEach(mesh => scene.remove(mesh));
+      if (cowMesh) scene.remove(cowMesh);
+      stationObjects = [];
+      signalObjects = [];
+      sceneryMeshes = [];
+
+      // Create Curve & Sample equidistant points
+      trackSpline = new THREE.CatmullRomCurve3(route.curvePoints, false, 'centripetal');
+      trackLength = trackSpline.getLength();
+
+      const numSamples = Math.floor(trackLength / 2.0); // every 2 meters
+      trackPoints = trackSpline.getSpacedPoints(numSamples);
+      trackTangents = [];
+      trackNormals = [];
+      trackBinormals = [];
+
+      const upWorld = new THREE.Vector3(0, 1, 0);
+      for (let i = 0; i <= numSamples; i++) {
+        const pCurrent = trackPoints[i];
+        const pNext = trackPoints[Math.min(numSamples, i + 1)];
+        const pPrev = trackPoints[Math.max(0, i - 1)];
+        const tangent = new THREE.Vector3().subVectors(pNext, pPrev).normalize();
+        const binormal = new THREE.Vector3().crossVectors(tangent, upWorld).normalize();
+        const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+        trackTangents.push(tangent);
+        trackBinormals.push(binormal);
+        trackNormals.push(normal);
+      }
+
+      // Build Ballast (Schotterbett) & Continuous Rails
+      buildRailsAndBallast(numSamples);
+
+      // Build Sleepers (Schwellen) via InstancedMesh
+      buildSleepers(trackLength);
+
+      // Build Catenary Masts (Oberleitungsmasten)
+      buildCatenary(trackLength);
+
+      // Build Stations
+      buildStations(route.stations);
+
+      // Build Signals
+      buildSignals(route);
+
+      // Build Environment / Scenery (Trees, Windmills, Houses, Bridge/Tunnel)
+      buildScenery(route, trackLength);
+    }
+
+    function buildRailsAndBallast(N) {
+      // Ballast Ribbon (Schotterbett)
+      const ballastGeo = new THREE.BufferGeometry();
+      const ballastVerts = [];
+      const ballastIndices = [];
+
+      // Solid 3D Rails (Left & Right)
+      const railLeftVerts = [];
+      const railRightVerts = [];
+      const railIndices = [];
+
+      const railGauge = 1.435;
+      const halfGauge = railGauge / 2;
+      const railWidth = 0.07;
+      const railHeight = 0.16;
+
+      for (let i = 0; i <= N; i++) {
+        const p = trackPoints[i];
+        const b = trackBinormals[i];
+        const n = trackNormals[i];
+
+        // Ballast Cross Section: 4 vertices (left skirt, left top, right top, right skirt)
+        const bL0 = p.clone().addScaledVector(b, -2.5).addScaledVector(n, -0.35);
+        const bL1 = p.clone().addScaledVector(b, -1.65).addScaledVector(n, 0.05);
+        const bR1 = p.clone().addScaledVector(b, 1.65).addScaledVector(n, 0.05);
+        const bR0 = p.clone().addScaledVector(b, 2.5).addScaledVector(n, -0.35);
+
+        ballastVerts.push(bL0.x, bL0.y, bL0.z);
+        ballastVerts.push(bL1.x, bL1.y, bL1.z);
+        ballastVerts.push(bR1.x, bR1.y, bR1.z);
+        ballastVerts.push(bR0.x, bR0.y, bR0.z);
+
+        if (i < N) {
+          const row = i * 4;
+          const nextRow = (i + 1) * 4;
+          for (let s = 0; s < 3; s++) {
+            ballastIndices.push(row + s, nextRow + s, row + s + 1);
+            ballastIndices.push(row + s + 1, nextRow + s, nextRow + s + 1);
+          }
+        }
+
+        // Left Rail: 4 vertices per slice (Top-Left, Top-Right, Bottom-Right, Bottom-Left)
+        const lCenter = p.clone().addScaledVector(b, -halfGauge);
+        const lTL = lCenter.clone().addScaledVector(b, -railWidth / 2).addScaledVector(n, railHeight);
+        const lTR = lCenter.clone().addScaledVector(b, railWidth / 2).addScaledVector(n, railHeight);
+        const lBR = lCenter.clone().addScaledVector(b, railWidth / 2).addScaledVector(n, 0.02);
+        const lBL = lCenter.clone().addScaledVector(b, -railWidth / 2).addScaledVector(n, 0.02);
+        railLeftVerts.push(lTL.x, lTL.y, lTL.z, lTR.x, lTR.y, lTR.z, lBR.x, lBR.y, lBR.z, lBL.x, lBL.y, lBL.z);
+
+        // Right Rail: 4 vertices per slice
+        const rCenter = p.clone().addScaledVector(b, halfGauge);
+        const rTL = rCenter.clone().addScaledVector(b, -railWidth / 2).addScaledVector(n, railHeight);
+        const rTR = rCenter.clone().addScaledVector(b, railWidth / 2).addScaledVector(n, railHeight);
+        const rBR = rCenter.clone().addScaledVector(b, railWidth / 2).addScaledVector(n, 0.02);
+        const rBL = rCenter.clone().addScaledVector(b, -railWidth / 2).addScaledVector(n, 0.02);
+        railRightVerts.push(rTL.x, rTL.y, rTL.z, rTR.x, rTR.y, rTR.z, rBR.x, rBR.y, rBR.z, rBL.x, rBL.y, rBL.z);
+
+        if (i < N) {
+          const rRow = i * 4;
+          const nextRRow = (i + 1) * 4;
+          // Top face (0-1), Right face (1-2), Left face (3-0)
+          railIndices.push(rRow + 0, nextRRow + 0, rRow + 1);
+          railIndices.push(rRow + 1, nextRRow + 0, nextRRow + 1);
+
+          railIndices.push(rRow + 1, nextRRow + 1, rRow + 2);
+          railIndices.push(rRow + 2, nextRRow + 1, nextRRow + 2);
+
+          railIndices.push(rRow + 3, nextRRow + 3, rRow + 0);
+          railIndices.push(rRow + 0, nextRRow + 3, nextRRow + 0);
+        }
+      }
+
+      ballastGeo.setAttribute('position', new THREE.Float32BufferAttribute(ballastVerts, 3));
+      ballastGeo.setIndex(ballastIndices);
+      ballastGeo.computeVertexNormals();
+
+      const ballastMat = new THREE.MeshStandardMaterial({
+        color: 0x4a4742,
+        roughness: 0.95,
+        flatShading: true
+      });
+      ballastMesh = new THREE.Mesh(ballastGeo, ballastMat);
+      ballastMesh.receiveShadow = true;
+      scene.add(ballastMesh);
+
+      // Rails
+      const leftRailGeo = new THREE.BufferGeometry();
+      leftRailGeo.setAttribute('position', new THREE.Float32BufferAttribute(railLeftVerts, 3));
+      leftRailGeo.setIndex(railIndices);
+      leftRailGeo.computeVertexNormals();
+
+      const rightRailGeo = new THREE.BufferGeometry();
+      rightRailGeo.setAttribute('position', new THREE.Float32BufferAttribute(railRightVerts, 3));
+      rightRailGeo.setIndex(railIndices);
+      rightRailGeo.computeVertexNormals();
+
+      const railMat = new THREE.MeshStandardMaterial({
+        color: 0xd4d8de,
+        metalness: 0.85,
+        roughness: 0.22
+      });
+
+      const leftRailMesh = new THREE.Mesh(leftRailGeo, railMat);
+      const rightRailMesh = new THREE.Mesh(rightRailGeo, railMat);
+      leftRailMesh.castShadow = true;
+      rightRailMesh.castShadow = true;
+
+      railsMesh = new THREE.Group();
+      railsMesh.add(leftRailMesh);
+      railsMesh.add(rightRailMesh);
+      scene.add(railsMesh);
+    }
+
+    function buildSleepers(totalDist) {
+      const spacing = 1.35;
+      const count = Math.floor(totalDist / spacing);
+      const sleeperGeo = new THREE.BoxGeometry(2.4, 0.12, 0.24);
+      const sleeperMat = new THREE.MeshStandardMaterial({
+        color: 0x6e6862,
+        roughness: 0.85,
+        flatShading: true
+      });
+
+      sleepersMesh = new THREE.InstancedMesh(sleeperGeo, sleeperMat, count);
+      sleepersMesh.receiveShadow = true;
+
+      const dummy = new THREE.Object3D();
+      for (let i = 0; i < count; i++) {
+        const u = (i * spacing) / totalDist;
+        const pt = trackSpline.getPointAt(Math.min(0.999, u));
+        const tangent = trackSpline.getTangentAt(Math.min(0.999, u)).normalize();
+        const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+        const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+        dummy.position.copy(pt).addScaledVector(normal, 0.06);
+        const rotMat = new THREE.Matrix4().makeBasis(binormal, normal, tangent);
+        dummy.setRotationFromMatrix(rotMat);
+        dummy.updateMatrix();
+        sleepersMesh.setMatrixAt(i, dummy.matrix);
+      }
+      sleepersMesh.instanceMatrix.needsUpdate = true;
+      scene.add(sleepersMesh);
+    }
+
+    let catenaryArmMesh = null;
+    let contactWireMesh = null;
+
+    function buildCatenary(totalDist) {
+      const poleSpacing = 48;
+      const count = Math.floor(totalDist / poleSpacing);
+
+      const mastGeo = new THREE.BoxGeometry(0.18, 5.2, 0.18);
+      const armGeo = new THREE.BoxGeometry(2.2, 0.1, 0.1);
+
+      const catMat = new THREE.MeshStandardMaterial({ color: 0x5a6578, metalness: 0.5, roughness: 0.5 });
+      catenaryMesh = new THREE.InstancedMesh(mastGeo, catMat, count);
+      catenaryArmMesh = new THREE.InstancedMesh(armGeo, catMat, count);
+
+      const dummyMast = new THREE.Object3D();
+      const dummyArm = new THREE.Object3D();
+
+      for (let i = 0; i < count; i++) {
+        const u = (i * poleSpacing) / totalDist;
+        const pt = trackSpline.getPointAt(Math.min(0.999, u));
+        const tangent = trackSpline.getTangentAt(Math.min(0.999, u)).normalize();
+        const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+        const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+        // Alternate left/right side
+        const side = (i % 2 === 0) ? 2.5 : -2.5;
+        const mastPos = pt.clone().addScaledVector(binormal, side).addScaledVector(normal, 2.6);
+        dummyMast.position.copy(mastPos);
+        dummyMast.updateMatrix();
+        catenaryMesh.setMatrixAt(i, dummyMast.matrix);
+
+        // Cantilever Arm reaching over the track
+        const armPos = mastPos.clone()
+          .addScaledVector(normal, 2.2)
+          .addScaledVector(binormal, (i % 2 === 0 ? -1.0 : 1.0));
+        dummyArm.position.copy(armPos);
+        dummyArm.updateMatrix();
+        catenaryArmMesh.setMatrixAt(i, dummyArm.matrix);
+      }
+      catenaryMesh.instanceMatrix.needsUpdate = true;
+      catenaryArmMesh.instanceMatrix.needsUpdate = true;
+      scene.add(catenaryMesh);
+      scene.add(catenaryArmMesh);
+
+      // Continuous Overhead Contact Wire (Fahrleitung)
+      const wirePoints = [];
+      const numWireSamples = Math.floor(totalDist / 5);
+      for (let w = 0; w <= numWireSamples; w++) {
+        const wu = w / numWireSamples;
+        const wpt = trackSpline.getPointAt(Math.min(0.999, wu));
+        const wNorm = trackNormals[Math.min(trackNormals.length - 1, Math.floor(wu * trackNormals.length))];
+        wirePoints.push(wpt.clone().addScaledVector(wNorm, 4.95));
+      }
+      const wireGeo = new THREE.BufferGeometry().setFromPoints(wirePoints);
+      const wireMat = new THREE.LineBasicMaterial({ color: 0x8899aa, transparent: true, opacity: 0.6 });
+      contactWireMesh = new THREE.Line(wireGeo, wireMat);
+      scene.add(contactWireMesh);
+    }
+
+    // CanvasTexture for Station Signs
+    function createStationSignTexture(stationName) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+
+      // DB Blue background
+      ctx.fillStyle = '#0c2340';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // White border
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
+
+      // Station Name
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 44px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(stationName, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      return texture;
+    }
+
+    function buildStations(stations) {
+      stations.forEach((st, idx) => {
+        const u = Math.min(0.999, st.dist / trackLength);
+        const pt = trackSpline.getPointAt(u);
+        const tangent = trackSpline.getTangentAt(u).normalize();
+        const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+        const stGroup = new THREE.Group();
+
+        // Platform (Bahnsteig)
+        const platLen = 80;
+        const platGeo = new THREE.BoxGeometry(4.0, 0.75, platLen);
+        const platMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.85, flatShading: true });
+        const platform = new THREE.Mesh(platGeo, platMat);
+        platform.position.set(0, 0.35, 0);
+        stGroup.add(platform);
+
+        // Yellow safety line on platform edge
+        const lineGeo = new THREE.BoxGeometry(0.12, 0.02, platLen);
+        const lineMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+        const yellowLine = new THREE.Mesh(lineGeo, lineMat);
+        yellowLine.position.set(-1.65, 0.73, 0);
+        stGroup.add(yellowLine);
+
+        // Platform Roof & Pillars
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 });
+        const roofGeo = new THREE.BoxGeometry(4.2, 0.15, platLen * 0.6);
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.position.set(0, 3.8, 0);
+        stGroup.add(roof);
+
+        for (let pz = -20; pz <= 20; pz += 10) {
+          const pillarGeo = new THREE.CylinderGeometry(0.08, 0.08, 3.2, 8);
+          const pillar = new THREE.Mesh(pillarGeo, roofMat);
+          pillar.position.set(0.6, 2.0, pz);
+          stGroup.add(pillar);
+        }
+
+        // Station Sign
+        const signTex = createStationSignTexture(st.name);
+        const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+        const signGeo = new THREE.PlaneGeometry(3.2, 0.8);
+        const sign = new THREE.Mesh(signGeo, signMat);
+        sign.position.set(0, 2.7, 0);
+        sign.rotation.y = -Math.PI / 2;
+        stGroup.add(sign);
+
+        // Stop Marker (H-Tafel)
+        const hCanvas = document.createElement('canvas');
+        hCanvas.width = 128;
+        hCanvas.height = 180;
+        const hCtx = hCanvas.getContext('2d');
+        hCtx.fillStyle = '#ffffff';
+        hCtx.fillRect(0, 0, 128, 180);
+        hCtx.strokeStyle = '#000000';
+        hCtx.lineWidth = 8;
+        hCtx.strokeRect(4, 4, 120, 172);
+        hCtx.fillStyle = '#000000';
+        hCtx.font = 'bold 110px monospace';
+        hCtx.textAlign = 'center';
+        hCtx.textBaseline = 'middle';
+        hCtx.fillText('H', 64, 90);
+
+        const hTex = new THREE.CanvasTexture(hCanvas);
+        const hSign = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.0), new THREE.MeshBasicMaterial({ map: hTex }));
+        hSign.position.set(-1.8, 1.5, platLen / 2 - 2);
+        hSign.rotation.y = Math.PI;
+        stGroup.add(hSign);
+
+        // Waiting Passenger Figures (Capsules: Cylinder + Sphere)
+        const passengerGroup = new THREE.Group();
+        const colors = [0xef4444, 0x3b82f6, 0x10b981, 0x8b5cf6, 0xf59e0b];
+        for (let i = 0; i < 14; i++) {
+          const pMat = new THREE.MeshStandardMaterial({
+            color: colors[i % colors.length],
+            roughness: 0.7
+          });
+          const bodyGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.8, 8);
+          const headGeo = new THREE.SphereGeometry(0.14, 8, 8);
+          const body = new THREE.Mesh(bodyGeo, pMat);
+          const head = new THREE.Mesh(headGeo, new THREE.MeshStandardMaterial({ color: 0xffdbac }));
+          head.position.y = 0.55;
+
+          const fig = new THREE.Group();
+          fig.add(body);
+          fig.add(head);
+          fig.position.set(
+            (Math.random() - 0.5) * 1.8 + 0.2,
+            1.15,
+            (Math.random() - 0.5) * (platLen - 12)
+          );
+          passengerGroup.add(fig);
+        }
+        stGroup.add(passengerGroup);
+        stGroup.userData = { passengerGroup, stopDist: st.dist };
+
+        // Position Station to the right of track
+        stGroup.position.copy(pt).addScaledVector(binormal, 3.2);
+        const rotMat = new THREE.Matrix4().makeBasis(binormal, new THREE.Vector3(0, 1, 0), tangent);
+        stGroup.setRotationFromMatrix(rotMat);
+
+        scene.add(stGroup);
+        stationObjects.push(stGroup);
+      });
+    }
+
+    function buildSignals(route) {
+      // Signals ~300m before each station
+      route.stations.forEach((st, idx) => {
+        if (idx === 0) return;
+        const sigDist = Math.max(50, st.dist - 320);
+        const u = sigDist / trackLength;
+        const pt = trackSpline.getPointAt(u);
+        const tangent = trackSpline.getTangentAt(u).normalize();
+        const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+        const sigGroup = new THREE.Group();
+
+        // Mast
+        const mastGeo = new THREE.BoxGeometry(0.2, 5.0, 0.2);
+        const mastMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+        const mast = new THREE.Mesh(mastGeo, mastMat);
+        mast.position.y = 2.5;
+        sigGroup.add(mast);
+
+        // Signal Shield
+        const shieldGeo = new THREE.BoxGeometry(0.6, 1.4, 0.1);
+        const shieldMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+        const shield = new THREE.Mesh(shieldGeo, shieldMat);
+        shield.position.set(0, 4.2, 0);
+        sigGroup.add(shield);
+
+        // Signal Lamps (Red, Yellow, Green)
+        const lampGeo = new THREE.SphereGeometry(0.12, 12, 12);
+        const redMat = new THREE.MeshStandardMaterial({ color: 0x330000, emissive: 0x000000 });
+        const yelMat = new THREE.MeshStandardMaterial({ color: 0x332200, emissive: 0x000000 });
+        const grnMat = new THREE.MeshStandardMaterial({ color: 0x003300, emissive: 0x22c55e });
+
+        const lampRed = new THREE.Mesh(lampGeo, redMat);
+        lampRed.position.set(0, 4.6, 0.06);
+        sigGroup.add(lampRed);
+
+        const lampYel = new THREE.Mesh(lampGeo, yelMat);
+        lampYel.position.set(0, 4.2, 0.06);
+        sigGroup.add(lampYel);
+
+        const lampGrn = new THREE.Mesh(lampGeo, grnMat);
+        lampGrn.position.set(0, 3.8, 0.06);
+        sigGroup.add(lampGrn);
+
+        sigGroup.userData = {
+          dist: sigDist,
+          lampRed,
+          lampYel,
+          lampGrn,
+          state: 'GREEN' // 'RED', 'YELLOW', 'GREEN'
+        };
+
+        sigGroup.position.copy(pt).addScaledVector(binormal, 2.6);
+        const rotMat = new THREE.Matrix4().makeBasis(binormal, new THREE.Vector3(0, 1, 0), tangent);
+        sigGroup.setRotationFromMatrix(rotMat);
+
+        scene.add(sigGroup);
+        signalObjects.push(sigGroup);
+      });
+
+      // Speed Limit Boards (Lf-Tafeln)
+      route.speedLimits.forEach(sl => {
+        if (sl.dist === 0) return;
+        const u = sl.dist / trackLength;
+        const pt = trackSpline.getPointAt(u);
+        const tangent = trackSpline.getTangentAt(u).normalize();
+        const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+        const boardGroup = new THREE.Group();
+
+        // Pole
+        const poleGeo = new THREE.CylinderGeometry(0.06, 0.06, 2.6, 6);
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8 });
+        const pole = new THREE.Mesh(poleGeo, poleMat);
+        pole.position.y = 1.3;
+        boardGroup.add(pole);
+
+        // Sign Board
+        const signTex = createLfSignTexture(sl.limit);
+        const signGeo = new THREE.PlaneGeometry(0.85, 0.85);
+        const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true });
+        const signMesh = new THREE.Mesh(signGeo, signMat);
+        signMesh.position.set(0, 2.2, 0);
+        signMesh.rotation.y = Math.PI;
+        boardGroup.add(signMesh);
+
+        boardGroup.position.copy(pt).addScaledVector(binormal, 2.4);
+        const rotMat = new THREE.Matrix4().makeBasis(binormal, new THREE.Vector3(0, 1, 0), tangent);
+        boardGroup.setRotationFromMatrix(rotMat);
+
+        scene.add(boardGroup);
+        signalObjects.push(boardGroup);
+      });
+    }
+
+    function createLfSignTexture(limit) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+
+      // Yellow triangle pointing down
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(10, 14);
+      ctx.lineTo(118, 14);
+      ctx.lineTo(64, 114);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+
+      ctx.fillStyle = '#000000';
+      ctx.font = '900 46px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(Math.round(limit / 10)), 64, 48);
+
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function setSignalState(sig, state) {
+      if (!sig.userData || !sig.userData.lampRed) return;
+      sig.userData.state = state;
+      const { lampRed, lampYel, lampGrn } = sig.userData;
+      if (state === 'RED') {
+        lampRed.material.emissive.setHex(0xef4444);
+        lampYel.material.emissive.setHex(0x000000);
+        lampGrn.material.emissive.setHex(0x000000);
+      } else if (state === 'YELLOW') {
+        lampRed.material.emissive.setHex(0x000000);
+        lampYel.material.emissive.setHex(0xf59e0b);
+        lampGrn.material.emissive.setHex(0x000000);
+      } else {
+        lampRed.material.emissive.setHex(0x000000);
+        lampYel.material.emissive.setHex(0x000000);
+        lampGrn.material.emissive.setHex(0x10b981);
+      }
+    }
+
+    function buildScenery(route, totalDist) {
+      // 1. Instanced Trees
+      const treeCount = 200;
+      const crownGeo = new THREE.ConeGeometry(1.6, 4.5, 6);
+      crownGeo.translate(0, 2.5, 0);
+      const crownMat = new THREE.MeshStandardMaterial({ color: 0x22543d, flatShading: true });
+      const treeInst = new THREE.InstancedMesh(crownGeo, crownMat, treeCount);
+      treeInst.castShadow = true;
+
+      const dummy = new THREE.Object3D();
+      for (let i = 0; i < treeCount; i++) {
+        const u = Math.random();
+        const pt = trackSpline.getPointAt(u);
+        const tangent = trackSpline.getTangentAt(u).normalize();
+        const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+        const offsetDist = (Math.random() > 0.5 ? 1 : -1) * (10 + Math.random() * 40);
+        dummy.position.copy(pt).addScaledVector(binormal, offsetDist);
+        dummy.scale.setScalar(0.7 + Math.random() * 0.9);
+        dummy.updateMatrix();
+        treeInst.setMatrixAt(i, dummy.matrix);
+      }
+      treeInst.instanceMatrix.needsUpdate = true;
+      scene.add(treeInst);
+      sceneryMeshes.push(treeInst);
+
+      // 2. Windmills (Windräder)
+      for (let i = 0; i < 4; i++) {
+        const u = 0.18 + i * 0.24;
+        const pt = trackSpline.getPointAt(u);
+        const binormal = trackSpline.getTangentAt(u).cross(new THREE.Vector3(0, 1, 0)).normalize();
+
+        const millGroup = new THREE.Group();
+        const towerGeo = new THREE.CylinderGeometry(0.8, 1.6, 26, 8);
+        const towerMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.6 });
+        const tower = new THREE.Mesh(towerGeo, towerMat);
+        tower.position.y = 13;
+        millGroup.add(tower);
+
+        // Rotor Blades
+        const bladeGeo = new THREE.BoxGeometry(0.4, 8.5, 0.1);
+        bladeGeo.translate(0, 4.25, 0);
+        const rotor = new THREE.Group();
+        for (let b = 0; b < 3; b++) {
+          const blade = new THREE.Mesh(bladeGeo, towerMat);
+          blade.rotation.z = (b * Math.PI * 2) / 3;
+          rotor.add(blade);
+        }
+        rotor.position.set(0, 26, 1.0);
+        millGroup.add(rotor);
+        millGroup.userData = { rotor };
+
+        millGroup.position.copy(pt).addScaledVector(binormal, 45 + (i % 2 === 0 ? 15 : -15));
+        scene.add(millGroup);
+        sceneryMeshes.push(millGroup);
+      }
+
+      // 3. Cute Low-Poly Cow (Route 1)
+      if (route.hasCow) {
+        cowMesh = new THREE.Group();
+        const cowBodyGeo = new THREE.BoxGeometry(1.2, 0.9, 2.0);
+        const cowMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.8 });
+        const cowBody = new THREE.Mesh(cowBodyGeo, cowMat);
+        cowBody.position.y = 1.0;
+        cowMesh.add(cowBody);
+
+        const spotGeo = new THREE.BoxGeometry(0.5, 0.4, 0.6);
+        const spotMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+        const spot1 = new THREE.Mesh(spotGeo, spotMat);
+        spot1.position.set(0.4, 1.2, 0.3);
+        cowMesh.add(spot1);
+
+        const cowHeadGeo = new THREE.BoxGeometry(0.6, 0.6, 0.8);
+        const cowHead = new THREE.Mesh(cowHeadGeo, cowMat);
+        cowHead.position.set(0, 1.5, 1.1);
+        cowMesh.add(cowHead);
+
+        for (let lx of [-0.4, 0.4]) {
+          for (let lz of [-0.6, 0.6]) {
+            const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 6);
+            const leg = new THREE.Mesh(legGeo, cowMat);
+            leg.position.set(lx, 0.4, lz);
+            cowMesh.add(leg);
+          }
+        }
+
+        const cowU = route.cowDist / totalDist;
+        const cPt = trackSpline.getPointAt(cowU);
+        const cBin = trackSpline.getTangentAt(cowU).cross(new THREE.Vector3(0, 1, 0)).normalize();
+        cowMesh.position.copy(cPt).addScaledVector(cBin, 3.8);
+        scene.add(cowMesh);
+      }
+
+      // 4. Hollow 3D Tunnel with Interior Emergency Lights
+      if (route.tunnelDist) {
+        const tunnelLength = (route.id === 'sfs') ? 280 : 90;
+        const tunnelStart = route.tunnelDist - tunnelLength / 2;
+        const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.95, flatShading: true });
+        const nicheLampMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff7700 });
+
+        for (let s = 0; s < tunnelLength; s += 12) {
+          const u = (tunnelStart + s) / totalDist;
+          const pt = trackSpline.getPointAt(Math.min(0.999, u));
+          const tangent = trackSpline.getTangentAt(Math.min(0.999, u)).normalize();
+          const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+          const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+          const seg = new THREE.Group();
+
+          // Left Wall
+          const wallL = new THREE.Mesh(new THREE.BoxGeometry(0.8, 6.2, 12), tunnelMat);
+          wallL.position.set(-3.2, 3.1, 0);
+          seg.add(wallL);
+
+          // Right Wall
+          const wallR = new THREE.Mesh(new THREE.BoxGeometry(0.8, 6.2, 12), tunnelMat);
+          wallR.position.set(3.2, 3.1, 0);
+          seg.add(wallR);
+
+          // Arched Roof
+          const roof = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.8, 12), tunnelMat);
+          roof.position.set(0, 6.2, 0);
+          seg.add(roof);
+
+          // Orange Niche Lamp every 24m
+          if (s % 24 === 0) {
+            const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), nicheLampMat);
+            lamp.position.set(2.7, 3.5, 0);
+            seg.add(lamp);
+          }
+
+          seg.position.copy(pt);
+          const rotMat = new THREE.Matrix4().makeBasis(binormal, normal, tangent);
+          seg.setRotationFromMatrix(rotMat);
+          scene.add(seg);
+          sceneryMeshes.push(seg);
+        }
+
+        // Stone Portal Arches at Entrance and Exit
+        [tunnelStart, tunnelStart + tunnelLength].forEach(pDist => {
+          const pu = pDist / totalDist;
+          const ppt = trackSpline.getPointAt(Math.min(0.999, pu));
+          const ptan = trackSpline.getTangentAt(Math.min(0.999, pu)).normalize();
+          const pbin = new THREE.Vector3().crossVectors(ptan, new THREE.Vector3(0, 1, 0)).normalize();
+          const pnorm = new THREE.Vector3().crossVectors(pbin, ptan).normalize();
+
+          const portal = new THREE.Mesh(
+            new THREE.BoxGeometry(8.8, 7.8, 2.5),
+            new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.9 })
+          );
+          portal.position.copy(ppt).addScaledVector(pnorm, 3.9);
+          const rotMat = new THREE.Matrix4().makeBasis(pbin, pnorm, ptan);
+          portal.setRotationFromMatrix(rotMat);
+          scene.add(portal);
+          sceneryMeshes.push(portal);
+        });
+      }
+
+      // 5. Viaduct / River Bridge
+      if (route.bridgeDist) {
+        const bridgeLen = (route.id === 'sfs') ? 220 : 110;
+        const pierHeight = (route.id === 'sfs') ? 35 : 12;
+        const bridgeStart = route.bridgeDist - bridgeLen / 2;
+
+        const bridgeMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.7, flatShading: true });
+        const pierMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85, flatShading: true });
+
+        // Bridge Piers every 40m
+        for (let b = 15; b < bridgeLen; b += 40) {
+          const bu = (bridgeStart + b) / totalDist;
+          const bpt = trackSpline.getPointAt(Math.min(0.999, bu));
+
+          const pier = new THREE.Mesh(new THREE.BoxGeometry(3.6, pierHeight, 4.2), pierMat);
+          pier.position.copy(bpt).add(new THREE.Vector3(0, -pierHeight / 2 - 0.2, 0));
+          pier.castShadow = true;
+          scene.add(pier);
+          sceneryMeshes.push(pier);
+        }
+
+        // River water for Route 1
+        if (route.id === 'regio') {
+          const rU = route.bridgeDist / totalDist;
+          const rPt = trackSpline.getPointAt(rU);
+          const waterGeo = new THREE.PlaneGeometry(160, 140);
+          const waterMat = new THREE.MeshStandardMaterial({
+            color: 0x1d4ed8,
+            roughness: 0.1,
+            metalness: 0.4,
+            transparent: true,
+            opacity: 0.85
+          });
+          const water = new THREE.Mesh(waterGeo, waterMat);
+          water.rotation.x = -Math.PI / 2;
+          water.position.set(rPt.x, -2.4, rPt.z);
+          scene.add(water);
+          sceneryMeshes.push(water);
+        }
+      }
+
+      // 6. Charming Rural Cottages / Houses
+      const villageSpots = [0.12, 0.42, 0.72];
+      const houseMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.8 });
+      const roofMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.7 });
+
+      villageSpots.forEach((spot, vIdx) => {
+        const vPt = trackSpline.getPointAt(spot);
+        const vBin = trackSpline.getTangentAt(spot).cross(new THREE.Vector3(0, 1, 0)).normalize();
+
+        for (let h = 0; h < 3; h++) {
+          const house = new THREE.Group();
+          const base = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3.2, 5.5), houseMat);
+          base.position.y = 1.6;
+          house.add(base);
+
+          const roof = new THREE.Mesh(new THREE.ConeGeometry(4.2, 2.5, 4), roofMat);
+          roof.rotation.y = Math.PI / 4;
+          roof.position.y = 4.4;
+          house.add(roof);
+
+          const sideOffset = (vIdx % 2 === 0 ? 1 : -1) * (26 + h * 12);
+          house.position.copy(vPt).addScaledVector(vBin, sideOffset).add(new THREE.Vector3((h - 1) * 8, 0, (h - 1) * 6));
+          house.rotation.y = Math.random() * Math.PI;
+          scene.add(house);
+          sceneryMeshes.push(house);
+        }
+      });
+    }
+
+    // --- 7. Driving Physics, Sifa, & Game Loop ---
+    function updatePhysics(dt) {
+      if (gameState !== 'RUNNING') return;
+
+      const speedKmH = trainSpeed * 3.6;
+
+      // Acceleration computation based on driving notch
+      let engineAcc = 0;
+      let brakeAcc = 0;
+
+      if (trainNotch > 0 && !doorsOpen) {
+        // Tractive effort tapers off at higher speed
+        const speedFactor = Math.max(0.2, 1 - Math.pow(speedKmH / currentRoute.maxSpeed, 1.3));
+        engineAcc = (trainNotch / 5) * 0.9 * speedFactor;
+      } else if (trainNotch < 0) {
+        brakeAcc = (trainNotch / 5) * 1.15; // Service brake ~1.15 m/s²
+      }
+
+      if (emergencyBraking) {
+        brakeAcc = -1.75; // Emergency brake ~1.75 m/s²
+      }
+
+      // Brake pressure animation
+      const targetPressure = emergencyBraking ? 0 : (trainNotch < 0 ? 5.0 - (Math.abs(trainNotch) / 5) * 1.6 : 5.0);
+      brakePressure += (targetPressure - brakePressure) * dt * 4;
+
+      // Track gradient (Incline / Slope)
+      const u = Math.min(0.999, trainDist / trackLength);
+      const tangent = trackSpline.getTangentAt(u);
+      const slope = tangent.y; // positive = uphill, negative = downhill
+      const slopeAcc = -slope * 9.81 * 0.35;
+
+      // Aerodynamic & Rolling Drag
+      const dragAcc = -0.015 * trainSpeed - 0.00018 * trainSpeed * trainSpeed;
+
+      // Weather friction modifier
+      const frictionMult = (selectedWeather === 'rain') ? 0.8 : 1.0;
+      acceleration = engineAcc * frictionMult + brakeAcc + slopeAcc + dragAcc;
+
+      // Compute Jerk (da/dt) for Coffee Spill
+      const jerk = Math.abs(acceleration - prevAcceleration) / Math.max(0.001, dt);
+      prevAcceleration = acceleration;
+
+      if (jerk > 4.5 && speedKmH > 10 && coffeeSpillCooldown <= 0) {
+        triggerCoffeeSpill();
+      }
+      if (coffeeSpillCooldown > 0) coffeeSpillCooldown -= dt;
+
+      // Integrate Velocity & Position
+      trainSpeed = Math.max(0, trainSpeed + acceleration * dt);
+      trainDist += trainSpeed * dt;
+
+      // Stop if emergency brake brings speed to zero
+      if (emergencyBraking && trainSpeed <= 0.05) {
+        emergencyBraking = false;
+        trainNotch = 0;
+        showAnnouncement("⚠️ Zwangsbremsung beendet. Zug steht.");
+      }
+
+      // Sifa Watchdog (all 30s)
+      sifaTimer += dt;
+      const sifaBox = document.getElementById('sifa-warning');
+
+      if (sifaTimer >= 24 && sifaTimer < 28) {
+        sifaBox.style.display = 'block';
+        sifaBox.textContent = 'SIFA! TASTE Q DRÜCKEN!';
+      } else if (sifaTimer >= 28 && sifaTimer < 32) {
+        sifaBox.style.display = 'block';
+        if (!sifaAlarmActive) {
+          trainAudio.playSifaAlarm();
+          sifaAlarmActive = true;
+        }
+      } else if (sifaTimer >= 32) {
+        // Missed Sifa -> Zwangsbremsung!
+        triggerZwangsbremsung("SIFA-Zwangsbremsung! Aufmerksamkeit verfehlt.");
+        sifaTimer = 0;
+        sifaBox.style.display = 'none';
+        sifaAlarmActive = false;
+      } else {
+        sifaBox.style.display = 'none';
+        sifaAlarmActive = false;
+      }
+
+      // Speed Limit Check
+      checkSpeedLimits();
+
+      // Signals Check
+      checkSignals();
+
+      // Cow Encounter on Route 1
+      if (currentRoute.hasCow && !cowHonked && Math.abs(trainDist - currentRoute.cowDist) < 120) {
+        showAnnouncement("🐄 Achtung: Kuh im Gleisbereich! Taste [H] (Horn) drücken!");
+      }
+
+      // Check Station Proximity & Arrival
+      checkStationApproach();
+
+      // Audio update
+      trainAudio.update(speedKmH, trainNotch, dt);
+
+      // Accelerate Game Clock (1s real = 8s game time)
+      gameTimeSeconds += dt * 8;
+    }
+
+    function checkSpeedLimits() {
+      const limits = currentRoute.speedLimits;
+      for (let i = limits.length - 1; i >= 0; i--) {
+        if (trainDist >= limits[i].dist) {
+          targetSpeedLimit = limits[i].limit;
+          break;
+        }
+      }
+
+      const speedKmH = trainSpeed * 3.6;
+      if (speedKmH > targetSpeedLimit + 4) {
+        document.getElementById('hud-speed').classList.add('overspeed');
+        totalScore = Math.max(0, totalScore - Math.floor(15 * 0.016)); // small deduction
+      } else {
+        document.getElementById('hud-speed').classList.remove('overspeed');
+      }
+    }
+
+    function checkSignals() {
+      signalObjects.forEach(sig => {
+        const delta = sig.userData.dist - trainDist;
+
+        // Dynamic behavior: turn Yellow 400m before, Green 120m before
+        if (delta > 0 && delta < 450) {
+          if (delta > 140) {
+            setSignalState(sig, 'YELLOW');
+          } else {
+            setSignalState(sig, 'GREEN');
+          }
+        }
+
+        // If player overruns RED signal
+        if (sig.userData.state === 'RED' && delta < 0 && delta > -15 && trainSpeed > 2) {
+          triggerZwangsbremsung("ROTES SIGNAL ÜBERFAHREN! PZB-Zwangsbremsung!");
+          totalScore = Math.max(0, totalScore - 800);
+        }
+      });
+    }
+
+    function triggerZwangsbremsung(reason) {
+      emergencyBraking = true;
+      trainNotch = -6;
+      showAnnouncement(`🛑 ${reason} (-250 Pkt)`);
+      totalScore = Math.max(0, totalScore - 250);
+      ArcadeCore.Sounds.hit();
+    }
+
+    function triggerCoffeeSpill() {
+      coffeeSpillCooldown = 4.0;
+      coffeeLevel = Math.max(0, coffeeLevel - 0.25);
+      trainAudio.playCoffeeSpill();
+
+      const mug = document.getElementById('coffee-mug');
+      mug.classList.add('coffee-spill');
+      setTimeout(() => mug.classList.remove('coffee-spill'), 400);
+
+      const status = document.getElementById('coffee-status');
+      if (coffeeLevel > 0.5) status.textContent = 'Geschwappt! ☕';
+      else if (coffeeLevel > 0.1) status.textContent = 'Halb voll ☕';
+      else status.textContent = 'Leer! Verschüttet!';
+
+      showAnnouncement("☕ Schwapp! Der Kaffee hat sich auf dem Fahrpult verteilt!");
+    }
+
+    function checkStationApproach() {
+      const st = currentRoute.stations[currentStationIdx];
+      if (!st) return;
+
+      const distToStop = st.dist - trainDist;
+
+      // Approaching gong announcement
+      if (distToStop < 350 && distToStop > 320 && !st.announced) {
+        st.announced = true;
+        trainAudio.playGong();
+        showAnnouncement(`Nächster Halt: ${st.name}. Ausstieg in Fahrtrichtung rechts.`);
+      }
+
+      // Prompt to brake
+      const promptEl = document.getElementById('hud-prompt');
+      if (distToStop < 70 && distToStop > -30) {
+        if (trainSpeed < 0.2) {
+          // Train has stopped at platform!
+          promptEl.classList.add('active');
+          if (!doorsOpen) {
+            promptEl.textContent = "Halt erreicht! Drücke [T] zum Türen öffnen";
+          } else {
+            promptEl.textContent = `Fahrgäste steigen ein... (${Math.ceil(5 - boardingTimer)}s)`;
+          }
+        } else {
+          promptEl.classList.remove('active');
+        }
+      } else {
+        promptEl.classList.remove('active');
+      }
+
+      // Terminal station complete
+      if (trainDist >= trackLength - 10 && trainSpeed < 0.2) {
+        showEndScreen();
+      }
+    }
+
+    // --- 8. Station Review & Passenger Boarding Logic ---
+    function toggleDoors() {
+      if (trainSpeed > 0.5) {
+        showAnnouncement("⚠️ Türen können bei fahrendem Zug nicht geöffnet werden!");
+        return;
+      }
+
+      doorsOpen = !doorsOpen;
+      if (doorsOpen) {
+        trainAudio.playGong();
+        showAnnouncement("Türen freigegeben. Bitte Vorsicht bei der Abfahrt.");
+        boardingTimer = 0;
+        animatePassengersBoarding();
+      } else {
+        trainAudio.playDoorBeep();
+        showAnnouncement("Türen geschlossen. Zurückbleiben bitte!");
+
+        // If doors closed after boarding, evaluate the stop!
+        if (boardingTimer >= 4) {
+          evaluateStationStop();
+        }
+      }
+    }
+
+    function animatePassengersBoarding() {
+      const stObj = stationObjects[currentStationIdx];
+      if (!stObj || !stObj.userData.passengerGroup) return;
+
+      const pGroup = stObj.userData.passengerGroup;
+      // Animate figures moving towards train track
+      pGroup.children.forEach(fig => {
+        fig.position.x -= 0.8;
+      });
+    }
+
+    function evaluateStationStop() {
+      gameState = 'STATION_STOP';
+      const st = currentRoute.stations[currentStationIdx];
+      const deltaDist = Math.abs(trainDist - st.dist);
+
+      // 1. Stopping Accuracy Rating (0 - 500 Pts)
+      let accPts = 0;
+      let accText = "";
+      if (deltaDist < 1.5) {
+        accPts = 500;
+        accText = `±${deltaDist.toFixed(1)} m (Perfekt auf den Millimeter!)`;
+      } else if (deltaDist < 5.0) {
+        accPts = 350;
+        accText = `+${deltaDist.toFixed(1)} m (Sehr gut)`;
+      } else if (deltaDist < 15.0) {
+        accPts = 180;
+        accText = `+${deltaDist.toFixed(1)} m (Akzeptabel)`;
+      } else {
+        accPts = 50;
+        accText = `+${deltaDist.toFixed(1)} m (Bahnsteig fast verpasst)`;
+      }
+
+      // 2. Punctuality Rating
+      const planArrSec = timeStrToSeconds(st.planArr);
+      const delaySec = Math.max(0, gameTimeSeconds - planArrSec);
+      let puncPts = 0;
+      let puncText = "";
+      if (delaySec < 30) {
+        puncPts = 400;
+        puncText = "Pünktlich wie die Schweizer Uhr (+400 Pkt)";
+      } else if (delaySec < 120) {
+        puncPts = 200;
+        puncText = `+${Math.round(delaySec / 60)} min Verspätung (+200 Pkt)`;
+      } else {
+        puncPts = 0;
+        puncText = `+${Math.round(delaySec / 60)} min Verspätung (Typisch DB)`;
+      }
+
+      // 3. Comfort Rating (Coffee Level)
+      let comfortPts = Math.round(coffeeLevel * 200);
+      let comfortText = coffeeLevel > 0.8 ? "Sanft wie auf Wolken" : (coffeeLevel > 0.4 ? "Etwas ruckelig" : "Kaffee verschüttet!");
+
+      const stationTotal = accPts + puncPts + comfortPts;
+      totalScore += stationTotal;
+
+      // Stars (1 - 5)
+      let stars = 3;
+      if (stationTotal >= 950) stars = 5;
+      else if (stationTotal >= 750) stars = 4;
+      else if (stationTotal >= 450) stars = 3;
+      else if (stationTotal >= 200) stars = 2;
+      else stars = 1;
+
+      const starStr = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+      const quotes = PASSENGER_QUOTES[stars];
+      const quote = quotes[Math.floor(Math.random() * quotes.length)];
+
+      stationReviews.push({
+        name: st.name,
+        distDelta: deltaDist,
+        delay: delaySec,
+        stars,
+        points: stationTotal
+      });
+
+      // Update Review Modal
+      document.getElementById('rev-station-name').textContent = st.name;
+      document.getElementById('rev-stars').textContent = starStr;
+      document.getElementById('rev-quote').textContent = quote;
+      document.getElementById('rev-accuracy').textContent = accText;
+      document.getElementById('rev-punctuality').textContent = puncText;
+      document.getElementById('rev-comfort').textContent = comfortText;
+      document.getElementById('rev-points').textContent = `+${stationTotal} Pkt`;
+
+      document.getElementById('modal-station').classList.add('active');
+      ArcadeCore.Sounds.coin();
+    }
+
+    function continueAfterStation() {
+      document.getElementById('modal-station').classList.remove('active');
+      currentStationIdx++;
+      gameState = 'RUNNING';
+
+      // Check if last station
+      if (currentStationIdx >= currentRoute.stations.length) {
+        showEndScreen();
+      } else {
+        showAnnouncement(`Abfahrt erteilt! Nächster Halt: ${currentRoute.stations[currentStationIdx].name}`);
+      }
+    }
+
+    function timeStrToSeconds(str) {
+      const parts = str.split(':').map(Number);
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+
+    function secondsToTimeStr(sec) {
+      const h = Math.floor(sec / 3600) % 24;
+      const m = Math.floor((sec % 3600) / 60);
+      const s = Math.floor(sec % 60);
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    // --- 9. End Screen & Highscore ---
+    function showEndScreen() {
+      gameState = 'FINISHED';
+      ArcadeCore.Sounds.powerup();
+
+      // Average Stars
+      const avg = stationReviews.length > 0
+        ? (stationReviews.reduce((sum, r) => sum + r.stars, 0) / stationReviews.length).toFixed(1)
+        : "4.0";
+      const fullStars = Math.round(Number(avg));
+      document.getElementById('end-stars').textContent = '★'.repeat(fullStars) + '☆'.repeat(5 - fullStars);
+      document.getElementById('end-avg-stars').textContent = `Gesamtbewertung: ${avg} von 5 Sternen`;
+
+      // Fill summary rows
+      const tbody = document.getElementById('end-summary-rows');
+      tbody.innerHTML = '';
+      stationReviews.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.name}</td>
+          <td>${r.distDelta.toFixed(1)} m</td>
+          <td>+${Math.round(r.delay / 60)} min</td>
+          <td>${'★'.repeat(r.stars)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('end-total-score').textContent = `${totalScore.toLocaleString()} Pkt`;
+
+      // Highscore Save via ArcadeCore
+      const oldBest = ArcadeCore.getScore('lokfuehrer') || 0;
+      if (totalScore > oldBest) {
+        ArcadeCore.saveScore('lokfuehrer', totalScore);
+      }
+      document.getElementById('end-highscore').textContent = `${Math.max(oldBest, totalScore).toLocaleString()} Pkt`;
+
+      // Check unlock of Route 2 (ICE 904 Sprinter)
+      if (currentRoute.id === 'regio' && Number(avg) >= 3.0) {
+        localStorage.setItem('lokfuehrer_route2_unlocked', 'true');
+        document.getElementById('end-unlock-banner').style.display = 'block';
+      }
+
+      document.getElementById('modal-end').classList.add('active');
+    }
+
+    // --- 10. Announcements & Ticker ---
+    let announcementTimeout = null;
+    function showAnnouncement(text) {
+      const el = document.getElementById('announcement');
+      const textEl = document.getElementById('announcement-text');
+      textEl.textContent = text;
+      el.classList.add('visible');
+
+      if (announcementTimeout) clearTimeout(announcementTimeout);
+      announcementTimeout = setTimeout(() => {
+        el.classList.remove('visible');
+      }, 5000);
+    }
+
+    // --- 11. Render Loop & Camera Attachment ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+
+      if (gameState === 'RUNNING' || gameState === 'STATION_STOP') {
+        updatePhysics(dt);
+
+        if (doorsOpen && gameState === 'RUNNING') {
+          boardingTimer += dt;
+        }
+
+        // Attach Camera & Cockpit to Train Spline Position
+        if (trackSpline) {
+          const u = Math.min(0.999, trainDist / trackLength);
+          const pos = trackSpline.getPointAt(u);
+          const tangent = trackSpline.getTangentAt(u).normalize();
+          const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+          const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+          // Camera Shake based on speed
+          const speedFactor = (trainSpeed * 3.6) / currentRoute.maxSpeed;
+          const shakeX = Math.sin(Date.now() * 0.02) * 0.015 * speedFactor;
+          const shakeY = Math.cos(Date.now() * 0.025) * 0.015 * speedFactor;
+
+          // Cabin eye level: 2.3m above rails, 0.4m right of center
+          const eyePos = pos.clone()
+            .addScaledVector(normal, 2.3 + shakeY)
+            .addScaledVector(binormal, 0.35 + shakeX);
+
+          camera.position.copy(eyePos);
+          const lookTarget = eyePos.clone().addScaledVector(tangent, 30);
+          camera.lookAt(lookTarget);
+
+          // Update Cockpit position & orientation
+          cockpitGroup.position.copy(eyePos);
+          const rotMat = new THREE.Matrix4().makeBasis(binormal, normal, tangent.clone().negate());
+          cockpitGroup.setRotationFromMatrix(rotMat);
+
+          // Headlight
+          spotLight.position.copy(pos).addScaledVector(normal, 1.8);
+          spotLight.target.position.copy(pos).addScaledVector(tangent, 60);
+
+          // Directional Shadow camera follows train
+          dirLight.position.set(pos.x + 80, pos.y + 120, pos.z + 60);
+          dirLight.target.position.copy(pos);
+
+          // Wiper animation during rain
+          if (selectedWeather === 'rain' && wiperArmMesh) {
+            wiperArmMesh.rotation.z = Math.sin(Date.now() * 0.005) * 0.8;
+          }
+
+          // Rain particles update
+          if (rainParticles && selectedWeather === 'rain') {
+            const posAttr = rainParticles.geometry.attributes.position;
+            const arr = posAttr.array;
+            for (let i = 1; i < arr.length; i += 3) {
+              arr[i] -= dt * 45;
+              if (arr[i] < camera.position.y - 10) {
+                arr[i] = camera.position.y + 25;
+              }
+            }
+            posAttr.needsUpdate = true;
+            rainParticles.position.copy(camera.position);
+          }
+
+          // Passenger boarding animation
+          if (doorsOpen && stationObjects[currentStationIdx]) {
+            const pGroup = stationObjects[currentStationIdx].userData.passengerGroup;
+            if (pGroup) {
+              pGroup.children.forEach((fig, fIdx) => {
+                if (fig.position.x > -1.2) {
+                  fig.position.x -= dt * 0.7;
+                  fig.position.y = 1.15 + Math.abs(Math.sin(Date.now() * 0.012 + fIdx)) * 0.08;
+                } else {
+                  fig.visible = false;
+                }
+              });
+            }
+          }
+
+          // Throttle lever tilt
+          if (throttleLeverMesh) {
+            throttleLeverMesh.rotation.x = -trainNotch * 0.08;
+          }
+
+          // Animate Windmill Rotors
+          sceneryMeshes.forEach(mesh => {
+            if (mesh.userData && mesh.userData.rotor) {
+              mesh.userData.rotor.rotation.z += dt * 1.5;
+            }
+          });
+
+          // Cow run away when honked
+          if (cowMesh && cowHonked) {
+            cowMesh.position.x += dt * 4;
+          }
+        }
+
+        updateHUD();
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function updateHUD() {
+      const speedKmH = Math.round(trainSpeed * 3.6);
+      document.getElementById('hud-speed').textContent = speedKmH;
+      document.getElementById('hud-lzb').textContent = targetSpeedLimit;
+
+      // Notch Badge
+      const notchBadge = document.getElementById('hud-notch');
+      notchBadge.className = 'notch-badge';
+      if (emergencyBraking) {
+        notchBadge.textContent = 'NOTBREMSE';
+        notchBadge.classList.add('emergency');
+      } else if (trainNotch > 0) {
+        notchBadge.textContent = `+${trainNotch} F`;
+        notchBadge.classList.add('power');
+      } else if (trainNotch < 0) {
+        notchBadge.textContent = `${trainNotch} B`;
+        notchBadge.classList.add('brake');
+      } else {
+        notchBadge.textContent = '0 (Rollen)';
+      }
+
+      // Brake Pressure
+      document.getElementById('hud-brake').textContent = `${brakePressure.toFixed(1)} bar`;
+
+      // Station Distance & Name
+      const nextSt = currentRoute.stations[currentStationIdx];
+      if (nextSt) {
+        document.getElementById('hud-station-name').textContent = `🚆 ${nextSt.name}`;
+        const dist = Math.max(0, Math.round(nextSt.dist - trainDist));
+        document.getElementById('hud-station-dist').textContent = `${dist} m`;
+      }
+
+      // Clock & Delay
+      const clockStr = secondsToTimeStr(gameTimeSeconds);
+      document.getElementById('hud-clock').textContent = clockStr;
+
+      if (nextSt) {
+        const planSec = timeStrToSeconds(nextSt.planArr);
+        const delay = Math.round((gameTimeSeconds - planSec) / 60);
+        const delayPill = document.getElementById('hud-delay');
+        if (delay <= 0) {
+          delayPill.textContent = 'Pünktlich +0 min';
+          delayPill.className = 'delay-pill';
+        } else if (delay <= 2) {
+          delayPill.textContent = `+${delay} min Verspätung`;
+          delayPill.className = 'delay-pill delayed';
+        } else {
+          delayPill.textContent = `+${delay} min Verspätung`;
+          delayPill.className = 'delay-pill late';
+        }
+      }
+
+      // Score
+      document.getElementById('hud-score').textContent = `${totalScore} Pkt`;
+
+      // Coffee Liquid Height
+      document.getElementById('coffee-liquid').style.height = `${Math.round(coffeeLevel * 100)}%`;
+    }
+
+    // --- 12. Input & Keyboard Handlers ---
+    window.addEventListener('keydown', (e) => {
+      // Audio unlock on user interaction
+      trainAudio.init();
+
+      if (e.repeat && e.key.toLowerCase() !== 'w' && e.key.toLowerCase() !== 's') return;
+
+      switch (e.key.toLowerCase()) {
+        case 'w':
+        case 'arrowup':
+          if (trainNotch < 5 && !emergencyBraking) {
+            trainNotch++;
+            ArcadeCore.Sounds.playTone(400 + trainNotch * 40, 0.05, 'sine', 0.1);
+          }
+          break;
+
+        case 's':
+        case 'arrowdown':
+          if (trainNotch > -5) {
+            trainNotch--;
+            ArcadeCore.Sounds.playTone(350 + trainNotch * 30, 0.05, 'sine', 0.1);
+          }
+          break;
+
+        case ' ': // Space: Emergency Brake
+          emergencyBraking = true;
+          trainNotch = -6;
+          ArcadeCore.Sounds.hit();
+          showAnnouncement("🛑 NOTBREMSE AUSGELÖST!");
+          break;
+
+        case 'q': // Sifa confirmation
+          if (sifaTimer > 2) {
+            sifaTimer = 0;
+            sifaAlarmActive = false;
+            ArcadeCore.Sounds.playTone(600, 0.06, 'triangle', 0.1);
+          }
+          break;
+
+        case 't': // Doors
+          toggleDoors();
+          break;
+
+        case 'enter': // Confirm departure or continue station review
+          if (gameState === 'STATION_STOP') {
+            continueAfterStation();
+          } else if (doorsOpen) {
+            showAnnouncement("⚠️ Vor der Abfahrt Türen schließen [Taste T]!");
+          }
+          break;
+
+        case 'h': // Horn
+          trainAudio.playHorn();
+          if (currentRoute.hasCow && Math.abs(trainDist - currentRoute.cowDist) < 150) {
+            cowHonked = true;
+            totalScore += 200;
+            showAnnouncement("🐮 Muh! Die Kuh springt glücklich auf die Weide! (+200 Pkt)");
+            ArcadeCore.Sounds.coin();
+          }
+          break;
+
+        case 'm': // Mute Toggle
+          const isM = ArcadeCore.toggleMute();
+          document.getElementById('btn-mute').textContent = isM ? '🔇' : '🔊';
+          break;
+
+        case 'p':
+        case 'escape':
+          togglePause();
+          break;
+      }
+    });
+
+    function togglePause() {
+      if (gameState === 'RUNNING') {
+        gameState = 'PAUSED';
+        document.getElementById('modal-pause').classList.add('active');
+      } else if (gameState === 'PAUSED') {
+        gameState = 'RUNNING';
+        document.getElementById('modal-pause').classList.remove('active');
+      }
+    }
+
+    // Touch Button Handlers (Mobile)
+    document.getElementById('touch-power').addEventListener('pointerdown', () => {
+      trainAudio.init();
+      if (trainNotch < 5 && !emergencyBraking) trainNotch++;
+    });
+    document.getElementById('touch-brake').addEventListener('pointerdown', () => {
+      trainAudio.init();
+      if (trainNotch > -5) trainNotch--;
+    });
+    document.getElementById('touch-ebrake').addEventListener('pointerdown', () => {
+      trainAudio.init();
+      emergencyBraking = true;
+      trainNotch = -6;
+    });
+    document.getElementById('touch-sifa').addEventListener('pointerdown', () => {
+      trainAudio.init();
+      sifaTimer = 0;
+      sifaAlarmActive = false;
+    });
+    document.getElementById('touch-doors').addEventListener('pointerdown', () => {
+      trainAudio.init();
+      toggleDoors();
+    });
+    document.getElementById('touch-horn').addEventListener('pointerdown', () => {
+      trainAudio.init();
+      trainAudio.playHorn();
+      if (currentRoute.hasCow && Math.abs(trainDist - currentRoute.cowDist) < 150) {
+        cowHonked = true;
+        totalScore += 200;
+        showAnnouncement("🐮 Muh! Die Kuh springt auf die Weide! (+200 Pkt)");
+      }
+    });
+
+    // UI Buttons (Mute, Pause, Start, Continue)
+    document.getElementById('btn-mute').addEventListener('click', () => {
+      const isM = ArcadeCore.toggleMute();
+      document.getElementById('btn-mute').textContent = isM ? '🔇' : '🔊';
+    });
+
+    document.getElementById('btn-pause').addEventListener('click', togglePause);
+    document.getElementById('btn-resume').addEventListener('click', togglePause);
+    document.getElementById('btn-pause-menu').addEventListener('click', () => {
+      location.reload();
+    });
+
+    document.getElementById('btn-station-continue').addEventListener('click', continueAfterStation);
+    document.getElementById('btn-end-retry').addEventListener('click', () => startGame(currentRoute));
+    document.getElementById('btn-end-menu').addEventListener('click', () => location.reload());
+
+    // Weather Selection
+    document.querySelectorAll('.weather-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.weather-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        applyWeather(e.target.dataset.weather);
+      });
+    });
+
+    // Route Selection
+    let selectedRouteIndex = 0;
+    const isRoute2Unlocked = localStorage.getItem('lokfuehrer_route2_unlocked') === 'true';
+
+    if (isRoute2Unlocked) {
+      const r2Card = document.getElementById('opt-route-2');
+      r2Card.classList.remove('locked');
+      document.getElementById('opt-route-2-desc').textContent = 'Schnellfahrstrecke • 5 Stationen • Vmax 300 km/h • Tunnel & Brücken';
+    }
+
+    document.getElementById('opt-route-1').addEventListener('click', () => {
+      selectedRouteIndex = 0;
+      document.getElementById('opt-route-1').classList.add('selected');
+      document.getElementById('opt-route-2').classList.remove('selected');
+    });
+
+    document.getElementById('opt-route-2').addEventListener('click', () => {
+      if (!isRoute2Unlocked) return;
+      selectedRouteIndex = 1;
+      document.getElementById('opt-route-2').classList.add('selected');
+      document.getElementById('opt-route-1').classList.remove('selected');
+    });
+
+    // Start Game Button
+    document.getElementById('btn-start-game').addEventListener('click', () => {
+      trainAudio.init();
+      startGame(ROUTES[selectedRouteIndex]);
+    });
+
+    function startGame(route) {
+      document.getElementById('modal-start').classList.remove('active');
+      document.getElementById('modal-end').classList.remove('active');
+      document.getElementById('modal-station').classList.remove('active');
+
+      totalScore = 0;
+      stationReviews = [];
+      coffeeLevel = 1.0;
+      cowHonked = false;
+      gameTimeSeconds = 8 * 3600;
+
+      buildRoute(route);
+      gameState = 'RUNNING';
+      showAnnouncement(`Fahrt gestartet: ${route.name}. Gute Reise!`);
+    }
+
+    // --- 13. Initialization ---
+    initThree();
+
+    // Load Highscore
+    const savedBest = ArcadeCore.getScore('lokfuehrer') || 0;
+    document.getElementById('start-highscore').textContent = savedBest.toLocaleString();
+
+    // Start animation loop
+    animate();
+  </script>
+</body>
+</html>
