@@ -85,13 +85,19 @@ button.gold { background:linear-gradient(#facc15,#ca8a04); box-shadow:0 4px 0 #8
 #visorHud { position:absolute; inset:0; pointer-events:none; z-index:3; display:block; }
 .visor-frame {
   position:absolute; inset:0;
-  box-shadow:inset 0 0 80px rgba(5,15,35,0.7), inset 0 0 30px rgba(167,139,250,0.15);
-  background:radial-gradient(circle at 50% 30%, transparent 62%, rgba(15,23,42,0.25) 88%, rgba(3,7,18,0.65) 100%);
+  box-shadow:inset 0 0 100px rgba(2,6,23,0.85), inset 0 0 40px rgba(167,139,250,0.22);
+  background:radial-gradient(ellipse at 50% 35%, transparent 60%, rgba(15,23,42,0.3) 85%, rgba(2,6,23,0.75) 100%);
+}
+.visor-scanline {
+  position:absolute; inset:0;
+  background:linear-gradient(rgba(18,16,38,0) 50%, rgba(0,0,0,0.2) 50%), linear-gradient(90deg, rgba(255,0,0,0.015), rgba(0,255,0,0.01), rgba(0,0,255,0.015));
+  background-size:100% 4px, 6px 100%;
+  pointer-events:none; opacity:0.65;
 }
 .visor-glass {
-  position:absolute; top:4%; right:4%; width:30%; height:20%;
-  background:linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 60%);
-  border-radius:50%; transform:rotate(-15deg); filter:blur(2px);
+  position:absolute; top:3%; right:5%; width:35%; height:24%;
+  background:linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
+  border-radius:50%; transform:rotate(-15deg); filter:blur(3px);
 }
 #compass {
   position:absolute; top:46px; left:50%; transform:translateX(-50%);
@@ -151,6 +157,7 @@ body.touch #prompt { bottom:auto; top:210px; }
   <div id="hurt"></div>
   <div id="visorHud">
     <div class="visor-frame"></div>
+    <div class="visor-scanline"></div>
     <div class="visor-glass"></div>
     <div id="compass">🧭 Mondbasis: <span id="compassDist">--</span>m <span id="compassArrow">▲</span></div>
     <div id="reticle">
@@ -213,10 +220,18 @@ body.touch #prompt { bottom:auto; top:210px; }
 </div>
 
 <script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
 </script>
 <script type="module">
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 // ---------- Helfer ----------
 const $ = id => document.getElementById(id);
@@ -439,77 +454,208 @@ const soapMult = () => 1 + save.up.soap * 0.25;
 const charm = () => 1 + save.up.charm * 0.15;
 const jumpV = () => jumpVL(save.up.jet);
 
-// ---------- 3D-Szene ----------
+// ---------- 3D-Szene & Grafiken ----------
 const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.15;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x030611);
+scene.background = new THREE.Color(0x02040b);
 
-const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 1200);
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 1400);
 scene.add(camera);
 
+// Post-Processing (Bloom für Sterne, Sonne, Laser & Glanz)
+let composer = null;
+try {
+  composer = new EffectComposer(renderer);
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(innerWidth, innerHeight),
+    0.45, // strength
+    0.35, // radius
+    0.85  // threshold
+  );
+  composer.addPass(bloomPass);
+} catch (e) {
+  console.warn('Bloom/Composer nicht aktiv:', e);
+  composer = null;
+}
+
 // Beleuchtung
-const amb = new THREE.AmbientLight(0x2d3748, 1.2); scene.add(amb);
-const hemi = new THREE.HemisphereLight(0x475569, 0x05070d, 0.8); scene.add(hemi);
+const amb = new THREE.AmbientLight(0x334155, 1.3); scene.add(amb);
+const hemi = new THREE.HemisphereLight(0x64748b, 0x05070d, 0.85); scene.add(hemi);
 const SUN_DIR = new V3(0.65, 0.45, 0.6).normalize();
-const sun = new THREE.DirectionalLight(0xfff7ed, 3.4);
+const sun = new THREE.DirectionalLight(0xfff8ee, 3.8);
 sun.castShadow = true;
 sun.shadow.mapSize.width = 2048; sun.shadow.mapSize.height = 2048;
-sun.shadow.bias = -0.0006;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.02;
 scene.add(sun); scene.add(sun.target);
 
-// Sternenhintergrund
+// Die strahlende Sonne mit Korona & Lensflare im Weltall
+const sunGroup = new THREE.Group();
+const sunCoreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const sunCore = new THREE.Mesh(new THREE.SphereGeometry(7, 32, 20), sunCoreMat);
+sunGroup.add(sunCore);
+
+const sunFlareTex = canvasTex(512, 512, (g, w, h) => {
+  const gr = g.createRadialGradient(256, 256, 0, 256, 256, 256);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.12, 'rgba(254,240,138,0.9)');
+  gr.addColorStop(0.35, 'rgba(251,146,60,0.4)');
+  gr.addColorStop(0.7, 'rgba(239,68,68,0.1)');
+  gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  // Sonnenstrahlen
+  g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = 3;
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    g.beginPath();
+    g.moveTo(256 + Math.cos(a) * 40, 256 + Math.sin(a) * 40);
+    g.lineTo(256 + Math.cos(a) * 250, 256 + Math.sin(a) * 250);
+    g.stroke();
+  }
+});
+const sunCoronaMat = new THREE.SpriteMaterial({ map: sunFlareTex, color: 0xffedd5, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+const sunCorona = new THREE.Sprite(sunCoronaMat);
+sunCorona.scale.set(65, 65, 1);
+sunGroup.add(sunCorona);
+scene.add(sunGroup);
+
+// Sternenpartikel & Weltraum-Nebel
+const starSpriteTex = canvasTex(64, 64, (g, w, h) => {
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.2, 'rgba(255,255,255,0.85)');
+  gr.addColorStop(0.5, 'rgba(224,242,254,0.3)');
+  gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  // Beugungsspitzen (Diffraction spikes)
+  g.fillStyle = 'rgba(255,255,255,0.7)';
+  g.fillRect(31, 4, 2, 56);
+  g.fillRect(4, 31, 56, 2);
+});
+
+let starPoints = null;
 {
-  const n = 1400, geo = new THREE.BufferGeometry(), pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const n = 3200, geo = new THREE.BufferGeometry(), pos = new Float32Array(n * 3), col = new Float32Array(n * 3), sz = new Float32Array(n);
+  const starColors = [
+    [0.75, 0.88, 1.0], // O/B bläulich weiß
+    [0.92, 0.95, 1.0], // A weiß
+    [1.0, 0.98, 0.88], // F gelbweiß
+    [1.0, 0.88, 0.65], // G gelb (Sol)
+    [1.0, 0.72, 0.45], // K orange
+    [1.0, 0.45, 0.35]  // M roter Riese
+  ];
   for (let k = 0; k < n; k++) {
-    const v = sph(rnd(0, Math.PI), rnd(0, TAU)).multiplyScalar(rnd(500, 950));
+    const v = sph(rnd(0, Math.PI), rnd(0, TAU)).multiplyScalar(rnd(550, 980));
     pos[k * 3] = v.x; pos[k * 3 + 1] = v.y; pos[k * 3 + 2] = v.z;
-    const c = new THREE.Color().setHSL(rnd(0.55, 0.75), rnd(0.2, 0.7), rnd(0.7, 1));
-    col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b;
+    const c = pick(starColors);
+    const lum = Math.pow(rnd(0.5, 1.0), 1.8);
+    col[k * 3] = c[0] * lum; col[k * 3 + 1] = c[1] * lum; col[k * 3 + 2] = c[2] * lum;
+    sz[k] = (k < 120 ? rnd(3.2, 5.0) : rnd(1.4, 2.5));
   }
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const mat = new THREE.PointsMaterial({ size: 1.8, vertexColors: true, transparent: true, opacity: 0.85 });
-  scene.add(new THREE.Points(geo, mat));
+  geo.setAttribute('size', new THREE.BufferAttribute(sz, 1));
+  const mat = new THREE.PointsMaterial({ size: 2.8, map: starSpriteTex, vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false, blending: THREE.AdditiveBlending });
+  starPoints = new THREE.Points(geo, mat);
+  scene.add(starPoints);
+}
+
+// Kosmische Nebelwolken (Milchstraße & Interstellare Gaswolken)
+{
+  const nebGroup = new THREE.Group();
+  const nebTex = canvasTex(256, 256, (g, w, h) => {
+    const gr = g.createRadialGradient(128, 128, 10, 128, 128, 120);
+    gr.addColorStop(0, 'rgba(255,255,255,0.8)');
+    gr.addColorStop(0.4, 'rgba(167,139,250,0.4)');
+    gr.addColorStop(0.7, 'rgba(56,189,248,0.15)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  });
+  const nebColors = [0x6366f1, 0x8b5cf6, 0x38bdf8, 0xec4899, 0x3b82f6];
+  for (let k = 0; k < 28; k++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: nebTex,
+      color: pick(nebColors),
+      transparent: true,
+      opacity: rnd(0.12, 0.28),
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }));
+    const v = sph(rnd(0.3, Math.PI - 0.3), rnd(0, TAU)).multiplyScalar(rnd(700, 920));
+    sp.position.copy(v);
+    const s = rnd(180, 360);
+    sp.scale.set(s, s * rnd(0.7, 1.3), 1);
+    nebGroup.add(sp);
+  }
+  scene.add(nebGroup);
 }
 
 // Mutterplanet am Horizont
-const skyPlanetMat = new THREE.MeshBasicMaterial();
-const skyPlanet = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), skyPlanetMat);
+const skyPlanetMat = new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.1 });
+const skyPlanet = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), skyPlanetMat);
 scene.add(skyPlanet);
+
+// Planeten-Atmosphären-Schein
+const skyPlanetGlowMat = new THREE.ShaderMaterial({
+  uniforms: { cColor: { value: new THREE.Color(0x38bdf8) } },
+  vertexShader: `varying vec3 vNormal; void main() { vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform vec3 cColor; varying vec3 vNormal; void main() { float f = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.6); gl_FragColor = vec4(cColor, clamp(f * 0.75, 0.0, 0.8)); }`,
+  side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false
+});
+const skyPlanetGlow = new THREE.Mesh(new THREE.SphereGeometry(1.22, 32, 24), skyPlanetGlowMat);
+skyPlanet.add(skyPlanetGlow);
 
 function canvasTex(w, h, fn) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d'); fn(g, w, h);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+
 function planetTex(p) {
-  return canvasTex(512, 256, (g, w, h) => {
+  return canvasTex(1024, 512, (g, w, h) => {
     g.fillStyle = p.col; g.fillRect(0, 0, w, h);
     if (p.bands) {
-      for (let y = 0; y < h; y += 8) {
-        g.fillStyle = (y / 8) % 2 ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.14)';
-        g.fillRect(0, y, w, 8);
+      // Detaillierte Jupiter-/Saturn-Bänder mit Wellen
+      for (let y = 0; y < h; y += 4) {
+        const factor = Math.sin(y * 0.04) * 0.5 + 0.5;
+        g.fillStyle = (Math.floor(y / 12) % 2 === 0) ? `rgba(0,0,0,${0.12 + factor * 0.15})` : `rgba(255,255,255,${0.1 + factor * 0.12})`;
+        g.fillRect(0, y, w, 4);
       }
+      // Großer Roter Fleck
+      const rf = g.createRadialGradient(w * 0.65, h * 0.6, 6, w * 0.65, h * 0.6, 38);
+      rf.addColorStop(0, 'rgba(185,28,28,0.75)');
+      rf.addColorStop(0.7, 'rgba(194,65,12,0.4)');
+      rf.addColorStop(1, 'transparent');
+      g.fillStyle = rf; g.fillRect(w * 0.55, h * 0.5, 80, 50);
     }
-    const gr = g.createRadialGradient(w * 0.35, h * 0.4, 20, w * 0.5, h * 0.5, w * 0.5);
-    gr.addColorStop(0, hexA(p.clouds || '#ffffff', 0.45)); gr.addColorStop(1, 'transparent');
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    // Wirbelnde Wolkensysteme
+    for (let k = 0; k < 18; k++) {
+      const cx = (k * 61) % w, cy = 60 + (k * 29) % (h - 120), cr = 40 + (k * 17) % 80;
+      const gr = g.createRadialGradient(cx, cy, 10, cx, cy, cr);
+      gr.addColorStop(0, hexA(p.clouds || '#ffffff', 0.55));
+      gr.addColorStop(1, 'transparent');
+      g.fillStyle = gr; g.fillRect(cx - cr, cy - cr, cr * 2, cr * 2);
+    }
   });
 }
+
 function emojiTex(char) {
   return canvasTex(128, 128, (g, w, h) => {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = '84px "Segoe UI Emoji", sans-serif'; g.fillText(char, w / 2, h / 2);
   });
 }
+
 function textSprite(text, bg = '#0f172aee', fg = '#fde047') {
   const tex = canvasTex(256, 64, (g, w, h) => {
     g.fillStyle = bg; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 14); g.fill();
@@ -533,12 +679,41 @@ function placeOn(obj, d, h = 0, yaw = 0) {
   M.group.add(obj);
 }
 
-// Dreck-Oberflächen-Bump-Map
-const grimeTex = canvasTex(256, 256, (g, w, h) => {
+// Deterministisches 2D-Perlin/Simplex-Rauschen für fotorealistische Mond-Oberflächen & Dreck
+function makeNoise2D(seed = 1234) {
+  const perm = new Uint8Array(512);
+  let s = seed;
+  for (let i = 0; i < 256; i++) {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    perm[i] = (s >>> 24) & 255;
+  }
+  for (let i = 0; i < 256; i++) perm[256 + i] = perm[i];
+  const grad = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+  return function(x, y) {
+    const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+    const xf = x - Math.floor(x), yf = y - Math.floor(y);
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const g00 = grad[perm[X + perm[Y]] % 8], g10 = grad[perm[X + 1 + perm[Y]] % 8];
+    const g01 = grad[perm[X + perm[Y + 1]] % 8], g11 = grad[perm[X + 1 + perm[Y + 1]] % 8];
+    const n00 = g00[0] * xf + g00[1] * yf, n10 = g10[0] * (xf - 1) + g10[1] * yf;
+    const n01 = g01[0] * xf + g01[1] * (yf - 1), n11 = g11[0] * (xf - 1) + g11[1] * (yf - 1);
+    return (n00 * (1 - u) + n10 * u) * (1 - v) + (n01 * (1 - u) + n11 * u) * v;
+  };
+}
+
+// Hochwertige zelluläre Dreck- & Schmutz-Bumpmap (kein weißes Rauschen mehr!)
+const grimeTex = canvasTex(512, 512, (g, w, h) => {
+  const noise = makeNoise2D(777);
   const img = g.createImageData(w, h), d = img.data;
-  for (let i = 0; i < w * h; i++) {
-    const v = Math.floor(Math.random() * 255);
-    d[i * 4] = v; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      const n1 = noise(x * 0.05, y * 0.05);
+      const n2 = noise(x * 0.14, y * 0.14) * 0.5;
+      const n3 = noise(x * 0.35, y * 0.35) * 0.25;
+      const v = clamp(Math.floor((n1 + n2 + n3 + 0.8) * 128), 0, 255);
+      d[idx] = v; d[idx + 1] = v; d[idx + 2] = v; d[idx + 3] = 255;
+    }
   }
   g.putImageData(img, 0, 0);
 });
@@ -546,63 +721,221 @@ grimeTex.wrapS = THREE.RepeatWrapping; grimeTex.wrapT = THREE.RepeatWrapping;
 
 // ---------- Mond-Generierung ----------
 let M = null;
+
 function makeBaseTexture(def, rng) {
-  return canvasTex(1024, 512, (g, W, H) => {
+  return canvasTex(2048, 1024, (g, W, H) => {
+    const noise = makeNoise2D(8888 + (def.R | 0));
     g.fillStyle = def.base1; g.fillRect(0, 0, W, H);
+    
+    // 1. Großräumige Maria (dunkle Basalt-Ebenen) vs Hochland-Terrassen
+    const imgData = g.getImageData(0, 0, W, H), pix = imgData.data;
+    const c1 = parseInt(def.base1.slice(1), 16), c2 = parseInt(def.base2.slice(1), 16);
+    const r1 = (c1 >> 16) & 255, g1 = (c1 >> 8) & 255, b1 = c1 & 255;
+    const r2 = (c2 >> 16) & 255, g2 = (c2 >> 8) & 255, b2 = c2 & 255;
+    
+    for (let y = 0; y < H; y++) {
+      const ny = y / H * 8;
+      for (let x = 0; x < W; x++) {
+        const nx = x / W * 16;
+        const nLow = noise(nx * 0.4, ny * 0.4);
+        const nMid = noise(nx * 1.5, ny * 1.5) * 0.5;
+        const nHigh = noise(nx * 5.0, ny * 5.0) * 0.25;
+        const f = clamp(0.5 + (nLow + nMid + nHigh) * 0.45, 0, 1);
+        
+        const idx = (y * W + x) * 4;
+        pix[idx] = clamp(r1 * (1 - f) + r2 * f + (Math.random() - 0.5) * 14, 0, 255);
+        pix[idx + 1] = clamp(g1 * (1 - f) + g2 * f + (Math.random() - 0.5) * 14, 0, 255);
+        pix[idx + 2] = clamp(b1 * (1 - f) + b2 * f + (Math.random() - 0.5) * 14, 0, 255);
+      }
+    }
+    g.putImageData(imgData, 0, 0);
+
     const blot = (x, y, r, col) => {
       const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, col); gr.addColorStop(1, 'transparent');
       g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
     };
-    const crater = (x, y, r, depth = 0.5) => {
-      const gr = g.createRadialGradient(x, y, r * 0.4, x, y, r);
-      gr.addColorStop(0, hexA('#000000', 0.55 * depth)); gr.addColorStop(0.8, hexA(def.base2, 0.4)); gr.addColorStop(1, 'transparent');
-      g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
-      g.strokeStyle = hexA('#ffffff', 0.22 * depth); g.lineWidth = Math.max(1, r * 0.12);
-      g.beginPath(); g.arc(x, y, r * 0.88, 0, TAU); g.stroke();
-    };
-    const Y = () => H * (0.08 + rng() * 0.84);
-    if (def.style === 'furrows') {
-      g.strokeStyle = hexA(def.base2, 0.6); g.lineWidth = 14;
-      for (let k = 0; k < 18; k++) {
-        g.beginPath(); let y = Y(); g.moveTo(0, y);
-        for (let x = 0; x < W; x += 60) g.lineTo(x, y + Math.sin(x * 0.02 + k) * 30);
+
+    // Strahlen-Systeme (Ray Systems wie beim Tycho-Krater)
+    const rayCrater = (x, y, r) => {
+      const numRays = Math.floor(12 + rng() * 14);
+      g.save();
+      g.translate(x, y);
+      for (let i = 0; i < numRays; i++) {
+        const a = (i / numRays) * TAU + (rng() - 0.5) * 0.2;
+        const len = r * (4.5 + rng() * 7);
+        const rayGr = g.createRadialGradient(0, 0, r * 0.8, 0, 0, len);
+        rayGr.addColorStop(0, 'rgba(255,255,255,0.45)');
+        rayGr.addColorStop(0.3, 'rgba(255,255,255,0.22)');
+        rayGr.addColorStop(1, 'transparent');
+        g.strokeStyle = rayGr;
+        g.lineWidth = Math.max(1.5, r * (0.08 + rng() * 0.08));
+        g.beginPath();
+        g.moveTo(Math.cos(a) * r * 0.8, Math.sin(a) * r * 0.8);
+        g.lineTo(Math.cos(a) * len, Math.sin(a) * len);
         g.stroke();
       }
-      for (let k = 0; k < 60; k++) crater(rng() * W, Y(), 8 + rng() * 32, 0.8);
+      g.restore();
+    };
+
+    // Einschlagskrater mit Wällen & Zentralberg
+    const crater = (x, y, r, depth = 0.5) => {
+      // Äußerer heller Auswurf-Wall
+      const rim = g.createRadialGradient(x, y, r * 0.75, x, y, r * 1.15);
+      rim.addColorStop(0, 'transparent');
+      rim.addColorStop(0.5, hexA('#ffffff', 0.26 * depth));
+      rim.addColorStop(1, 'transparent');
+      g.fillStyle = rim; g.beginPath(); g.arc(x, y, r * 1.15, 0, TAU); g.fill();
+
+      // Krater-Inneres mit Schatten
+      const inGr = g.createRadialGradient(x - r * 0.2, y - r * 0.2, r * 0.1, x, y, r);
+      inGr.addColorStop(0, hexA('#000000', 0.65 * depth));
+      inGr.addColorStop(0.85, hexA(def.base2, 0.45));
+      inGr.addColorStop(1, 'transparent');
+      g.fillStyle = inGr; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+
+      // Heller Kraterrand
+      g.strokeStyle = hexA('#ffffff', 0.35 * depth);
+      g.lineWidth = Math.max(1.5, r * 0.1);
+      g.beginPath(); g.arc(x, y, r * 0.9, 0, TAU); g.stroke();
+
+      // Zentralberg bei großen Kratern
+      if (r > 26) {
+        const peak = g.createRadialGradient(x, y, 0, x, y, r * 0.25);
+        peak.addColorStop(0, hexA('#ffffff', 0.55));
+        peak.addColorStop(1, 'transparent');
+        g.fillStyle = peak; g.beginPath(); g.arc(x, y, r * 0.25, 0, TAU); g.fill();
+      }
+    };
+
+    const Y = () => H * (0.08 + rng() * 0.84);
+
+    if (def.style === 'furrows') {
+      g.strokeStyle = hexA(def.base2, 0.6); g.lineWidth = 18;
+      for (let k = 0; k < 22; k++) {
+        g.beginPath(); let y = Y(); g.moveTo(0, y);
+        for (let x = 0; x < W; x += 60) g.lineTo(x, y + Math.sin(x * 0.02 + k) * 36);
+        g.stroke();
+      }
+      for (let k = 0; k < 90; k++) crater(rng() * W, Y(), 10 + rng() * 40, 0.85);
     } else {
-      for (let k = 0; k < 14; k++) blot(rng() * W, Y(), 80 + rng() * 150, hexA(def.base2, 0.42));
-      if (def.style === 'volcano') for (let k = 0; k < 40; k++) blot(rng() * W, Y(), 18 + rng() * 50, pick(['rgba(230,120,40,.55)', 'rgba(200,60,30,.5)', 'rgba(250,210,90,.6)']));
-      for (let k = 0; k < 170; k++) crater(rng() * W, Y(), 6 + rng() * 44 * (rng() < 0.15 ? 2 : 1), 0.75);
+      for (let k = 0; k < 20; k++) blot(rng() * W, Y(), 120 + rng() * 220, hexA(def.base2, 0.45));
+      if (def.style === 'volcano') {
+        for (let k = 0; k < 55; k++) blot(rng() * W, Y(), 25 + rng() * 70, pick(['rgba(239,68,68,.6)', 'rgba(234,88,12,.55)', 'rgba(250,204,21,.65)']));
+      }
+      // Große Strahlen-Krater
+      for (let k = 0; k < 6; k++) {
+        const cx = rng() * W, cy = Y(), cr = 35 + rng() * 55;
+        rayCrater(cx, cy, cr);
+        crater(cx, cy, cr, 0.9);
+      }
+      // Mittlere & kleine Krater
+      for (let k = 0; k < 260; k++) crater(rng() * W, Y(), 8 + rng() * 50 * (rng() < 0.15 ? 1.8 : 1), 0.8);
     }
-    // rosige Wangen unterm Gesicht
-    for (const s of [-1, 1]) blot(W * (0.25 + s * 0.068), H * (0.5 + 0.07), 70, 'rgba(255,120,150,.35)');
+
+    // Rosige Wangen unterm Gesicht
+    for (const s of [-1, 1]) blot(W * (0.25 + s * 0.068), H * (0.5 + 0.07), 110, 'rgba(255,120,150,.35)');
   });
 }
+
+function makeBumpTexture(def, rng) {
+  return canvasTex(2048, 1024, (g, W, H) => {
+    g.fillStyle = '#808080'; g.fillRect(0, 0, W, H);
+    const noise = makeNoise2D(9999 + (def.R | 0));
+    const imgData = g.getImageData(0, 0, W, H), pix = imgData.data;
+    for (let y = 0; y < H; y++) {
+      const ny = y / H * 10;
+      for (let x = 0; x < W; x++) {
+        const nx = x / W * 20;
+        const n1 = noise(nx * 1.0, ny * 1.0);
+        const n2 = noise(nx * 4.0, ny * 4.0) * 0.35;
+        const v = clamp(Math.floor(128 + (n1 + n2) * 55), 0, 255);
+        const idx = (y * W + x) * 4;
+        pix[idx] = v; pix[idx + 1] = v; pix[idx + 2] = v;
+      }
+    }
+    g.putImageData(imgData, 0, 0);
+
+    const bumpCrater = (x, y, r) => {
+      // Erhöhter Rand
+      const rim = g.createRadialGradient(x, y, r * 0.8, x, y, r * 1.1);
+      rim.addColorStop(0, '#808080'); rim.addColorStop(0.7, '#ffffff'); rim.addColorStop(1, '#808080');
+      g.fillStyle = rim; g.beginPath(); g.arc(x, y, r * 1.1, 0, TAU); g.fill();
+      // Vertiefung
+      const pit = g.createRadialGradient(x, y, 0, x, y, r * 0.85);
+      pit.addColorStop(0, '#202020'); pit.addColorStop(1, '#808080');
+      g.fillStyle = pit; g.beginPath(); g.arc(x, y, r * 0.85, 0, TAU); g.fill();
+    };
+
+    const Y = () => H * (0.08 + rng() * 0.84);
+    for (let k = 0; k < 180; k++) bumpCrater(rng() * W, Y(), 6 + rng() * 45);
+  });
+}
+
 function disposeMoon() {
   if (!M) return;
   M.group.traverse(o => {
     if (o.geometry) o.geometry.dispose();
-    if (o.material) for (const m of [].concat(o.material)) { if (m.map && m.map !== dirtTex && m.map !== grimeTex && m.map !== M.baseTex) m.map.dispose(); m.dispose(); }
+    if (o.material) for (const m of [].concat(o.material)) { if (m.map && m.map !== dirtTex && m.map !== grimeTex && m.map !== M.baseTex && m.map !== M.bumpTex) m.map.dispose(); m.dispose(); }
   });
-  M.baseTex.dispose(); scene.remove(M.group);
+  if (M.baseTex) M.baseTex.dispose();
+  if (M.bumpTex) M.bumpTex.dispose();
+  scene.remove(M.group);
   junk.length = 0; meteors.length = 0; M = null;
 }
+
 function buildMoon(idx, grid) {
   disposeMoon();
   const def = moonDef(idx), loop = Math.floor(idx / MOONS.length), R = def.R, rng = mulberry32(9001 + idx * 7919);
   M = { idx, def, loop, R, R2: R * R, valMult: Math.pow(5, loop), name: moonName(idx), group: new THREE.Group(), obs: [], eyes: [], mouth: null, mouthM: 99,
     clean: 0, meteorT: 50, junkT: 8, idleT: 30, ms: 0, station: new V3(0, 1, 0), face: { th0: Math.PI / 2 - 0.04, ph0: Math.PI / 2 } };
   scene.add(M.group);
+  
   M.baseTex = makeBaseTexture(def, rng); M.baseTex.wrapS = THREE.RepeatWrapping;
-  M.baseMat = new THREE.MeshPhysicalMaterial({ map: M.baseTex, bumpMap: M.baseTex, bumpScale: 1.5, roughness: 0.5, clearcoat: 1, clearcoatRoughness: 0.12, emissive: new THREE.Color(def.glow), emissiveMap: M.baseTex, emissiveIntensity: 0.03 });
+  M.bumpTex = makeBumpTexture(def, rng); M.bumpTex.wrapS = THREE.RepeatWrapping;
+
+  // Mond-Kugel mit hochauflösender Textur, Relief-Bumpmap & glänzendem Clearcoat
+  M.baseMat = new THREE.MeshPhysicalMaterial({
+    map: M.baseTex,
+    bumpMap: M.bumpTex,
+    bumpScale: 2.2,
+    roughness: 0.58,
+    metalness: 0.04,
+    clearcoat: 0.85,
+    clearcoatRoughness: 0.18,
+    emissive: new THREE.Color(def.glow),
+    emissiveMap: M.baseTex,
+    emissiveIntensity: 0.03
+  });
   const base = new THREE.Mesh(new THREE.SphereGeometry(R, 192, 96), M.baseMat); base.receiveShadow = true; M.group.add(base);
+
+  // Ethereal Atmospheric Limb Glow (Horizont-Atmosphärenleuchten im Weltall)
+  const limbGlowMat = new THREE.ShaderMaterial({
+    uniforms: { glowCol: { value: new THREE.Color(def.glow) } },
+    vertexShader: `varying vec3 vNorm; void main() { vNorm = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform vec3 glowCol; varying vec3 vNorm; void main() { float f = pow(0.68 - dot(vNorm, vec3(0.0, 0.0, 1.0)), 2.8); gl_FragColor = vec4(glowCol, clamp(f * 0.9, 0.0, 0.85)); }`,
+    side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false
+  });
+  const limbMesh = new THREE.Mesh(new THREE.SphereGeometry(R + 0.38, 64, 32), limbGlowMat);
+  M.group.add(limbMesh); M.limbMesh = limbMesh;
+
   grimeTex.repeat.set(Math.round(R * 6), Math.round(R * 3));
-  M.dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex, transparent: true, depthWrite: false, roughness: 1, metalness: 0, bumpMap: grimeTex, bumpScale: 3,
-    displacementMap: heightTex, displacementScale: 0.2, displacementBias: -0.045 });
+  M.dirtMat = new THREE.MeshStandardMaterial({
+    map: dirtTex,
+    transparent: true,
+    depthWrite: false,
+    roughness: 0.95,
+    metalness: 0,
+    bumpMap: grimeTex,
+    bumpScale: 3.5,
+    displacementMap: heightTex,
+    displacementScale: 0.28,
+    displacementBias: -0.05
+  });
   const dm = new THREE.Mesh(new THREE.SphereGeometry(R + 0.025, 384, 192), M.dirtMat); dm.receiveShadow = true; dm.renderOrder = 1; M.group.add(dm);
   
   const old = skyPlanet.material.map; skyPlanet.material.map = planetTex(def.planet); skyPlanet.material.needsUpdate = true; if (old) old.dispose();
   skyPlanet.position.copy(def.planet.d); skyPlanet.scale.setScalar(def.planet.r);
+  skyPlanetGlowMat.uniforms.cColor.value.set(def.planet.col);
   
   buildStation(); buildFace(); buildRocks(rng);
   
@@ -628,6 +961,7 @@ function buildMoon(idx, grid) {
   
   // Licht & Schatten
   sun.position.copy(SUN_DIR).multiplyScalar(R + 40); sun.target.position.set(0, 0, 0);
+  sunGroup.position.copy(SUN_DIR).multiplyScalar(R + 250); sunGroup.lookAt(0, 0, 0);
   Object.assign(sun.shadow.camera, { left: -R - 5, right: R + 5, top: R + 5, bottom: -R - 5, near: 5, far: 2 * R + 80 });
   sun.shadow.camera.updateProjectionMatrix();
   for (let k = 0; k < 10 + Math.min(8, idx); k++) spawnJunk();
@@ -759,14 +1093,56 @@ function addSwipe(dx) {
   swipeE = Math.min(TEMPO_MAX - 1, swipeE + Math.abs(dx) * 0.0035);
 }
 
+const suitTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#f8fafc'; g.fillRect(0, 0, w, h);
+  // Kevlar/Nylon Webmuster
+  g.strokeStyle = 'rgba(148,163,184,0.18)'; g.lineWidth = 1;
+  for (let y = 0; y < h; y += 6) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+  for (let x = 0; x < w; x += 6) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+  // NASA/ESA Missions-Patch
+  const px = 180, py = 220, pr = 70;
+  g.fillStyle = '#0f172a'; g.beginPath(); g.arc(px, py, pr, 0, TAU); g.fill();
+  g.strokeStyle = '#facc15'; g.lineWidth = 4; g.stroke();
+  g.fillStyle = '#facc15'; g.font = 'bold 24px "Segoe UI",sans-serif'; g.textAlign = 'center';
+  g.fillText('LUNA-1', px, py - 10);
+  g.font = 'bold 32px sans-serif'; g.fillText('🌙', px, py + 30);
+});
+
+// Unterarm-Bordcomputer Textur mit leuchtendem HUD
+const armScreenTex = canvasTex(256, 128, (g, w, h) => {
+  g.fillStyle = '#022c22'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#10b981'; g.lineWidth = 3; g.strokeRect(4, 4, w - 8, h - 8);
+  g.fillStyle = '#34d399'; g.font = 'bold 15px monospace';
+  g.fillText('O2: 100% · EVA OK', 14, 28);
+  g.fillText('SUIT: PRESSURIZED', 14, 52);
+  g.fillText('CLEAN RADAR: ACTIVE', 14, 76);
+  // Audio-/Sensor-Wellen
+  g.strokeStyle = '#6ee7b7'; g.lineWidth = 2; g.beginPath();
+  for (let x = 14; x < w - 14; x += 6) {
+    const y = 100 + Math.sin(x * 0.2) * 10;
+    if (x === 14) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.stroke();
+});
+
 const astro = new THREE.Group(); scene.add(astro);
-const suitM = std({ color: 0xf1f5f9, roughness: 0.55 }), suitD = std({ color: 0x94a3b8, roughness: 0.6 }), accent = std({ color: 0x8b5cf6, roughness: 0.4 });
+const suitM = new THREE.MeshStandardMaterial({ map: suitTex, roughness: 0.52, metalness: 0.08 });
+const suitD = std({ color: 0x334155, roughness: 0.7, metalness: 0.2 });
+const accent = std({ color: 0x8b5cf6, roughness: 0.35, metalness: 0.3 });
+const goldVisorMat = new THREE.MeshPhysicalMaterial({
+  color: 0xf59e0b,
+  metalness: 0.98,
+  roughness: 0.06,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.05
+});
+
 const mk = (geo, mat, x = 0, y = 0, z = 0, parent = astro) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
 const body = new THREE.Group(); astro.add(body);
 mk(new THREE.CapsuleGeometry(0.27, 0.3, 6, 14), suitM, 0, 0.84, 0, body);
 mk(new THREE.CylinderGeometry(0.29, 0.29, 0.08, 18), accent, 0, 0.66, 0, body);
 mk(new THREE.SphereGeometry(0.25, 24, 16), suitM, 0, 1.3, 0, body);
-const visor = mk(new THREE.SphereGeometry(0.2, 24, 16), std({ color: 0xf59e0b, metalness: 1, roughness: 0.1 }), 0, 1.31, 0.1, body); visor.scale.set(1, 0.78, 0.7);
+const visor = mk(new THREE.SphereGeometry(0.2, 24, 16), goldVisorMat, 0, 1.31, 0.1, body); visor.scale.set(1, 0.78, 0.7);
 mk(new THREE.BoxGeometry(0.44, 0.5, 0.2), suitD, 0, 0.9, -0.27, body);
 const tankFills = [], tankFillMat = std({ color: 0x8a7a66, roughness: 1 });
 for (const s of [-1, 1]) {
@@ -800,15 +1176,32 @@ fpArmSleeve.rotation.x = Math.PI / 2.7; fpArmSleeve.rotation.z = -0.2;
 fpArmSleeve.position.set(0.04, -0.06, 0.12);
 fpArmGroup.add(fpArmSleeve);
 
-const fpCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.05, 16), accent);
+// Unterarm-Display
+const fpScreenMat = new THREE.MeshBasicMaterial({ map: armScreenTex });
+const fpScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 0.042), fpScreenMat);
+fpScreen.position.set(0.02, 0.015, 0.08);
+fpScreen.rotation.set(-0.35, 0.1, -0.2);
+fpArmGroup.add(fpScreen);
+
+// Handgelenks-Kupplung (Metallring)
+const fpCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.05, 16), std({ color: 0x94a3b8, metalness: 0.8, roughness: 0.2 }));
 fpCuff.rotation.x = Math.PI / 2.7; fpCuff.rotation.z = -0.2;
 fpCuff.position.set(0.03, -0.03, 0.01);
 fpArmGroup.add(fpCuff);
 
+// Handschuh mit Knöchelpanzerung
 const fpGlove = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.09, 0.13), suitD);
 fpGlove.position.set(0.02, 0.01, -0.07);
 fpGlove.rotation.set(-0.25, 0.2, -0.15);
 fpArmGroup.add(fpGlove);
+
+// Knöchelschutz-Elemente
+for (let f = -1; f <= 1; f++) {
+  const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.025, 0.04), std({ color: 0x475569, metalness: 0.6, roughness: 0.3 }));
+  knuckle.position.set(0.02 + f * 0.024, 0.045, -0.08);
+  knuckle.rotation.set(-0.25, 0.2, -0.15);
+  fpArmGroup.add(knuckle);
+}
 
 const fpToolSlot = new THREE.Group();
 fpArmGroup.add(fpToolSlot);
@@ -816,6 +1209,7 @@ fpToolSlot.position.set(0.02, 0.03, -0.12);
 
 let fpSpinPad = null;
 let fpBeam = null;
+let fpJetStream = null;
 
 function buildFpTool() {
   while (fpToolSlot.children.length > 0) {
@@ -823,7 +1217,7 @@ function buildFpTool() {
     fpToolSlot.remove(obj);
     obj.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) [].concat(c.material).forEach(m => m.dispose()); });
   }
-  fpSpinPad = null; fpBeam = null;
+  fpSpinPad = null; fpBeam = null; fpJetStream = null;
   const t = tool();
   const add = (geo, mat, x = 0, y = 0, z = 0, parent = fpToolSlot) => {
     const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m;
@@ -831,78 +1225,102 @@ function buildFpTool() {
   
   switch (t.id) {
     case 'brush': {
-      // Ergonomische Zahnbürste mit Schaum
-      const handle = add(new THREE.BoxGeometry(0.032, 0.032, 0.32), std({ color: 0x38bdf8, roughness: 0.3 }), 0, 0.02, -0.08);
+      // Ergonomische Zahnbürste mit transluzenten Borsten und Schaum
+      const handle = add(new THREE.BoxGeometry(0.032, 0.032, 0.32), std({ color: 0x0284c7, metalness: 0.2, roughness: 0.2 }), 0, 0.02, -0.08);
       handle.rotation.x = -0.4;
-      add(new THREE.BoxGeometry(0.036, 0.02, 0.1), std({ color: 0xffffff }), 0, 0.08, -0.24);
-      add(new THREE.BoxGeometry(0.032, 0.035, 0.08), std({ color: 0x0284c7, roughness: 0.9 }), 0, 0.105, -0.24);
-      for (let k = 0; k < 4; k++) {
-        add(new THREE.SphereGeometry(0.012 + k * 0.003, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }), (k % 2 ? 0.012 : -0.012), 0.12, -0.22 - k * 0.015);
+      add(new THREE.BoxGeometry(0.036, 0.018, 0.1), std({ color: 0xf8fafc }), 0, 0.08, -0.24);
+      // Dichte zweifarbige Borsten
+      add(new THREE.BoxGeometry(0.032, 0.036, 0.05), std({ color: 0x38bdf8, roughness: 0.9 }), 0, 0.105, -0.26);
+      add(new THREE.BoxGeometry(0.032, 0.036, 0.045), std({ color: 0xffffff, roughness: 0.9 }), 0, 0.105, -0.215);
+      // Schaum-Bläschen
+      for (let k = 0; k < 6; k++) {
+        add(new THREE.SphereGeometry(0.012 + k * 0.002, 8, 8), new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, roughness: 0.1, clearcoat: 1 }), (k % 2 ? 0.014 : -0.014), 0.125 + (k % 3) * 0.005, -0.21 - k * 0.014);
       }
       break;
     }
     case 'sponge': {
-      // Dicker zweilagiger Schwamm
+      // Dicker zweilagiger Schwamm mit feuchtem Glanz
       const g = new THREE.Group(); g.rotation.set(-0.35, 0.1, -0.2); fpToolSlot.add(g);
-      add(new THREE.BoxGeometry(0.14, 0.065, 0.18), std({ color: 0xfacc15, roughness: 0.9 }), 0, 0.02, -0.08, g);
-      add(new THREE.BoxGeometry(0.142, 0.022, 0.182), std({ color: 0x15803d, roughness: 0.95 }), 0, 0.06, -0.08, g);
+      const spongeMat = new THREE.MeshPhysicalMaterial({ color: 0xfacc15, roughness: 0.85, clearcoat: 0.4 });
+      add(new THREE.BoxGeometry(0.14, 0.065, 0.18), spongeMat, 0, 0.02, -0.08, g);
+      add(new THREE.BoxGeometry(0.142, 0.022, 0.182), std({ color: 0x166534, roughness: 0.95 }), 0, 0.06, -0.08, g);
       break;
     }
     case 'scrub': {
-      // Massiver Holzschrubber mit dichten Borsten
+      // Massiver Holzschrubber mit Messingbeschlag und Naturfaserborsten
       const g = new THREE.Group(); g.rotation.set(-0.4, 0, 0); fpToolSlot.add(g);
-      add(new THREE.CylinderGeometry(0.02, 0.02, 0.32, 8), std({ color: 0xa16207, roughness: 0.6 }), 0, 0.05, 0.02, g).rotation.x = Math.PI / 2.8;
-      add(new THREE.BoxGeometry(0.18, 0.04, 0.12), std({ color: 0x854d0e, roughness: 0.7 }), 0, 0.11, -0.16, g);
-      add(new THREE.BoxGeometry(0.17, 0.04, 0.11), std({ color: 0x292524, roughness: 1 }), 0, 0.145, -0.16, g);
+      add(new THREE.CylinderGeometry(0.02, 0.02, 0.32, 8), std({ color: 0x92400e, roughness: 0.5 }), 0, 0.05, 0.02, g).rotation.x = Math.PI / 2.8;
+      add(new THREE.BoxGeometry(0.18, 0.04, 0.12), std({ color: 0x78350f, roughness: 0.6 }), 0, 0.11, -0.16, g);
+      add(new THREE.BoxGeometry(0.184, 0.015, 0.03), std({ color: 0xfacc15, metalness: 0.8, roughness: 0.3 }), 0, 0.125, -0.16, g);
+      add(new THREE.BoxGeometry(0.17, 0.045, 0.11), std({ color: 0x292524, roughness: 1 }), 0, 0.145, -0.16, g);
       break;
     }
     case 'mop': {
       // XXL Mikrofaser-Mopp mit Strängen
       const g = new THREE.Group(); g.rotation.set(-0.3, 0, 0); fpToolSlot.add(g);
-      add(new THREE.CylinderGeometry(0.022, 0.022, 0.35, 8), std({ color: 0x2563eb, metalness: 0.5 }), 0, 0.05, 0, g).rotation.x = Math.PI / 2.7;
+      add(new THREE.CylinderGeometry(0.022, 0.022, 0.35, 8), std({ color: 0x2563eb, metalness: 0.6, roughness: 0.3 }), 0, 0.05, 0, g).rotation.x = Math.PI / 2.7;
       add(new THREE.CylinderGeometry(0.06, 0.08, 0.06, 12), std({ color: 0x1d4ed8 }), 0, 0.12, -0.18, g);
       const mopM = std({ color: 0xf8fafc, roughness: 1 });
-      for (let k = 0; k < 12; k++) {
-        const a = k / 12 * TAU;
-        const strand = add(new THREE.CylinderGeometry(0.015, 0.018, 0.16, 6), mopM, Math.cos(a) * 0.06, 0.17, -0.18 + Math.sin(a) * 0.06, g);
-        strand.rotation.set(Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4);
+      for (let k = 0; k < 14; k++) {
+        const a = k / 14 * TAU;
+        const strand = add(new THREE.CylinderGeometry(0.014, 0.018, 0.18, 6), mopM, Math.cos(a) * 0.06, 0.17, -0.18 + Math.sin(a) * 0.06, g);
+        strand.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35);
       }
       break;
     }
     case 'washer': {
-      // Hochdruckreiniger Lanze mit Sprühdüse
-      const gun = add(new THREE.BoxGeometry(0.05, 0.12, 0.18), std({ color: 0xfacc15, roughness: 0.4 }), 0, 0.02, -0.04);
+      // Hochdruckreiniger Lanze mit Manometer & Düse
+      const gun = add(new THREE.BoxGeometry(0.05, 0.12, 0.18), std({ color: 0xeab308, roughness: 0.35, metalness: 0.1 }), 0, 0.02, -0.04);
       gun.rotation.x = -0.3;
-      const lance = add(new THREE.CylinderGeometry(0.014, 0.014, 0.38, 8), std({ color: 0x64748b, metalness: 0.8, roughness: 0.2 }), 0, 0.08, -0.24);
+      const lance = add(new THREE.CylinderGeometry(0.014, 0.014, 0.38, 8), std({ color: 0x94a3b8, metalness: 0.9, roughness: 0.15 }), 0, 0.08, -0.24);
       lance.rotation.x = Math.PI / 2.4;
-      add(new THREE.CylinderGeometry(0.022, 0.015, 0.06, 8), std({ color: 0xb45309, metalness: 0.7 }), 0, 0.13, -0.42);
+      add(new THREE.CylinderGeometry(0.022, 0.015, 0.06, 8), std({ color: 0xd97706, metalness: 0.8, roughness: 0.2 }), 0, 0.13, -0.42);
+      // Manometer
+      const dial = add(new THREE.CylinderGeometry(0.025, 0.025, 0.018, 16), std({ color: 0xf1f5f9, metalness: 0.5, roughness: 0.3 }), 0.035, 0.07, -0.12);
+      dial.rotation.z = Math.PI / 2;
+      // Wasserstrahl-Kegel (bei Aktivierung sichtbar)
+      const jet = add(new THREE.ConeGeometry(0.07, 0.55, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false }), 0, 0.22, -0.66);
+      jet.rotation.x = -Math.PI / 2.4;
+      fpJetStream = jet;
       break;
     }
     case 'polish': {
-      // Rotierende Poliermaschine
-      const pBody = add(new THREE.BoxGeometry(0.12, 0.14, 0.18), std({ color: 0xdc2626, metalness: 0.4, roughness: 0.3 }), 0, 0.04, -0.1);
+      // Rotierende Hochglanz-Poliermaschine mit Chrom-Elementen
+      const pBody = add(new THREE.BoxGeometry(0.12, 0.14, 0.18), std({ color: 0xb91c1c, metalness: 0.5, roughness: 0.2 }), 0, 0.04, -0.1);
       pBody.rotation.x = -0.35;
-      const pad = add(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 24), std({ color: 0xffffff, roughness: 1 }), 0, 0.14, -0.22);
+      // LED-Arbeitslicht
+      add(new THREE.SphereGeometry(0.02, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfef08a }), 0, 0.08, -0.18);
+      const pad = add(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 24), std({ color: 0xffffff, roughness: 0.9 }), 0, 0.14, -0.22);
       pad.rotation.x = Math.PI / 2.4;
       fpSpinPad = pad;
       break;
     }
     case 'laser': {
-      // High-Tech Laser-Polierer mit Leuchtringen
-      const rifle = add(new THREE.CylinderGeometry(0.03, 0.045, 0.4, 12), std({ color: 0x581c87, metalness: 0.6, roughness: 0.3 }), 0, 0.05, -0.15);
+      // Sci-Fi Laser-Polierer mit leuchtendem Plasma-Kern
+      const rifle = add(new THREE.CylinderGeometry(0.03, 0.045, 0.42, 12), std({ color: 0x3b0764, metalness: 0.8, roughness: 0.2 }), 0, 0.05, -0.15);
       rifle.rotation.x = Math.PI / 2.4;
+      // Leuchtender Energiekern
+      const core = add(new THREE.CylinderGeometry(0.018, 0.018, 0.2, 12), new THREE.MeshBasicMaterial({ color: 0xf472b6 }), 0, 0.05, -0.15);
+      core.rotation.x = Math.PI / 2.4;
       for (let k = 0; k < 3; k++) {
-        add(new THREE.TorusGeometry(0.048, 0.009, 6, 16), new THREE.MeshBasicMaterial({ color: 0xf472b6 }), 0, 0.02 + k * 0.08, -0.08 - k * 0.1);
+        add(new THREE.TorusGeometry(0.048, 0.009, 6, 16), new THREE.MeshBasicMaterial({ color: 0xec4899 }), 0, 0.02 + k * 0.08, -0.08 - k * 0.1);
       }
+      // Laserstrahl-Zylinder (bei Aktivierung sichtbar)
+      const beam = add(new THREE.CylinderGeometry(0.015, 0.02, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0xf472b6, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false }), 0, 0.28, -0.9);
+      beam.rotation.x = Math.PI / 2.4;
+      fpBeam = beam;
       break;
     }
     case 'comet': {
-      // Kometen-Kärcher 9000
-      const heavy = add(new THREE.CylinderGeometry(0.05, 0.07, 0.45, 14), std({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 }), 0, 0.06, -0.16);
+      // Kometen-Kärcher 9000 mit blauem Plasma-Triebwerk
+      const heavy = add(new THREE.CylinderGeometry(0.05, 0.07, 0.46, 14), std({ color: 0x020617, metalness: 0.9, roughness: 0.15 }), 0, 0.06, -0.16);
       heavy.rotation.x = Math.PI / 2.4;
       for (let k = 0; k < 4; k++) {
         add(new THREE.TorusGeometry(0.075, 0.012, 8, 16), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }), 0, 0.02 + k * 0.07, -0.06 - k * 0.09);
       }
+      const cometBeam = add(new THREE.CylinderGeometry(0.025, 0.04, 1.5, 8), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false }), 0, 0.3, -0.95);
+      cometBeam.rotation.x = Math.PI / 2.4;
+      fpBeam = cometBeam;
       break;
     }
   }
@@ -1486,6 +1904,14 @@ function updateFpRig(dt, now, moving) {
     fpWipePhase = 0;
   }
 
+  if (fpJetStream) {
+    fpJetStream.material.opacity = (isWiping && P.active) ? 0.65 + Math.random() * 0.25 : 0;
+    fpJetStream.scale.set(1 + Math.random() * 0.2, 1, 1 + Math.random() * 0.2);
+  }
+  if (fpBeam) {
+    fpBeam.material.opacity = (isWiping && P.active) ? 0.75 + Math.random() * 0.25 : 0;
+  }
+
   fpArmGroup.position.set(0.24 + walkBobX + wipeX, -0.22 + breathe - walkBobY + wipeY, -0.44 + wipeZ);
   fpArmGroup.rotation.set(-0.1 + wipeRotX, 0.05, wipeRotZ);
 }
@@ -1939,7 +2365,12 @@ $('reset').onclick = () => {
     location.reload();
   }
 };
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  if (composer) composer.setSize(innerWidth, innerHeight);
+});
 
 // ---------- Hauptschleife ----------
 let last = performance.now();
@@ -1953,10 +2384,20 @@ function loop(now) {
   _eyeT.copy(state === 'menu' ? camera.position : astro.position);
   updateFace(dt, _eyeT);
   updatePool(dustP, dt, 3); updatePool(sparkP, dt, -0.4); updatePool(sprayP, dt, 2); updateFlakes(dt);
+  if (starPoints) starPoints.rotation.y = now * 0.000015;
+  if (sunCorona) sunCorona.material.rotation = now * 0.0001;
   skyPlanet.rotation.y += dt * 0.02;
   refreshDirt();
   if (state !== 'menu') updateHud(dt);
-  renderer.render(scene, camera);
+  if (composer) {
+    try {
+      composer.render();
+    } catch (err) {
+      renderer.render(scene, camera);
+    }
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 
 // ---------- Start ----------
