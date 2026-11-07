@@ -1,0 +1,1971 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Mondputzer 3D</title>
+<meta name="description" content="Putz den Mond! Schrubb in 3D Mondstaub, Käseschimmel und Vulkan-Ruß von fünf Monden in Ego-Perspektive mit sichtbaren Händen und Werkzeugen, verkauf den Dreck an der Mondbasis und rüste von der Zahnbürste bis zum Kometen-Kärcher 9000 auf.">
+<meta name="theme-color" content="#05070d">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) { if (msg) document.getElementById('fallbackMsg').textContent = msg; fb.style.display = 'block'; }
+};
+window.addEventListener('error', function(e) { if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar')); });
+setTimeout(function() { if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).'); }, 9000);
+</script>
+<style>
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#05070d; color:#f4f4f5; font-family:"Segoe UI",system-ui,sans-serif; }
+canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; cursor:crosshair; }
+canvas#gl.drag { cursor:grabbing; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; min-height:36px; backdrop-filter:blur(4px); }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000a; z-index:20; padding:16px; overflow:auto; }
+.overlay.hide { display:none; }
+.card { background:#0f1426f2; color:#f4f4f5; border-radius:16px; padding:20px 24px; max-width:620px; width:100%; text-align:center; border:2px solid #a78bfa; box-shadow:0 0 40px #a78bfa33; margin:auto; backdrop-filter:blur(10px); }
+.card.wide { max-width:700px; }
+.card h1 { margin:0 0 6px; font-size:28px; }
+.card p { margin:8px 0; line-height:1.45; font-size:15px; color:#cbd5e1; }
+.card .stats { color:#facc15; font-weight:700; }
+button { font:inherit; font-weight:800; font-size:18px; color:#fff; background:linear-gradient(#8b5cf6,#6d28d9); border:0; border-radius:10px; padding:11px 26px; margin-top:8px; cursor:pointer; box-shadow:0 4px 0 #4c1d95; transition:transform .1s; }
+button:active { transform:translateY(3px); box-shadow:0 1px 0 #4c1d95; }
+button:disabled { filter:grayscale(1); opacity:.5; cursor:default; }
+button.small { font-size:12px; padding:5px 10px; background:#1e2540; box-shadow:0 2px 0 #0b1020; color:#94a3b8; }
+button.gold { background:linear-gradient(#facc15,#ca8a04); box-shadow:0 4px 0 #854d0e; color:#1c1917; }
+.tabs { display:flex; gap:6px; justify-content:center; margin:8px 0 4px; flex-wrap:wrap; }
+.tab { font-size:14px; padding:7px 14px; margin:0; background:#1e2540; box-shadow:0 3px 0 #0b1020; }
+.tab.on { background:linear-gradient(#8b5cf6,#6d28d9); box-shadow:0 3px 0 #4c1d95; }
+#shopMoney { font-size:20px; font-weight:800; color:#facc15; margin:6px 0; }
+.shop { display:grid; gap:6px; margin:8px 0; text-align:left; max-height:min(52vh,460px); overflow:auto; padding-right:4px; }
+.row { display:flex; align-items:center; gap:10px; background:#1a2036; border-radius:10px; padding:7px 10px; font-size:14px; border:2px solid transparent; }
+.row.eq { border-color:#facc15; }
+.row.lock { opacity:.55; }
+.row .ic { font-size:28px; width:38px; text-align:center; flex:none; }
+.row .info { flex:1; line-height:1.35; min-width:0; }
+.row small { color:#94a3b8; }
+.row button { font-size:13px; padding:7px 10px; margin:0; box-shadow:0 2px 0 #4c1d95; white-space:nowrap; min-width:96px; }
+.ok { color:#4ade80; } .no { color:#f87171; }
+#hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+.t { position:absolute; font-weight:700; text-shadow:0 2px 3px #000; }
+#top { top:10px; left:50%; transform:translateX(-50%); width:min(440px,56vw); text-align:center; font-size:14px; }
+#cleanBar { position:relative; height:14px; border:1px solid #fff9; border-radius:8px; background:#0009; overflow:hidden; margin-top:3px; }
+#cleanFill { height:100%; width:0; background:linear-gradient(90deg,#64748b,#c4b5fd,#fef9c3); transition:width .3s; }
+#cleanGoal { position:absolute; top:-2px; bottom:-2px; left:90%; width:3px; background:#facc15; box-shadow:0 0 4px #000; }
+#money { top:10px; right:14px; font-size:24px; color:#facc15; text-align:right; }
+#rate { top:42px; right:14px; font-size:13px; color:#cbd5e1; text-align:right; }
+#btns { position:absolute; top:64px; right:12px; display:flex; flex-direction:column; gap:6px; align-items:flex-end; pointer-events:auto; }
+#btns button { font-size:13px; padding:6px 12px; margin:0; box-shadow:0 3px 0 #4c1d95; border-radius:8px; }
+#btns button.gold { box-shadow:0 3px 0 #854d0e; }
+#say { top:58px; left:50%; transform:translateX(-50%); width:max-content; max-width:min(520px,64vw); background:#f8fafcee; color:#1e1b4b; text-shadow:none; padding:7px 14px; border-radius:14px; font-size:15px; font-weight:600; opacity:0; transition:opacity .3s; text-align:center; box-shadow:0 4px 16px rgba(0,0,0,0.4); }
+#say.show { opacity:1; }
+#toast { top:118px; left:50%; transform:translateX(-50%); font-size:15px; background:#0f172add; border:1px solid #a78bfa66; color:#e9d5ff; padding:6px 14px; border-radius:8px; opacity:0; transition:opacity .3s; width:max-content; max-width:min(560px,90vw); text-align:center; }
+#toast.show { opacity:1; }
+#banner { top:32%; left:50%; transform:translate(-50%,-50%); font-size:38px; text-align:center; width:max-content; max-width:94vw; opacity:0; transition:opacity .3s; text-shadow:0 4px 10px #000; }
+#banner.show { opacity:1; }
+#tank { bottom:16px; left:50%; transform:translateX(-50%); width:min(400px,60vw); text-align:center; font-size:14px; }
+#tankBar { position:relative; height:16px; border:1px solid #fff9; border-radius:8px; background:#0009; overflow:hidden; margin-top:3px; }
+#tankFill { height:100%; width:0; background:#94a3b8; transition:width .15s ease-out; }
+#tank.full #tankBar { animation:blink .5s infinite alternate; border-color:#f87171; }
+@keyframes blink { from { box-shadow:0 0 0 #f87171; } to { box-shadow:0 0 14px #f87171; } }
+#tool { bottom:16px; left:14px; background:#000a; border:2px solid #a78bfa66; border-radius:12px; padding:6px 12px; font-size:13px; display:flex; align-items:center; gap:8px; backdrop-filter:blur(4px); }
+#tool .ic { font-size:26px; }
+#prompt { bottom:66px; left:50%; transform:translateX(-50%); font-size:15px; background:#000c; padding:6px 14px; border-radius:8px; display:none; width:max-content; max-width:92vw; text-align:center; border:1px solid #4ade8066; }
+.pop { position:absolute; font-weight:900; font-size:18px; color:#facc15; text-shadow:0 2px 3px #000; transform:translate(-50%,-50%); white-space:nowrap; pointer-events:none; }
+#hurt { position:absolute; inset:0; background:radial-gradient(ellipse at center, transparent 50%, #b91c1c88 100%); opacity:0; pointer-events:none; }
+#pause { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; font-size:32px; background:#000a; pointer-events:auto; cursor:pointer; }
+#pause span { font-size:15px; margin-top:6px; color:#cbd5e1; }
+#fade { position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition:opacity .6s; z-index:30; display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:800; text-align:center; padding:20px; }
+#fade.on { opacity:1; }
+
+/* Astronaut Helmet Visor HUD (Ego-Perspektive) */
+#visorHud { position:absolute; inset:0; pointer-events:none; z-index:3; display:block; }
+.visor-frame {
+  position:absolute; inset:0;
+  box-shadow:inset 0 0 80px rgba(5,15,35,0.7), inset 0 0 30px rgba(167,139,250,0.15);
+  background:radial-gradient(circle at 50% 30%, transparent 62%, rgba(15,23,42,0.25) 88%, rgba(3,7,18,0.65) 100%);
+}
+.visor-glass {
+  position:absolute; top:4%; right:4%; width:30%; height:20%;
+  background:linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 60%);
+  border-radius:50%; transform:rotate(-15deg); filter:blur(2px);
+}
+#compass {
+  position:absolute; top:46px; left:50%; transform:translateX(-50%);
+  background:rgba(15,23,42,0.85); border:1px solid rgba(167,139,250,0.45);
+  color:#e2e8f0; font-size:12px; font-weight:700; padding:4px 14px; border-radius:14px;
+  backdrop-filter:blur(6px); letter-spacing:0.5px; display:flex; align-items:center; gap:6px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.5);
+}
+#compassArrow { color:#4ade80; font-weight:900; display:inline-block; transition:transform .15s ease-out; }
+#reticle {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:42px; height:42px; pointer-events:none; transition:transform 0.1s ease;
+}
+.reticle-ring {
+  width:100%; height:100%; border:2px dashed rgba(74,222,128,0.75); border-radius:50%;
+  box-sizing:border-box; transition:all 0.15s ease;
+}
+.reticle-dot {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:5px; height:5px; background:#4ade80; border-radius:50%;
+}
+.reticle-hint {
+  position:absolute; top:46px; left:50%; transform:translateX(-50%);
+  font-size:11px; font-weight:800; color:#4ade80; white-space:nowrap; opacity:0;
+  transition:opacity 0.15s ease; text-shadow:0 1px 3px #000;
+}
+#reticle.active .reticle-ring {
+  border-color:#facc15; border-style:solid; transform:scale(1.25) rotate(45deg);
+  box-shadow:0 0 14px #facc15bb;
+}
+#reticle.active .reticle-dot { background:#facc15; }
+#reticle.active .reticle-hint { opacity:1; color:#facc15; }
+#reticle.blocked .reticle-ring {
+  border-color:#ef4444; border-style:solid; transform:scale(0.9);
+  box-shadow:0 0 12px #ef4444cc;
+}
+#reticle.blocked .reticle-dot { background:#ef4444; }
+#reticle.blocked .reticle-hint { opacity:1; color:#ef4444; }
+
+#touch { position:fixed; inset:0; z-index:15; display:none; pointer-events:none; }
+#touch .b { position:absolute; width:66px; height:66px; border-radius:50%; background:#fff2; border:2px solid #fff6; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; pointer-events:auto; touch-action:none; backdrop-filter:blur(4px); box-shadow:0 4px 10px rgba(0,0,0,0.4); }
+#touch .b.on { background:#fff6; transform:scale(0.95); }
+#joy { position:absolute; left:20px; bottom:30px; width:124px; height:124px; border-radius:50%; border:2px solid #fff4; background:#fff1; pointer-events:auto; touch-action:none; backdrop-filter:blur(4px); }
+#joyK { position:absolute; left:42px; top:42px; width:40px; height:40px; border-radius:50%; background:#fff5; }
+
+body.touch #tool { bottom:auto; top:54px; }
+body.touch #tank { bottom:auto; top:118px; }
+body.touch #toast { top:170px; }
+body.touch #prompt { bottom:auto; top:210px; }
+@media (max-width:640px) { #top { font-size:12px; } #money { font-size:19px; } #say { top:auto; bottom:170px; font-size:13px; } #banner { font-size:26px; } }
+</style>
+</head>
+<body>
+<a class="back" href="../index.html">← Hub</a>
+<canvas id="gl"></canvas>
+<div id="hud">
+  <div id="hurt"></div>
+  <div id="visorHud">
+    <div class="visor-frame"></div>
+    <div class="visor-glass"></div>
+    <div id="compass">🧭 Mondbasis: <span id="compassDist">--</span>m <span id="compassArrow">▲</span></div>
+    <div id="reticle">
+      <div class="reticle-ring"></div>
+      <div class="reticle-dot"></div>
+      <div class="reticle-hint" id="reticleHint">🧽 SCHRUBBEN</div>
+    </div>
+  </div>
+  <div id="top" class="t"><span id="moonTxt">🌚 Luna</span>
+    <div id="cleanBar"><div id="cleanFill"></div><div id="cleanGoal"></div></div></div>
+  <div id="money" class="t">🪙 0</div>
+  <div id="rate" class="t"></div>
+  <div id="btns">
+    <button id="bView">👁️ Ego (C)</button>
+    <button id="bShop">🛒 Shop (B)</button>
+    <button id="bSell" style="display:none">📡 Verkaufen (R)</button>
+    <button id="bTravel" class="gold" style="display:none">🚀 Weiterreisen</button>
+    <button id="bZoom">🔭 Zoom (Z)</button>
+  </div>
+  <div id="say" class="t"></div>
+  <div id="toast" class="t"></div>
+  <div id="banner" class="t"></div>
+  <div id="tool" class="t"></div>
+  <div id="prompt" class="t"></div>
+  <div id="tank" class="t"><span id="tankTxt"></span><div id="tankBar"><div id="tankFill"></div></div></div>
+  <div id="pops"></div>
+  <div id="pause"><b>⏸ Pause</b><span>Klicken / Tippen = weiter</span></div>
+</div>
+<div id="fade"></div>
+<div id="touch">
+  <div id="joy"><div id="joyK"></div></div>
+  <div class="b" id="tJump" style="right:22px;bottom:34px;width:78px;height:78px">⤒</div>
+  <div class="b" id="tWipe" style="right:112px;bottom:34px;width:78px;height:78px;background:rgba(250,204,21,0.25);border-color:#facc15">🧽</div>
+  <div class="b" id="tView" style="right:22px;bottom:124px;width:54px;height:54px">👁️</div>
+  <div class="b" id="tSell" style="right:112px;bottom:124px;width:54px;height:54px;display:none">📡</div>
+</div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🌝 Mondputzer 3D</h1>
+  <p>Der Mond wurde seit 4,5 Milliarden Jahren nicht geputzt – die Erde lacht schon über ihn! In der <b>3D Ego-Perspektive</b> schrubbst du mit deinen eigenen Händen den Mondstaub, Käseschimmel und Krater-Schmutz weg.</p>
+  <p>Verkauf den Dreck an der <b>Mondbasis am Nordpol</b> und rüste von der <b>Zahnbürste</b> über <b>Schwämme</b> und <b>Hochdruckreiniger</b> bis zum <b>Kometen-Kärcher 9000</b> auf. Bei 90 % Sauberkeit reist du zum nächsten Mond weiter!</p>
+  <p><b>Laufen:</b> W/A/S/D · <b>Kamera:</b> Maus bewegen (Klick für Ego-Lock)<br>
+  <b>Staub abwischen:</b> Linksklick halten (oder 🧽 / E) und Maus flott <b>hin und her</b> – je schneller, desto mehr Putzkraft!<br>
+  <b>Hüpfen:</b> Leertaste / Rechtsklick (mit Jetpack: Stampf-Putz) · <b>Ansicht:</b> C (Ego / 3D-Verfolger)<br>
+  <b>B:</b> Shop · <b>1–8 / Rad:</b> Gerät wechseln · <b>P:</b> Pause · <b>M:</b> Ton</p>
+  <p class="stats" id="menuStats"></p>
+  <button id="go">Los geht's 🧽</button><br>
+  <button id="reset" class="small">Spielstand löschen</button>
+</div></div>
+<div class="overlay hide" id="shopO"><div class="card wide">
+  <h1>🛒 Mond-Baumarkt</h1>
+  <div class="tabs"><button class="tab on" data-tab="tools">🧽 Putzgeräte</button><button class="tab" data-tab="ups">⚙️ Upgrades</button><button class="tab" data-tab="moons">🌙 Monde</button></div>
+  <div id="shopMoney"></div>
+  <div class="shop" id="shopList"></div>
+  <button id="shopClose">Weiter putzen ✖</button>
+</div></div>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#05070d;color:#fff;z-index:99999;padding:30px;text-align:center;">
+  <h2>🌚 Funkstille zum Mond</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#c4b5fd">Zurück zum Hub</a></p>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ---------- Helfer ----------
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const lerp = (a, b, t) => a + (b - a) * t;
+const TAU = Math.PI * 2;
+const V3 = THREE.Vector3, UP = new V3(0, 1, 0);
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function fmt(n) {
+  n = Math.floor(n);
+  if (Math.abs(n) < 100000) return n.toLocaleString('de-DE');
+  const u = ['', ' Tsd.', ' Mio.', ' Mrd.', ' Bio.', ' Brd.']; let i = 0, x = n;
+  while (Math.abs(x) >= 1000 && i < u.length - 1) { x /= 1000; i++; }
+  return x.toLocaleString('de-DE', { maximumFractionDigits: x < 100 ? 1 : 0 }) + u[i];
+}
+const f1 = n => n.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+const ROMAN = ['', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+const sph = (th, ph) => new V3(-Math.cos(ph) * Math.sin(th), Math.cos(th), Math.sin(ph) * Math.sin(th));
+const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+
+// ---------- Spieldaten ----------
+const VAL = [0, 1, 3, 10, 35, 120, 450];
+const MOONS = [
+  { name: 'Luna', title: 'Der Erdmond', R: 18, base1: '#94a3b8', base2: '#64748b', glow: '#38bdf8', style: 'crater', rock: '#475569', mouth: '#475569',
+    planet: { r: 5, col: '#38bdf8', clouds: '#ffffff', d: new V3(-180, 70, -120) },
+    soft: { h: 1, name: 'Mondstaub', col: [148, 163, 184] }, hard: { h: 2, name: 'Krater-Kruste', col: [71, 85, 105] }, hardFrac: 0.28,
+    intro: 'Endlich! 4,5 Milliarden Jahre Staub auf meiner Nase. Fang mit der Zahnbürste an!' },
+  { name: 'Phobos', title: 'Der Kartoffelmond', R: 13, base1: '#78716c', base2: '#57534e', glow: '#fb923c', style: 'furrows', rock: '#44403c', mouth: '#292524',
+    planet: { r: 7.5, col: '#ef4444', clouds: '#f97316', d: new V3(140, -40, -160) },
+    soft: { h: 2, name: 'Mars-Schlamm', col: [168, 120, 80] }, hard: { h: 3, name: 'Gesteins-Panzer', col: [87, 83, 78] }, hardFrac: 0.32,
+    intro: 'Mars wirft ständig roten Sand rüber. Ich seh aus wie eine verschrumpelte Kartoffel!' },
+  { name: 'Ganymed', title: 'Der Eiskönig', R: 23, base1: '#cbd5e1', base2: '#94a3b8', glow: '#67e8f9', style: 'grooves', rock: '#64748b', mouth: '#334155',
+    planet: { r: 12, col: '#eab308', clouds: '#ca8a04', bands: true, d: new V3(-220, 120, 140) },
+    soft: { h: 2, name: 'Käseschimmel', col: [180, 205, 160] }, hard: { h: 4, name: 'Tiefkühl-Glibber', col: [100, 160, 200] }, hardFrac: 0.35,
+    intro: 'Jupiter glotzt mich schon an. Kannst du den Schimmel wegkriegen? Es riecht streng!' },
+  { name: 'Titan', title: 'Die Smog-Kugel', R: 21, base1: '#fde047', base2: '#ca8a04', glow: '#f59e0b', style: 'dunes', rock: '#854d0e', mouth: '#713f12',
+    planet: { r: 10, col: '#fef08a', clouds: '#eab308', ring: true, d: new V3(190, 80, -180) },
+    soft: { h: 3, name: 'Alien-Schleim', col: [190, 160, 50] }, hard: { h: 5, name: 'Methan-Pech', col: [90, 70, 30] }, hardFrac: 0.38,
+    intro: 'Saturn hat mir Ringe versprochen, aber ich kriege nur Smog. Polier mich blank!' },
+  { name: 'Io', title: 'Die Schwefel-Hölle', R: 19, base1: '#facc15', base2: '#ea580c', glow: '#f97316', style: 'volcano', rock: '#7c2d12', mouth: '#451a03',
+    planet: { r: 13, col: '#eab308', clouds: '#ca8a04', bands: true, d: new V3(-160, -90, -180) },
+    soft: { h: 4, name: 'Vulkan-Ruß', col: [60, 50, 45] }, hard: { h: 6, name: 'Obsidian-Schlacke', col: [30, 25, 35] }, hardFrac: 0.42,
+    intro: 'Hust! Schwefel-Alarm! Die Vulkane spucken nonstop. Hier brauchst du echtes schweres Gerät!' }
+];
+const moonDef = idx => MOONS[idx % MOONS.length];
+const moonName = idx => MOONS[idx % MOONS.length].name + (idx >= MOONS.length ? ' ' + ROMAN[Math.floor(idx / MOONS.length) + 1] : '');
+
+const TOOLS = [
+  { id: 'brush', icon: '🪥', name: 'Zahnbürste', r: 0.7, p: 2.4, tier: 1, cost: 0, desc: 'Gründlich, handlich. Perfekt zum Einstieg.' },
+  { id: 'sponge', icon: '🧽', name: 'Schwamm am Stiel', r: 1.0, p: 3.2, tier: 1, cost: 45, desc: 'Große Wischfläche, saugt Feinstaub direkt auf.' },
+  { id: 'scrub', icon: '🧹', name: 'Schrubber', r: 1.3, p: 4.0, tier: 2, cost: 260, desc: 'Harte Naturborsten – knackt Krater-Kruste.' },
+  { id: 'mop', icon: '🪣', name: 'Wischmopp XXL', r: 1.75, p: 5.2, tier: 2, cost: 850, desc: 'Riesige Wischbreite aus saugstarken Mikrofasern.' },
+  { id: 'washer', icon: '💦', name: 'Hochdruckreiniger', r: 2.2, p: 6.8, tier: 3, cost: 2200, desc: '180 bar Jet-Strahl gegen Edelschimmel und Ruß.' },
+  { id: 'polish', icon: '🌀', name: 'Mond-Bohnermaschine', r: 2.8, p: 9.0, tier: 4, cost: 7000, desc: 'Rotierender Polierteller für Glanzpolitur.' },
+  { id: 'laser', icon: '🔆', name: 'Laser-Polierer', r: 3.4, p: 12.0, tier: 5, cost: 22000, desc: 'Plasma-Strahl verdampft Glibber und Pech.' },
+  { id: 'comet', icon: '☄️', name: 'Kometen-Kärcher 9000', r: 4.2, p: 16.5, tier: 6, cost: 70000, desc: 'Kometen-Antrieb. Hinterlässt strahlende Reinheit.' }
+];
+const tankCapL = l => Math.round(20 * Math.pow(1.45, l));
+const speedL = l => 4.0 + 0.5 * l;
+const magL = l => 1.5 + 1.0 * l;
+const GRAV = 7.5;
+const jumpH = l => 1.5 + 0.7 * l;
+const jumpVL = l => Math.sqrt(2 * GRAV * jumpH(l));
+const stompR = l => 0.9 + 0.45 * l;
+const UPS = [
+  { id: 'tank', icon: '🎒', name: 'Dreck-Tank', max: 14, cost: l => 30 * Math.pow(1.65, l), eff: l => fmt(tankCapL(l)) + ' L', desc: 'Größerer Rucksack – seltener zur Mondbasis laufen.' },
+  { id: 'speed', icon: '🥾', name: 'Mondstiefel', max: 8, cost: l => 40 * Math.pow(1.8, l), eff: l => f1(speedL(l)) + ' m/s', desc: 'Schneller sprinten auf dem Mond.' },
+  { id: 'soap', icon: '🧴', name: 'Turbo-Seife', max: 12, cost: l => 50 * Math.pow(1.75, l), eff: l => '+' + l * 25 + ' % Wischkraft', desc: 'Jedes Werkzeug putzt deutlich schneller.' },
+  { id: 'magnet', icon: '🧲', name: 'Schrott-Magnet', max: 8, cost: l => 60 * Math.pow(1.9, l), eff: l => f1(magL(l)) + ' m Radius', desc: 'Zieht Weltraumschrott und Sternschnuppen an.' },
+  { id: 'robots', icon: '🤖', name: 'Putzroboter', max: 5, cost: l => 220 * Math.pow(2.8, l), eff: l => l + ' Bots', desc: 'Autonome Roboter wuseln über den Mond und putzen mit.' },
+  { id: 'beam', icon: '📡', name: 'Beam-Verkauf', max: 1, cost: () => 1400, eff: l => l ? 'Aktiv (R)' : 'Inaktiv', desc: 'Verkaufe deinen Tankinhalt von überall per Tastendruck R.' },
+  { id: 'charm', icon: '✨', name: 'Mond-Charme', max: 6, cost: l => 180 * Math.pow(2.2, l), eff: l => '+' + l * 15 + ' % Taler-Wert', desc: 'Recycling-Bonus: Mehr Taler für allen Dreck.' },
+  { id: 'jet', icon: '🚀', name: 'Hüpf-Jetpack', max: 6, cost: l => 120 * Math.pow(2.1, l), eff: l => f1(jumpH(l)) + ' m Sprunghöhe' + (l ? ' · Stampf-Putz ' + f1(stompR(l)) + ' m' : ''), desc: 'Höher hüpfen – die Landung schleudert Dreck per Druckwelle in deinen Tank.' }
+];
+const LINES = {
+  idle: [
+    'Hinter meinem Krater links ist noch Dreck!',
+    'Weißt du, wie lang 4,5 Milliarden Jahre ohne Dusche sind?',
+    'Die Sonne meint, ich soll mehr strahlen. Hilf mir!',
+    'Wenn du fertig bist, glänze ich heller als die Venus.',
+    'Die Erde guckt schon wieder so. Putz weiter!',
+    'Da drüben kitzelt es noch. Ja, genau da!'
+  ],
+  eye: ['Aua! Nicht ins Auge!', 'Hey, das ist mein AUGE!', 'Ich seh nur noch Sterne… also mehr als sonst.'],
+  nose: ['Pass auf meine Nase auf!', 'Hatschi! Das kitzelt!', 'Nicht in der Nase bohren, bitte.'],
+  meteor: ['Autsch! Wer wirft hier mit Steinen?!', 'Schon wieder so ein Kometen-Rowdy!', 'Gerade frisch geputzt… menno.'],
+  m25: 'Oh, da kitzelt\'s! Weiter so!',
+  m50: 'Ich fühl mich schon halb so staubig!',
+  m75: 'Ich glänze! Ich GLÄNZE!',
+  m90: 'Wunderbar! So sauber war ich seit dem Urknall nicht!',
+  m100: 'Perfekt poliert! Ich bin der schönste Mond im Sonnensystem!'
+};
+
+// ---------- Kugel-Raster für Dreck ----------
+const GW = 512, GH = 256, GN = GW * GH;
+const DX = new Float32Array(GN), DY = new Float32Array(GN), DZ = new Float32Array(GN);
+const rowSin = new Float32Array(GH), rowCos = new Float32Array(GH), rowArea = new Float32Array(GH);
+for (let j = 0; j < GH; j++) {
+  const th = (j + 0.5) / GH * Math.PI; rowSin[j] = Math.sin(th); rowCos[j] = Math.cos(th);
+  rowArea[j] = (TAU / GW) * (Math.cos(j / GH * Math.PI) - Math.cos((j + 1) / GH * Math.PI));
+  for (let i = 0; i < GW; i++) {
+    const ph = (i + 0.5) / GW * TAU, idx = j * GW + i;
+    DX[idx] = -Math.cos(ph) * rowSin[j]; DY[idx] = rowCos[j]; DZ[idx] = Math.sin(ph) * rowSin[j];
+  }
+}
+const amount = new Float32Array(GN), hard = new Uint8Array(GN), mask = new Uint8Array(GN);
+const cellNoise = new Float32Array(GN); for (let i = 0; i < GN; i++) cellNoise[i] = Math.random() * 2 - 1;
+const texData = new Uint8Array(GN * 4);
+const dirtTex = new THREE.DataTexture(texData, GW, GH, THREE.RGBAFormat);
+dirtTex.colorSpace = THREE.SRGBColorSpace; dirtTex.wrapS = THREE.RepeatWrapping; dirtTex.wrapT = THREE.ClampToEdgeWrapping;
+dirtTex.magFilter = THREE.LinearFilter; dirtTex.minFilter = THREE.LinearMipmapLinearFilter; dirtTex.generateMipmaps = true; dirtTex.needsUpdate = true;
+// Staubhöhe (R-Kanal) für Displacement: dicker Dreck steht sichtbar über der Oberfläche
+const heightData = new Uint8Array(GN);
+const heightTex = new THREE.DataTexture(heightData, GW, GH, THREE.RedFormat);
+heightTex.wrapS = THREE.RepeatWrapping; heightTex.wrapT = THREE.ClampToEdgeWrapping; heightTex.magFilter = THREE.LinearFilter; heightTex.minFilter = THREE.LinearFilter; heightTex.needsUpdate = true;
+
+function cellOf(d) {
+  const th = Math.acos(clamp(d.y / d.length(), -1, 1)); let ph = Math.atan2(d.z, -d.x); if (ph < 0) ph += TAU;
+  return clamp(Math.floor(th / Math.PI * GH), 0, GH - 1) * GW + clamp(Math.floor(ph / TAU * GW), 0, GW - 1);
+}
+let dirtyJ0 = GH, dirtyJ1 = -1;
+function eachCell(c, angR, fn) {
+  const cosR = Math.cos(angR), inv = 1 / (1 - cosR);
+  const ct = clamp(c.y, -1, 1), th = Math.acos(ct), stc = Math.sin(th);
+  const j0 = Math.max(0, Math.floor((th - angR) / Math.PI * GH)), j1 = Math.min(GH - 1, Math.floor((th + angR) / Math.PI * GH));
+  let ph = Math.atan2(c.z, -c.x); if (ph < 0) ph += TAU;
+  for (let j = j0; j <= j1; j++) {
+    const den = rowSin[j] * stc; let i0 = 0, i1 = GW - 1;
+    if (den > 1e-6) {
+      const x = (cosR - rowCos[j] * ct) / den;
+      if (x > -1) {
+        const dphi = Math.acos(Math.min(1, x)) + TAU / GW;
+        if (dphi < Math.PI) { i0 = Math.floor((ph - dphi) / TAU * GW); i1 = Math.min(i0 + GW - 1, Math.ceil((ph + dphi) / TAU * GW)); }
+      }
+    }
+    for (let ii = i0; ii <= i1; ii++) {
+      const idx = j * GW + ((ii % GW) + GW) % GW;
+      const dot = c.x * DX[idx] + c.y * DY[idx] + c.z * DZ[idx];
+      if (dot > cosR) fn(idx, 1 - (1 - dot) * inv, j);
+    }
+  }
+  if (j0 < dirtyJ0) dirtyJ0 = j0; if (j1 > dirtyJ1) dirtyJ1 = j1;
+}
+const BR = { u: 0, v: 0, blocked: 0, hardCells: 0, cells: 0, cleared: 0 };
+function scrub(c, angR, amt, tier) {
+  BR.u = BR.v = BR.blocked = BR.hardCells = BR.cells = BR.cleared = 0;
+  eachCell(c, angR, (idx, f, j) => {
+    const old = amount[idx]; if (old <= 0) return;
+    BR.cells++;
+    const h = hard[idx]; let k = 1;
+    if (h > tier) { k = 0.035 / (h - tier); BR.hardCells++; if (BR.blocked < h) BR.blocked = h; }
+    let nv = old - amt * f * k; if (nv < 0.03) { nv = 0; BR.cleared++; }
+    amount[idx] = nv; const a = (old - nv) * rowArea[j];
+    BR.u += a; BR.v += a * VAL[h];
+  });
+  BR.u *= M.R2; BR.v *= M.R2 * M.valMult;
+  return BR;
+}
+function deposit(c, angR, amt) { eachCell(c, angR, (idx, f) => { if (mask[idx]) amount[idx] = Math.min(1, amount[idx] + amt * (0.3 + f)); }); }
+function maskOut(c, angR) { eachCell(c, angR, idx => { mask[idx] = 0; amount[idx] = 0; }); }
+function refreshDirt() {
+  if (dirtyJ1 < dirtyJ0) return;
+  for (let j = dirtyJ0; j <= dirtyJ1; j++) {
+    const o = j * GW, po = (GH - 1 - j) * GW * 4 + 3, ho = (GH - 1 - j) * GW;
+    for (let i = 0; i < GW; i++) { const a = amount[o + i]; texData[po + i * 4] = a > 0 ? 70 + a * 185 : 0; heightData[ho + i] = a > 0 ? 50 + a * 205 : 0; }
+  }
+  dirtTex.needsUpdate = true; heightTex.needsUpdate = true; dirtyJ0 = GH; dirtyJ1 = -1;
+}
+function computeClean() {
+  let s = 0;
+  for (let j = 0; j < GH; j++) { let c = 0; const o = j * GW; for (let i = 0; i < GW; i++) if (amount[o + i] > 0) c++; s += c * rowArea[j]; }
+  return 100 * (1 - s / (4 * Math.PI));
+}
+function makeField(rng, n, f0, f1) {
+  const w = []; let norm = 0;
+  for (let k = 0; k < n; k++) { const v = new V3(rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1).normalize(); const f = f0 * Math.pow(f1 / f0, k / (n - 1)), a = 1 / Math.sqrt(f); w.push([v.x * f, v.y * f, v.z * f, rng() * TAU, a]); norm += a; }
+  return (x, y, z) => { let s = 0; for (const q of w) s += Math.sin(q[0] * x + q[1] * y + q[2] * z + q[3]) * q[4]; return s / norm * 1.8; };
+}
+
+// ---------- Spielstand ----------
+const SAVE_KEY = 'mondputzer_save_v2';
+function defSave() { return { money: 0, earned: 0, cleaned: 0, tools: TOOLS.map((t, i) => i === 0), tool: 0, up: Object.fromEntries(UPS.map(u => [u.id, 0])), moon: 0, m90: false, m100: false, grid: null, seen: false }; }
+let save = defSave();
+try {
+  const s = JSON.parse(localStorage.getItem(SAVE_KEY)) || JSON.parse(localStorage.getItem('mondputzer_save_v1'));
+  if (s && typeof s === 'object' && s.up) {
+    const d = defSave();
+    save = Object.assign(d, s, { up: Object.assign(d.up, s.up) });
+    save.tools = TOOLS.map((t, i) => i === 0 || !!(Array.isArray(s.tools) && s.tools[i]));
+    save.tool = clamp(save.tool | 0, 0, TOOLS.length - 1); if (!save.tools[save.tool]) save.tool = 0;
+    save.money = Math.max(0, Number(save.money) || 0); save.earned = Number(save.earned) || 0; save.moon = Math.max(0, save.moon | 0);
+  }
+} catch (e) {}
+let resetting = false;
+function encodeGrid() {
+  const out = new Uint8Array(GN);
+  for (let i = 0; i < GN; i++) out[i] = Math.round(amount[i] * 255);
+  let binary = ''; const len = out.byteLength;
+  for (let i = 0; i < len; i += 8192) binary += String.fromCharCode.apply(null, out.subarray(i, Math.min(i + 8192, len)));
+  return btoa(binary);
+}
+function decodeGrid(b64) {
+  try {
+    const bin = atob(b64), out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch (e) { return null; }
+}
+function persist() {
+  if (resetting) return;
+  try { save.grid = encodeGrid(); localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
+}
+
+const tool = () => TOOLS[save.tool];
+const tankCap = () => tankCapL(save.up.tank);
+const walkSpeed = () => speedL(save.up.speed);
+const soapMult = () => 1 + save.up.soap * 0.25;
+const charm = () => 1 + save.up.charm * 0.15;
+const jumpV = () => jumpVL(save.up.jet);
+
+// ---------- 3D-Szene ----------
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x030611);
+
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 1200);
+scene.add(camera);
+
+// Beleuchtung
+const amb = new THREE.AmbientLight(0x2d3748, 1.2); scene.add(amb);
+const hemi = new THREE.HemisphereLight(0x475569, 0x05070d, 0.8); scene.add(hemi);
+const SUN_DIR = new V3(0.65, 0.45, 0.6).normalize();
+const sun = new THREE.DirectionalLight(0xfff7ed, 3.4);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 2048; sun.shadow.mapSize.height = 2048;
+sun.shadow.bias = -0.0006;
+scene.add(sun); scene.add(sun.target);
+
+// Sternenhintergrund
+{
+  const n = 1400, geo = new THREE.BufferGeometry(), pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  for (let k = 0; k < n; k++) {
+    const v = sph(rnd(0, Math.PI), rnd(0, TAU)).multiplyScalar(rnd(500, 950));
+    pos[k * 3] = v.x; pos[k * 3 + 1] = v.y; pos[k * 3 + 2] = v.z;
+    const c = new THREE.Color().setHSL(rnd(0.55, 0.75), rnd(0.2, 0.7), rnd(0.7, 1));
+    col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({ size: 1.8, vertexColors: true, transparent: true, opacity: 0.85 });
+  scene.add(new THREE.Points(geo, mat));
+}
+
+// Mutterplanet am Horizont
+const skyPlanetMat = new THREE.MeshBasicMaterial();
+const skyPlanet = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), skyPlanetMat);
+scene.add(skyPlanet);
+
+function canvasTex(w, h, fn) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); fn(g, w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function planetTex(p) {
+  return canvasTex(512, 256, (g, w, h) => {
+    g.fillStyle = p.col; g.fillRect(0, 0, w, h);
+    if (p.bands) {
+      for (let y = 0; y < h; y += 8) {
+        g.fillStyle = (y / 8) % 2 ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.14)';
+        g.fillRect(0, y, w, 8);
+      }
+    }
+    const gr = g.createRadialGradient(w * 0.35, h * 0.4, 20, w * 0.5, h * 0.5, w * 0.5);
+    gr.addColorStop(0, hexA(p.clouds || '#ffffff', 0.45)); gr.addColorStop(1, 'transparent');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  });
+}
+function emojiTex(char) {
+  return canvasTex(128, 128, (g, w, h) => {
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '84px "Segoe UI Emoji", sans-serif'; g.fillText(char, w / 2, h / 2);
+  });
+}
+function textSprite(text, bg = '#0f172aee', fg = '#fde047') {
+  const tex = canvasTex(256, 64, (g, w, h) => {
+    g.fillStyle = bg; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 14); g.fill();
+    g.strokeStyle = fg; g.lineWidth = 3; g.stroke();
+    g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 22px "Segoe UI", sans-serif'; g.fillText(text, w / 2, h / 2);
+  });
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+  sp.scale.set(3.2, 0.8, 1); return sp;
+}
+
+const std = opts => new THREE.MeshStandardMaterial(opts);
+const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion();
+function orientUp(obj, up, fwd) {
+  const z = new V3().copy(fwd).addScaledVector(up, -fwd.dot(up)).normalize(), x = new V3().crossVectors(up, z);
+  obj.quaternion.setFromRotationMatrix(_m4.makeBasis(x, up, z));
+}
+function placeOn(obj, d, h = 0, yaw = 0) {
+  obj.position.copy(d).multiplyScalar(M.R + h); obj.quaternion.setFromUnitVectors(UP, d);
+  if (yaw) obj.rotateY(yaw);
+  M.group.add(obj);
+}
+
+// Dreck-Oberflächen-Bump-Map
+const grimeTex = canvasTex(256, 256, (g, w, h) => {
+  const img = g.createImageData(w, h), d = img.data;
+  for (let i = 0; i < w * h; i++) {
+    const v = Math.floor(Math.random() * 255);
+    d[i * 4] = v; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+});
+grimeTex.wrapS = THREE.RepeatWrapping; grimeTex.wrapT = THREE.RepeatWrapping;
+
+// ---------- Mond-Generierung ----------
+let M = null;
+function makeBaseTexture(def, rng) {
+  return canvasTex(1024, 512, (g, W, H) => {
+    g.fillStyle = def.base1; g.fillRect(0, 0, W, H);
+    const blot = (x, y, r, col) => {
+      const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, col); gr.addColorStop(1, 'transparent');
+      g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    };
+    const crater = (x, y, r, depth = 0.5) => {
+      const gr = g.createRadialGradient(x, y, r * 0.4, x, y, r);
+      gr.addColorStop(0, hexA('#000000', 0.55 * depth)); gr.addColorStop(0.8, hexA(def.base2, 0.4)); gr.addColorStop(1, 'transparent');
+      g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+      g.strokeStyle = hexA('#ffffff', 0.22 * depth); g.lineWidth = Math.max(1, r * 0.12);
+      g.beginPath(); g.arc(x, y, r * 0.88, 0, TAU); g.stroke();
+    };
+    const Y = () => H * (0.08 + rng() * 0.84);
+    if (def.style === 'furrows') {
+      g.strokeStyle = hexA(def.base2, 0.6); g.lineWidth = 14;
+      for (let k = 0; k < 18; k++) {
+        g.beginPath(); let y = Y(); g.moveTo(0, y);
+        for (let x = 0; x < W; x += 60) g.lineTo(x, y + Math.sin(x * 0.02 + k) * 30);
+        g.stroke();
+      }
+      for (let k = 0; k < 60; k++) crater(rng() * W, Y(), 8 + rng() * 32, 0.8);
+    } else {
+      for (let k = 0; k < 14; k++) blot(rng() * W, Y(), 80 + rng() * 150, hexA(def.base2, 0.42));
+      if (def.style === 'volcano') for (let k = 0; k < 40; k++) blot(rng() * W, Y(), 18 + rng() * 50, pick(['rgba(230,120,40,.55)', 'rgba(200,60,30,.5)', 'rgba(250,210,90,.6)']));
+      for (let k = 0; k < 170; k++) crater(rng() * W, Y(), 6 + rng() * 44 * (rng() < 0.15 ? 2 : 1), 0.75);
+    }
+    // rosige Wangen unterm Gesicht
+    for (const s of [-1, 1]) blot(W * (0.25 + s * 0.068), H * (0.5 + 0.07), 70, 'rgba(255,120,150,.35)');
+  });
+}
+function disposeMoon() {
+  if (!M) return;
+  M.group.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) for (const m of [].concat(o.material)) { if (m.map && m.map !== dirtTex && m.map !== grimeTex && m.map !== M.baseTex) m.map.dispose(); m.dispose(); }
+  });
+  M.baseTex.dispose(); scene.remove(M.group);
+  junk.length = 0; meteors.length = 0; M = null;
+}
+function buildMoon(idx, grid) {
+  disposeMoon();
+  const def = moonDef(idx), loop = Math.floor(idx / MOONS.length), R = def.R, rng = mulberry32(9001 + idx * 7919);
+  M = { idx, def, loop, R, R2: R * R, valMult: Math.pow(5, loop), name: moonName(idx), group: new THREE.Group(), obs: [], eyes: [], mouth: null, mouthM: 99,
+    clean: 0, meteorT: 50, junkT: 8, idleT: 30, ms: 0, station: new V3(0, 1, 0), face: { th0: Math.PI / 2 - 0.04, ph0: Math.PI / 2 } };
+  scene.add(M.group);
+  M.baseTex = makeBaseTexture(def, rng); M.baseTex.wrapS = THREE.RepeatWrapping;
+  M.baseMat = new THREE.MeshPhysicalMaterial({ map: M.baseTex, bumpMap: M.baseTex, bumpScale: 1.5, roughness: 0.5, clearcoat: 1, clearcoatRoughness: 0.12, emissive: new THREE.Color(def.glow), emissiveMap: M.baseTex, emissiveIntensity: 0.03 });
+  const base = new THREE.Mesh(new THREE.SphereGeometry(R, 192, 96), M.baseMat); base.receiveShadow = true; M.group.add(base);
+  grimeTex.repeat.set(Math.round(R * 6), Math.round(R * 3));
+  M.dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex, transparent: true, depthWrite: false, roughness: 1, metalness: 0, bumpMap: grimeTex, bumpScale: 3,
+    displacementMap: heightTex, displacementScale: 0.2, displacementBias: -0.045 });
+  const dm = new THREE.Mesh(new THREE.SphereGeometry(R + 0.025, 384, 192), M.dirtMat); dm.receiveShadow = true; dm.renderOrder = 1; M.group.add(dm);
+  
+  const old = skyPlanet.material.map; skyPlanet.material.map = planetTex(def.planet); skyPlanet.material.needsUpdate = true; if (old) old.dispose();
+  skyPlanet.position.copy(def.planet.d); skyPlanet.scale.setScalar(def.planet.r);
+  
+  buildStation(); buildFace(); buildRocks(rng);
+  
+  // Dreck erzeugen
+  const fA = makeField(rng, 12, 1.6, 10), fB = makeField(rng, 12, 1.3, 7);
+  const nh = new Float32Array(GN); for (let i = 0; i < GN; i++) nh[i] = fB(DX[i], DY[i], DZ[i]);
+  const thr = Float32Array.from(nh).sort()[Math.floor(GN * (1 - def.hardFrac))];
+  for (let i = 0; i < GN; i++) {
+    const a = fA(DX[i], DY[i], DZ[i]), isHard = nh[i] > thr && DY[i] < Math.cos(11 / R), col = isHard ? def.hard.col : def.soft.col, v = 1 + cellNoise[i] * 0.1 + a * 0.18;
+    hard[i] = isHard ? def.hard.h : def.soft.h; mask[i] = 1;
+    amount[i] = clamp(0.62 + a * 0.5 + cellNoise[i] * 0.04, 0.3, 1);
+    const p = ((GH - 1 - ((i / GW) | 0)) * GW + (i % GW)) * 4;
+    texData[p] = clamp(col[0] * v, 0, 255); texData[p + 1] = clamp(col[1] * v, 0, 255); texData[p + 2] = clamp(col[2] * v, 0, 255);
+  }
+  maskOut(M.station, 4.6 / R);
+  for (const o of M.obs) if (o.kind !== 'station') maskOut(o.d, (o.r + 0.15) / R);
+  if (grid) for (let i = 0; i < GN; i++) if (mask[i]) amount[i] = grid[i] / 255;
+  dirtyJ0 = 0; dirtyJ1 = GH - 1;
+  let tv = 0; for (let i = 0; i < GN; i++) tv += amount[i] * rowArea[(i / GW) | 0] * VAL[hard[i]];
+  M.totalValue = tv * M.R2 * M.valMult;
+  M.clean = computeClean();
+  M.ms = [25, 50, 75].filter(x => M.clean >= x).length;
+  
+  // Licht & Schatten
+  sun.position.copy(SUN_DIR).multiplyScalar(R + 40); sun.target.position.set(0, 0, 0);
+  Object.assign(sun.shadow.camera, { left: -R - 5, right: R + 5, top: R + 5, bottom: -R - 5, near: 5, far: 2 * R + 80 });
+  sun.shadow.camera.updateProjectionMatrix();
+  for (let k = 0; k < 10 + Math.min(8, idx); k++) spawnJunk();
+  M.meteorT = 45;
+  
+  // Spieler an Basis
+  P.d.copy(sph(1.3 / R, Math.PI / 2)); P.f.set(0, -Math.sin(1.3 / R), Math.cos(1.3 / R)); P.h = 0; P.vh = 0; P.kv.set(0, 0, 0);
+  for (const r of robots) placeRobot(r);
+  tankFillMat.color.setRGB(def.soft.col[0] / 255, def.soft.col[1] / 255, def.soft.col[2] / 255, THREE.SRGBColorSpace);
+  brushCenters(0, false);
+  cam.snap = true;
+}
+
+function buildStation() {
+  const R = M.R, N = M.station;
+  const metal = std({ color: 0x9aa4b2, metalness: 0.7, roughness: 0.35 }), white = std({ color: 0xe5e7eb, metalness: 0.2, roughness: 0.45 });
+  const glowG = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
+  const pad = new THREE.Group();
+  pad.add(new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.3, 0.2, 48), std({ color: 0x3b4252, metalness: 0.5, roughness: 0.5 })));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.05, 0.07, 8, 64), glowG); ring.rotation.x = Math.PI / 2; ring.position.y = 0.11; pad.add(ring);
+  const sym = new THREE.Mesh(new THREE.CircleGeometry(1.2, 32), new THREE.MeshBasicMaterial({ map: emojiTex('♻️'), transparent: true, depthWrite: false })); sym.rotation.x = -Math.PI / 2; sym.position.y = 0.105; pad.add(sym);
+  placeOn(pad, N, 0.02); sym.castShadow = false; M.padRing = ring;
+  // Silo
+  const silo = new THREE.Group(), sd = sph(3.7 / R, 0);
+  const sb = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 2.6, 28), white); sb.position.y = 1.2; silo.add(sb);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.87, 0.87, 0.28, 28), std({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 0.6 })); band.position.y = 1.7; silo.add(band);
+  const fun = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 0.5, 0.6, 28, 1, true), std({ color: 0x9aa4b2, metalness: 0.7, roughness: 0.35, side: THREE.DoubleSide })); fun.position.y = 2.8; silo.add(fun);
+  for (const s of [-1, 1]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.6, 0.12), metal); leg.position.set(s * 0.6, 0.1, 0.5); silo.add(leg); }
+  placeOn(silo, sd, -0.1); M.obs.push({ d: sd, r: 0.95, hgt: 99, kind: 'station' });
+  // Kuppel
+  const dome = new THREE.Group(), dd = sph(3.7 / R, Math.PI);
+  dome.add(new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 16, 0, TAU, 0, Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: 0x9ad8ff, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.45, clearcoat: 1 })));
+  const dr = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.12, 8, 40), metal); dr.rotation.x = Math.PI / 2; dome.add(dr);
+  const plant = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), std({ color: 0x3f9f4a, flatShading: true })); plant.position.y = 0.5; dome.add(plant);
+  placeOn(dome, dd, -0.02); M.obs.push({ d: dd, r: 1.55, hgt: 99, kind: 'station' });
+  // Antenne
+  const ant = new THREE.Group(), ad = sph(3.4 / R, 1.5 * Math.PI);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2.2, 8), metal); pole.position.y = 1.1; ant.add(pole);
+  const dish = new THREE.Mesh(new THREE.SphereGeometry(0.75, 20, 10, 0, TAU, 0, 1.0), std({ color: 0xf1f5f9, side: THREE.DoubleSide, metalness: 0.3, roughness: 0.3 })); dish.position.y = 2.2; dish.rotation.x = 2.3; ant.add(dish);
+  M.dish = dish; placeOn(ant, ad); M.obs.push({ d: ad, r: 0.3, hgt: 99, kind: 'station' });
+  // Fahne
+  const flag = new THREE.Group(), fd = sph(3.0 / R, Math.PI / 2 + 0.75);
+  const fp = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.3, 6), metal); fp.position.y = 1.15; flag.add(fp);
+  const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.8), new THREE.MeshStandardMaterial({ map: canvasTex(256, 146, (g, w, h) => { g.fillStyle = '#7c3aed'; g.fillRect(0, 0, w, h); g.fillStyle = '#facc15'; g.font = 'bold 30px "Segoe UI",sans-serif'; g.textAlign = 'center'; g.fillText('PUTZ-', w / 2, 58); g.fillText('KOLONNE 🧽', w / 2, 100); }), side: THREE.DoubleSide }));
+  cloth.position.set(0.72, 1.85, 0); flag.add(cloth); placeOn(flag, fd); M.obs.push({ d: fd, r: 0.15, hgt: 2.3, kind: 'station' });
+  // Leuchtstrahl & Schild
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.6, 80, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  beam.position.copy(N).multiplyScalar(R + 40); M.group.add(beam);
+  const lbl = textSprite('♻️ Dreck-Ankauf', '#052e16d9', '#bbf7d0'); lbl.position.copy(N).multiplyScalar(R + 4.2); M.group.add(lbl); M.label = lbl;
+}
+
+const eyeWhite = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.25, clearcoat: 1 });
+const pupilMat = new THREE.MeshPhysicalMaterial({ color: 0x111827, roughness: 0.2, clearcoat: 1 });
+function buildFace() {
+  const R = M.R, { th0, ph0 } = M.face, e = 0.12 * R;
+  const browMat = std({ color: M.def.mouth });
+  for (const s of [-1, 1]) {
+    const d = sph(th0 - 0.21, ph0 + s * 0.27), g = new THREE.Group();
+    const north = new V3(0, 1, 0).addScaledVector(d, -d.y).normalize(), x = new V3().crossVectors(north, d);
+    g.quaternion.setFromRotationMatrix(_m4.makeBasis(x, north, d)); g.position.copy(d).multiplyScalar(R);
+    const w = new THREE.Mesh(new THREE.SphereGeometry(e, 36, 24), eyeWhite.clone()); w.position.z = -0.3 * e; w.castShadow = true; g.add(w);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(e * 0.44, 24, 16), pupilMat.clone()); pupil.position.set(0, 0, e * 0.65); g.add(pupil);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(e * 1.5, e * 0.22, e * 0.35), browMat); brow.position.set(0, e * 1.15, 0.1 * e); g.add(brow);
+    M.group.add(g);
+    M.eyes.push({ d, g, w, pupil, brow, e, s, blink: 0, nextBlink: rnd(2, 5) });
+    M.obs.push({ d, r: e * 1.05, hgt: e * 0.6, kind: 'eye' });
+  }
+  // Nase
+  const nd = sph(th0 + 0.05, ph0), nose = new THREE.Mesh(new THREE.SphereGeometry(e * 0.52, 24, 16), M.baseMat);
+  nose.scale.set(1, 0.85, 1.35); placeOn(nose, nd, -0.05 * e);
+  M.obs.push({ d: nd, r: e * 0.55, hgt: e * 0.5, kind: 'nose' });
+  // Mund
+  const md = sph(th0 + 0.32, ph0);
+  M.mouthMesh = new THREE.Mesh(new THREE.BufferGeometry(), std({ color: M.def.mouth, roughness: 0.6 }));
+  placeOn(M.mouthMesh, md, 0.05);
+  updateMouth(0);
+}
+function updateMouth(mood) {
+  if (Math.abs(M.mouthM - mood) < 0.05) return;
+  M.mouthM = mood;
+  const w = 0.26 * M.R, N = 24, geo = M.mouthMesh.geometry, pos = new Float32Array((N + 1) * 3);
+  for (let k = 0; k <= N; k++) {
+    const u = (k / N) * 2 - 1, x = u * w, y = mood * 0.08 * M.R * (1 - u * u) - 0.02 * (1 - u * u);
+    pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = 0.03;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  if (!M.mouth) {
+    const tubeGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(Array.from({ length: N + 1 }, (_, i) => new V3(pos[i * 3], pos[i * 3 + 1], 0))), 20, 0.06 * M.R * 0.18, 8, false);
+    M.mouthMesh.geometry.dispose(); M.mouthMesh.geometry = tubeGeo;
+  }
+}
+function buildRocks(rng) {
+  const n = 12 + Math.min(10, M.idx * 2), mat = std({ color: M.def.rock, flatShading: true, roughness: 0.9 });
+  const faceC = sph(M.face.th0, M.face.ph0);
+  for (let k = 0, tries = 0; k < n && tries < 400; tries++) {
+    const d = new V3(rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1).normalize();
+    if (d.y > Math.cos(7 / M.R) || d.dot(faceC) > Math.cos(0.8)) continue;
+    if (M.obs.some(o => d.dot(o.d) > Math.cos((o.r + 3) / M.R))) continue;
+    const r = 0.45 + rng() * 0.95, m = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), mat);
+    m.scale.set(1, 0.65 + rng() * 0.4, 1); placeOn(m, d, -0.12 * r, rng() * TAU);
+    M.obs.push({ d, r: r * 0.95, hgt: r * 0.75, kind: 'rock' }); k++;
+  }
+}
+function randomFreeDir(minNorth = 5) {
+  const v = new V3();
+  for (let t = 0; t < 60; t++) {
+    v.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).normalize();
+    if (v.y > Math.cos(minNorth / M.R) || !mask[cellOf(v)]) continue;
+    if (M.obs.some(o => v.dot(o.d) > Math.cos((o.r + 0.6) / M.R))) continue;
+    return v;
+  }
+  return v.set(0, -1, 0);
+}
+
+// ---------- Spieler & Astronaut (3D & Ego) ----------
+const P = { d: new V3(0, 1, 0), f: new V3(0, 0, 1), h: 0, vh: 0, kv: new V3(), walk: 0, tank: { u: 0, v: 0 }, cleanC: new V3(), ringC: new V3(), active: false, scrubbing: false, bumpT: 0 };
+let camMode = '1st'; // Standardmäßig First-Person!
+let lookPitch = -0.3; // Blick leicht auf den Boden gerichtet
+let isWiping = false;
+let isMouseDown = false;
+let isTouchWiping = false;
+let isPointerLocked = false;
+let fpWipePhase = 0;
+// Wisch-Tempo: je flotter die Maus beim Wischen hin und her geht, desto mehr Kraft
+const TEMPO_MAX = 2.5;
+let swipeE = 0, swipeDir = 0, tempo = 1;
+function addSwipe(dx) {
+  if (!isWiping || !dx) return;
+  const sgn = Math.sign(dx);
+  if (sgn !== swipeDir) { swipeE += 0.1; swipeDir = sgn; }
+  swipeE = Math.min(TEMPO_MAX - 1, swipeE + Math.abs(dx) * 0.0035);
+}
+
+const astro = new THREE.Group(); scene.add(astro);
+const suitM = std({ color: 0xf1f5f9, roughness: 0.55 }), suitD = std({ color: 0x94a3b8, roughness: 0.6 }), accent = std({ color: 0x8b5cf6, roughness: 0.4 });
+const mk = (geo, mat, x = 0, y = 0, z = 0, parent = astro) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+const body = new THREE.Group(); astro.add(body);
+mk(new THREE.CapsuleGeometry(0.27, 0.3, 6, 14), suitM, 0, 0.84, 0, body);
+mk(new THREE.CylinderGeometry(0.29, 0.29, 0.08, 18), accent, 0, 0.66, 0, body);
+mk(new THREE.SphereGeometry(0.25, 24, 16), suitM, 0, 1.3, 0, body);
+const visor = mk(new THREE.SphereGeometry(0.2, 24, 16), std({ color: 0xf59e0b, metalness: 1, roughness: 0.1 }), 0, 1.31, 0.1, body); visor.scale.set(1, 0.78, 0.7);
+mk(new THREE.BoxGeometry(0.44, 0.5, 0.2), suitD, 0, 0.9, -0.27, body);
+const tankFills = [], tankFillMat = std({ color: 0x8a7a66, roughness: 1 });
+for (const s of [-1, 1]) {
+  mk(new THREE.CylinderGeometry(0.085, 0.085, 0.44, 12), new THREE.MeshPhysicalMaterial({ color: 0xdbeafe, transparent: true, opacity: 0.35, roughness: 0.05 }), s * 0.12, 0.9, -0.41, body);
+  const fl = mk(new THREE.CylinderGeometry(0.07, 0.07, 1, 12), tankFillMat, s * 0.12, 0.7, -0.41, body); tankFills.push(fl);
+}
+const legs = [], arms = [];
+for (const s of [-1, 1]) {
+  const leg = new THREE.Group(); leg.position.set(s * 0.13, 0.56, 0); body.add(leg);
+  mk(new THREE.CylinderGeometry(0.1, 0.11, 0.46, 10), suitM, 0, -0.23, 0, leg);
+  mk(new THREE.BoxGeometry(0.17, 0.12, 0.27), suitD, 0, -0.5, 0.04, leg); legs.push(leg);
+  const arm = new THREE.Group(); arm.position.set(s * 0.35, 1.02, 0); body.add(arm);
+  mk(new THREE.CapsuleGeometry(0.075, 0.34, 4, 10), suitM, 0, -0.22, 0, arm);
+  mk(new THREE.SphereGeometry(0.085, 12, 8), accent, 0, -0.45, 0, arm); arms.push(arm);
+}
+const handAnchor = new THREE.Object3D(); handAnchor.position.set(0, -0.47, 0.02); arms[0].add(handAnchor);
+const lamp = new THREE.SpotLight(0xfff1d6, 30, 18, 0.6, 0.5, 1.4); lamp.position.set(0, 1.34, 0.22); body.add(lamp);
+const lampT = new THREE.Object3D(); lampT.position.set(0, -0.6, 6); astro.add(lampT); lamp.target = lampT;
+
+// ---------- First-Person Viewmodel (3D-Hände & Werkzeuge) ----------
+const fpRig = new THREE.Group();
+camera.add(fpRig);
+
+const fpArmGroup = new THREE.Group();
+fpRig.add(fpArmGroup);
+fpArmGroup.position.set(0.24, -0.22, -0.44);
+
+// Arm-Geometrie (Raumanzug Ärmel + Manschette + Handschuh)
+const fpArmSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.078, 0.42, 16), suitM);
+fpArmSleeve.rotation.x = Math.PI / 2.7; fpArmSleeve.rotation.z = -0.2;
+fpArmSleeve.position.set(0.04, -0.06, 0.12);
+fpArmGroup.add(fpArmSleeve);
+
+const fpCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.05, 16), accent);
+fpCuff.rotation.x = Math.PI / 2.7; fpCuff.rotation.z = -0.2;
+fpCuff.position.set(0.03, -0.03, 0.01);
+fpArmGroup.add(fpCuff);
+
+const fpGlove = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.09, 0.13), suitD);
+fpGlove.position.set(0.02, 0.01, -0.07);
+fpGlove.rotation.set(-0.25, 0.2, -0.15);
+fpArmGroup.add(fpGlove);
+
+const fpToolSlot = new THREE.Group();
+fpArmGroup.add(fpToolSlot);
+fpToolSlot.position.set(0.02, 0.03, -0.12);
+
+let fpSpinPad = null;
+let fpBeam = null;
+
+function buildFpTool() {
+  while (fpToolSlot.children.length > 0) {
+    const obj = fpToolSlot.children[0];
+    fpToolSlot.remove(obj);
+    obj.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) [].concat(c.material).forEach(m => m.dispose()); });
+  }
+  fpSpinPad = null; fpBeam = null;
+  const t = tool();
+  const add = (geo, mat, x = 0, y = 0, z = 0, parent = fpToolSlot) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m;
+  };
+  
+  switch (t.id) {
+    case 'brush': {
+      // Ergonomische Zahnbürste mit Schaum
+      const handle = add(new THREE.BoxGeometry(0.032, 0.032, 0.32), std({ color: 0x38bdf8, roughness: 0.3 }), 0, 0.02, -0.08);
+      handle.rotation.x = -0.4;
+      add(new THREE.BoxGeometry(0.036, 0.02, 0.1), std({ color: 0xffffff }), 0, 0.08, -0.24);
+      add(new THREE.BoxGeometry(0.032, 0.035, 0.08), std({ color: 0x0284c7, roughness: 0.9 }), 0, 0.105, -0.24);
+      for (let k = 0; k < 4; k++) {
+        add(new THREE.SphereGeometry(0.012 + k * 0.003, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }), (k % 2 ? 0.012 : -0.012), 0.12, -0.22 - k * 0.015);
+      }
+      break;
+    }
+    case 'sponge': {
+      // Dicker zweilagiger Schwamm
+      const g = new THREE.Group(); g.rotation.set(-0.35, 0.1, -0.2); fpToolSlot.add(g);
+      add(new THREE.BoxGeometry(0.14, 0.065, 0.18), std({ color: 0xfacc15, roughness: 0.9 }), 0, 0.02, -0.08, g);
+      add(new THREE.BoxGeometry(0.142, 0.022, 0.182), std({ color: 0x15803d, roughness: 0.95 }), 0, 0.06, -0.08, g);
+      break;
+    }
+    case 'scrub': {
+      // Massiver Holzschrubber mit dichten Borsten
+      const g = new THREE.Group(); g.rotation.set(-0.4, 0, 0); fpToolSlot.add(g);
+      add(new THREE.CylinderGeometry(0.02, 0.02, 0.32, 8), std({ color: 0xa16207, roughness: 0.6 }), 0, 0.05, 0.02, g).rotation.x = Math.PI / 2.8;
+      add(new THREE.BoxGeometry(0.18, 0.04, 0.12), std({ color: 0x854d0e, roughness: 0.7 }), 0, 0.11, -0.16, g);
+      add(new THREE.BoxGeometry(0.17, 0.04, 0.11), std({ color: 0x292524, roughness: 1 }), 0, 0.145, -0.16, g);
+      break;
+    }
+    case 'mop': {
+      // XXL Mikrofaser-Mopp mit Strängen
+      const g = new THREE.Group(); g.rotation.set(-0.3, 0, 0); fpToolSlot.add(g);
+      add(new THREE.CylinderGeometry(0.022, 0.022, 0.35, 8), std({ color: 0x2563eb, metalness: 0.5 }), 0, 0.05, 0, g).rotation.x = Math.PI / 2.7;
+      add(new THREE.CylinderGeometry(0.06, 0.08, 0.06, 12), std({ color: 0x1d4ed8 }), 0, 0.12, -0.18, g);
+      const mopM = std({ color: 0xf8fafc, roughness: 1 });
+      for (let k = 0; k < 12; k++) {
+        const a = k / 12 * TAU;
+        const strand = add(new THREE.CylinderGeometry(0.015, 0.018, 0.16, 6), mopM, Math.cos(a) * 0.06, 0.17, -0.18 + Math.sin(a) * 0.06, g);
+        strand.rotation.set(Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4);
+      }
+      break;
+    }
+    case 'washer': {
+      // Hochdruckreiniger Lanze mit Sprühdüse
+      const gun = add(new THREE.BoxGeometry(0.05, 0.12, 0.18), std({ color: 0xfacc15, roughness: 0.4 }), 0, 0.02, -0.04);
+      gun.rotation.x = -0.3;
+      const lance = add(new THREE.CylinderGeometry(0.014, 0.014, 0.38, 8), std({ color: 0x64748b, metalness: 0.8, roughness: 0.2 }), 0, 0.08, -0.24);
+      lance.rotation.x = Math.PI / 2.4;
+      add(new THREE.CylinderGeometry(0.022, 0.015, 0.06, 8), std({ color: 0xb45309, metalness: 0.7 }), 0, 0.13, -0.42);
+      break;
+    }
+    case 'polish': {
+      // Rotierende Poliermaschine
+      const pBody = add(new THREE.BoxGeometry(0.12, 0.14, 0.18), std({ color: 0xdc2626, metalness: 0.4, roughness: 0.3 }), 0, 0.04, -0.1);
+      pBody.rotation.x = -0.35;
+      const pad = add(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 24), std({ color: 0xffffff, roughness: 1 }), 0, 0.14, -0.22);
+      pad.rotation.x = Math.PI / 2.4;
+      fpSpinPad = pad;
+      break;
+    }
+    case 'laser': {
+      // High-Tech Laser-Polierer mit Leuchtringen
+      const rifle = add(new THREE.CylinderGeometry(0.03, 0.045, 0.4, 12), std({ color: 0x581c87, metalness: 0.6, roughness: 0.3 }), 0, 0.05, -0.15);
+      rifle.rotation.x = Math.PI / 2.4;
+      for (let k = 0; k < 3; k++) {
+        add(new THREE.TorusGeometry(0.048, 0.009, 6, 16), new THREE.MeshBasicMaterial({ color: 0xf472b6 }), 0, 0.02 + k * 0.08, -0.08 - k * 0.1);
+      }
+      break;
+    }
+    case 'comet': {
+      // Kometen-Kärcher 9000
+      const heavy = add(new THREE.CylinderGeometry(0.05, 0.07, 0.45, 14), std({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 }), 0, 0.06, -0.16);
+      heavy.rotation.x = Math.PI / 2.4;
+      for (let k = 0; k < 4; k++) {
+        add(new THREE.TorusGeometry(0.075, 0.012, 8, 16), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }), 0, 0.02 + k * 0.07, -0.06 - k * 0.09);
+      }
+      break;
+    }
+  }
+}
+
+// 3D-Putzradius-Ring (auf der Kugeloberfläche)
+const RING_N = 72;
+const ringGeo = new THREE.BufferGeometry(); ringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((RING_N + 1) * 6), 3));
+{ const ix = []; for (let k = 0; k < RING_N; k++) { const a = k * 2, b = a + 1, c = a + 2, d = a + 3; ix.push(a, b, c, b, d, c); } ringGeo.setIndex(ix); }
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.65, depthWrite: false, side: THREE.DoubleSide });
+const ring = new THREE.Mesh(ringGeo, ringMat); ring.frustumCulled = false; ring.renderOrder = 3; scene.add(ring);
+const _t1 = new V3(), _t2 = new V3(), _rv = new V3();
+function updateRing(c, angR) {
+  const pos = ringGeo.attributes.position.array, R = M.R + 0.08;
+  _t1.set(0, 1, 0); if (Math.abs(c.y) > 0.9) _t1.set(1, 0, 0);
+  _t1.addScaledVector(c, -_t1.dot(c)).normalize(); _t2.crossVectors(c, _t1);
+  for (let k = 0; k <= RING_N; k++) {
+    const al = k / RING_N * TAU, ca = Math.cos(al), sa = Math.sin(al);
+    for (let q = 0; q < 2; q++) {
+      const a = angR * (q ? 1 : 0.82);
+      _rv.copy(c).multiplyScalar(Math.cos(a)).addScaledVector(_t1, ca * Math.sin(a)).addScaledVector(_t2, sa * Math.sin(a)).multiplyScalar(R);
+      pos.set([_rv.x, _rv.y, _rv.z], (k * 2 + q) * 3);
+    }
+  }
+  ringGeo.attributes.position.needsUpdate = true;
+}
+
+// 3D-Richtungspfeil zur Mondbasis
+const arrow = new THREE.Group(); scene.add(arrow);
+{
+  const m = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.2, 16), new THREE.MeshBasicMaterial({ color: 0x4ade80 }));
+  m.rotation.x = Math.PI / 2; arrow.add(m);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 12), new THREE.MeshBasicMaterial({ color: 0x22c55e }));
+  shaft.rotation.x = Math.PI / 2; shaft.position.z = -0.7; arrow.add(shaft);
+}
+arrow.visible = false;
+
+// Dritter-Person Werkzeug-Visual
+let TV = null;
+function buildToolVis() {
+  if (TV) for (const o of [TV.head, TV.hand, TV.link]) if (o) { if (o.parent) o.parent.remove(o); o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose(); }); }
+  const t = tool(); TV = { head: null, hand: null, link: null, beam: false, tip: new V3(), spin: null, color: 0xffffff };
+  const head = new THREE.Group(), hand = new THREE.Group();
+  const add = (parent, geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+  const stick = (r, color) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 8), std({ color, metalness: 0.4, roughness: 0.4 })); m.castShadow = true; scene.add(m); return m; };
+  const beam = (r, color) => { TV.beam = true; TV.color = color; const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.6, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false })); scene.add(m); return m; };
+  switch (t.id) {
+    case 'brush': add(head, new THREE.BoxGeometry(0.22, 0.08, 0.66), std({ color: 0xf8fafc }), 0, 0.22, -0.05); add(head, new THREE.BoxGeometry(0.2, 0.16, 0.34), std({ color: 0x38bdf8, roughness: 1 }), 0, 0.09, 0.1); TV.link = stick(0.045, 0x60a5fa); break;
+    case 'sponge': add(head, new THREE.BoxGeometry(0.8, 0.2, 0.5), std({ color: 0xfacc15, roughness: 1 }), 0, 0.15, 0); add(head, new THREE.BoxGeometry(0.8, 0.07, 0.5), std({ color: 0x16a34a, roughness: 1 }), 0, 0.03, 0); TV.link = stick(0.035, 0xcbd5e1); break;
+    case 'scrub': add(head, new THREE.BoxGeometry(1.15, 0.14, 0.36), std({ color: 0x9a6b3f }), 0, 0.2, 0); add(head, new THREE.BoxGeometry(1.08, 0.12, 0.3), std({ color: 0x1f2937, roughness: 1 }), 0, 0.07, 0); TV.link = stick(0.04, 0x9a6b3f); break;
+    case 'mop': {
+      const m = std({ color: 0xe5e7eb, roughness: 1 });
+      for (let k = 0; k < 16; k++) { const a = k / 16 * TAU, s = add(head, new THREE.CylinderGeometry(0.05, 0.07, 0.8, 6), m, Math.cos(a) * 0.32, 0.1, Math.sin(a) * 0.32); s.rotation.set(Math.sin(a) * 1.25, 0, -Math.cos(a) * 1.25); }
+      add(head, new THREE.CylinderGeometry(0.17, 0.17, 0.14, 12), std({ color: 0x2563eb }), 0, 0.28, 0); TV.link = stick(0.04, 0x2563eb); break;
+    }
+    case 'polish': {
+      add(head, new THREE.CylinderGeometry(0.85, 0.9, 0.28, 32), std({ color: 0xdc2626, metalness: 0.3, roughness: 0.35 }), 0, 0.24, 0);
+      const pad = add(head, new THREE.CylinderGeometry(0.95, 0.95, 0.08, 32), std({ color: 0xf8fafc, roughness: 1 }), 0, 0.05, 0);
+      for (let k = 0; k < 3; k++) { const b = add(pad, new THREE.BoxGeometry(1.8, 0.09, 0.12), std({ color: 0x94a3b8 })); b.rotation.y = k * Math.PI / 3; }
+      TV.spin = pad; add(head, new THREE.BoxGeometry(0.42, 0.32, 0.5), std({ color: 0x334155 }), 0, 0.54, 0); TV.link = stick(0.05, 0xd1d5db); break;
+    }
+    case 'washer':
+      add(hand, new THREE.BoxGeometry(0.14, 0.2, 0.36), std({ color: 0xfacc15 }), 0, -0.05, 0.1); add(hand, new THREE.CylinderGeometry(0.035, 0.035, 0.5, 8), std({ color: 0x334155, metalness: 0.6 }), 0, 0, 0.5).rotation.x = Math.PI / 2;
+      TV.tip.set(0, 0, 0.76); TV.link = beam(0.06, 0x7dd3fc); break;
+    case 'laser': {
+      const c = add(hand, new THREE.CylinderGeometry(0.08, 0.1, 0.6, 14), std({ color: 0x581c87, metalness: 0.6, roughness: 0.3 }), 0, 0, 0.25); c.rotation.x = Math.PI / 2;
+      for (let k = 0; k < 3; k++) { add(hand, new THREE.TorusGeometry(0.1, 0.025, 6, 16), new THREE.MeshBasicMaterial({ color: 0xf472b6 }), 0, 0, 0.12 + k * 0.16); }
+      TV.tip.set(0, 0, 0.58); TV.link = beam(0.07, 0xf472b6); break;
+    }
+    case 'comet': {
+      const c = add(hand, new THREE.CylinderGeometry(0.15, 0.2, 0.95, 16), std({ color: 0x0f172a, metalness: 0.7, roughness: 0.25 }), 0, 0, 0.35); c.rotation.x = Math.PI / 2;
+      for (let k = 0; k < 4; k++) add(hand, new THREE.TorusGeometry(0.18, 0.03, 6, 18), new THREE.MeshBasicMaterial({ color: 0x67e8f9 }), 0, 0, 0.05 + k * 0.22);
+      add(hand, new THREE.BoxGeometry(0.1, 0.2, 0.14), std({ color: 0x334155 }), 0, -0.16, 0.05);
+      TV.tip.set(0, 0, 0.85); TV.link = beam(0.14, 0x67e8f9); break;
+    }
+  }
+  if (head.children.length) { scene.add(head); TV.head = head; }
+  if (hand.children.length) { hand.rotation.x = Math.PI / 2; handAnchor.add(hand); TV.hand = hand; }
+  buildFpTool();
+  updateToolHud();
+}
+
+const _ha = new V3(), _hp = new V3(), _lm = new V3(), _ld = new V3(), _tip = new V3(), _hu = new V3();
+function setLink(m, a, b) {
+  _lm.addVectors(a, b).multiplyScalar(0.5); m.position.copy(_lm);
+  _ld.subVectors(b, a); const len = Math.max(0.01, _ld.length());
+  m.scale.set(1, len, 1); m.quaternion.setFromUnitVectors(UP, _ld.multiplyScalar(1 / len));
+}
+
+// ---------- Roboter ----------
+const robots = [];
+function placeRobot(r) { r.d.copy(sph(2.8 / M.R, rnd(0, TAU))); r.f.set(rnd(-1, 1), 0, rnd(-1, 1)).addScaledVector(r.d, -r.d.dot(r.f)); if (r.f.lengthSq() < 1e-4) r.f.set(1, 0, 0); r.f.addScaledVector(r.d, -r.d.dot(r.f)).normalize(); r.target.copy(r.d); r.rt = 0; }
+function syncRobots() {
+  while (robots.length < save.up.robots) {
+    const g = new THREE.Group();
+    const add = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.castShadow = true; g.add(m); return m; };
+    add(new THREE.CylinderGeometry(0.38, 0.42, 0.2, 24), std({ color: pick([0xf97316, 0x22c55e, 0x3b82f6, 0xec4899]), metalness: 0.3, roughness: 0.4 }), 0.17);
+    add(new THREE.SphereGeometry(0.22, 16, 8, 0, TAU, 0, Math.PI / 2), std({ color: 0xe2e8f0, metalness: 0.5, roughness: 0.2 }), 0.27);
+    const eye = add(new THREE.BoxGeometry(0.2, 0.05, 0.03), new THREE.MeshBasicMaterial({ color: 0x22d3ee }), 0.38); eye.position.z = 0.15;
+    add(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 4), std({ color: 0x334155 }), 0.6);
+    const light = add(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfacc15 }), 0.77);
+    const br = add(new THREE.CylinderGeometry(0.36, 0.36, 0.05, 16), std({ color: 0x334155 }), 0.04);
+    for (let k = 0; k < 2; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.06, 0.08), std({ color: 0xfacc15 })); b.rotation.y = k * Math.PI / 2; br.add(b); }
+    scene.add(g);
+    const r = { g, br, light, d: new V3(), f: new V3(), target: new V3(), rt: 0, t: rnd(0, 6) };
+    if (M) placeRobot(r); robots.push(r);
+  }
+}
+const _rt = new V3(), _rc = new V3(), _disp = new V3();
+function randTangent(d, out) { out.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).addScaledVector(d, -out.dot(d)); if (out.lengthSq() < 1e-6) out.set(d.y, -d.x, 0); return out.normalize(); }
+function retarget(r) {
+  const tier = tool().tier; let bs = 0.04, found = false;
+  r.rt = rnd(2.5, 4.5);
+  for (let k = 0; k < 16; k++) {
+    randTangent(r.d, _rt); const a = rnd(0.6, 4) / M.R;
+    _rc.copy(r.d).multiplyScalar(Math.cos(a)).addScaledVector(_rt, Math.sin(a));
+    const idx = cellOf(_rc), s = amount[idx] * (hard[idx] <= tier ? 1 : 0.02) - a * 0.03;
+    if (s > bs) { bs = s; r.target.copy(_rc); found = true; }
+  }
+  if (found) return;
+  let bd = -2;
+  for (let k = 0; k < 8; k++) {
+    randTangent(r.d, _rt); const a = rnd(2, 6) / M.R;
+    _rc.copy(r.d).multiplyScalar(Math.cos(a)).addScaledVector(_rt, Math.sin(a));
+    const dtBase = _rc.dot(M.station);
+    if (dtBase > bd) { bd = dtBase; r.target.copy(_rc); }
+  }
+}
+function steer(d, f, target, maxTurn) {
+  _rt.copy(target).addScaledVector(d, -target.dot(d)); if (_rt.lengthSq() < 1e-6) return 0;
+  _rt.normalize();
+  const ang = Math.atan2(_rc.crossVectors(f, _rt).dot(d), f.dot(_rt));
+  _q.setFromAxisAngle(d, clamp(ang, -maxTurn, maxTurn)); f.applyQuaternion(_q);
+  return ang;
+}
+
+// ---------- Weltraumschrott ----------
+const junk = [];
+const JUNK = {
+  sat: { n: 'Satellitenschrott', mk: g => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), std({ color: 0xd4af37, metalness: 0.8, roughness: 0.3 })); g.add(b); for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.26), std({ color: 0x1e3a8a, metalness: 0.5, roughness: 0.3 })); p.position.x = s * 0.42; g.add(p); } } },
+  sock: { n: 'Astronautensocke', mk: g => { const m = std({ color: pick([0xffffff, 0xdc2626, 0x16a34a]) }); const a = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.34, 0.12), m); g.add(a); const f = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.22), m); f.position.set(0, -0.12, 0.08); g.add(f); } },
+  golf: { n: 'Golfball', mk: g => g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 2), std({ color: 0xffffff, roughness: 0.4, flatShading: true }))) },
+  can: { n: 'Raumfahrer-Dose', mk: g => g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.3, 14), std({ color: pick([0xc0392b, 0x2563eb, 0x16a34a]), metalness: 0.7, roughness: 0.3 }))) },
+  gum: { n: 'Alien-Kaugummi', mk: g => g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.17, 1), std({ color: 0xf472b6, roughness: 0.3, flatShading: true }))) },
+  glove: { n: 'Verlorener Handschuh', mk: g => { const m = std({ color: 0xe5e7eb }); g.add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.1), m)); const t = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.08), m); t.position.set(0.15, 0.04, 0); t.rotation.z = -0.6; g.add(t); } },
+  star: { n: 'Sternschnuppe', mk: g => { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.26, 0), new THREE.MeshStandardMaterial({ color: 0xfde047, emissive: 0xfacc15, emissiveIntensity: 1.6, metalness: 0.5, roughness: 0.2 })); g.add(s); } }
+};
+const JUNK_KEYS = ['sat', 'sock', 'golf', 'can', 'gum', 'glove'];
+function spawnJunk(d0) {
+  const gold = Math.random() < 0.07, type = gold ? 'star' : pick(JUNK_KEYS);
+  const g = new THREE.Group(); JUNK[type].mk(g); g.traverse(o => { if (o.isMesh) o.castShadow = true; }); M.group.add(g);
+  const val = Math.max(1, Math.round(rnd(4, 8) * VAL[M.def.soft.h] * M.valMult * (1 + M.idx * 0.1) * (gold ? 10 : 1)));
+  junk.push({ d: d0 ? d0.clone().normalize() : randomFreeDir(), g, type, val, t: rnd(0, 6), spin: rnd(-1.5, 1.5) });
+}
+
+// ---------- Meteoriten ----------
+const meteors = [];
+const ringRedMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
+function spawnMeteor() {
+  let d = null;
+  for (let t = 0; t < 20 && !d; t++) {
+    const v = Math.random() < 0.55 ? (() => { randTangent(P.d, _rt); const a = rnd(0, 9) / M.R; return P.d.clone().multiplyScalar(Math.cos(a)).addScaledVector(_rt, Math.sin(a)).normalize(); })() : randomFreeDir(7);
+    if (v.y < Math.cos(7 / M.R)) d = v;
+  }
+  if (!d) return;
+  const ringM = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.35, 48), ringRedMat.clone());
+  ringM.position.copy(d).multiplyScalar(M.R + 0.1); ringM.quaternion.setFromUnitVectors(new V3(0, 0, 1), d); ringM.renderOrder = 4; M.group.add(ringM);
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.75, 0), new THREE.MeshStandardMaterial({ color: 0x57534e, emissive: 0xf97316, emissiveIntensity: 0.9, flatShading: true }));
+  const trail = new THREE.Mesh(new THREE.ConeGeometry(0.7, 6, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xfb923c, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }));
+  trail.position.y = 3.2; rock.add(trail); M.group.add(rock);
+  meteors.push({ d, ring: ringM, rock, t: 3.6, T: 3.6 });
+  sfx.whistle();
+}
+
+// ---------- Partikel-System ----------
+const dotTex = canvasTex(64, 64, (g, w) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, w); });
+const starTex = canvasTex(64, 64, (g, w) => { g.translate(32, 32); const gr = g.createRadialGradient(0, 0, 0, 0, 0, 30); gr.addColorStop(0, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; for (const r of [0, Math.PI / 2]) { g.save(); g.rotate(r); g.beginPath(); g.ellipse(0, 0, 30, 4, 0, 0, TAU); g.fill(); g.restore(); } g.beginPath(); g.arc(0, 0, 8, 0, TAU); g.fill(); });
+function makePool(n, size, additive, map) {
+  const geo = new THREE.BufferGeometry(), pos = new Float32Array(n * 3).fill(9999), col = new Float32Array(n * 3).fill(1);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({ size, map, transparent: true, opacity: 0.85, vertexColors: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; scene.add(pts);
+  const vel = new Float32Array(n * 3), life = new Float32Array(n), maxL = new Float32Array(n);
+  return { pts, n, cur: 0, pos, col, vel, life, maxL };
+}
+const dustP = makePool(400, 0.45, false, dotTex);
+const sparkP = makePool(250, 0.55, true, starTex);
+const sprayP = makePool(200, 0.35, true, dotTex);
+function emit(pool, p, vx, vy, vz, dur, r = 1, g = 1, b = 1) {
+  const i = pool.cur = (pool.cur + 1) % pool.n;
+  pool.pos[i * 3] = p.x; pool.pos[i * 3 + 1] = p.y; pool.pos[i * 3 + 2] = p.z;
+  pool.vel[i * 3] = vx; pool.vel[i * 3 + 1] = vy; pool.vel[i * 3 + 2] = vz;
+  pool.col[i * 3] = r; pool.col[i * 3 + 1] = g; pool.col[i * 3 + 2] = b;
+  pool.life[i] = dur; pool.maxL[i] = dur;
+}
+function updatePool(pool, dt, grav = 3) {
+  const { pos, vel, life, maxL } = pool;
+  for (let i = 0; i < pool.n; i++) {
+    if (life[i] <= 0) continue;
+    life[i] -= dt;
+    if (life[i] <= 0) { pos[i * 3] = 9999; continue; }
+    const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2], l = Math.hypot(x, y, z) || 1;
+    vel[i * 3] -= x / l * grav * dt; vel[i * 3 + 1] -= y / l * grav * dt; vel[i * 3 + 2] -= z / l * grav * dt;
+    pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+    if (M && l < M.R) { pos[i * 3] *= M.R / l; pos[i * 3 + 1] *= M.R / l; pos[i * 3 + 2] *= M.R / l; vel[i * 3] *= 0.3; vel[i * 3 + 1] *= 0.3; vel[i * 3 + 2] *= 0.3; }
+  }
+  pool.pts.geometry.attributes.position.needsUpdate = true; pool.pts.geometry.attributes.color.needsUpdate = true;
+}
+const _pe = new V3(), _pv = new V3();
+function burst(pool, at, n, speed, life, col, up) {
+  for (let k = 0; k < n; k++) {
+    randTangent(up, _pv); _pv.multiplyScalar(rnd(0.2, 1) * speed).addScaledVector(up, rnd(0.3, 1.2) * speed);
+    emit(pool, at, _pv.x, _pv.y, _pv.z, life * rnd(0.6, 1.2), col[0], col[1], col[2]);
+  }
+}
+
+// Wegfliegende Dreck-Flocken (InstancedMesh, taumeln und rieseln zurück)
+const FLAKE_N = 320;
+const flakeMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.07, 0), new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), FLAKE_N);
+flakeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); flakeMesh.frustumCulled = false; flakeMesh.castShadow = false;
+const flakes = Array.from({ length: FLAKE_N }, () => ({ p: new V3(), v: new V3(), ax: new V3(1, 0, 0), a: 0, w: 0, s: 1, life: 0, max: 1 }));
+let flakeCur = 0;
+const _fm = new THREE.Matrix4(), _fq = new THREE.Quaternion(), _fs = new V3(), _fc = new THREE.Color();
+{ _fm.makeScale(0, 0, 0); for (let i = 0; i < FLAKE_N; i++) { flakeMesh.setMatrixAt(i, _fm); flakeMesh.setColorAt(i, _fc.setRGB(1, 1, 1)); } }
+scene.add(flakeMesh);
+function emitFlake(at, up, away, speed, col, size = 1) {
+  const F = flakes[flakeCur = (flakeCur + 1) % FLAKE_N];
+  F.p.copy(at);
+  randTangent(up, F.v); F.v.multiplyScalar(rnd(0.3, 1.2) * speed);
+  if (away) F.v.addScaledVector(away, rnd(0.4, 1.3) * speed);
+  F.v.addScaledVector(up, rnd(0.7, 1.6) * speed);
+  F.ax.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).normalize(); F.a = rnd(0, TAU); F.w = rnd(6, 16) * (Math.random() < 0.5 ? -1 : 1);
+  F.s = rnd(0.55, 1.35) * size; F.life = F.max = rnd(0.9, 1.6);
+  const v = rnd(0.75, 1.1); flakeMesh.setColorAt(flakeCur, _fc.setRGB(col[0] / 255 * v, col[1] / 255 * v, col[2] / 255 * v, THREE.SRGBColorSpace));
+  flakeMesh.instanceColor.needsUpdate = true;
+}
+function updateFlakes(dt) {
+  let any = false;
+  for (let i = 0; i < FLAKE_N; i++) {
+    const F = flakes[i]; if (F.life <= 0) continue;
+    any = true; F.life -= dt;
+    if (F.life <= 0 || !M) { _fm.makeScale(0, 0, 0); flakeMesh.setMatrixAt(i, _fm); F.life = 0; continue; }
+    const l = F.p.length() || 1;
+    F.v.addScaledVector(F.p, -GRAV * 0.55 * dt / l);
+    F.p.addScaledVector(F.v, dt);
+    const floor = M.R + 0.05, onFloor = F.p.length() <= floor;
+    if (onFloor) { F.p.setLength(floor); F.v.multiplyScalar(0.25); F.w *= 0.6; }
+    F.a += F.w * dt;
+    const k = Math.min(1, F.life / F.max * 3) * F.s;
+    _fq.setFromAxisAngle(F.ax, F.a); _fs.set(k * 1.4, k * 0.35, k);
+    _fm.compose(F.p, _fq, _fs); flakeMesh.setMatrixAt(i, _fm);
+  }
+  if (any) flakeMesh.instanceMatrix.needsUpdate = true;
+}
+
+// ---------- Audio ----------
+let actx = null, loopS = null;
+function audio() { try { actx = ArcadeCore.getAudioContext(); if (actx && actx.state === 'suspended') actx.resume(); } catch (e) {} }
+function noise(dur, freq, gain, q = 1, type = 'bandpass') {
+  if (!actx || ArcadeCore.isMuted()) return;
+  const n = Math.floor(actx.sampleRate * dur), b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = actx.createBufferSource(); s.buffer = b;
+  const f = actx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const g = actx.createGain(); g.gain.value = gain; s.connect(f); f.connect(g); g.connect(actx.destination); s.start();
+}
+const TOOL_SOUND = { brush: [2600, 3, 0, 0.05], sponge: [900, 1.2, 0, 0.05], scrub: [1800, 2, 0, 0.06], mop: [600, 1, 0, 0.06], washer: [3200, 0.7, 0, 0.07], polish: [500, 1.5, 70, 0.07], laser: [1400, 4, 880, 0.05], comet: [380, 1, 55, 0.08] };
+function scrubSound(on, intensity) {
+  if (!actx) return;
+  if (!loopS) {
+    const n = actx.sampleRate * 2, b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const s = actx.createBufferSource(); s.buffer = b; s.loop = true;
+    const f = actx.createBiquadFilter(); f.type = 'bandpass';
+    const o = actx.createOscillator(); o.type = 'sawtooth'; const og = actx.createGain(); og.gain.value = 0;
+    const g = actx.createGain(); g.gain.value = 0;
+    s.connect(f); o.connect(og); og.connect(f); f.connect(g); g.connect(actx.destination); s.start(); o.start();
+    loopS = { f, g, o, og };
+  }
+  const [fr, q, osc, vol] = TOOL_SOUND[tool().id], tNow = actx.currentTime;
+  loopS.f.frequency.setTargetAtTime(fr * (1 + intensity * 0.2), tNow, 0.08); loopS.f.Q.value = q;
+  loopS.o.frequency.setTargetAtTime(osc || 100, tNow, 0.1); loopS.og.gain.setTargetAtTime(osc ? 0.4 : 0, tNow, 0.1);
+  loopS.g.gain.setTargetAtTime(on && !ArcadeCore.isMuted() ? vol * (0.6 + intensity * 0.6) : 0, tNow, 0.06);
+}
+const tone = (f, d, t = 'sine', g = 0.1) => ArcadeCore.playTone(f, d, t, g);
+const sfx = {
+  step() { noise(0.05, rnd(200, 320), 0.035, 1.5); },
+  jump() { tone(330, 0.12, 'sine', 0.08); setTimeout(() => tone(500, 0.1, 'sine', 0.06), 60); },
+  land() { noise(0.18, 160, 0.25, 1, 'lowpass'); },
+  coin() { ArcadeCore.coin(); },
+  sell(n) { for (let i = 0; i < Math.min(6, 2 + n); i++) setTimeout(() => tone(880 + i * 140, 0.08, 'square', 0.05), i * 60); },
+  buy() { ArcadeCore.powerup(); },
+  deny() { tone(140, 0.16, 'square', 0.06); },
+  bump() { noise(0.12, 260, 0.25, 1, 'lowpass'); tone(110, 0.12, 'sine', 0.12); },
+  speak() { for (let i = 0; i < 4; i++) setTimeout(() => tone(rnd(160, 260), 0.07, 'triangle', 0.07), i * 85); },
+  whistle() {
+    if (!actx || ArcadeCore.isMuted()) return;
+    try { const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime; o.type = 'sine'; o.frequency.setValueAtTime(1500, t); o.frequency.exponentialRampToValueAtTime(260, t + 3.5); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 1.5); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.6); o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 3.7); } catch (e) {}
+  },
+  boom() { ArcadeCore.explosion(); noise(0.7, 120, 0.5, 0.7, 'lowpass'); },
+  beam() { for (let i = 0; i < 8; i++) setTimeout(() => tone(400 + i * 120, 0.06, 'sine', 0.05), i * 35); },
+  sparkle() { tone(rnd(1800, 2600), 0.05, 'sine', 0.025); }
+};
+
+// ---------- HUD-Helfer ----------
+let toastT = 0, bannerT = 0, sayT = 0, shake = 0, hardToastT = 0, fullToastT = 0, rateAcc = 0, hudT = 0;
+function toast(msg, t = 3) { $('toast').innerHTML = msg; $('toast').classList.add('show'); toastT = t; }
+function banner(msg, t = 2) { $('banner').innerHTML = msg; $('banner').classList.add('show'); bannerT = t; }
+const moodEmoji = () => M.clean < 50 ? '🌚' : M.clean < 75 ? '🌕' : '🌝';
+
+function say(text, t = 4.5) { $('say').innerHTML = `${moodEmoji()} <b>${M.name}:</b> „${text}“`; $('say').classList.add('show'); sayT = t; sfx.speak(); }
+const pops = [];
+function popAt(text, p, color = '#facc15') {
+  const el = document.createElement('div'); el.className = 'pop'; el.textContent = text; el.style.color = color; $('pops').appendChild(el);
+  pops.push({ el, p: p.clone(), t: 1.3 });
+}
+function updateToolHud() { const t = tool(); $('tool').innerHTML = `<span class="ic">${t.icon}</span><span>${t.name}<br><small style="color:#c4b5fd">Stufe ${t.tier} · Radius ${f1(t.r)} m</small></span>`; }
+function earn(n) { save.money += n; save.earned += n; }
+
+// ---------- Spielzustand & Gameplay ----------
+let state = 'menu', prevState = 'play', dragTurn = 0, cleanT = 0, saveT = 15, playTime = 0;
+const keys = {};
+const cam = { pos: new V3(0, 6, 34), look: new V3(), up: new V3(0, 1, 0), zoom: 0, zoomT: 0, snap: true };
+
+function toggleView() {
+  camMode = (camMode === '1st') ? '3rd' : '1st';
+  $('bView').textContent = (camMode === '1st') ? '👁️ Verfolger (C)' : '👁️ Ego (C)';
+  $('visorHud').style.display = (camMode === '1st') ? 'block' : 'none';
+  toast((camMode === '1st') ? '👁️ Ego-Perspektive: Wische den Staub direkt vor dir weg!' : '👁️ 3D-Verfolger-Kamera aktiv', 1.8);
+}
+
+function collectDirt(res) {
+  if (res.u <= 1e-5) return 0;
+  const room = Math.max(0, tankCap() - P.tank.u), take = Math.min(1, room / res.u);
+  P.tank.u += res.u * take; P.tank.v += res.v * take; save.cleaned += res.u * take; rateAcc += res.v * take;
+  return take;
+}
+function stomp() {
+  const l = save.up.jet; if (!l || P.tank.u >= tankCap() - 1e-6) return;
+  const R = M.R, T = tool(), r = stompR(l);
+  const res = scrub(P.d, r / R, 0.9 + 0.15 * l, T.tier);
+  if (collectDirt(res) > 0) {
+    const col = M.def.soft.col, at = P.d.clone().multiplyScalar(R + 0.1);
+    for (let k = 0; k < Math.min(40, 8 + res.u * 6); k++) {
+      randTangent(P.d, _rt); _pe.copy(P.d).multiplyScalar(Math.cos(rnd(0.2, 1) * r / R)).addScaledVector(_rt, Math.sin(rnd(0.2, 1) * r / R)).multiplyScalar(R + 0.1);
+      emitFlake(_pe, P.d, _rt, rnd(1.5, 3), col, 1.2);
+    }
+    shake = Math.max(shake, 0.25); popAt('💥 Stampf-Putz!', at, '#fde68a');
+  }
+}
+
+function sellTank(beamed) {
+  const gain = Math.round(P.tank.v * charm());
+  if (gain < 1) return;
+  earn(gain); popAt('+' + fmt(gain) + ' 🪙', astro.position.clone().addScaledVector(P.d, 2.2));
+  sfx.sell(Math.log10(gain + 1) | 0); if (beamed) sfx.beam();
+  P.tank.u = 0; P.tank.v = 0;
+  if (!save.seen) { save.seen = true; toast('💰 Verkauft! Öffne mit <b>B</b> den Shop – der Schwamm putzt breiter, der Schrubber schafft harte Kruste.', 7); }
+  else toast(`♻️ ${beamed ? 'Gebeamt' : 'Dreck verkauft'}: +${fmt(gain)} 🪙`, 2);
+  persist();
+}
+function moonBump(o) {
+  if (P.bumpT > 0) return;
+  P.bumpT = 6; sfx.bump();
+  if (o.kind === 'eye') { say(pick(LINES.eye), 3); const E = M.eyes.find(e => e.d === o.d); if (E) E.blink = 0.6; }
+  else say(pick(LINES.nose), 3);
+}
+function impact(m) {
+  const R = M.R, pos = m.d.clone().multiplyScalar(R + 0.1);
+  deposit(m.d, 2.7 / R, 0.85);
+  burst(dustP, pos, 60, 6, 1.6, M.def.soft.col.map(c => c / 255), m.d);
+  burst(sparkP, pos, 30, 7, 0.8, [1, 0.6, 0.2], m.d);
+  for (let k = 0; k < 3; k++) { randTangent(m.d, _rt); spawnJunk(m.d.clone().addScaledVector(_rt, rnd(0.6, 2.2) / R)); }
+  sfx.boom();
+  const dist = Math.acos(clamp(P.d.dot(m.d), -1, 1)) * R;
+  shake = Math.max(shake, clamp(1 - dist / 14, 0, 1));
+  if (dist < 2.5 && P.h < 1.6) {
+    const lost = P.tank.u * 0.3; P.tank.u -= lost; P.tank.v *= 0.7;
+    _rt.copy(P.d).addScaledVector(m.d, -P.d.dot(m.d)); if (_rt.lengthSq() < 1e-8) _rt.copy(P.f); _rt.normalize();
+    P.kv.copy(_rt).multiplyScalar(8); P.vh = 6; P.h = Math.max(P.h, 0.05);
+    $('hurt').style.opacity = 0.9;
+    toast(`☄️ Volltreffer! ${lost > 0.5 ? fmt(lost) + ' Liter Dreck verschüttet.' : 'Zum Glück war der Tank leer.'}`, 3);
+  }
+  if (dist < 22 && Math.random() < 0.6) say(pick(LINES.meteor), 3.5);
+}
+
+// Sphärischer Raycast auf den Mond
+const _rayDir = new V3(), _camPos = new V3(), _hitPos = new V3();
+function raycastMoon(camPos, dir, R) {
+  const b = camPos.dot(dir);
+  const c = camPos.lengthSq() - R * R;
+  const d = b * b - c;
+  if (d >= 0) {
+    const t = -b - Math.sqrt(d);
+    if (t > 0 && t < 14) {
+      _hitPos.copy(camPos).addScaledVector(dir, t);
+      return _hitPos.normalize();
+    }
+  }
+  return null;
+}
+
+function updatePlayer(dt, now) {
+  const R = M.R;
+  let fwd = 0, turn = 0;
+  if (keys.w || keys.arrowup) fwd += 1; if (keys.s || keys.arrowdown) fwd -= 1;
+  if (keys.a || keys.arrowleft) turn += 1; if (keys.d || keys.arrowright) turn -= 1;
+  fwd = clamp(fwd - joy.y, -1, 1); turn = clamp(turn - joy.x * 0.9, -1, 1);
+  const ta = turn * 2.5 * dt + dragTurn; dragTurn = 0;
+  if (ta) { _q.setFromAxisAngle(P.d, ta); P.f.applyQuaternion(_q); }
+  const spd = walkSpeed() * (fwd < 0 ? 0.6 : 1);
+  P.kv.addScaledVector(P.d, -P.kv.dot(P.d)).multiplyScalar(Math.exp(-dt * (P.h > 0 ? 0.8 : 4)));
+  _disp.copy(P.f).multiplyScalar(fwd * spd * dt).addScaledVector(P.kv, dt);
+  moveOnSphere(P.d, P.f, _disp, R + P.h);
+  const hit = collide(P.d, P.f, 0.36, P.h);
+  if (hit && (hit.kind === 'eye' || hit.kind === 'nose')) moonBump(hit);
+  P.bumpT -= dt;
+  if (P.h > 0 || P.vh > 0) {
+    P.vh -= GRAV * dt; P.h += P.vh * dt;
+    if (P.h <= 0) { if (P.vh < -2.5) { sfx.land(); burst(dustP, P.d.clone().multiplyScalar(R + 0.1), 14, 1.6, 0.8, M.def.soft.col.map(c => c / 255), P.d); if (P.vh < -4) { P.h = 0; stomp(); } } P.h = 0; P.vh = 0; }
+  }
+  const moving = Math.abs(fwd) > 0.05 && P.h <= 0;
+  if (moving) { const before = Math.floor(P.walk / Math.PI); P.walk += dt * spd * 2.4 * Math.abs(fwd); if (Math.floor(P.walk / Math.PI) !== before) sfx.step(); }
+
+  // Putz-Zentren & Zielpunkt ermitteln
+  const T = tool(), onGround = P.h < 0.04, full = P.tank.u >= tankCap() - 1e-6;
+  brushCenters(now, moving);
+  const onPad = P.d.dot(M.station) > Math.cos(2.4 / R);
+
+  // In Ego-Perspektive: Raycast vom Fadenkreuz auf den Mond
+  let targetCleanDir = P.cleanC;
+  if (camMode === '1st') {
+    _camPos.copy(P.d).multiplyScalar(R + P.h + 1.25);
+    _rayDir.copy(P.f).multiplyScalar(Math.cos(lookPitch)).addScaledVector(P.d, Math.sin(lookPitch)).normalize();
+    const hitDir = raycastMoon(_camPos, _rayDir, R);
+    if (hitDir) {
+      targetCleanDir = hitDir;
+      P.ringC.copy(hitDir);
+      P.cleanC.copy(hitDir);
+    }
+  }
+
+  isWiping = isMouseDown || isTouchWiping || !!keys.e || !!keys.f;
+  swipeE *= Math.exp(-dt * (isWiping ? 2.2 : 6));
+  tempo = 1 + swipeE;
+  P.active = onGround && !full && !onPad;
+  P.scrubbing = false;
+  let blockedRing = false;
+
+  if (P.active) {
+    // Wenn aktiv gewischt wird (Mausklick/Halten), 2.2x Turboschub + Staub-Explosion
+    const powerMult = isWiping ? 1.6 * tempo : (moving ? 1.0 : 0.6);
+    const res = scrub(targetCleanDir, T.r / R, T.p * soapMult() * powerMult * dt, T.tier);
+    
+    if (res.u > 1e-5) {
+      collectDirt(res);
+      P.scrubbing = res.u > dt * 0.01;
+      
+      const hp = _hp.copy(targetCleanDir).multiplyScalar(R + 0.15), col = (res.blocked ? M.def.hard : M.def.soft).col;
+      // Dreck-Flocken fliegen vom Werkzeug weg – mehr, je flotter gewischt wird
+      _ld.copy(P.f).multiplyScalar(-1).addScaledVector(_hu, swipeDir * 0.8);
+      let fl = Math.min(4, res.u * (isWiping ? 9 : 4) * tempo / Math.max(dt * 60, 0.5));
+      while (fl > 0) { if (Math.random() < fl) { _pe.copy(hp).addScaledVector(_hu, rnd(-0.5, 0.5) * T.r); emitFlake(_pe, targetCleanDir, _ld, isWiping ? 1.2 + tempo * 0.5 : 0.9, col); } fl -= 1; }
+      
+      // Sichtbare Staubwolken, die beim Wischen aufwirbeln!
+      if (Math.random() < (isWiping ? 0.95 : 0.7)) {
+        emit(dustP, hp.addScaledVector(_hu, rnd(-0.4, 0.4) * T.r), rnd(-1.5, 1.5), rnd(-1.5, 1.5), rnd(-1.5, 1.5), 0.75, col[0] / 255, col[1] / 255, col[2] / 255);
+      }
+      // Hochdruck-Wasserstrahl / Laser / Kometen-Partikel
+      if (isWiping && (T.id === 'washer' || T.id === 'laser' || T.id === 'comet')) {
+        const c = new THREE.Color(T.id === 'washer' ? 0x7dd3fc : T.id === 'laser' ? 0xf472b6 : 0x67e8f9);
+        emit(sprayP, hp, rnd(-2, 2), rnd(-2, 2), rnd(-2, 2), 0.45, c.r, c.g, c.b);
+      }
+      // Glanz-Funkeln bei frisch gereinigtem Mondgestein
+      if (res.cleared && Math.random() < 0.6) {
+        randTangent(P.ringC, _rt); _pe.copy(P.ringC).multiplyScalar(Math.cos(rnd(0, T.r) / R)).addScaledVector(_rt, Math.sin(rnd(0, T.r) / R)).multiplyScalar(R + 0.2);
+        emit(sparkP, _pe, 0, 0, 0, 0.65);
+        if (Math.random() < 0.2) sfx.sparkle();
+      }
+    }
+    if (res.blocked && res.hardCells > res.cells * 0.5) {
+      blockedRing = true;
+      if (hardToastT <= 0) {
+        hardToastT = 7;
+        const dn = res.blocked === M.def.hard.h ? M.def.hard.name : M.def.soft.name, need = TOOLS.find(x => x.tier >= res.blocked);
+        toast(`🪨 <b>${dn}</b> ist zu hart für ${T.name}! Du brauchst Stufe ${res.blocked}${need ? ` (z. B. ${need.icon} ${need.name})` : ''} → Shop <b>B</b>`, 4.5);
+      }
+    }
+  }
+
+  if (full && onGround && fullToastT <= 0) {
+    fullToastT = 12;
+    toast('🎒 Tank voll! Folge dem Kompass zur <b>Mondbasis am Nordpol</b>' + (save.up.beam ? ' – oder beame mit <b>R</b>.' : '.'), 4);
+  }
+  hardToastT -= dt; fullToastT -= dt;
+
+  // Sound-Effekte
+  scrubSound(P.active && (P.scrubbing || isWiping), Math.min(1, T.r / 2) * (isWiping ? 1.3 : 0.8));
+
+  // 3D-Ring aktualisieren
+  ringMat.color.setHex(full ? 0x94a3b8 : blockedRing ? 0xef4444 : isWiping ? (tempo > 1.8 ? 0xfb923c : 0xfacc15) : 0x4ade80);
+  ringMat.opacity = 0.4 + 0.25 * Math.sin(now * 0.008);
+  ring.visible = onGround && !onPad;
+  updateRing(P.ringC, T.r / R);
+
+  // Reticle UI (Fadenkreuz)
+  const retEl = $('reticle');
+  if (retEl) {
+    if (blockedRing) { retEl.className = 'blocked'; $('reticleHint').textContent = 'ZU HART'; }
+    else if (isWiping && P.active) { retEl.className = 'active'; $('reticleHint').textContent = tempo > 1.15 ? `TEMPO ×${tempo.toFixed(1).replace('.', ',')} 🔥` : 'WISCHT ✨ – hin & her!'; }
+    else { retEl.className = ''; $('reticleHint').textContent = '🧽 SCHRUBBEN'; }
+  }
+
+  // Verkaufen an Mondbasis
+  if (onPad && P.tank.u > 0.01) sellTank(false);
+
+  // 3D-Leitpfeil
+  const toBase = P.d.dot(M.station) < Math.cos(3 / R);
+  arrow.visible = toBase && P.tank.u >= tankCap() * 0.8;
+  if (arrow.visible) {
+    _rt.copy(M.station).addScaledVector(P.d, -M.station.dot(P.d)).normalize();
+    arrow.position.copy(P.d).multiplyScalar(R + P.h + 2.0 + Math.sin(now * 0.005) * 0.12);
+    orientUp(arrow, P.d, _rt);
+  }
+}
+
+function brushCenters(now, moving) {
+  const T = tool(), R = M.R, off = T.r * 0.55 + 0.6;
+  _hu.crossVectors(P.f, P.d);
+  P.ringC.copy(P.d).multiplyScalar(R).addScaledVector(P.f, off).normalize();
+  const wig = Math.sin(now * 0.018) * (moving ? 0.06 : 0.22) * T.r;
+  P.cleanC.copy(P.d).multiplyScalar(R).addScaledVector(P.f, off).addScaledVector(_hu, wig).normalize();
+}
+
+const _ax = new V3(), _ct = new V3();
+function moveOnSphere(d, f, disp, R) {
+  const len = disp.length(); if (len < 1e-7) return;
+  _ax.crossVectors(d, disp).normalize(); _q.setFromAxisAngle(_ax, len / R);
+  d.applyQuaternion(_q).normalize(); f.applyQuaternion(_q); f.addScaledVector(d, -f.dot(d)).normalize();
+}
+function collide(d, f, r, h) {
+  let hit = null;
+  for (const o of M.obs) {
+    if (h > o.hgt) continue;
+    const minA = (o.r + r) / M.R, dot = d.dot(o.d), cm = Math.cos(minA);
+    if (dot > cm) {
+      _ct.copy(d).addScaledVector(o.d, -dot); let l = _ct.length();
+      if (l < 1e-6) { _ct.copy(f); l = 1; }
+      _ct.multiplyScalar(1 / l);
+      d.copy(o.d).multiplyScalar(cm).addScaledVector(_ct, Math.sin(minA)).normalize();
+      f.addScaledVector(d, -f.dot(d)).normalize(); hit = o;
+    }
+  }
+  return hit;
+}
+
+// First-Person Viewmodel Animation
+function updateFpRig(dt, now, moving) {
+  if (camMode !== '1st') { fpRig.visible = false; return; }
+  fpRig.visible = true;
+
+  const T = tool();
+  const breathe = Math.sin(now * 0.003) * 0.005;
+  const walkBobX = moving ? Math.cos(P.walk * 0.5) * 0.012 : 0;
+  const walkBobY = moving ? Math.abs(Math.sin(P.walk)) * 0.015 : 0;
+
+  let wipeX = 0, wipeY = 0, wipeZ = 0, wipeRotZ = 0, wipeRotX = 0;
+  if (isWiping) {
+    fpWipePhase += dt * (T.id === 'brush' ? 18 : 13) * (0.7 + tempo * 0.3);
+    wipeX = Math.sin(fpWipePhase) * 0.08;
+    wipeY = Math.abs(Math.cos(fpWipePhase)) * 0.035 - 0.04;
+    wipeZ = Math.sin(fpWipePhase * 2) * 0.04;
+    wipeRotZ = Math.sin(fpWipePhase) * 0.28;
+    wipeRotX = -0.15 + Math.abs(Math.sin(fpWipePhase)) * 0.12;
+
+    if (fpSpinPad) fpSpinPad.rotation.y += dt * 35;
+    if (T.id === 'washer' || T.id === 'laser' || T.id === 'comet') {
+      wipeX += (Math.random() - 0.5) * 0.008;
+      wipeY += (Math.random() - 0.5) * 0.008;
+    }
+  } else {
+    fpWipePhase = 0;
+  }
+
+  fpArmGroup.position.set(0.24 + walkBobX + wipeX, -0.22 + breathe - walkBobY + wipeY, -0.44 + wipeZ);
+  fpArmGroup.rotation.set(-0.1 + wipeRotX, 0.05, wipeRotZ);
+}
+
+function updateAstro(dt, now) {
+  const R = M.R;
+  if (state !== 'play') brushCenters(now, false);
+  
+  // Im Ego-Modus blenden wir den Körper aus, damit keine Kamera-Überschneidungen entstehen
+  astro.visible = (camMode === '3rd');
+  astro.position.copy(P.d).multiplyScalar(R + P.h);
+  orientUp(astro, P.d, P.f);
+  
+  const moving = Math.abs((keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0) - joy.y) > 0.05;
+  const sw = P.h > 0 ? 0 : moving ? Math.sin(P.walk) * 0.6 : 0;
+  legs[0].rotation.x = P.h > 0 ? -0.5 : sw; legs[1].rotation.x = P.h > 0 ? 0.3 : -sw;
+  body.position.y = moving && P.h <= 0 ? Math.abs(Math.sin(P.walk)) * 0.06 : 0;
+  
+  const T = tool(), off = T.r * 0.55 + 0.6, scrubA = (P.active || isWiping) ? Math.sin(now * 0.02) * 0.25 : 0;
+  if (TV.beam) { const a = -(Math.PI / 2 - Math.atan2(0.95, off)); arms[0].rotation.set(a, 0, 0); arms[1].rotation.set(a + 0.25, 0, -0.35); }
+  else { arms[0].rotation.set(-0.85 + scrubA, 0, 0); arms[1].rotation.set(-0.75 - scrubA * 0.5, 0, 0.3); }
+  
+  for (let k = 0; k < 2; k++) { const f = clamp(P.tank.u / tankCap(), 0.001, 1); tankFills[k].scale.y = f * 0.42; tankFills[k].position.y = 0.69 + f * 0.21; }
+  astro.updateMatrixWorld(true);
+  handAnchor.getWorldPosition(_ha);
+  
+  if (P.h > 0.04) _hp.copy(astro.position).addScaledVector(P.f, 0.8).addScaledVector(P.d, 0.2);
+  else _hp.copy(P.cleanC).multiplyScalar(R + 0.03);
+  
+  if (TV.head) {
+    TV.head.position.copy(_hp); _rt.copy(_hp).normalize(); orientUp(TV.head, _rt, P.f);
+    if (TV.spin) TV.spin.rotation.y += dt * (P.scrubbing ? 28 : 3);
+  }
+  if (TV.link) {
+    if (TV.beam) {
+      TV.hand.localToWorld(_tip.copy(TV.tip)); setLink(TV.link, _tip, _hp);
+      TV.link.visible = P.active || isWiping; TV.link.material.opacity = 0.45 + Math.random() * 0.35;
+    } else { _lm.copy(_hp).addScaledVector(_rt.copy(_hp).normalize(), 0.24); setLink(TV.link, _ha, _lm); }
+  }
+
+  updateFpRig(dt, now, moving);
+}
+
+function updateRobots(dt) {
+  const T = tool(), pw = 0.4 * T.p * soapMult(), R = M.R;
+  for (const r of robots) {
+    r.t += dt; r.rt -= dt;
+    if (r.rt <= 0 || amount[cellOf(r.target)] <= 0) retarget(r);
+    steer(r.d, r.f, r.target, 3 * dt);
+    if (r.d.dot(r.target) < Math.cos(0.25 / R)) { _disp.copy(r.f).multiplyScalar(2.1 * dt); moveOnSphere(r.d, r.f, _disp, R); }
+    collide(r.d, r.f, 0.42, 0);
+    const res = scrub(r.d, 0.8 / R, pw * dt, T.tier);
+    if (res.u > 0) { const g = res.v * charm(); earn(g); rateAcc += res.v; }
+    r.g.position.copy(r.d).multiplyScalar(R + 0.02); orientUp(r.g, r.d, r.f);
+    r.br.rotation.y += dt * 18; r.light.visible = Math.sin(r.t * 6) > 0;
+  }
+}
+
+const _jp = new V3();
+function updateJunk(dt) {
+  const R = M.R, magR = magL(save.up.magnet);
+  for (let k = junk.length - 1; k >= 0; k--) {
+    const J = junk[k]; J.t += dt;
+    const ang = Math.acos(clamp(J.d.dot(P.d), -1, 1)), dist = ang * R;
+    if (dist < magR && P.h < 2.5) {
+      _ax.crossVectors(J.d, P.d); if (_ax.lengthSq() > 1e-10) { _ax.normalize(); _q.setFromAxisAngle(_ax, Math.min(ang, (2 + 7 * (1 - dist / magR)) * dt / R)); J.d.applyQuaternion(_q).normalize(); }
+      if (dist < 0.75) {
+        earn(J.val); sfx.coin(); popAt(`+${fmt(J.val)} 🪙 ${JUNK[J.type].n}`, J.g.position, J.type === 'star' ? '#fde047' : '#facc15');
+        if (J.type === 'star') { burst(sparkP, J.g.position, 24, 3, 0.9, [1, 0.9, 0.4], P.d); toast('🌠 Sternschnuppe gefangen!', 2); }
+        J.g.traverse(o => { if (o.geometry) o.geometry.dispose(); }); M.group.remove(J.g); junk.splice(k, 1); continue;
+      }
+    }
+    J.g.position.copy(J.d).multiplyScalar(R + 0.3 + Math.sin(J.t * 2.2) * 0.08);
+    _jp.set(0, 0, 1); if (Math.abs(J.d.z) > 0.9) _jp.set(1, 0, 0); orientUp(J.g, J.d, _jp); J.g.rotateY(J.t * J.spin);
+    if (J.type === 'star' && Math.random() < dt * 8) emit(sparkP, J.g.position, rnd(-0.3, 0.3), rnd(-0.3, 0.3), rnd(-0.3, 0.3), 0.6, 1, 0.9, 0.4);
+  }
+  M.junkT -= dt;
+  if (M.junkT <= 0) { M.junkT = rnd(9, 16); if (junk.length < 12 + Math.min(8, M.idx)) spawnJunk(); }
+}
+
+function updateMeteors(dt) {
+  M.meteorT -= dt;
+  if (M.meteorT <= 0) { M.meteorT = rnd(30, 55) / (1 + M.loop * 0.3 + M.idx * 0.05); spawnMeteor(); }
+  for (let k = meteors.length - 1; k >= 0; k--) {
+    const m = meteors[k]; m.t -= dt;
+    const u = Math.max(0, m.t / m.T);
+    m.rock.position.copy(m.d).multiplyScalar(M.R + 0.6 + 70 * Math.pow(u, 1.3)); orientUp(m.rock, m.d, Math.abs(m.d.x) > 0.9 ? _jp.set(0, 0, 1) : _jp.set(1, 0, 0)); m.rock.children[0].scale.y = 1 + u;
+    m.ring.material.opacity = 0.35 + 0.35 * Math.abs(Math.sin(m.t * (8 - u * 5)));
+    m.ring.scale.setScalar(0.9 + 0.1 * Math.sin(m.t * 12));
+    if (m.t <= 0) {
+      impact(m);
+      for (const o of [m.ring, m.rock]) { o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose(); }); M.group.remove(o); }
+      meteors.splice(k, 1);
+    }
+  }
+}
+
+const _look = new V3();
+function updateFace(dt, target) {
+  const mood = clamp((M.clean - 40) / 45, -1, 1);
+  updateMouth(Math.round(mood * 10) / 10);
+  for (const E of M.eyes) {
+    E.nextBlink -= dt; if (E.nextBlink <= 0) { E.blink = 0.22; E.nextBlink = rnd(2.5, 6); }
+    if (E.blink > 0) E.blink -= dt;
+    E.g.scale.y = E.blink > 0 ? 0.12 : 1;
+    E.g.updateMatrixWorld(true); _look.copy(target); E.g.worldToLocal(_look);
+    _look.z += 0.3 * E.e; _look.normalize(); _look.z = Math.max(_look.z, 0.45); _look.normalize();
+    E.pupil.position.copy(_look).multiplyScalar(E.e * 0.8); E.pupil.position.z -= 0.3 * E.e;
+    E.brow.rotation.z = E.s * -mood * 0.38; E.brow.position.y = E.e * (1.1 + Math.max(0, mood) * 0.14);
+  }
+  M.baseMat.emissiveIntensity = 0.03 + Math.pow(M.clean / 100, 2) * 0.22;
+}
+
+function updateWorld(dt, now) {
+  playTime += dt;
+  updateRobots(dt); updateJunk(dt); updateMeteors(dt);
+  cleanT -= dt;
+  if (cleanT <= 0) {
+    cleanT = 0.35; M.clean = computeClean();
+    const th = [25, 50, 75];
+    while (M.ms < 3 && M.clean >= th[M.ms]) { say(LINES['m' + th[M.ms]]); M.ms++; }
+    if (!save.m90 && M.clean >= 90) {
+      save.m90 = true; const b = Math.round(M.totalValue * 0.3); earn(b);
+      banner(`🌝 ${M.name} glänzt!<br><span style="font-size:20px">Glanz-Prämie +${fmt(b)} 🪙 · Nächster Mond freigeschaltet</span>`, 4);
+      say(LINES.m90, 6); sfx.buy(); persist();
+    }
+    if (!save.m100 && M.clean >= 99.5) {
+      save.m100 = true; const b = Math.round(M.totalValue * 0.15); earn(b);
+      banner(`✨ Perfekt poliert!<br><span style="font-size:20px">Perfektions-Bonus +${fmt(b)} 🪙</span>`, 4); say(LINES.m100, 6); sfx.buy(); persist();
+    }
+  }
+  M.idleT -= dt; if (M.idleT <= 0) { M.idleT = rnd(45, 80); if (sayT <= 0) say(pick(LINES.idle)); }
+  saveT -= dt; if (saveT <= 0) { saveT = 15; persist(); }
+  if (M.dish) M.dish.rotation.z += dt * 0.4;
+  if (M.label) M.label.material.opacity = clamp((camera.position.distanceTo(M.label.position) - 7) / 5, 0, 1);
+  if (M.padRing) M.padRing.material.color.setHSL(0.38, 0.8, 0.45 + 0.15 * Math.sin(now * 0.004));
+}
+
+const _cd = new V3(), _cl = new V3(), _cu = new V3(), _pp = new V3();
+const _lookDir = new V3(), _camRight = new V3(), _camUp = new V3();
+
+function updateCamera(dt, now) {
+  const R = M.R;
+  if (state === 'menu') {
+    const a = Math.sin(now * 0.00012) * 0.7;
+    _cd.set(Math.sin(a) * R * 2.9, R * 0.45, Math.cos(a) * R * 2.9); _cl.set(0, 0, 0); _cu.set(0, 1, 0);
+    cam.pos.lerp(_cd, 0.05); cam.look.lerp(_cl, 0.05); cam.up.lerp(_cu, 0.05).normalize();
+    camera.position.copy(cam.pos); camera.up.copy(cam.up); camera.lookAt(cam.look);
+  } else if (camMode === '1st') {
+    // Exakte First-Person Ego-Kamera auf der Kugeloberfläche
+    _pp.copy(P.d).multiplyScalar(R + P.h + 1.25);
+    const moving = Math.abs((keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0) - joy.y) > 0.05;
+    if (moving && P.h <= 0) _pp.addScaledVector(P.d, Math.abs(Math.sin(P.walk)) * 0.05);
+    
+    _lookDir.copy(P.f).multiplyScalar(Math.cos(lookPitch)).addScaledVector(P.d, Math.sin(lookPitch)).normalize();
+    _camRight.crossVectors(_lookDir, P.d).normalize();
+    _camUp.crossVectors(_camRight, _lookDir).normalize();
+    
+    camera.position.copy(_pp);
+    if (shake > 0) camera.position.add(_pv.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(shake * 0.25));
+    _m4.makeBasis(_camRight, _camUp, _lookDir.clone().negate());
+    camera.quaternion.setFromRotationMatrix(_m4);
+  } else {
+    // 3D-Verfolgerkamera
+    const z = cam.zoom += (cam.zoomT - cam.zoom) * (1 - Math.exp(-dt * 3));
+    _pp.copy(P.d).multiplyScalar(R + P.h); _rv.crossVectors(P.f, P.d);
+    _cd.copy(_pp).addScaledVector(P.d, lerp(7.2, R * 2.3, z)).addScaledVector(P.f, -lerp(4.3, R * 0.5, z)).addScaledVector(_rv, -1.1 * (1 - z));
+    _cl.copy(_pp).addScaledVector(P.d, 0.2).addScaledVector(P.f, 2.3 * (1 - z)).addScaledVector(_rv, 0.35 * (1 - z)).multiplyScalar(1 - z * 0.85);
+    _cu.copy(P.d).lerp(P.f, z * 0.9).normalize();
+    
+    const k = cam.snap ? 1 : 1 - Math.exp(-dt * 5);
+    cam.snap = false;
+    cam.pos.lerp(_cd, k); cam.look.lerp(_cl, k); cam.up.lerp(_cu, k).normalize();
+    const cl = cam.pos.length(); if (cl < R + 1.3) cam.pos.multiplyScalar((R + 1.3) / cl);
+    camera.position.copy(cam.pos);
+    if (shake > 0) camera.position.add(_pv.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(shake * 0.3));
+    camera.up.copy(cam.up); camera.lookAt(cam.look);
+  }
+}
+
+const _toBaseTang = new V3();
+function updateHud(dt) {
+  toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show');
+  bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show');
+  sayT -= dt; if (sayT <= 0) $('say').classList.remove('show');
+  $('hurt').style.opacity = Math.max(0, parseFloat($('hurt').style.opacity || 0) - dt * 1.4);
+  
+  for (let i = pops.length - 1; i >= 0; i--) {
+    const p = pops[i]; p.t -= dt; p.p.addScaledVector(P.d, dt * 1.2); _pv.copy(p.p).project(camera);
+    if (p.t <= 0 || _pv.z > 1) { p.el.remove(); pops.splice(i, 1); continue; }
+    p.el.style.left = (_pv.x * 0.5 + 0.5) * innerWidth + 'px'; p.el.style.top = (-_pv.y * 0.5 + 0.5) * innerHeight + 'px'; p.el.style.opacity = Math.min(1, p.t * 2);
+  }
+  rateAcc *= Math.exp(-dt / 4);
+  hudT -= dt; if (hudT > 0) return; hudT = 0.1;
+  
+  const cl = M.clean;
+  $('moonTxt').innerHTML = `${moodEmoji()} <b>${M.name}</b>, ${M.def.title} · <b style="color:${save.m90 ? '#fde047' : '#e9d5ff'}">${f1(Math.floor(cl * 10) / 10)} %</b> sauber${save.m90 ? ' ✨' : ' · Ziel 90 %'}`;
+  $('cleanFill').style.width = cl + '%';
+  $('money').textContent = '🪙 ' + fmt(save.money);
+  $('rate').textContent = `⚡ ${f1(rateAcc / 4 * charm())} 🪙/s` + (robots.length ? ` · 🤖 ${robots.length}` : '');
+  
+  const cap = tankCap(), full = P.tank.u >= cap - 1e-6;
+  $('tankTxt').innerHTML = `🎒 Dreck-Tank <b>${fmt(P.tank.u)} / ${fmt(cap)} L</b> · Wert ${fmt(P.tank.v * charm())} 🪙`;
+  $('tankFill').style.width = Math.min(100, P.tank.u / cap * 100) + '%';
+  $('tankFill').style.background = full ? '#ef4444' : `rgb(${M.def.soft.col.map(c => Math.min(255, c + 40)).join(',')})`;
+  $('tank').classList.toggle('full', full);
+  
+  $('bSell').style.display = save.up.beam ? '' : 'none'; $('tSell').style.display = save.up.beam && touchMode ? 'flex' : 'none';
+  $('bTravel').style.display = save.m90 ? '' : 'none';
+  if (save.m90) $('bTravel').textContent = `🚀 Weiter zu ${moonName(M.idx + 1)}`;
+  
+  let pr = '';
+  const atBase = P.d.dot(M.station) < Math.cos(2.2 / M.R) && P.d.dot(M.station) > Math.cos(5 / M.R);
+  if (atBase && P.tank.u > 0) pr = '♻️ Stell dich auf das grüne Pad zum Verkaufen';
+  else if (P.d.dot(M.station) > Math.cos(2.2 / M.R)) pr = '♻️ Mondbasis · <b>B</b>: Shop öffnen';
+  $('prompt').style.display = pr ? 'block' : 'none'; $('prompt').innerHTML = pr;
+
+  // Kompass-Peilung zur Mondbasis
+  const angleToBase = Math.acos(clamp(P.d.dot(M.station), -1, 1));
+  const distM = Math.round(angleToBase * M.R);
+  $('compassDist').textContent = distM;
+  _toBaseTang.copy(M.station).addScaledVector(P.d, -M.station.dot(P.d)).normalize();
+  const fwdDot = P.f.dot(_toBaseTang);
+  const rightDot = _rv.crossVectors(P.f, P.d).dot(_toBaseTang);
+  let arrowSym = '▲';
+  if (fwdDot < -0.6) arrowSym = '▼';
+  else if (rightDot > 0.4) arrowSym = '►';
+  else if (rightDot < -0.4) arrowSym = '◄';
+  $('compassArrow').textContent = arrowSym;
+}
+
+// ---------- Shop ----------
+let shopTab = 'tools';
+function canClean(t, h) { return t.tier >= h; }
+function renderShop() {
+  $('shopMoney').textContent = '🪙 ' + fmt(save.money) + ' Mond-Taler';
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === shopTab));
+  const D = M.def; let html = '';
+  if (shopTab === 'tools') {
+    html = TOOLS.map((t, i) => {
+      const own = save.tools[i], eq = save.tool === i;
+      const chk = [D.soft, D.hard].map(d => `<span class="${canClean(t, d.h) ? 'ok' : 'no'}">${canClean(t, d.h) ? '✔' : '✖'} ${d.name}</span>`).join(' · ');
+      const btn = eq ? '<button disabled>Ausgerüstet</button>' : own ? `<button data-act="equip" data-i="${i}">Ausrüsten</button>` : `<button data-act="tool" data-i="${i}" ${save.money < t.cost ? 'disabled' : ''}>${fmt(t.cost)} 🪙</button>`;
+      return `<div class="row ${eq ? 'eq' : ''}"><span class="ic">${t.icon}</span><span class="info"><b>${t.name}</b> <small>Stufe ${t.tier} · Taste ${i + 1}</small><br><small>${t.desc} Radius ${f1(t.r)} m · Kraft ${f1(t.p)}</small><br><small>${chk}</small></span>${btn}</div>`;
+    }).join('');
+  } else if (shopTab === 'ups') {
+    html = UPS.map(u => {
+      const l = save.up[u.id], max = l >= u.max, c = Math.round(u.cost(l));
+      return `<div class="row"><span class="ic">${u.icon}</span><span class="info"><b>${u.name}</b> <small>Lv ${l}/${u.max}</small><br><small>${u.desc}</small><br><small>${u.eff(l)}${max ? '' : ' → <span class="ok">' + u.eff(l + 1) + '</span>'}</small></span><button data-act="up" data-id="${u.id}" ${max || save.money < c ? 'disabled' : ''}>${max ? 'MAX' : fmt(c) + ' 🪙'}</button></div>`;
+    }).join('');
+  } else {
+    const rows = [];
+    for (let i = Math.max(0, M.idx - 1); i <= M.idx + 2; i++) {
+      const d = moonDef(i), cur = i === M.idx, next = i === M.idx + 1, done = i < M.idx;
+      const eqT = TOOLS[save.tool], need = [d.soft, d.hard].map(x => `<span class="${canClean(eqT, x.h) ? 'ok' : 'no'}">${x.name} (Stufe ${x.h})</span>`).join(' · ');
+      let btn = '';
+      if (cur) btn = `<button disabled>${f1(Math.floor(M.clean * 10) / 10)} %</button>`;
+      else if (done) btn = '<button disabled>✔ Geputzt</button>';
+      else if (next) btn = `<button class="gold" data-act="travel" ${save.m90 ? '' : 'disabled'}>${save.m90 ? '🚀 Reisen' : '90 % nötig'}</button>`;
+      else btn = '<button disabled>🔒</button>';
+      rows.push(`<div class="row ${cur ? 'eq' : ''} ${!cur && !next && !done ? 'lock' : ''}"><span class="ic">${done ? '🌝' : cur ? moodEmoji() : '🌑'}</span><span class="info"><b>${moonName(i)}</b>, ${d.title} <small>· Ø ${Math.round(d.R * 2)} m</small><br><small>Dreck: ${need}</small>${next ? `<br><small>${save.m90 ? 'Bereit! Die Reise lässt den Rest hier zurück.' : 'Putz diesen Mond auf 90 %, dann geht die Reise los.'}</small>` : ''}</span>${btn}</div>`);
+    }
+    html = rows.join('') + `<p style="font-size:13px">Bei 90 % gibt's eine Glanz-Prämie, bei 100 % einen Perfektions-Bonus. Nach Io geht es mit fünffachem Wert von vorne los.</p>`;
+  }
+  $('shopList').innerHTML = html;
+  $('shopList').querySelectorAll('button[data-act]').forEach(b => b.onclick = () => shopAction(b.dataset));
+}
+function shopAction(ds) {
+  if (ds.act === 'tool') { const i = +ds.i, t = TOOLS[i]; if (save.money >= t.cost && !save.tools[i]) { save.money -= t.cost; save.tools[i] = true; save.tool = i; buildToolVis(); sfx.buy(); toast(`${t.icon} ${t.name} gekauft und ausgerüstet!`, 2.5); persist(); } else sfx.deny(); }
+  else if (ds.act === 'equip') { equip(+ds.i); }
+  else if (ds.act === 'up') {
+    const u = UPS.find(x => x.id === ds.id), l = save.up[u.id], c = Math.round(u.cost(l));
+    if (l < u.max && save.money >= c) { save.money -= c; save.up[u.id]++; if (u.id === 'robots') syncRobots(); sfx.buy(); persist(); } else sfx.deny();
+  } else if (ds.act === 'travel') { closeShop(); travel(); return; }
+  renderShop();
+}
+function equip(i) { if (!save.tools[i] || save.tool === i) return; save.tool = i; buildToolVis(); tone(500, 0.05, 'square', 0.05); persist(); if (state === 'shop') renderShop(); }
+function openShop() { if (state !== 'play') return; state = 'shop'; keys.w = keys.s = keys.a = keys.d = false; isMouseDown = false; isWiping = false; scrubSound(false, 0); renderShop(); $('shopO').classList.remove('hide'); }
+function closeShop() { if (state !== 'shop') return; $('shopO').classList.add('hide'); state = 'play'; }
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => { shopTab = b.dataset.tab; renderShop(); });
+$('shopClose').onclick = closeShop;
+
+function travel() {
+  if (!save.m90 || state !== 'play') return;
+  state = 'travel'; scrubSound(false, 0); isMouseDown = false; isWiping = false;
+  const next = M.idx + 1;
+  $('fade').innerHTML = `🚀 Flug zu ${moonName(next)}…<br><span style="font-size:18px;color:#c4b5fd">${moonDef(next).title}</span>`; $('fade').classList.add('on');
+  setTimeout(() => {
+    save.moon = next; save.m90 = false; save.m100 = false; save.grid = null;
+    P.tank.u = 0; P.tank.v = 0;
+    buildMoon(next, null); persist();
+    $('fade').classList.remove('on'); state = 'play';
+    banner(`🌑 ${M.name}<br><span style="font-size:20px">${M.def.title} · ${M.def.soft.name} & ${M.def.hard.name}</span>`, 3);
+    setTimeout(() => say(M.def.intro, 6), 1200);
+  }, 1700);
+}
+
+// ---------- Eingabe-Steuerung ----------
+let touchMode = false;
+const joy = { x: 0, y: 0, id: null, cx: 0, cy: 0 };
+function jump() { if (state !== 'play' || P.h > 0) return; P.vh = jumpV(); P.h = 0.001; sfx.jump(); }
+function beamSell() { if (state !== 'play') return; if (!save.up.beam) { toast('📡 Beam-Verkauf gibt es im Shop unter Upgrades.', 2); return; } if (P.tank.u > 0.01) sellTank(true); }
+function togglePause() {
+  if (state === 'pause') { state = prevState; $('pause').style.display = 'none'; last = performance.now(); }
+  else if (state === 'play') { prevState = 'play'; state = 'pause'; scrubSound(false, 0); isMouseDown = false; isWiping = false; $('pause').style.display = 'flex'; persist(); }
+}
+const zoomToggle = () => { cam.zoomT = cam.zoomT > 0.5 ? 0 : 1; };
+
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase(); keys[k] = true;
+  if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
+  if (e.repeat) return;
+  if (k === 'm') { ArcadeCore.toggleMute(); toast(ArcadeCore.isMuted() ? '🔇 Ton aus' : '🔊 Ton an', 1.2); return; }
+  if (state === 'shop') { if (k === 'b' || k === 'escape') closeShop(); return; }
+  if (state === 'pause') { if (k === 'p' || k === 'escape') togglePause(); return; }
+  if (state !== 'play') return;
+  if (k === ' ') jump();
+  else if (k === 'b') openShop();
+  else if (k === 'r') beamSell();
+  else if (k === 'c' || k === 'v') toggleView();
+  else if (k === 'z' || k === '+' || k === '-') zoomToggle();
+  else if (k === 'p' || k === 'escape') togglePause();
+  else if (k >= '1' && k <= '8') equip(+k - 1);
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; isMouseDown = false; isWiping = false; if (state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { persist(); if (state === 'play') togglePause(); } });
+addEventListener('pagehide', persist);
+addEventListener('wheel', e => {
+  if (state === 'play') {
+    if (camMode === '3rd') cam.zoomT = clamp(cam.zoomT + (e.deltaY > 0 ? 0.25 : -0.25), 0, 1);
+    else {
+      // Werkzeug durchscrollen im Ego-Modus
+      const dir = e.deltaY > 0 ? 1 : -1;
+      let nextTool = save.tool;
+      for (let s = 1; s <= TOOLS.length; s++) {
+        const candidate = (save.tool + s * dir + TOOLS.length) % TOOLS.length;
+        if (save.tools[candidate]) { nextTool = candidate; break; }
+      }
+      equip(nextTool);
+    }
+  }
+}, { passive: true });
+
+// Pointer Lock & Maus-Steuerung
+document.addEventListener('pointerlockchange', () => {
+  isPointerLocked = (document.pointerLockElement === canvas);
+});
+
+canvas.addEventListener('mousedown', e => {
+  if (state !== 'play') return;
+  if (e.button === 0) {
+    isMouseDown = true;
+    if (camMode === '1st' && !isPointerLocked && !touchMode) {
+      try { const pl = canvas.requestPointerLock(); if (pl && pl.catch) pl.catch(() => {}); } catch (err) {}
+    }
+  } else if (e.button === 2) {
+    jump();
+  }
+});
+window.addEventListener('mouseup', e => {
+  if (e.button === 0) isMouseDown = false;
+});
+window.addEventListener('mousemove', e => {
+  if (state !== 'play' || !isPointerLocked) return;
+  addSwipe(e.movementX);
+  const sens = 0.0024 * (isWiping ? 0.4 : 1);
+  _q.setFromAxisAngle(P.d, -e.movementX * sens);
+  P.f.applyQuaternion(_q);
+  lookPitch = clamp(lookPitch - e.movementY * sens, -1.25, 1.15);
+});
+
+// Touch & Dragging Fallback
+let drag = null;
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch' && !touchMode) enableTouch();
+  if (!isPointerLocked) {
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    canvas.classList.add('drag');
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id || isPointerLocked) return;
+  if (state === 'play') {
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    addSwipe(dx * (e.pointerType === 'touch' ? 1.6 : 1));
+    const damp = isWiping ? 0.4 : 1;
+    dragTurn -= dx * (e.pointerType === 'touch' ? 0.007 : 0.005) * damp;
+    lookPitch = clamp(lookPitch - dy * (e.pointerType === 'touch' ? 0.005 : 0.004) * damp, -1.25, 1.15);
+  }
+  drag.x = e.clientX; drag.y = e.clientY;
+});
+const endDrag = e => { if (drag && e.pointerId === drag.id) { drag = null; canvas.classList.remove('drag'); } };
+canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+function enableTouch() {
+  touchMode = true; document.body.classList.add('touch');
+  $('touch').style.display = 'block';
+  $('bShop').textContent = '🛒 Shop'; $('bZoom').textContent = '🔭 Zoom'; $('bSell').textContent = '📡 Verkaufen';
+  $('bView').textContent = (camMode === '1st') ? '👁️ Verfolger' : '👁️ Ego';
+}
+addEventListener('touchstart', () => { if (!touchMode) enableTouch(); }, { passive: true });
+
+const joyEl = $('joy');
+joyEl.addEventListener('pointerdown', e => { joy.id = e.pointerId; const r = joyEl.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; joyEl.setPointerCapture(e.pointerId); joyMove(e); });
+joyEl.addEventListener('pointermove', e => { if (e.pointerId === joy.id) joyMove(e); });
+const joyEnd = () => { joy.id = null; joy.x = joy.y = 0; $('joyK').style.transform = ''; };
+joyEl.addEventListener('pointerup', joyEnd); joyEl.addEventListener('pointercancel', joyEnd);
+function joyMove(e) { let dx = (e.clientX - joy.cx) / 52, dy = (e.clientY - joy.cy) / 52; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } joy.x = dx; joy.y = dy; $('joyK').style.transform = `translate(${dx * 40}px,${dy * 40}px)`; }
+
+const tb = (id, fnDown, fnUp) => {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('on'); if (fnDown) fnDown(); });
+  const u = () => { el.classList.remove('on'); if (fnUp) fnUp(); };
+  el.addEventListener('pointerup', u); el.addEventListener('pointercancel', u);
+};
+tb('tJump', jump);
+tb('tWipe', () => { isTouchWiping = true; }, () => { isTouchWiping = false; });
+tb('tView', toggleView);
+tb('tSell', beamSell);
+
+$('bShop').onclick = () => { if (state === 'shop') closeShop(); else openShop(); };
+$('bSell').onclick = beamSell;
+$('bZoom').onclick = zoomToggle;
+$('bTravel').onclick = travel;
+$('bView').onclick = toggleView;
+$('pause').addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'pause') togglePause(); });
+
+$('go').onclick = () => {
+  audio(); $('menu').classList.add('hide'); state = 'play'; last = performance.now();
+  if (!save.seen) {
+    setTimeout(() => toast('Lauf mit <b>W/A/S/D</b> los – halte <b>Linksklick</b> oder <b>🧽</b> und wisch flott <b>hin und her</b> – je schneller, desto mehr Putzkraft!', 8), 600);
+    setTimeout(() => say(M.def.intro, 6), 2800);
+  } else {
+    setTimeout(() => say(pick(LINES.idle)), 1500);
+  }
+};
+$('reset').onclick = () => {
+  if (confirm('Spielstand wirklich löschen? Alle Taler, Geräte und Monde gehen verloren.')) {
+    resetting = true;
+    try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem('mondputzer_save_v1'); } catch (e) {}
+    location.reload();
+  }
+};
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ---------- Hauptschleife ----------
+let last = performance.now();
+const _eyeT = new V3();
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (state === 'play') { updatePlayer(dt, now); updateWorld(dt, now); shake = Math.max(0, shake - dt * 1.5); }
+  updateAstro(dt, now);
+  updateCamera(dt, now);
+  _eyeT.copy(state === 'menu' ? camera.position : astro.position);
+  updateFace(dt, _eyeT);
+  updatePool(dustP, dt, 3); updatePool(sparkP, dt, -0.4); updatePool(sprayP, dt, 2); updateFlakes(dt);
+  skyPlanet.rotation.y += dt * 0.02;
+  refreshDirt();
+  if (state !== 'menu') updateHud(dt);
+  renderer.render(scene, camera);
+}
+
+// ---------- Start ----------
+syncRobots();
+buildMoon(save.moon, save.grid ? decodeGrid(save.grid) : null);
+buildToolVis();
+$('menuStats').innerHTML = save.earned > 0 ? `${M.name} · ${f1(Math.floor(M.clean * 10) / 10)} % sauber · 🪙 ${fmt(save.money)} · insgesamt verdient: ${fmt(save.earned)}` : '';
+if (save.earned > 0) $('go').textContent = 'Weiterputzen 🧽';
+appStarted = true;
+requestAnimationFrame(loop);
+
+// Test-Hooks
+window.__mond = { P, save, robots, junk, meteors, keys, cam, flakes, stomp, get tempo() { return tempo; }, get M() { return M; }, get state() { return state; }, computeClean, scrub, spawnMeteor, spawnJunk, travel, openShop, closeShop, shopAction, sellTank, equip, jump, persist, amount, mask, hard, toggleView };
+</script>
+</body>
+</html>
