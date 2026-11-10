@@ -33,7 +33,13 @@ canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; tou
 #panel button.warn { background:#d6302c; }
 #panel button.on { background:#2fb24c; }
 #panel .small { font-size:11px; opacity:.75; margin-top:6px; line-height:1.4; }
-#toggle { position:fixed; top:10px; left:100px; z-index:51; font:inherit; font-weight:800; font-size:13px; color:#fff; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:8px 12px; border-radius:20px; cursor:pointer; }
+#toggle, #mute { position:fixed; top:10px; left:100px; z-index:51; font:inherit; font-weight:800; font-size:13px; color:#fff; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:8px 12px; border-radius:20px; cursor:pointer; }
+#mute { left:196px; }
+#nav { top:58px; left:50%; transform:translateX(-50%); display:none; align-items:center; gap:10px; font-size:17px; background:#0007; padding:6px 14px; border-radius:20px; white-space:nowrap; }
+#navArrow { display:inline-block; font-size:22px; color:#ffd21f; }
+#pauseTag { top:50%; left:50%; transform:translate(-50%,-50%); font-size:38px; display:none; }
+body.touch #heel { bottom:150px; width:96px; height:96px; }
+body.touch #ctrl { bottom:8px; }
 #hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
 .t { position:absolute; font-weight:800; text-shadow:0 2px 0 #000a, 0 0 6px #0008; }
 #stats { top:12px; right:16px; font-size:15px; text-align:right; line-height:1.55; background:#0006; padding:8px 12px; border-radius:10px; }
@@ -46,11 +52,14 @@ canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; tou
 #touch { position:fixed; inset:auto 0 0 0; height:150px; z-index:15; display:none; pointer-events:none; }
 #touch .b { position:absolute; bottom:70px; width:62px; height:62px; border-radius:50%; background:#0004; border:2px solid #fff8; color:#fff; font-size:22px; font-weight:800; display:flex; align-items:center; justify-content:center; pointer-events:auto; touch-action:none; }
 #touch .b.on { background:#fff6; color:#000; }
+#touch .b.sm { bottom:142px; width:50px; height:50px; font-size:18px; display:none; }
+body.sub #touch .b.sm { display:flex; }
 </style>
 </head>
 <body>
 <a class="back" href="../index.html">← Hub</a>
 <button id="toggle">⚙️ Labor</button>
+<button id="mute" aria-label="Ton an/aus">🔊</button>
 <canvas id="gl"></canvas>
 <div id="panel">
   <h3>🌊 Ozean-Labor</h3>
@@ -60,7 +69,7 @@ canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; tou
   <input type="range" id="sea" min="0" max="3" step="0.05" value="1">
   <label>Wind: <b id="windV">12</b> kn</label>
   <input type="range" id="wind" min="0" max="60" step="1" value="12">
-  <label>Windrichtung: <b id="dirV">0</b>°</label>
+  <label>Windrichtung: <b id="dirV">30</b>°</label>
   <input type="range" id="wdir" min="0" max="359" step="1" value="30">
   <div class="row">
     <button id="rogue" class="warn">🌊 Monsterwelle (M)</button>
@@ -70,20 +79,29 @@ canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; tou
     <button id="storm">⛈️ Sturm-Challenge</button>
     <button id="reset">↺ Reset (Backspace)</button>
   </div>
+  <div class="row">
+    <button id="hunt">🎯 Bojen-Jagd</button>
+    <button id="camBtn">🎥 Kamera (C)</button>
+    <button id="pause">⏸ Pause (P)</button>
+  </div>
   <div class="small" id="boatInfo"></div>
-  <div class="small">W/S Gas · A/D Ruder · Q/E Ballast (U-Boot) · Maus ziehen = Kamera · Mausrad = Zoom · Wellen-Pinsel: aufs Wasser klicken/ziehen</div>
+  <div class="small">W/S Gas · A/D Ruder · X Maschine stopp · Q/E Ballast (U-Boot) · C Verfolgerkamera · P Pause · Maus ziehen = Kamera · Mausrad = Zoom · Wellen-Pinsel: aufs Wasser klicken/ziehen</div>
 </div>
 <div id="hud">
   <div id="stats" class="t"></div>
   <canvas id="heel" class="t" width="280" height="280"></canvas>
   <div id="ctrl" class="t"><span id="ctrlTxt">Gas</span><div id="thrWrap"><div id="thr"></div></div></div>
+  <div id="nav" class="t"><span id="navArrow">▲</span><span id="navTxt"></span></div>
   <div id="banner" class="t"></div>
+  <div id="pauseTag" class="t">⏸ PAUSE</div>
 </div>
 <div id="touch">
   <div class="b" id="tL" style="left:14px">◀</div>
   <div class="b" id="tR" style="left:90px">▶</div>
   <div class="b" id="tF" style="right:90px">▲</div>
   <div class="b" id="tB" style="right:14px">▼</div>
+  <div class="b sm" id="tD" style="left:14px" aria-label="Tauchen">⤓</div>
+  <div class="b sm" id="tU" style="left:76px" aria-label="Auftauchen">⤒</div>
 </div>
 <div id="fallbackError" style="display:none;position:fixed;inset:0;background:#0d2a45;color:#fff;z-index:99999;padding:30px;text-align:center;">
   <h2>🚢 Auf Grund gelaufen</h2>
@@ -102,7 +120,9 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const KEY = 'boatsim';
 const G = 9.81;
+const KEY_HUNT = 'boatsim_buoys';
 let bestStorm = Number(ArcadeCore.getScore(KEY)) || 0;
+let bestHunt = Number(ArcadeCore.getScore(KEY_HUNT)) || 0;
 
 // ---------- Renderer ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true });
@@ -114,6 +134,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.3, 2500);
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 const skyCanvas = document.createElement('canvas'); skyCanvas.width = 4; skyCanvas.height = 256;
 const skyTex = new THREE.CanvasTexture(skyCanvas); skyTex.colorSpace = THREE.SRGBColorSpace;
 scene.background = skyTex;
@@ -216,8 +237,20 @@ function updateWater(cx, cz) {
     tmpC.lerp(foam, clamp(f, 0, 0.9));
     wCol[i * 3] = tmpC.r; wCol[i * 3 + 1] = tmpC.g; wCol[i * 3 + 2] = tmpC.b;
   }
-  waterGeo.attributes.position.needsUpdate = true; waterGeo.attributes.color.needsUpdate = true;
-  waterGeo.computeVertexNormals();
+  // Normalen direkt aus dem Raster (viel billiger als computeVertexNormals)
+  const nrm = waterGeo.attributes.normal.array, N1 = W_SEG + 1;
+  for (let j = 0; j < N1; j++) {
+    const jc = (j > 0 ? j - 1 : j) * N1, je = (j < W_SEG ? j + 1 : j) * N1, jr = j * N1;
+    for (let i = 0; i < N1; i++) {
+      const a = (jr + (i > 0 ? i - 1 : i)) * 3, b = (jr + (i < W_SEG ? i + 1 : i)) * 3, c = (jc + i) * 3, e = (je + i) * 3;
+      const ax = pos[b] - pos[a], ay = pos[b + 1] - pos[a + 1], az = pos[b + 2] - pos[a + 2];
+      const bx = pos[e] - pos[c], by = pos[e + 1] - pos[c + 1], bz = pos[e + 2] - pos[c + 2];
+      const nx = by * az - bz * ay, ny = bz * ax - bx * az, nz = bx * ay - by * ax;
+      const il = 1 / (Math.hypot(nx, ny, nz) || 1), o = (jr + i) * 3;
+      nrm[o] = nx * il; nrm[o + 1] = ny * il; nrm[o + 2] = nz * il;
+    }
+  }
+  waterGeo.attributes.position.needsUpdate = true; waterGeo.attributes.color.needsUpdate = true; waterGeo.attributes.normal.needsUpdate = true;
   farWater.position.x = cx; farWater.position.z = cz;
 }
 
@@ -335,7 +368,7 @@ function buildBoat(def) {
 // ---------- Rigid Body ----------
 const boat = {
   def: null, mesh: null, pos: new THREE.Vector3(), vel: new THREE.Vector3(), q: new THREE.Quaternion(), w: new THREE.Vector3(),
-  I: new THREE.Vector3(), pts: [], kp: 0, throttle: 0, rudder: 0, ballast: 1, flood: 0, capT: 0, capsized: false, maxHeel: 0
+  I: new THREE.Vector3(), pts: [], kp: 0, throttle: 0, rudder: 0, ballast: 1, flood: 0, capT: 0, capsized: false, maxHeel: 0, gen: 0, sub: 0
 };
 function selectBoat(i) {
   const def = BOATS[i];
@@ -355,6 +388,7 @@ function selectBoat(i) {
   boat.hMax = def.sub ? draft * 2 : H;
   $('boatInfo').innerHTML = `<b>${def.name}</b><br>${def.info}<br>Länge ${L} m · Breite ${B} m · ${(def.mass / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} t`;
   $('ctrlTxt').textContent = def.sub ? 'Gas · Ballast Q/E' : 'Gas';
+  document.body.classList.toggle('sub', !!def.sub);
   resetBoat();
   camDist = clamp(L * 1.6 + 10, 18, 170);
 }
@@ -362,93 +396,91 @@ function resetBoat() {
   boat.pos.set(0, 0, 0); boat.vel.set(0, 0, 0); boat.w.set(0, 0, 0); boat.q.identity();
   boat.throttle = 0; boat.rudder = 0; boat.ballast = 1; boat.flood = 0; boat.capT = 0; boat.capsized = false; boat.maxHeel = 0;
   boat.pos.y = waterHeight(0, 0);
+  boat.gen++;
 }
-const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _qi = new THREE.Quaternion();
+const V3 = () => new THREE.Vector3();
+const _F = V3(), _T = V3(), _fwd = V3(), _up = V3(), _side = V3(), _r = V3(), _fb = V3(), _vb = V3(), _c = V3(), _sr = V3(), _rel = V3(), _wf = V3(), _arm = V3(), _wb = V3(), _tb = V3(), _Iw = V3();
+const _qi = new THREE.Quaternion(), _qd = new THREE.Quaternion();
 const sprayQueue = [];
 function stepBoat(dt) {
-  const d = boat.def, m = d.mass * (1 + boat.flood * 1.6);
-  const F = new THREE.Vector3(0, -m * G, 0), T = new THREE.Vector3();
-  const fwd = _v3.set(1, 0, 0).applyQuaternion(boat.q).clone();
-  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(boat.q);
-  const side = new THREE.Vector3(0, 0, 1).applyQuaternion(boat.q);
-  _qi.copy(boat.q).invert();
+  const d = boat.def, q = boat.q, fl = 1 + boat.flood * 1.6, m = d.mass * fl;
+  _F.set(0, -m * G, 0); _T.set(0, 0, 0);
+  _fwd.set(1, 0, 0).applyQuaternion(q); _up.set(0, 1, 0).applyQuaternion(q); _side.set(0, 0, 1).applyQuaternion(q);
+  _qi.copy(q).invert();
   let subm = 0, awash = 0;
-  const nP = boat.pts.length;
+  const nP = boat.pts.length, mm = m / nP, kb = boat.kp * (d.sub ? boat.ballast : 1);
   for (const lp of boat.pts) {
-    const r = _v1.copy(lp).applyQuaternion(boat.q);
-    const wp = _v2.copy(r).add(boat.pos);
-    const wh = waterHeight(wp.x, wp.z);
-    const depth = wh - wp.y;
+    _r.copy(lp).applyQuaternion(q);
+    const depth = waterHeight(_r.x + boat.pos.x, _r.z + boat.pos.z) - (_r.y + boat.pos.y);
     if (depth <= 0) continue;
     const dd = Math.min(depth, boat.hMax);
     subm += dd / boat.hMax;
     if (depth > boat.hMax * 0.98 && !d.sub && d.id !== 'duck') awash++;
-    const fb = new THREE.Vector3(0, boat.kp * dd * (d.sub ? boat.ballast : 1), 0);
-    // Punktgeschwindigkeit
-    const vp = new THREE.Vector3().crossVectors(boat.w, r).add(boat.vel);
-    const vb = vp.clone().applyQuaternion(_qi);
+    // Punktgeschwindigkeit im Bootssystem
+    _vb.crossVectors(boat.w, _r).add(boat.vel).applyQuaternion(_qi);
     const frac = clamp(dd / d.draft, 0, 1.5);
-    const mm = m / nP;
-    const drag = new THREE.Vector3(
-      -vb.x * mm * 0.08 * d.cx * frac - vb.x * Math.abs(vb.x) * mm * 0.02 * d.cx,
-      -vb.y * mm * 1.6 * frac,
-      -vb.z * mm * 1.5 * frac - vb.z * Math.abs(vb.z) * mm * 0.05
-    ).applyQuaternion(boat.q);
-    fb.add(drag);
-    F.add(fb); T.add(new THREE.Vector3().crossVectors(r, fb));
+    _fb.set(
+      -_vb.x * mm * 0.08 * d.cx * frac - _vb.x * Math.abs(_vb.x) * mm * 0.02 * d.cx,
+      -_vb.y * mm * 1.6 * frac,
+      -_vb.z * mm * 1.5 * frac - _vb.z * Math.abs(_vb.z) * mm * 0.05
+    ).applyQuaternion(q);
+    _fb.y += kb * dd;
+    _F.add(_fb); _T.add(_c.crossVectors(_r, _fb));
   }
   boat.sub = subm / nP;
   // Antrieb & Ruder (am Heck, nur wenn eingetaucht)
-  const sternL = new THREE.Vector3(-d.L * 0.46, -d.draft * 0.8, 0);
-  const sr = sternL.clone().applyQuaternion(boat.q), sw = sr.clone().add(boat.pos);
-  const sternWet = waterHeight(sw.x, sw.z) > sw.y;
-  const vbBody = boat.vel.clone().applyQuaternion(_qi);
+  _sr.set(-d.L * 0.46, -d.draft * 0.8, 0).applyQuaternion(q);
+  const sternX = _sr.x + boat.pos.x, sternZ = _sr.z + boat.pos.z;
+  const sternWH = waterHeight(sternX, sternZ), sternWet = sternWH > _sr.y + boat.pos.y;
+  _vb.copy(boat.vel).applyQuaternion(_qi);
   if (sternWet || d.sub) {
-    const th = fwd.clone().multiplyScalar(boat.throttle * d.thrust);
-    F.add(th); T.add(new THREE.Vector3().crossVectors(sr, th));
-    const flow = vbBody.x + boat.throttle * 3;
-    const rf = side.clone().multiplyScalar(-boat.rudder * flow * Math.abs(flow) * d.mass * 0.012 / Math.max(1, d.L * 0.08) - boat.rudder * flow * d.mass * 0.05);
-    F.add(rf); T.add(new THREE.Vector3().crossVectors(sr, rf));
+    _fb.copy(_fwd).multiplyScalar(boat.throttle * d.thrust);
+    _F.add(_fb); _T.add(_c.crossVectors(_sr, _fb));
+    const flow = _vb.x + boat.throttle * 3;
+    _fb.copy(_side).multiplyScalar(-boat.rudder * flow * Math.abs(flow) * d.mass * 0.012 / Math.max(1, d.L * 0.08) - boat.rudder * flow * d.mass * 0.05);
+    _F.add(_fb); _T.add(_c.crossVectors(_sr, _fb));
   }
   // Wind auf Aufbau / Segel
-  const wv = new THREE.Vector3(Math.cos(env.wdir), 0, Math.sin(env.wdir)).multiplyScalar(env.wind * 0.514);
-  const rel = wv.clone().sub(new THREE.Vector3(boat.vel.x, 0, boat.vel.z));
+  const ws = env.wind * 0.514;
+  _rel.set(Math.cos(env.wdir) * ws - boat.vel.x, 0, Math.sin(env.wdir) * ws - boat.vel.z);
+  const relLen = _rel.length();
   const area = (d.sail || 0) + d.L * d.free * 0.35 + (d.id === 'cruiser' ? d.L * 14 : d.id === 'container' ? d.L * 8 : 0);
-  const windF = rel.clone().multiplyScalar(rel.length() * 0.6 * area);
-  const hArm = new THREE.Vector3(0, d.free + (d.sail ? 5 : d.id === 'cruiser' ? 10 : 2), 0).applyQuaternion(boat.q);
+  _wf.copy(_rel).multiplyScalar(relLen * 0.6 * area);
+  _arm.set(0, d.free + (d.sail ? 5 : d.id === 'cruiser' ? 10 : 2), 0).applyQuaternion(q);
   if (d.sail) {
     // Segel: Vortrieb aus Seitenwind
-    const relB = rel.clone().applyQuaternion(_qi);
-    const drive = Math.abs(relB.z) * rel.length() * d.sail * 1.4 + Math.max(0, relB.x) * rel.length() * d.sail * 0.8;
-    F.add(fwd.clone().multiplyScalar(drive));
-    if (boat.mesh.userData.boom) { const target = clamp(Math.atan2(relB.z, -relB.x) * 0.5, -1.2, 1.2); boat.mesh.userData.boom.rotation.y += (-target - boat.mesh.userData.boom.rotation.y) * 0.05; }
+    _vb.copy(_rel).applyQuaternion(_qi);
+    _F.addScaledVector(_fwd, Math.abs(_vb.z) * relLen * d.sail * 1.4 + Math.max(0, _vb.x) * relLen * d.sail * 0.8);
+    const boom = boat.mesh.userData.boom;
+    if (boom) { const target = clamp(Math.atan2(_vb.z, -_vb.x) * 0.5, -1.2, 1.2); boom.rotation.y += (-target - boom.rotation.y) * 0.05; }
   }
-  F.add(windF); T.add(new THREE.Vector3().crossVectors(hArm, windF));
+  _F.add(_wf); _T.add(_c.crossVectors(_arm, _wf));
   // Wassereinbruch
   if (awash > 0) boat.flood = Math.min(1, boat.flood + awash / nP * dt * 0.35);
   boat.flood = Math.max(0, boat.flood - dt * 0.012);
   // Integration
-  boat.vel.addScaledVector(F, dt / m);
+  boat.vel.addScaledVector(_F, dt / m);
   boat.pos.addScaledVector(boat.vel, dt);
-  const wb = boat.w.clone().applyQuaternion(_qi), tb = T.applyQuaternion(_qi);
-  const I = boat.I.clone().multiplyScalar(1 + boat.flood * 1.6);
-  const Iw = new THREE.Vector3(I.x * wb.x, I.y * wb.y, I.z * wb.z);
-  tb.sub(new THREE.Vector3().crossVectors(wb, Iw));
-  wb.x += tb.x / I.x * dt; wb.y += tb.y / I.y * dt; wb.z += tb.z / I.z * dt;
-  wb.multiplyScalar(Math.exp(-(0.25 + boat.sub * 0.9) * dt));
-  boat.w.copy(wb.applyQuaternion(boat.q));
-  const wq = new THREE.Quaternion(boat.w.x * dt * 0.5, boat.w.y * dt * 0.5, boat.w.z * dt * 0.5, 0).multiply(boat.q);
-  boat.q.x += wq.x; boat.q.y += wq.y; boat.q.z += wq.z; boat.q.w += wq.w; boat.q.normalize();
+  _wb.copy(boat.w).applyQuaternion(_qi); _tb.copy(_T).applyQuaternion(_qi);
+  const Ix = boat.I.x * fl, Iy = boat.I.y * fl, Iz = boat.I.z * fl;
+  _Iw.set(Ix * _wb.x, Iy * _wb.y, Iz * _wb.z);
+  _tb.sub(_c.crossVectors(_wb, _Iw));
+  _wb.x += _tb.x / Ix * dt; _wb.y += _tb.y / Iy * dt; _wb.z += _tb.z / Iz * dt;
+  _wb.multiplyScalar(Math.exp(-(0.25 + boat.sub * 0.9) * dt));
+  boat.w.copy(_wb.applyQuaternion(q));
+  _qd.set(boat.w.x * dt * 0.5, boat.w.y * dt * 0.5, boat.w.z * dt * 0.5, 0).multiply(q);
+  q.x += _qd.x; q.y += _qd.y; q.z += _qd.z; q.w += _qd.w; q.normalize();
   // Meeresgrund
   if (boat.pos.y < -70) { boat.pos.y = -70; boat.vel.y = Math.max(0, boat.vel.y); }
-  // Gischt
+  // Gischt am Bug, Schraubenwasser am Heck
   const sp = Math.hypot(boat.vel.x, boat.vel.z);
   if (sp > 3 && Math.random() < dt * (8 + sp)) {
-    const bow = new THREE.Vector3(d.L * 0.45, 0, rnd(-d.B / 2, d.B / 2)).applyQuaternion(boat.q).add(boat.pos);
-    const wh = waterHeight(bow.x, bow.z);
-    if (Math.abs(bow.y - wh) < 1.5 + d.draft) sprayQueue.push([bow.x, wh, bow.z, sp]);
+    _r.set(d.L * 0.45, 0, rnd(-d.B / 2, d.B / 2)).applyQuaternion(q).add(boat.pos);
+    const wh = waterHeight(_r.x, _r.z);
+    if (Math.abs(_r.y - wh) < 1.5 + d.draft) sprayQueue.push([_r.x, wh, _r.z, sp]);
   }
-  return up;
+  if (sternWet && !d.sub && Math.abs(boat.throttle) > 0.3 && Math.random() < dt * 14 * Math.abs(boat.throttle)) sprayQueue.push([sternX + rnd(-1, 1) * d.B * 0.25, sternWH, sternZ + rnd(-1, 1) * d.B * 0.25, 2 + sp * 0.3]);
+  return _up;
 }
 
 // ---------- Gischt-Partikel ----------
@@ -480,8 +512,101 @@ for (let i = 0; i < 6; i++) {
   scene.add(g); gulls.push(g);
 }
 
+// ---------- Regen & Blitz ----------
+const RAIN_N = 900, RAIN_BOX = 70, RAIN_H = 45;
+const rainOff = new Float32Array(RAIN_N * 3), rainPos = new Float32Array(RAIN_N * 6);
+for (let i = 0; i < RAIN_N; i++) { rainOff[i * 3] = rnd(0, RAIN_BOX); rainOff[i * 3 + 1] = rnd(0, RAIN_H); rainOff[i * 3 + 2] = rnd(0, RAIN_BOX); }
+const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+const rainMat = new THREE.LineBasicMaterial({ color: 0xcfe3f5, transparent: true, opacity: 0, depthWrite: false });
+const rain = new THREE.LineSegments(rainGeo, rainMat); rain.frustumCulled = false; rain.visible = false; scene.add(rain);
+let flash = 0, rainShift = 0;
+const wrap = (v, m) => ((v % m) + m) % m;
+function updateRain(dt) {
+  const k = clamp((env.storm - 0.25) * 1.8, 0, 1);
+  rain.visible = k > 0.02; rainMat.opacity = k * 0.5;
+  if (!rain.visible) return;
+  rainShift += dt;
+  const wx = Math.cos(env.wdir) * env.wind * 0.25, wz = Math.sin(env.wdir) * env.wind * 0.25, fall = 30;
+  const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z, sl = 0.045;
+  for (let i = 0; i < RAIN_N; i++) {
+    const x = cx + wrap(rainOff[i * 3] + wx * rainShift - cx, RAIN_BOX) - RAIN_BOX / 2;
+    const y = cy + wrap(rainOff[i * 3 + 1] - fall * rainShift - cy, RAIN_H) - RAIN_H * 0.4;
+    const z = cz + wrap(rainOff[i * 3 + 2] + wz * rainShift - cz, RAIN_BOX) - RAIN_BOX / 2;
+    const o = i * 6;
+    rainPos[o] = x; rainPos[o + 1] = y; rainPos[o + 2] = z;
+    rainPos[o + 3] = x - wx * sl; rainPos[o + 4] = y + fall * sl; rainPos[o + 5] = z - wz * sl;
+  }
+  rainGeo.attributes.position.needsUpdate = true;
+}
+function updateLightning(dt) {
+  if (env.storm > 0.5 && Math.random() < dt * 0.18 * env.storm) {
+    flash = 1;
+    setTimeout(() => { ArcadeCore.playTone(48, 1.4, 'sawtooth', 0.1); ArcadeCore.playTone(71, 0.9, 'triangle', 0.07); }, rnd(300, 1400));
+  }
+  flash *= Math.exp(-dt * 7);
+}
+
+// ---------- Bojen-Jagd ----------
+const buoy = new THREE.Group();
+{
+  const red = std({ color: 0xe0281f, roughness: 0.45 }), white = std({ color: 0xf5f5f5, roughness: 0.45 });
+  addMesh(buoy, new THREE.CylinderGeometry(1.5, 1.9, 1.6, 16), red, 0, 0.2, 0);
+  addMesh(buoy, new THREE.CylinderGeometry(0.9, 1.5, 1.4, 16), white, 0, 1.7, 0);
+  addMesh(buoy, new THREE.CylinderGeometry(0.12, 0.12, 3.2, 8), red, 0, 4, 0);
+  addMesh(buoy, new THREE.SphereGeometry(0.45, 12, 10), std({ color: 0xffe14a, emissive: 0xffb000, emissiveIntensity: 1.6 }), 0, 5.8, 0);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 90, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  beam.position.y = 50; buoy.add(beam);
+}
+buoy.visible = false; scene.add(buoy);
+let hunt = null; // {t, n}
+function placeBuoy() {
+  const a = rnd(0, Math.PI * 2), r = clamp(boat.def.L * 3, 60, 180) * rnd(0.8, 1.2);
+  buoy.position.set(boat.pos.x + Math.cos(a) * r, 0, boat.pos.z + Math.sin(a) * r);
+}
+function startHunt() {
+  stopStorm(); resetBoat();
+  hunt = { t: 75, n: 0 }; placeBuoy(); buoy.visible = true;
+  $('hunt').textContent = '⏹ Jagd stoppen'; $('hunt').classList.add('on'); $('nav').style.display = 'flex';
+  banner('🎯 BOJEN-JAGD<br><span style="font-size:20px">Sammle Bojen, jede gibt +20 s!</span>', 2.5);
+}
+function stopHunt() {
+  hunt = null; buoy.visible = false;
+  $('hunt').textContent = '🎯 Bojen-Jagd'; $('hunt').classList.remove('on'); $('nav').style.display = 'none';
+}
+function updateHunt(dt) {
+  if (!hunt) return;
+  const d = boat.def;
+  hunt.t -= dt;
+  buoy.position.y = waterHeight(buoy.position.x, buoy.position.z) - 0.4;
+  buoy.rotation.set(Math.sin(env.t * 1.3) * 0.12, env.t * 0.4, Math.cos(env.t * 1.1) * 0.12);
+  const dx = buoy.position.x - boat.pos.x, dz = buoy.position.z - boat.pos.z, dist = Math.hypot(dx, dz);
+  if (!boat.capsized && dist < d.L * 0.5 + 4) {
+    hunt.n++; hunt.t = Math.min(hunt.t + 20, 120);
+    ArcadeCore.coin(); banner('🎯 +1 · +20 s', 0.9); placeBuoy();
+  }
+  // Richtungspfeil relativ zur Blickrichtung
+  const fx = boat.pos.x - camera.position.x, fz = boat.pos.z - camera.position.z, fl = Math.hypot(fx, fz) || 1;
+  const ang = Math.atan2((dx * -fz + dz * fx) / fl, (dx * fx + dz * fz) / fl);
+  $('navArrow').style.transform = 'rotate(' + ang.toFixed(2) + 'rad)';
+  $('navTxt').textContent = Math.round(dist) + ' m · ' + hunt.n + ' 🎯 · ' + Math.max(0, Math.ceil(hunt.t)) + ' s';
+  if (hunt.t <= 0) {
+    const n = hunt.n; let rec = '';
+    if (n > bestHunt) { bestHunt = n; ArcadeCore.saveScore(KEY_HUNT, n); rec = ' · NEUER REKORD!'; }
+    stopHunt(); ArcadeCore.powerup();
+    banner(`🎯 ZEIT UM!<br><span style="font-size:22px">${n} Bojen mit ${d.name}${rec}</span>`, 3.5);
+  }
+}
+
 // ---------- Kamera ----------
-let camYaw = -2.4, camPitch = 0.32, camDist = 40, drag = null, brushOn = false, brushDown = false;
+let camYaw = -2.4, camPitch = 0.32, camDist = 40, drag = null, brushOn = false, brushDown = false, camFollow = false, paused = false;
+function boatHeading() { _c.set(1, 0, 0).applyQuaternion(boat.q); return Math.atan2(_c.z, _c.x); }
+function toggleCam() {
+  const h = boatHeading();
+  camFollow = !camFollow;
+  camYaw = camFollow ? Math.PI : camYaw + h; // Verfolger: hinter dem Heck starten
+  $('camBtn').classList.toggle('on', camFollow);
+}
+function togglePause() { paused = !paused; $('pause').classList.toggle('on', paused); $('pauseTag').style.display = paused ? 'block' : 'none'; }
 const cv = $('gl');
 const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
 function waterPick(e) {
@@ -519,12 +644,12 @@ function audio() {
   try {
     actx = ArcadeCore.getAudioContext(); if (!actx) return;
     if (actx.state === 'suspended') actx.resume();
-    if (!oceanGain && !ArcadeCore.isMuted()) {
+    if (!oceanGain) {
       const n = actx.sampleRate * 3, b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0);
       let l = 0; for (let i = 0; i < n; i++) { l = l * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = l * 6; }
       const s = actx.createBufferSource(); s.buffer = b; s.loop = true;
       const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500;
-      oceanGain = actx.createGain(); oceanGain.gain.value = 0.1;
+      oceanGain = actx.createGain(); oceanGain.gain.value = 0;
       s.connect(f); f.connect(oceanGain); oceanGain.connect(actx.destination); s.start();
     }
   } catch (e) {}
@@ -533,7 +658,7 @@ function audio() {
 // ---------- Panel ----------
 const sel = $('boatSel');
 BOATS.forEach((b, i) => { const o = document.createElement('option'); o.value = i; o.textContent = (i + 1) + '. ' + b.name; sel.appendChild(o); });
-sel.onchange = () => { selectBoat(+sel.value); sel.blur(); stopStorm(); };
+sel.onchange = () => { stopModes(); selectBoat(+sel.value); sel.blur(); };
 $('sea').oninput = e => { env.sea = +e.target.value; $('seaV').textContent = env.sea.toFixed(2); updateWaveParams(); };
 $('wind').oninput = e => { env.wind = +e.target.value; $('windV').textContent = env.wind; updateWaveParams(); };
 $('wdir').oninput = e => { env.wdir = +e.target.value * Math.PI / 180; $('dirV').textContent = e.target.value; updateWaveParams(); };
@@ -546,17 +671,24 @@ function spawnRogue() {
 }
 $('rogue').onclick = () => { audio(); spawnRogue(); };
 $('brush').onclick = () => { brushOn = !brushOn; $('brush').classList.toggle('on', brushOn); };
-$('reset').onclick = () => { resetBoat(); stopStorm(); };
+$('reset').onclick = () => { stopModes(); resetBoat(); };
+$('hunt').onclick = () => { audio(); hunt ? stopHunt() : startHunt(); };
+$('camBtn').onclick = toggleCam;
+$('pause').onclick = togglePause;
+const muteBtn = $('mute'), syncMute = () => { muteBtn.textContent = ArcadeCore.isMuted() ? '🔇' : '🔊'; };
+muteBtn.onclick = () => { ArcadeCore.toggleMute(); syncMute(); audio(); };
+addEventListener('arcade_mute_changed', syncMute); syncMute();
 $('toggle').onclick = () => { const p = $('panel'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; };
 if (innerWidth < 700) $('panel').style.display = 'none';
 let storm = null;
 function startStorm() {
-  storm = { t: 0, next: 20 }; resetBoat();
+  stopHunt(); storm = { t: 0, next: 20 }; resetBoat();
   env.sea = 0.8; env.wind = 18; syncSliders(); updateWaveParams();
   $('storm').textContent = '⏹ Challenge stoppen'; $('storm').classList.add('on');
   banner('⛈️ STURM-CHALLENGE<br><span style="font-size:20px">Halte dich über Wasser!</span>', 2.5);
 }
 function stopStorm() { storm = null; $('storm').textContent = '⛈️ Sturm-Challenge'; $('storm').classList.remove('on'); }
+function stopModes() { stopStorm(); stopHunt(); }
 $('storm').onclick = () => { audio(); storm ? stopStorm() : startStorm(); };
 function syncSliders() { $('sea').value = env.sea; $('seaV').textContent = env.sea.toFixed(2); $('wind').value = env.wind; $('windV').textContent = Math.round(env.wind); }
 let bannerT = 0;
@@ -565,24 +697,27 @@ function banner(html, dur = 1.6) { $('banner').innerHTML = html; $('banner').cla
 // ---------- Eingabe ----------
 const keys = {}, touch = {};
 addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') { if (!['w', 'a', 's', 'd', 'q', 'e'].includes(e.key.toLowerCase())) return; }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') { if (!['w', 'a', 's', 'd', 'q', 'e', 'x'].includes(e.key.toLowerCase())) return; }
   const k = e.key.toLowerCase(); keys[k] = true;
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'backspace'].includes(k)) e.preventDefault();
   if (e.repeat) return;
-  if (k >= '1' && k <= '8') { sel.value = +k - 1; selectBoat(+k - 1); stopStorm(); }
+  if (k >= '1' && k <= '8') { stopModes(); sel.value = +k - 1; selectBoat(+k - 1); }
   if (k === 'm') { audio(); spawnRogue(); }
   if (k === 'r') $('brush').click();
-  if (k === 'backspace') { resetBoat(); stopStorm(); }
+  if (k === 'backspace') { stopModes(); resetBoat(); }
+  if (k === 'x') boat.throttle = 0;
+  if (k === 'c') toggleCam();
+  if (k === 'p') togglePause();
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
-for (const [id, k] of [['tL', 'l'], ['tR', 'r'], ['tF', 'f'], ['tB', 'b']]) {
+for (const [id, k] of [['tL', 'l'], ['tR', 'r'], ['tF', 'f'], ['tB', 'b'], ['tU', 'u'], ['tD', 'd']]) {
   const el = $(id);
   el.addEventListener('pointerdown', e => { e.preventDefault(); touch[k] = true; el.classList.add('on'); el.setPointerCapture(e.pointerId); });
   const upF = () => { touch[k] = false; el.classList.remove('on'); };
   el.addEventListener('pointerup', upF); el.addEventListener('pointercancel', upF);
 }
-addEventListener('touchstart', () => { $('touch').style.display = 'block'; }, { passive: true, once: true });
+addEventListener('touchstart', () => { $('touch').style.display = 'block'; document.body.classList.add('touch'); }, { passive: true, once: true });
 
 // ---------- HUD ----------
 const heelCtx = $('heel').getContext('2d');
@@ -607,11 +742,16 @@ function drawHeel(roll, pitch) {
 // ---------- Loop ----------
 let last = performance.now();
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
-let camInit = false;
+let camInit = false, hudT = 0, skyStorm = 0, slowT = 0, frameAvg = 0.016;
+const _roll = V3(), _tp = V3(), _lk = V3();
 function loop(t) {
   requestAnimationFrame(loop);
-  const dt = Math.min((t - last) / 1000, 0.05); last = t;
+  const rdt = Math.min((t - last) / 1000, 0.05); last = t;
+  const dt = paused ? 0 : rdt;
   env.t += dt;
+  // Auflösung senken, wenn das Gerät dauerhaft nicht hinterherkommt
+  frameAvg += (rdt - frameAvg) * 0.05;
+  if (frameAvg > 0.03 && renderer.getPixelRatio() > 1) { slowT += rdt; if (slowT > 3) { renderer.setPixelRatio(1); slowT = 0; } } else slowT = 0;
   if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show'); }
   // Steuerung
   const d = boat.def;
@@ -619,7 +759,7 @@ function loop(t) {
   if (th) boat.throttle = clamp(boat.throttle + th * dt * 0.6, -0.5, 1); else if (Math.abs(boat.throttle) < 0.03) boat.throttle = 0;
   const rd = (keys['a'] || keys['arrowleft'] || touch.l ? 1 : 0) - (keys['d'] || keys['arrowright'] || touch.r ? 1 : 0);
   boat.rudder += ((rd * 0.6) - boat.rudder) * Math.min(1, dt * 3);
-  if (d.sub) { if (keys['q']) boat.ballast = clamp(boat.ballast - dt * 0.25, 0.38, 1.1); if (keys['e']) boat.ballast = clamp(boat.ballast + dt * 0.25, 0.38, 1.1); }
+  if (d.sub) { if (keys['q'] || touch.d) boat.ballast = clamp(boat.ballast - dt * 0.25, 0.38, 1.1); if (keys['e'] || touch.u) boat.ballast = clamp(boat.ballast + dt * 0.25, 0.38, 1.1); }
   // Sturm-Challenge
   if (storm) {
     storm.t += dt;
@@ -629,8 +769,9 @@ function loop(t) {
     storm.next -= dt; if (storm.next <= 0) { storm.next = Math.max(10, 24 - storm.t * 0.06); spawnRogue(); }
   }
   env.storm += ((clamp((env.sea - 1) / 2, 0, 1) * 0.5 + clamp((env.wind - 25) / 35, 0, 1) * 0.5) - env.storm) * Math.min(1, dt * 0.5);
-  if (Math.random() < dt * 2) paintSky(env.storm);
-  sun.intensity = 2.2 * (1 - env.storm * 0.7); hemi.intensity = 1.1 * (1 - env.storm * 0.35);
+  if (Math.abs(env.storm - skyStorm) > 0.01) { skyStorm = env.storm; paintSky(skyStorm); }
+  updateLightning(dt);
+  sun.intensity = 2.2 * (1 - env.storm * 0.7); hemi.intensity = 1.1 * (1 - env.storm * 0.35) + flash * 4;
   // Monsterwelle
   if (rogue) { rogue.s += rogue.c * dt; if (rogue.s - (boat.pos.x * rogue.dx + boat.pos.z * rogue.dz) > 160) rogue = null; }
   for (let i = ripples.length - 1; i >= 0; i--) if (env.t - ripples[i].t0 > 14) ripples.splice(i, 1);
@@ -640,9 +781,8 @@ function loop(t) {
   let up;
   for (let i = 0; i < sub; i++) up = stepBoat(dt / sub);
   // Kentern / Sinken
-  const roll = Math.atan2(new THREE.Vector3(0, 0, 1).applyQuaternion(boat.q).y, up.y);
-  const fwdV = new THREE.Vector3(1, 0, 0).applyQuaternion(boat.q);
-  const pitch = Math.asin(clamp(fwdV.y, -1, 1));
+  const roll = Math.atan2(_roll.set(0, 0, 1).applyQuaternion(boat.q).y, up.y);
+  const pitch = Math.asin(clamp(_roll.set(1, 0, 0).applyQuaternion(boat.q).y, -1, 1));
   boat.maxHeel = Math.max(boat.maxHeel, Math.abs(roll));
   const sunk = !d.sub && boat.pos.y < waterHeight(boat.pos.x, boat.pos.z) - d.free - d.draft - 2;
   if (!boat.capsized && (up.y < 0.05 || sunk || boat.flood > 0.95)) {
@@ -657,29 +797,37 @@ function loop(t) {
         setTimeout(() => banner(`⛈️ ${d.name}<br><span style="font-size:22px">${s} s im Sturm überlebt${rec}</span>`, 3.5), 2600);
         stopStorm();
       }
-      setTimeout(() => { resetBoat(); if (env.sea > 1.6 && !storm) { env.sea = 1.2; syncSliders(); updateWaveParams(); } }, 3200);
+      const gen = boat.gen;
+      setTimeout(() => {
+        if (boat.gen !== gen) return; // inzwischen manuell zurückgesetzt / Schiff gewechselt
+        resetBoat(); if (hunt) placeBuoy();
+        if (env.sea > 1.6 && !storm) { env.sea = 1.2; syncSliders(); updateWaveParams(); }
+      }, 3200);
     }
   } else if (up.y > 0.3) boat.capT = 0;
   boat.mesh.position.copy(boat.pos); boat.mesh.quaternion.copy(boat.q);
   // Wasser & Szene
   updateWater(boat.pos.x, boat.pos.z);
   updateSpray(dt);
+  updateHunt(dt);
   for (const g of gulls) { const u = g.userData; u.a += dt * u.s; g.position.set(boat.pos.x + Math.cos(u.a) * u.r, u.h + Math.sin(u.a * 3) * 1.5, boat.pos.z + Math.sin(u.a) * u.r); g.rotation.y = -u.a; const f = Math.sin(env.t * 9 + u.r) * 0.5; u.wl.rotation.x = f; u.wr.rotation.x = -f; g.visible = env.storm < 0.6; }
-  if (oceanGain) oceanGain.gain.value = 0.06 + env.sea * 0.05 + env.wind * 0.002;
+  if (oceanGain) oceanGain.gain.value = ArcadeCore.isMuted() || paused ? 0 : 0.06 + env.sea * 0.05 + env.wind * 0.002;
   // Kamera
-  const dist = camDist;
-  const tp = new THREE.Vector3(boat.pos.x + Math.cos(camYaw) * Math.cos(camPitch) * dist, boat.pos.y + Math.sin(camPitch) * dist + d.free, boat.pos.z + Math.sin(camYaw) * Math.cos(camPitch) * dist);
+  const dist = camDist, yaw = camYaw + (camFollow ? boatHeading() : 0);
+  const tp = _tp.set(boat.pos.x + Math.cos(yaw) * Math.cos(camPitch) * dist, boat.pos.y + Math.sin(camPitch) * dist + d.free, boat.pos.z + Math.sin(yaw) * Math.cos(camPitch) * dist);
   const wh = waterHeight(tp.x, tp.z) + 1.5; if (tp.y < wh) tp.y = wh;
   if (!camInit) { camPos.copy(tp); camLook.copy(boat.pos); camInit = true; }
-  camPos.lerp(tp, Math.min(1, dt * 4)); camLook.lerp(boat.pos.clone().add(new THREE.Vector3(0, d.free, 0)), Math.min(1, dt * 6));
+  camPos.lerp(tp, Math.min(1, rdt * 4)); camLook.lerp(_lk.copy(boat.pos).setY(boat.pos.y + d.free), Math.min(1, rdt * 6));
   camera.position.copy(camPos); camera.lookAt(camLook);
+  updateRain(dt);
   sun.position.set(boat.pos.x + 80, 140, boat.pos.z + 50); sun.target.position.copy(boat.pos);
   sun.shadow.camera.left = sun.shadow.camera.bottom = -Math.max(40, d.L); sun.shadow.camera.right = sun.shadow.camera.top = Math.max(40, d.L); sun.shadow.camera.updateProjectionMatrix();
   sunDisk.position.set(camera.position.x + 600, 420, camera.position.z + 380);
   // HUD
   const spd = Math.hypot(boat.vel.x, boat.vel.z) / 0.514;
   const draftNow = Math.max(0, waterHeight(boat.pos.x, boat.pos.z) - (boat.pos.y - d.draft));
-  $('stats').innerHTML = `<b>${d.name}</b><br>⚓ ${spd.toFixed(1)} kn<br>Trimm ${(pitch * 180 / Math.PI).toFixed(1)}°<br>Tiefgang ${draftNow.toFixed(1)} m${d.sub ? '<br>Tiefe ' + Math.max(0, -boat.pos.y).toFixed(1) + ' m · Ballast ' + Math.round((1.1 - boat.ballast) / 0.72 * 100) + '%' : ''}<br>💧 Wasser im Rumpf ${Math.round(boat.flood * 100)}%<br>Max. Krängung ${Math.round(boat.maxHeel * 180 / Math.PI)}°` + (storm ? `<br>⛈️ <b>${Math.floor(storm.t)} s</b> überlebt` : '') + (bestStorm ? `<br>🏆 Sturm-Rekord ${bestStorm} s` : '');
+  hudT -= rdt;
+  if (hudT <= 0) { hudT = 0.12; $('stats').innerHTML = `<b>${d.name}</b><br>⚓ ${spd.toFixed(1)} kn<br>Trimm ${(pitch * 180 / Math.PI).toFixed(1)}°<br>Tiefgang ${draftNow.toFixed(1)} m${d.sub ? '<br>Tiefe ' + Math.max(0, -boat.pos.y).toFixed(1) + ' m · Ballast ' + Math.round((1.1 - boat.ballast) / 0.72 * 100) + '%' : ''}<br>💧 Wasser im Rumpf ${Math.round(boat.flood * 100)}%<br>Max. Krängung ${Math.round(boat.maxHeel * 180 / Math.PI)}°` + (storm ? `<br>⛈️ <b>${Math.floor(storm.t)} s</b> überlebt` : '') + (bestStorm ? `<br>🏆 Sturm-Rekord ${bestStorm} s` : '') + (bestHunt ? `<br>🎯 Bojen-Rekord ${bestHunt}` : ''); }
   $('thr').style.left = (boat.throttle >= 0 ? 50 : 50 + boat.throttle * 50) + '%'; $('thr').style.width = Math.abs(boat.throttle) * 50 + '%';
   $('thr').style.background = boat.throttle >= 0 ? '#5fe36a' : '#ff8a3a';
   drawHeel(roll, pitch);
