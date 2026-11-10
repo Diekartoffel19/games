@@ -1,4 +1,4 @@
-﻿# 🕹️ Game Arcade & Web Tools
+﻿# Game Arcade & Web Tools
 
 Eine umfassende, eigenständige Sammlung von **über 65 Browser-Games, interaktiven Web-Tools und Lern-Apps** — komplett clientseitig in HTML5, Canvas und modernem Vanilla JavaScript umgesetzt, ohne Build-Step, Bundler oder externe Backend-Abhängigkeiten.
 
