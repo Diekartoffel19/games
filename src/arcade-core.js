@@ -278,7 +278,8 @@ const ArcadeCore = (() => {
     'microwave': 'mw_best',
     'magnet': 'mag_best',
     'ballistics': 'ballistics_best',
-    'gischtjagd': 'gischtjagd_wins'
+    'gischtjagd': 'gischtjagd_wins',
+    'grundriss': 'grundriss_wins'
   };
 
   function getScore(gameKey) {

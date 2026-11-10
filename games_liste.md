@@ -215,7 +215,7 @@ Die restlichen 53 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
    - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match*  
    *Begründung:* Präzise Eingaben im Millisekundentakt erfordern maximale Übersicht ohne Kamera-Verdeckung, Tiefenunschärfe oder Perspektivverzerrung. 3D-Tetris oder 3D-Snake schaffen visuelle Hürden statt Spielspaß.
 2. **Karten- & Deckbuilder-Systeme:**
-   - *Spire of Cards, Backpack Gladiator*  
+   - *Spire of Cards, Backpack Gladiator, Grundriss (Raum-Drafting-Roguelike, `games/grundriss.html`)*  
    *Begründung:* Inventarverwaltung und Kartenstapel benötigen saubere 2D-GUIs mit Tooltips und Hover-Zuständen. 3D-Karten verlangsamen das schnelle Lesen.
 3. **Finanz-, Strategie- & Text-Simulationen:**
    - *Wall Street Trader (Stocks), Wähl Mich! (Propaganda), El Patrón, Kiez Simulator*  

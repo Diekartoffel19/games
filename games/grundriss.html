@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Grundriss — The Drafted Manor</title>
+<meta name="description" content="Roguelike room-drafting mystery: build a manor room by room from three blueprints per door, manage steps, keys and gems, and crack the Observatory cipher.">
+<meta name="theme-color" content="#24180f">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<style>
+:root {
+  --wood:#24180f; --wood2:#3a2818; --paper:#efe3c8; --paper2:#e2d2ae; --ink:#3b2a1a; --ink2:#6b5440;
+  --gold:#d9a636; --red:#a8473f; --teal:#3e8a8c;
+}
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { margin:0; height:100%; overflow:hidden; background:var(--wood); color:var(--paper); font-family:Georgia,"Times New Roman",serif; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:var(--paper); text-decoration:none; font-size:14px; font-weight:700; background:rgba(58,40,24,.9); border:1px solid rgba(217,166,54,.45); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:4px; min-height:36px; font-family:system-ui,sans-serif; }
+.back:hover { background:rgba(217,166,54,.3); }
+#wrap { position:fixed; inset:0; display:flex; padding:54px 10px 10px; gap:10px; }
+#mapbox { position:relative; flex:1; min-width:0; min-height:0; background:radial-gradient(ellipse at center,#3a2818,#1a110a); border-radius:12px; box-shadow:inset 0 0 40px #000a; }
+#map { position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:pointer; }
+#title { position:fixed; top:12px; left:0; right:0; text-align:center; pointer-events:none; font-size:20px; letter-spacing:3px; color:var(--gold); font-variant:small-caps; }
+#side { width:340px; display:flex; flex-direction:column; gap:8px; overflow-y:auto; min-height:0; }
+.panel { background:var(--paper); color:var(--ink); border-radius:10px; padding:10px 12px; box-shadow:0 3px 0 #0006; }
+.panel h3 { margin:0 0 6px; font-size:15px; font-variant:small-caps; letter-spacing:1px; color:var(--ink2); }
+#res { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; text-align:center; }
+#res div { background:var(--paper2); border-radius:8px; padding:4px 0; }
+#res b { display:block; font-size:20px; }
+#res span { font-size:11px; color:var(--ink2); }
+#res .steps b { color:var(--red); }
+#dayline { display:flex; justify-content:space-between; font-size:13px; color:var(--ink2); margin-bottom:6px; }
+#roomName { font-size:18px; font-weight:bold; }
+#roomDesc { font-size:13px; line-height:1.35; margin:4px 0; }
+#roomActions { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+#log { font-size:12.5px; line-height:1.35; max-height:150px; overflow-y:auto; }
+#log div { padding:2px 0; border-bottom:1px dotted #0002; }
+#log div:first-child { font-weight:bold; }
+button { font:inherit; font-size:14px; font-weight:bold; color:var(--paper); background:var(--ink); border:0; border-radius:8px; padding:7px 12px; cursor:pointer; box-shadow:0 3px 0 #0007; }
+button:hover:not(:disabled) { background:#5a3f27; }
+button:active:not(:disabled) { transform:translateY(2px); box-shadow:0 1px 0 #0007; }
+button:disabled { opacity:.4; cursor:default; }
+button.gold { background:var(--gold); color:var(--ink); }
+button.gold:hover:not(:disabled) { background:#e8bb55; }
+.row { display:flex; gap:6px; flex-wrap:wrap; }
+.overlay { position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center; background:#000c; padding:16px; overflow-y:auto; }
+.overlay.hide { display:none; }
+.sheet { background:var(--paper); color:var(--ink); border-radius:14px; padding:18px 20px; max-width:720px; width:100%; max-height:100%; overflow-y:auto; box-shadow:0 10px 0 #0008; border:3px double var(--ink2); }
+.sheet h1 { margin:0 0 4px; font-variant:small-caps; letter-spacing:2px; }
+.sheet h2 { margin:6px 0; font-size:18px; font-variant:small-caps; }
+.sheet p { line-height:1.45; margin:6px 0; }
+.small { font-size:13px; color:var(--ink2); }
+#cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+.card { position:relative; background:#f7eedb; border:2px solid var(--ink2); border-radius:10px; padding:8px; text-align:center; cursor:pointer; transition:transform .12s, box-shadow .12s; }
+.card:hover { transform:translateY(-3px); box-shadow:0 6px 0 #0003; }
+.card.poor { opacity:.5; cursor:not-allowed; }
+.card canvas { width:84px; height:84px; display:block; margin:0 auto; }
+.card .nm { font-weight:bold; font-size:15px; margin-top:4px; }
+.card .cat { font-size:11px; text-transform:uppercase; letter-spacing:1px; }
+.card .ds { font-size:12.5px; line-height:1.3; margin-top:4px; min-height:48px; }
+.card .cost { position:absolute; top:6px; right:8px; font-weight:bold; font-size:13px; }
+.card .rot { position:absolute; top:4px; left:4px; padding:3px 7px; font-size:13px; }
+.card .key { position:absolute; bottom:4px; right:8px; font-size:11px; color:var(--ink2); }
+.upg { display:grid; grid-template-columns:1fr auto; gap:6px 10px; align-items:center; margin:8px 0; }
+.upg .pips { color:var(--gold); letter-spacing:2px; }
+.sig { font-size:26px; width:52px; height:52px; padding:0; font-family:"Segoe UI Symbol","DejaVu Sans",serif; }
+.slot { display:inline-flex; width:60px; height:60px; align-items:center; justify-content:center; border:3px solid var(--ink2); border-radius:50%; font-size:30px; margin:4px; background:#f7eedb; cursor:pointer; font-family:"Segoe UI Symbol","DejaVu Sans",serif; }
+.slot.cur { border-color:var(--gold); box-shadow:0 0 0 3px #d9a63655; }
+#notes { border-collapse:collapse; margin:6px 0; font-family:"Segoe UI Symbol","DejaVu Sans",serif; }
+#notes td, #notes th { border:1px solid var(--ink2); width:34px; height:30px; text-align:center; font-size:16px; cursor:pointer; user-select:none; }
+#notes th { cursor:default; font-size:12px; font-family:Georgia,serif; }
+#notes td.x { color:var(--red); }
+#notes td.v { color:#2f7a3a; font-weight:bold; }
+.clue { padding:3px 0; border-bottom:1px dotted #0002; font-size:14px; }
+.toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink); color:var(--paper); padding:8px 16px; border-radius:20px; font-size:14px; z-index:60; pointer-events:none; opacity:0; transition:opacity .2s; max-width:90vw; text-align:center; }
+.toast.on { opacity:1; }
+@media (max-width:760px) {
+  #wrap { flex-direction:column; padding-top:52px; }
+  #mapbox { flex:none; height:56vh; }
+  #side { width:auto; flex:1; }
+  #title { left:auto; right:14px; text-align:right; font-size:16px; }
+}
+</style>
+</head>
+<body>
+<a class="back" href="../index.html">← Arcade</a>
+<div id="title">Grundriss</div>
+<div id="wrap">
+  <div id="mapbox"><canvas id="map"></canvas></div>
+  <div id="side">
+    <div class="panel">
+      <div id="dayline"><span id="dayTxt">Day 1</span><span id="rankTxt">Rank 9</span></div>
+      <div id="res">
+        <div class="steps"><b id="rSteps">0</b><span>steps</span></div>
+        <div><b id="rKeys">0</b><span>keys</span></div>
+        <div><b id="rGems">0</b><span>gems</span></div>
+        <div><b id="rCoins">0</b><span>coins</span></div>
+        <div><b id="rDice">0</b><span>dice</span></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>You stand in</h3>
+      <div id="roomName">Foyer</div>
+      <div id="roomDesc"></div>
+      <div id="roomActions"></div>
+    </div>
+    <div class="panel">
+      <div class="row">
+        <button id="btnJournal">📖 Journal</button>
+        <button id="btnEnd">🕯 End Day</button>
+        <button id="btnMute">🔊</button>
+        <button id="btnHelp">?</button>
+      </div>
+    </div>
+    <div class="panel"><h3>Ledger</h3><div id="log"></div></div>
+  </div>
+</div>
+
+<!-- Draft overlay -->
+<div id="ovDraft" class="overlay hide"><div class="sheet">
+  <h1>Draft a Room</h1>
+  <p class="small" id="draftInfo"></p>
+  <div id="cards"></div>
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <span class="small">Click a blueprint to build it. ⟳ turns it. Keys 1–4 pick, Space rerolls.</span>
+    <button id="btnReroll">🎲 Redraw (1 die)</button>
+  </div>
+</div></div>
+
+<!-- Cipher overlay -->
+<div id="ovCipher" class="overlay hide"><div class="sheet" style="max-width:520px;text-align:center">
+  <h1>The Observatory Dial</h1>
+  <p>A brass dial bars the telescope. Three sigils, in order. A wrong combination jams the dial and costs <b>2 steps</b>.</p>
+  <div id="slots"></div>
+  <div id="sigBtns" class="row" style="justify-content:center;margin:8px 0"></div>
+  <div class="row" style="justify-content:center">
+    <button id="btnClearDial">Clear</button>
+    <button class="gold" id="btnSubmitDial">Turn the Dial</button>
+    <button id="btnLeaveDial">Step back</button>
+  </div>
+  <p class="small" id="dialHint"></p>
+</div></div>
+
+<!-- Journal overlay -->
+<div id="ovJournal" class="overlay hide"><div class="sheet">
+  <h1>Journal</h1>
+  <p class="small">Clues survive the night. The combination stays the same until you open the Observatory.</p>
+  <h2>Deduction grid</h2>
+  <p class="small">Tap a cell to mark it ✗ (ruled out) or ✓ (certain).</p>
+  <table id="notes"></table>
+  <h2>Clues found</h2>
+  <div id="clueList"></div>
+  <h2>Dial attempts</h2>
+  <div id="guessList"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="gold" id="btnCloseJournal">Close</button></div>
+</div></div>
+
+<!-- Menu / day-end overlay -->
+<div id="ovMenu" class="overlay"><div class="sheet">
+  <h1 id="menuTitle">Grundriss</h1>
+  <div id="menuBody"></div>
+  <h2>Estate Improvements</h2>
+  <p class="small">Fund: <b id="fundTxt">0</b> coins. Coins you hold at day's end (plus a stipend per room drafted) go into the fund.</p>
+  <div id="upgList" class="upg"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:10px">
+    <button id="btnMenuJournal">📖 Journal</button>
+    <button class="gold" id="btnStart">Begin Day 1</button>
+  </div>
+</div></div>
+
+<!-- Help overlay -->
+<div id="ovHelp" class="overlay hide"><div class="sheet">
+  <h1>How to Play</h1>
+  <p>Your late great-aunt left you a manor that rearranges itself every night. Each morning you enter the <b>Foyer</b> on the bottom rank. The <b>Observatory</b> waits at the top. Open it and the estate is yours.</p>
+  <p><b>Drafting.</b> Walk through a door that leads to an unbuilt square and you choose one of three blueprints to build there. Each room has its own doors, effects and placement rules. Turn a blueprint with ⟳ so its doors point where you need them. Some rooms cost gems.</p>
+  <p><b>Steps.</b> Entering any room costs 1 step. At 0 steps the day ends and the manor resets. Food and bedrooms give steps back.</p>
+  <p><b>Keys & locks.</b> Doors higher in the manor are often locked. Each lock eats one key. <b>Dice</b> redraw the blueprints.</p>
+  <p><b>The Cipher.</b> The Observatory dial needs three sigils. Studies, the Library and the Chapel hold clues. Clues and failed attempts stay in your journal between days, so every day brings you closer.</p>
+  <p><b>Controls.</b> Click an adjacent room or door, or use arrow keys / WASD. Click any built room to walk there by the shortest route. J opens the journal.</p>
+  <div class="row" style="justify-content:flex-end"><button class="gold" id="btnCloseHelp">Got it</button></div>
+</div></div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+(() => {
+'use strict';
+const AC = window.ArcadeCore || null;
+const snd = (n, ...a) => { try { AC && AC[n] && AC[n](...a); } catch (e) {} };
+const tone = (f, d, t, g) => snd('playTone', f, d, t, g);
+
+// ---------- Geometry ----------
+const COLS = 5, ROWS = 9;
+const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0], DNAME = ['north', 'east', 'south', 'west'];
+const SHAPES = { dead: [1,0,0,0], straight: [1,0,1,0], corner: [1,1,0,0], tee: [1,1,0,1], cross: [1,1,1,1] };
+const SHAPE_NAME = { dead: 'Dead end', straight: 'Straight', corner: 'Corner', tee: 'T-junction', cross: 'Crossing' };
+const rot = (d, r) => { const o = [0,0,0,0]; for (let i = 0; i < 4; i++) o[(i + r) % 4] = d[i]; return o; };
+const inb = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
+const START = { r: 8, c: 2 }, GOAL = { r: 0, c: 2 };
+
+const CAT = {
+  hall:     { c: '#8b7355', n: 'Passage' },
+  food:     { c: '#c4862f', n: 'Kitchen wing' },
+  rest:     { c: '#5e8c5a', n: 'Living quarters' },
+  treasure: { c: '#c9a227', n: 'Treasury' },
+  clue:     { c: '#7a5a9e', n: 'Archive' },
+  shop:     { c: '#3e8a8c', n: 'Service' },
+  hazard:   { c: '#a8473f', n: 'Hazard' },
+  special:  { c: '#3d5f8f', n: 'Curiosity' },
+  garden:   { c: '#4c9a6a', n: 'Garden' }
+};
+
+// ---------- Rooms ----------
+const edgeCol = (r, c) => c === 0 || c === COLS - 1;
+const ROOMS = [
+  { id:'foyer', name:'Foyer', icon:'🚪', shape:'tee', cat:'special', copies:0, desc:'Where every day begins. Coats, umbrellas and a smell of old varnish.' },
+  { id:'observatory', name:'Observatory', icon:'🔭', shape:'dead', cat:'special', copies:0, desc:'A domed room at the top rank. A brass dial guards the telescope.' },
+
+  { id:'hallway', name:'Hallway', icon:'🕯', shape:'straight', cat:'hall', w:10, copies:5, desc:'A plain corridor. Cheap and dependable.' },
+  { id:'bend', name:'Bent Passage', icon:'↪', shape:'corner', cat:'hall', w:10, copies:5, desc:'A corridor that turns a corner.' },
+  { id:'junction', name:'Junction', icon:'✣', shape:'tee', cat:'hall', w:8, copies:4, desc:'Three ways out. The manor branches.' },
+  { id:'rotunda', name:'Rotunda', icon:'❂', shape:'cross', cat:'hall', w:3, copies:2, cost:2, place:(r,c)=>!edgeCol(r,c), placeNote:'Inner columns only', desc:'A round hall with doors on all sides.' },
+
+  { id:'pantry', name:'Pantry', icon:'🧀', shape:'dead', cat:'food', w:7, copies:3, desc:'+4 steps.', enter:G=>{ gain({steps:4}); return 'Bread and cheese. +4 steps.'; } },
+  { id:'kitchen', name:'Kitchen', icon:'🍲', shape:'corner', cat:'food', w:5, copies:2, cost:1, desc:'+9 steps.', enter:G=>{ gain({steps:9}); return 'A pot of stew still simmers. +9 steps.'; } },
+  { id:'dining', name:'Dining Hall', icon:'🍽', shape:'tee', cat:'food', w:4, copies:2, cost:1, desc:'+4 steps, +2 coins.', enter:G=>{ gain({steps:4, coins:2}); return 'Leftovers and silver under a napkin. +4 steps, +2 coins.'; } },
+
+  { id:'bedroom', name:'Guest Bedroom', icon:'🛏', shape:'corner', cat:'rest', w:6, copies:3, desc:'+5 steps.', enter:G=>{ gain({steps:5}); return 'You rest a moment. +5 steps.'; } },
+  { id:'bunkroom', name:'Bunk Room', icon:'🛌', shape:'dead', cat:'rest', w:3, copies:1, cost:1, desc:'+8 steps.', enter:G=>{ gain({steps:8}); return 'A proper nap. +8 steps.'; } },
+
+  { id:'closet', name:'Closet', icon:'🧥', shape:'dead', cat:'treasure', w:7, copies:4, desc:'Something in a coat pocket: a key, a gem or coins.', enter:G=>{
+      const x = Math.random();
+      if (x < .45) { gain({keys:1}); return 'A key in a coat pocket. +1 key.'; }
+      if (x < .75) { gain({gems:1}); return 'A loose gem in a shoe. +1 gem.'; }
+      gain({coins:3}); return 'Small change in a waistcoat. +3 coins.'; } },
+  { id:'storeroom', name:'Storeroom', icon:'📦', shape:'dead', cat:'treasure', w:4, copies:2, cost:1, desc:'+1 key, +1 gem, +2 coins.', enter:G=>{ gain({keys:1,gems:1,coins:2}); return 'Crates of odds and ends. +1 key, +1 gem, +2 coins.'; } },
+  { id:'vault', name:'Vault', icon:'💰', shape:'dead', cat:'treasure', w:2, copies:1, cost:3, place:(r)=>r<=3, placeNote:'Top four ranks only', desc:'+15 coins.', enter:G=>{ gain({coins:15}); return 'Stacks of old coin. +15 coins.'; } },
+  { id:'trophy', name:'Trophy Room', icon:'🏆', shape:'tee', cat:'treasure', w:2, copies:1, cost:2, desc:'+2 gems, +6 coins.', enter:G=>{ gain({gems:2,coins:6}); return 'You pry jewels off a gaudy cup. +2 gems, +6 coins.'; } },
+
+  { id:'greenhouse', name:'Greenhouse', icon:'🌿', shape:'corner', cat:'garden', w:4, copies:2, place:edgeCol, placeNote:'Outer wall only (needs sun)', desc:'+2 gems from the soil.', enter:G=>{ gain({gems:2}); return 'Gems glint in a flowerpot. +2 gems.'; } },
+  { id:'orangery', name:'Orangery', icon:'🍊', shape:'dead', cat:'garden', w:3, copies:1, place:edgeCol, placeNote:'Outer wall only (needs sun)', desc:'+3 gems, +3 steps.', enter:G=>{ gain({gems:3,steps:3}); return 'Oranges and a buried pouch. +3 gems, +3 steps.'; } },
+
+  { id:'study', name:'Study', icon:'🖋', shape:'corner', cat:'clue', w:5, copies:2, desc:'A desk full of notes. Reveals 1 clue.', enter:G=>revealClues(1) },
+  { id:'library', name:'Library', icon:'📚', shape:'tee', cat:'clue', w:4, copies:2, cost:1, desc:'Shelves of diaries. Reveals 2 clues.', enter:G=>revealClues(2) },
+  { id:'chapel', name:'Chapel', icon:'⛪', shape:'straight', cat:'clue', w:3, copies:1, desc:'Tithe 1 coin, gain 1 clue and 1 key.', enter:G=>{
+      if (G.coins > 0) { G.coins--; gain({keys:1}); return 'You leave a coin. A key lies by the altar. +1 key. ' + revealClues(1); }
+      return 'No coin for the tithe. The chapel stays silent.'; } },
+
+  { id:'locksmith', name:'Locksmith', icon:'🔑', shape:'dead', cat:'shop', w:3, copies:1, desc:'Buy keys for 4 coins.', shop:[{label:'Key', price:4, give:{keys:1}}] },
+  { id:'commissary', name:'Commissary', icon:'🛒', shape:'dead', cat:'shop', w:4, copies:1, desc:'Buy snacks, gems and dice.', shop:[{label:'Snack (+5 steps)', price:3, give:{steps:5}}, {label:'Gem', price:4, give:{gems:1}}, {label:'Die', price:4, give:{dice:1}}] },
+  { id:'laundry', name:'Laundry', icon:'🧺', shape:'straight', cat:'special', w:3, copies:1, desc:'Once: launder coins into gems, 3 coins per gem.', action:{label:'Launder coins', run:G=>{ const g = Math.floor(G.coins/3); if (!g) return 'Not enough coins to launder.'; G.coins -= g*3; G.gems += g; return 'Laundered ' + (g*3) + ' coins into ' + g + ' gem' + (g>1?'s':'') + '.'; }} },
+  { id:'boiler', name:'Boiler Room', icon:'♨', shape:'tee', cat:'special', w:3, copies:1, desc:'+1 die. Steam forces the next 2 locks open for free.', enter:G=>{ gain({dice:1}); G.freeLocks += 2; return 'Pipes hiss. +1 die, next 2 locks open free.'; } },
+  { id:'office', name:'Drafting Office', icon:'📐', shape:'dead', cat:'special', w:2, copies:1, cost:2, desc:'All drafts show 1 extra blueprint for the rest of the day.', enter:G=>{ G.extraDraft++; return 'Fresh vellum. Drafts now show one more blueprint.'; } },
+
+  { id:'cellar', name:'Cellar Stair', icon:'🪜', shape:'dead', cat:'hazard', w:5, copies:2, place:(r)=>r>=5, placeNote:'Bottom four ranks only', desc:'−3 steps, +1 key.', enter:G=>{ gain({steps:-3, keys:1}); return 'A long, steep climb back. −3 steps, +1 key.'; } },
+  { id:'flooded', name:'Flooded Hall', icon:'🌊', shape:'cross', cat:'hazard', w:4, copies:2, desc:'Four doors, but wading costs 4 steps.', enter:G=>{ gain({steps:-4}); return 'Knee-deep water. −4 steps.'; } },
+  { id:'darkroom', name:'Darkroom', icon:'🌑', shape:'tee', cat:'hazard', w:3, copies:1, desc:'+1 gem, but the next draft shows 1 fewer blueprint.', enter:G=>{ gain({gems:1}); G.darkNext = true; return 'Red light, wet prints, a gem in the tray. +1 gem. Your next draft will be dim.'; } },
+  { id:'collapsed', name:'Collapsed Corridor', icon:'🧱', shape:'straight', cat:'hazard', w:3, copies:2, desc:'−3 steps, +5 coins in the rubble.', enter:G=>{ gain({steps:-3, coins:5}); return 'You climb the rubble and find a purse. −3 steps, +5 coins.'; } }
+];
+const RM = Object.fromEntries(ROOMS.map(r => [r.id, r]));
+
+// ---------- Cipher ----------
+const SIGILS = ['☉','☽','★','♁','♄','♆'];
+const SIGNAME = ['Sun','Moon','Star','Earth','Saturn','Neptune'];
+const ORD = ['first','second','third'];
+const sigTxt = i => SIGILS[i] + ' ' + SIGNAME[i];
+
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function newCipher() {
+  const code = shuffle([0,1,2,3,4,5]).slice(0, 3);
+  const clues = [];
+  for (let p = 0; p < 3; p++) for (let s = 0; s < 6; s++) if (s !== code[p]) clues.push({ t:'not', p, s });
+  for (let s = 0; s < 6; s++) clues.push({ t: code.includes(s) ? 'in' : 'out', s });
+  return { code, clues: shuffle(clues), revealed: 0, guesses: [], notes: Array(18).fill(0) };
+}
+function clueText(k) {
+  if (k.t === 'not') return 'The ' + ORD[k.p] + ' sigil is not ' + sigTxt(k.s) + '.';
+  if (k.t === 'in') return sigTxt(k.s) + ' is part of the combination.';
+  return sigTxt(k.s) + ' appears nowhere on the dial.';
+}
+
+// ---------- Save ----------
+const SAVE_KEY = 'grundriss_save';
+const UPG = [
+  { id:'boots', name:'Sturdy Boots', desc:'+5 starting steps', max:4, cost:l=>8 + l*6 },
+  { id:'keys',  name:'Ring of Keys', desc:'+1 starting key', max:3, cost:l=>12 + l*8 },
+  { id:'gems',  name:'Gem Pouch', desc:'+1 starting gem', max:3, cost:l=>10 + l*6 },
+  { id:'dice',  name:'Lucky Die', desc:'+1 starting die', max:2, cost:l=>10 + l*8 },
+  { id:'eye',   name:"Surveyor's Eye", desc:'Every draft shows 1 more blueprint', max:1, cost:()=>30 }
+];
+let S;
+function loadSave() {
+  try { S = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { S = null; }
+  if (!S || !S.cipher) S = { cipher: newCipher(), fund: 0, up: {}, days: 0, wins: 0, bestRank: 8 };
+  UPG.forEach(u => { S.up[u.id] = S.up[u.id] || 0; });
+}
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
+
+// ---------- Game state ----------
+let G = null;
+function gain(o) {
+  for (const k in o) G[k] = Math.max(0, (G[k] || 0) + o[k]);
+  if (o.coins > 0) snd('coin');
+  else if (o.keys > 0 || o.gems > 0 || o.dice > 0) tone(880, .12, 'triangle', .12);
+}
+function revealClues(n) {
+  const C = S.cipher, out = [];
+  for (let i = 0; i < n; i++) {
+    if (C.revealed >= C.clues.length) { gain({coins:2}); out.push('Nothing new to learn; you pocket 2 coins.'); break; }
+    out.push('Clue: “' + clueText(C.clues[C.revealed++]) + '”');
+  }
+  persist();
+  tone(523, .15, 'sine', .12); setTimeout(() => tone(784, .2, 'sine', .1), 120);
+  return out.join(' ');
+}
+
+function newDay() {
+  const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  grid[START.r][START.c] = { id:'foyer', doors:[1,1,0,1], visited:true, used:false };
+  grid[GOAL.r][GOAL.c] = { id:'observatory', doors:[0,0,1,0], visited:false, used:false };
+  const deck = {};
+  ROOMS.forEach(r => { if (r.copies) deck[r.id] = r.copies; });
+  G = {
+    day: S.days + 1, steps: 40 + S.up.boots * 5, keys: S.up.keys, gems: 2 + S.up.gems, coins: 0, dice: 1 + S.up.dice,
+    grid, deck, pos: { ...START }, locks: {}, extraDraft: S.up.eye, darkNext: false, freeLocks: 0,
+    drafted: 0, bestRank: START.r, over: false, won: false, pendingUnlock: null, draft: null, log: []
+  };
+  tok.x = START.c; tok.y = START.r;
+  logMsg('Day ' + G.day + '. The Foyer smells of rain. The manor has rearranged itself again.');
+  updateUI();
+}
+
+function logMsg(t) {
+  if (!G) return;
+  G.log.unshift(t); G.log.length = Math.min(G.log.length, 40);
+  renderLog(); toast(t);
+}
+
+// ---------- Locks ----------
+function edgeKey(r, c, d) {
+  const nr = r + DY[d], nc = c + DX[d];
+  return (r < nr || (r === nr && c < nc)) ? r+','+c+'|'+nr+','+nc : nr+','+nc+'|'+r+','+c;
+}
+function lockChance(row) { return row >= 7 ? 0 : 0.06 + (7 - row) * 0.065; }
+
+// ---------- Movement ----------
+function canPass(r, c, d) {
+  const a = G.grid[r] && G.grid[r][c]; if (!a || !a.doors[d]) return false;
+  const nr = r + DY[d], nc = c + DX[d]; if (!inb(nr, nc)) return false;
+  const b = G.grid[nr][nc]; return !!(b && b.doors[(d + 2) % 4]);
+}
+function openDoors(r, c) { // doors of a room leading to unbuilt in-bounds squares
+  const a = G.grid[r][c], res = [];
+  for (let d = 0; d < 4; d++) { const nr = r + DY[d], nc = c + DX[d]; if (a.doors[d] && inb(nr, nc) && !G.grid[nr][nc]) res.push(d); }
+  return res;
+}
+function busy() { return !G || G.over || G.draft || !ovCipher.classList.contains('hide') || !ovJournal.classList.contains('hide') || !ovHelp.classList.contains('hide') || walking; }
+
+function tryDir(d) {
+  if (busy()) return;
+  const { r, c } = G.pos, a = G.grid[r][c];
+  if (!a.doors[d]) { tone(140, .08, 'square', .06); logMsg('No door to the ' + DNAME[d] + '.'); return; }
+  const nr = r + DY[d], nc = c + DX[d];
+  if (!inb(nr, nc)) { logMsg('That door opens onto the grounds. Not today.'); return; }
+  const b = G.grid[nr][nc];
+  if (b) {
+    if (!b.doors[(d + 2) % 4]) { snd('hit'); logMsg('The door opens onto a bare wall.'); return; }
+    stepInto(nr, nc); return;
+  }
+  attemptDraft(r, c, d);
+}
+
+function attemptDraft(r, c, d) {
+  if (G.steps < 1) return;
+  const nr = r + DY[d], nc = c + DX[d], key = edgeKey(r, c, d);
+  if (G.locks[key] === undefined) G.locks[key] = Math.random() < lockChance(nr) ? 'locked' : 'open';
+  if (G.locks[key] === 'locked') {
+    if (G.freeLocks > 0) { G.freeLocks--; G.locks[key] = 'open'; snd('jump'); logMsg('Steam pressure bursts the lock open.'); }
+    else if (G.keys > 0) {
+      if (G.pendingUnlock !== key) { G.pendingUnlock = key; snd('hit'); logMsg('Locked. Try the door again to spend a key (' + G.keys + ' left).'); updateUI(); return; }
+      G.keys--; G.locks[key] = 'open'; G.pendingUnlock = null; snd('jump'); logMsg('The key turns. −1 key.');
+    } else { snd('hit'); logMsg('Locked, and you have no keys.'); updateUI(); return; }
+  }
+  G.pendingUnlock = null;
+  openDraft(nr, nc, (d + 2) % 4);
+}
+
+function stepInto(r, c) {
+  if (G.steps < 1) return false;
+  G.steps--; G.pos = { r, c }; G.pendingUnlock = null;
+  if (r < G.bestRank) G.bestRank = r;
+  snd('pop', 1 + (8 - r) * 0.06);
+  const cell = G.grid[r][c], rm = RM[cell.id];
+  if (!cell.visited) {
+    cell.visited = true;
+    if (rm.enter) logMsg(rm.name + ': ' + rm.enter(G));
+  }
+  updateUI();
+  if (cell.id === 'observatory') { openCipher(); return true; }
+  checkEnd();
+  return true;
+}
+
+function pathTo(tr, tc) {
+  const { r, c } = G.pos, key = (a, b) => a * COLS + b, prev = new Map([[key(r, c), null]]), q = [[r, c]];
+  while (q.length) {
+    const [cr, cc] = q.shift();
+    if (cr === tr && cc === tc) break;
+    if (G.grid[cr][cc].id === 'observatory') continue;
+    for (let d = 0; d < 4; d++) {
+      if (!canPass(cr, cc, d)) continue;
+      const nr = cr + DY[d], nc = cc + DX[d], k = key(nr, nc);
+      if (!prev.has(k)) { prev.set(k, [cr, cc]); q.push([nr, nc]); }
+    }
+  }
+  if (!prev.has(key(tr, tc))) return null;
+  const path = []; let cur = [tr, tc];
+  while (cur && !(cur[0] === r && cur[1] === c)) { path.unshift(cur); cur = prev.get(key(cur[0], cur[1])); }
+  return path;
+}
+let walking = false;
+function walkPath(path) {
+  if (!path.length) return;
+  if (path.length > G.steps) { logMsg('That walk needs ' + path.length + ' steps; you have ' + G.steps + '.'); return; }
+  walking = true;
+  let i = 0;
+  const next = () => {
+    walking = false;
+    if (G.over || i >= path.length) return;
+    const [r, c] = path[i++];
+    stepInto(r, c);
+    if (i < path.length && !G.over && ovCipher.classList.contains('hide')) { walking = true; setTimeout(next, 130); }
+  };
+  next();
+}
+
+function checkEnd() {
+  if (G.over) return;
+  if (G.steps <= 0) { endDay('Your legs give out. You sleep where you fall, and the manor shifts in the night.'); return; }
+  if (isStuck()) logMsg('No way forward remains. End the day to try again tomorrow.');
+}
+function isStuck() {
+  const seen = new Set([G.pos.r * COLS + G.pos.c]), q = [[G.pos.r, G.pos.c]];
+  while (q.length) {
+    const [r, c] = q.shift(), cell = G.grid[r][c];
+    if (cell.id === 'observatory') return false;
+    for (const d of openDoors(r, c)) if (G.locks[edgeKey(r, c, d)] !== 'locked' || G.keys > 0 || G.freeLocks > 0) return false;
+    for (let d = 0; d < 4; d++) if (canPass(r, c, d)) {
+      const k = (r + DY[d]) * COLS + c + DX[d];
+      if (!seen.has(k)) { seen.add(k); q.push([r + DY[d], c + DX[d]]); }
+    }
+  }
+  return true;
+}
+
+// ---------- Drafting ----------
+function validRots(r, c, rm, back) {
+  const seen = new Set(), list = [];
+  for (let k = 0; k < 4; k++) {
+    const d = rot(SHAPES[rm.shape], k);
+    if (!d[back]) continue;
+    const sig = d.join(''); if (seen.has(sig)) continue; seen.add(sig);
+    let score = 0;
+    for (let i = 0; i < 4; i++) {
+      if (!d[i] || i === back) continue;
+      const nr = r + DY[i], nc = c + DX[i];
+      if (!inb(nr, nc)) score -= 1;
+      else if (G.grid[nr][nc]) score += G.grid[nr][nc].doors[(i + 2) % 4] ? 2 : -1;
+      else score += 1 + (i === 0 ? 0.3 : 0);
+    }
+    list.push({ k, doors: d, score });
+  }
+  return list.sort((a, b) => b.score - a.score);
+}
+function drawCards(r, c, back) {
+  let n = 3 + G.extraDraft + (G.darkNext ? -1 : 0);
+  G.darkNext = false;
+  n = Math.max(2, n);
+  let pool = ROOMS.filter(rm => G.deck[rm.id] > 0 && (!rm.place || rm.place(r, c)));
+  const picks = [];
+  while (picks.length < n && pool.length) {
+    const tot = pool.reduce((a, x) => a + x.w, 0); let x = Math.random() * tot, ch = pool[pool.length - 1];
+    for (const rm of pool) { x -= rm.w; if (x <= 0) { ch = rm; break; } }
+    picks.push(ch); pool = pool.filter(p => p !== ch);
+  }
+  if (picks.length && !picks.some(p => !p.cost)) {
+    const free = pool.filter(p => !p.cost);
+    if (free.length) picks[picks.length - 1] = free[Math.floor(Math.random() * free.length)];
+  }
+  return picks.map(rm => ({ id: rm.id, rots: validRots(r, c, rm, back), ri: 0 }));
+}
+function openDraft(r, c, back) {
+  G.draft = { r, c, back, cards: drawCards(r, c, back) };
+  tone(330, .1, 'triangle', .1);
+  renderDraft();
+  ovDraft.classList.remove('hide');
+}
+function pickCard(i) {
+  const D = G.draft; if (!D) return;
+  const card = D.cards[i]; if (!card) return;
+  const rm = RM[card.id], cost = rm.cost || 0;
+  if (G.gems < cost) { snd('hit'); toast('Needs ' + cost + ' gem' + (cost > 1 ? 's' : '') + '.'); return; }
+  G.gems -= cost; G.deck[rm.id]--; G.drafted++;
+  G.grid[D.r][D.c] = { id: rm.id, doors: card.rots[card.ri].doors, visited: false, used: false };
+  G.draft = null; ovDraft.classList.add('hide');
+  snd('powerup');
+  stepInto(D.r, D.c);
+}
+function reroll() {
+  const D = G.draft; if (!D || G.dice < 1) return;
+  G.dice--; D.cards = drawCards(D.r, D.c, D.back); snd('jump'); renderDraft(); updateUI();
+}
+
+function drawShape(cv, doors, back, color) {
+  const dpr = window.devicePixelRatio || 1, s = 84;
+  cv.width = s * dpr; cv.height = s * dpr;
+  const x = cv.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.fillStyle = '#efe3c8'; x.fillRect(0, 0, s, s);
+  x.fillStyle = color + '55'; x.fillRect(12, 12, s - 24, s - 24);
+  drawWalls(x, 12, 12, s - 24, doors, '#3b2a1a', 3);
+  // entry marker
+  const m = s / 2, p = [[m, 4], [s - 4, m], [m, s - 4], [4, m]][back];
+  x.fillStyle = '#d9a636'; x.beginPath(); x.arc(p[0], p[1], 5, 0, 7); x.fill();
+  for (let i = 0; i < 4; i++) if (doors[i] && i !== back) {
+    const q = [[m, 6], [s - 6, m], [m, s - 6], [6, m]][i];
+    x.fillStyle = '#3b2a1a'; x.beginPath(); x.arc(q[0], q[1], 2.5, 0, 7); x.fill();
+  }
+}
+function renderDraft() {
+  const D = G.draft, wrap = $('cards');
+  draftInfo.textContent = 'Building on rank ' + (9 - D.r) + ', column ' + 'ABCDE'[D.c] + '. The gold dot marks the door you came through. You hold ' + G.gems + ' gem' + (G.gems === 1 ? '' : 's') + '.';
+  wrap.innerHTML = '';
+  D.cards.forEach((card, i) => {
+    const rm = RM[card.id], cost = rm.cost || 0, el = document.createElement('div');
+    el.className = 'card' + (G.gems < cost ? ' poor' : '');
+    el.style.borderColor = CAT[rm.cat].c;
+    el.innerHTML = '<div class="cost">' + (cost ? '💎' + cost : 'free') + '</div>' +
+      (card.rots.length > 1 ? '<button class="rot" title="Turn">⟳</button>' : '') +
+      '<canvas></canvas><div class="nm">' + rm.icon + ' ' + rm.name + '</div>' +
+      '<div class="cat" style="color:' + CAT[rm.cat].c + '">' + CAT[rm.cat].n + ' · ' + SHAPE_NAME[rm.shape] + '</div>' +
+      '<div class="ds">' + rm.desc + (rm.placeNote ? '<br><i>' + rm.placeNote + '</i>' : '') + '</div>' +
+      '<div class="key">' + (i + 1) + '</div>';
+    drawShape(el.querySelector('canvas'), card.rots[card.ri].doors, D.back, CAT[rm.cat].c);
+    el.addEventListener('click', e => {
+      if (e.target.classList.contains('rot')) { card.ri = (card.ri + 1) % card.rots.length; tone(600, .05, 'square', .05); renderDraft(); return; }
+      pickCard(i);
+    });
+    wrap.appendChild(el);
+  });
+  btnReroll.disabled = G.dice < 1;
+  btnReroll.textContent = '🎲 Redraw (' + G.dice + ' ' + (G.dice === 1 ? 'die' : 'dice') + ')';
+}
+
+// ---------- Cipher dial ----------
+let dial = [];
+function openCipher() {
+  dial = []; renderDial(); ovCipher.classList.remove('hide');
+  tone(220, .4, 'sine', .12);
+}
+function renderDial() {
+  const slots = $('slots'); slots.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const s = document.createElement('span');
+    s.className = 'slot' + (i === dial.length ? ' cur' : '');
+    s.textContent = dial[i] !== undefined ? SIGILS[dial[i]] : '';
+    s.title = dial[i] !== undefined ? SIGNAME[dial[i]] : '';
+    s.onclick = () => { dial = dial.slice(0, i); renderDial(); };
+    slots.appendChild(s);
+  }
+  const sb = $('sigBtns'); sb.innerHTML = '';
+  SIGILS.forEach((g, i) => {
+    const b = document.createElement('button'); b.className = 'sig'; b.textContent = g; b.title = SIGNAME[i];
+    b.disabled = dial.length >= 3 || dial.includes(i);
+    b.onclick = () => { dial.push(i); tone(400 + i * 60, .08, 'triangle', .1); renderDial(); };
+    sb.appendChild(b);
+  });
+  btnSubmitDial.disabled = dial.length < 3 || G.steps < 2;
+  dialHint.textContent = G.steps < 2 ? 'You are too tired to force the dial (needs 2 steps).' :
+    S.cipher.guesses.length ? 'The dial clicks once for each sigil in its right place, and hums once for each sigil in the wrong place.' : 'Sigils do not repeat.';
+}
+function submitDial() {
+  if (dial.length < 3) return;
+  const code = S.cipher.code;
+  let hits = 0, near = 0;
+  dial.forEach((s, i) => { if (code[i] === s) hits++; else if (code.includes(s)) near++; });
+  if (hits === 3) { ovCipher.classList.add('hide'); winDay(); return; }
+  G.steps = Math.max(0, G.steps - 2);
+  S.cipher.guesses.push({ g: dial.slice(), hits, near }); persist();
+  snd('hit');
+  logMsg('The dial jams: ' + dial.map(i => SIGILS[i]).join(' ') + ' → ' + hits + ' click' + (hits === 1 ? '' : 's') + ', ' + near + ' hum' + (near === 1 ? '' : 's') + '. −2 steps.');
+  dial = []; renderDial(); updateUI();
+  if (G.steps <= 0) { ovCipher.classList.add('hide'); checkEnd(); }
+}
+
+// ---------- Day end / win ----------
+function bankDay() {
+  const stipend = Math.floor(G.drafted / 4);
+  const bank = G.coins + stipend;
+  S.fund += bank; S.days++;
+  if (G.bestRank < S.bestRank) S.bestRank = G.bestRank;
+  persist();
+  return { bank, stipend };
+}
+function endDay(reason) {
+  if (G.over) return;
+  G.over = true;
+  const { bank, stipend } = bankDay();
+  snd('gameOver');
+  showMenu('Day ' + G.day + ' is over',
+    '<p>' + reason + '</p><p>Rooms drafted: <b>' + G.drafted + '</b> · Highest rank: <b>' + (9 - G.bestRank) + '/9</b>' +
+    ' · Banked: <b>' + bank + '</b> coins (' + G.coins + ' held + ' + stipend + ' stipend).</p>' +
+    '<p class="small">Clues found so far: ' + S.cipher.revealed + '. Dial attempts: ' + S.cipher.guesses.length + '.</p>');
+}
+function winDay() {
+  G.over = true; G.won = true;
+  const { bank } = bankDay();
+  S.wins++;
+  const days = S.days;
+  S.cipher = newCipher();
+  persist();
+  try { AC && AC.saveScore('grundriss', S.wins); } catch (e) {}
+  snd('merge', 3); setTimeout(() => snd('powerup'), 250);
+  showMenu('The Observatory opens!',
+    '<p>The dial turns, the dome splits, and starlight floods the telescope. Inside the eyepiece, a deed: <b>the manor is yours</b>.</p>' +
+    '<p>Estates claimed: <b>' + S.wins + '</b> · Days so far: <b>' + days + '</b> · Banked today: <b>' + bank + '</b> coins.</p>' +
+    '<p class="small">The old caretaker sets a new combination on the dial. Your journal is wiped clean, but your improvements remain.</p>');
+}
+
+// ---------- Menu ----------
+function showMenu(title, body) {
+  $('menuTitle').textContent = title;
+  $('menuBody').innerHTML = body;
+  btnStart.textContent = 'Begin Day ' + (S.days + 1);
+  renderUpgrades();
+  ovMenu.classList.remove('hide');
+}
+function renderUpgrades() {
+  $('fundTxt').textContent = S.fund;
+  const list = $('upgList'); list.innerHTML = '';
+  UPG.forEach(u => {
+    const l = S.up[u.id], maxed = l >= u.max, cost = maxed ? 0 : u.cost(l);
+    const d = document.createElement('div');
+    d.innerHTML = '<b>' + u.name + '</b> <span class="pips">' + '●'.repeat(l) + '○'.repeat(u.max - l) + '</span><br><span class="small">' + u.desc + '</span>';
+    const b = document.createElement('button');
+    b.textContent = maxed ? 'Done' : 'Buy · ' + cost;
+    b.disabled = maxed || S.fund < cost;
+    b.onclick = () => { S.fund -= cost; S.up[u.id]++; persist(); snd('coin'); renderUpgrades(); };
+    list.appendChild(d); list.appendChild(b);
+  });
+}
+
+// ---------- Journal ----------
+function renderJournal() {
+  const C = S.cipher, t = $('notes');
+  let h = '<tr><th></th>' + SIGILS.map((g, i) => '<th title="' + SIGNAME[i] + '">' + g + '</th>').join('') + '</tr>';
+  for (let p = 0; p < 3; p++) {
+    h += '<tr><th>' + ['1st','2nd','3rd'][p] + '</th>';
+    for (let s = 0; s < 6; s++) { const v = C.notes[p * 6 + s]; h += '<td data-i="' + (p * 6 + s) + '" class="' + (v === 1 ? 'x' : v === 2 ? 'v' : '') + '">' + (v === 1 ? '✗' : v === 2 ? '✓' : '') + '</td>'; }
+    h += '</tr>';
+  }
+  t.innerHTML = h;
+  t.querySelectorAll('td').forEach(td => td.onclick = () => { const i = +td.dataset.i; C.notes[i] = (C.notes[i] + 1) % 3; persist(); renderJournal(); });
+  $('clueList').innerHTML = C.revealed ? C.clues.slice(0, C.revealed).map(k => '<div class="clue">' + clueText(k) + '</div>').join('') :
+    '<p class="small">No clues yet. Draft a Study, Library or Chapel.</p>';
+  $('guessList').innerHTML = C.guesses.length ? C.guesses.map(g => '<div class="clue">' + g.g.map(i => SIGILS[i]).join(' ') + ' — ' + g.hits + ' click' + (g.hits === 1 ? '' : 's') + ' (right place), ' + g.near + ' hum' + (g.near === 1 ? '' : 's') + ' (wrong place)</div>').join('') :
+    '<p class="small">None yet.</p>';
+}
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+const ovDraft = $('ovDraft'), ovCipher = $('ovCipher'), ovJournal = $('ovJournal'), ovMenu = $('ovMenu'), ovHelp = $('ovHelp');
+const draftInfo = $('draftInfo'), btnReroll = $('btnReroll'), btnSubmitDial = $('btnSubmitDial'), dialHint = $('dialHint'), btnStart = $('btnStart');
+let toastT = 0;
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2600); }
+function renderLog() { $('log').innerHTML = G.log.map(l => '<div>' + l + '</div>').join(''); }
+
+function updateUI() {
+  if (!G) return;
+  $('rSteps').textContent = G.steps; $('rKeys').textContent = G.keys; $('rGems').textContent = G.gems;
+  $('rCoins').textContent = G.coins; $('rDice').textContent = G.dice;
+  $('dayTxt').textContent = 'Day ' + G.day + (S.wins ? ' · Estates ' + S.wins : '');
+  $('rankTxt').textContent = 'Rank ' + (9 - G.pos.r) + '/9' + (G.freeLocks ? ' · ♨' + G.freeLocks : '') + (G.darkNext ? ' · 🌑' : '');
+  const cell = G.grid[G.pos.r][G.pos.c], rm = RM[cell.id];
+  $('roomName').textContent = rm.icon + ' ' + rm.name;
+  $('roomDesc').textContent = rm.desc;
+  const act = $('roomActions'); act.innerHTML = '';
+  if (rm.shop) rm.shop.forEach(it => {
+    const b = document.createElement('button'); b.textContent = it.label + ' · ' + it.price + '¢';
+    b.disabled = G.coins < it.price || G.over;
+    b.onclick = () => { if (G.coins < it.price) return; G.coins -= it.price; gain(it.give); logMsg('Bought: ' + it.label + '.'); updateUI(); };
+    act.appendChild(b);
+  });
+  if (rm.action && !cell.used) {
+    const b = document.createElement('button'); b.textContent = rm.action.label; b.disabled = G.over;
+    b.onclick = () => { cell.used = true; logMsg(rm.action.run(G)); snd('merge', 1); updateUI(); };
+    act.appendChild(b);
+  }
+  if (cell.id === 'observatory' && !G.over) {
+    const b = document.createElement('button'); b.className = 'gold'; b.textContent = 'Try the dial'; b.onclick = openCipher; act.appendChild(b);
+  }
+  const od = openDoors(G.pos.r, G.pos.c);
+  if (!rm.shop && !rm.action && cell.id !== 'observatory') {
+    const p = document.createElement('div'); p.className = 'small';
+    p.textContent = od.length ? 'Unbuilt doors: ' + od.map(d => DNAME[d]).join(', ') + '.' : 'No unbuilt doors here.';
+    act.appendChild(p);
+  }
+  $('btnMute').textContent = AC && AC.isMuted && AC.isMuted() ? '🔇' : '🔊';
+}
+
+// ---------- Canvas ----------
+const cv = $('map'), ctx = cv.getContext('2d');
+let W = 0, H = 0, CS = 60, OX = 0, OY = 0, hover = null;
+const tok = { x: START.c, y: START.r };
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  CS = Math.floor(Math.min((W - 24) / COLS, (H - 24) / ROWS));
+  OX = Math.floor((W - CS * COLS) / 2); OY = Math.floor((H - CS * ROWS) / 2);
+}
+window.addEventListener('resize', resize);
+
+function drawWalls(x, x0, y0, s, doors, color, lw) {
+  const x1 = x0 + s, y1 = y0 + s, g = s * 0.17;
+  const sides = [[x0, y0, x1, y0], [x1, y0, x1, y1], [x0, y1, x1, y1], [x0, y0, x0, y1]];
+  x.strokeStyle = color; x.lineWidth = lw; x.lineCap = 'square';
+  x.beginPath();
+  sides.forEach((sd, i) => {
+    const [ax, ay, bx, by] = sd;
+    if (!doors[i]) { x.moveTo(ax, ay); x.lineTo(bx, by); return; }
+    const mx = (ax + bx) / 2, my = (ay + by) / 2, ux = Math.sign(bx - ax), uy = Math.sign(by - ay);
+    x.moveTo(ax, ay); x.lineTo(mx - ux * g, my - uy * g);
+    x.moveTo(mx + ux * g, my + uy * g); x.lineTo(bx, by);
+  });
+  x.stroke();
+}
+function wrapText(t, maxW) {
+  const words = t.split(' '), lines = []; let cur = '';
+  words.forEach(w => { const tst = cur ? cur + ' ' + w : w; if (ctx.measureText(tst).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tst; });
+  if (cur) lines.push(cur); return lines.slice(0, 2);
+}
+
+function draw(t) {
+  ctx.clearRect(0, 0, W, H);
+  if (!G) { requestAnimationFrame(draw); return; }
+  const pulse = 0.5 + 0.5 * Math.sin(t / 260);
+  // paper
+  ctx.fillStyle = '#efe3c8';
+  ctx.shadowColor = '#0008'; ctx.shadowBlur = 18;
+  ctx.fillRect(OX - 8, OY - 8, CS * COLS + 16, CS * ROWS + 16);
+  ctx.shadowBlur = 0;
+  // grid
+  ctx.strokeStyle = '#3b2a1a22'; ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+  for (let r = 0; r <= ROWS; r++) { ctx.beginPath(); ctx.moveTo(OX, OY + r * CS); ctx.lineTo(OX + COLS * CS, OY + r * CS); ctx.stroke(); }
+  for (let c = 0; c <= COLS; c++) { ctx.beginPath(); ctx.moveTo(OX + c * CS, OY); ctx.lineTo(OX + c * CS, OY + ROWS * CS); ctx.stroke(); }
+  ctx.setLineDash([]);
+  // rank labels
+  ctx.fillStyle = '#efe3c866'; ctx.font = Math.max(9, CS * 0.14) + 'px Georgia'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let r = 0; r < ROWS; r++) ctx.fillText(9 - r, OX - 12, OY + r * CS + CS / 2);
+
+  const { r: pr, c: pc } = G.pos, here = G.grid[pr][pc];
+  // draft targets
+  if (!G.over) openDoors(pr, pc).forEach(d => {
+    const nr = pr + DY[d], nc = pc + DX[d], x = OX + nc * CS, y = OY + nr * CS;
+    ctx.strokeStyle = 'rgba(217,166,54,' + (0.45 + pulse * 0.5) + ')'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 5]);
+    ctx.strokeRect(x + 5, y + 5, CS - 10, CS - 10); ctx.setLineDash([]);
+    const st = G.locks[edgeKey(pr, pc, d)];
+    ctx.fillStyle = '#3b2a1aaa'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = Math.max(10, CS * 0.2) + 'px serif';
+    ctx.fillText(st === 'locked' ? '🔒' : '✎', x + CS / 2, y + CS / 2);
+  });
+  // rooms
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const cell = G.grid[r][c]; if (!cell) continue;
+    const rm = RM[cell.id], ins = CS * 0.07, x = OX + c * CS + ins, y = OY + r * CS + ins, s = CS - ins * 2;
+    ctx.fillStyle = CAT[rm.cat].c + (cell.visited || cell.id === 'observatory' ? '48' : '22');
+    ctx.fillRect(x, y, s, s);
+    if (hover && hover.r === r && hover.c === c) { ctx.fillStyle = '#ffffff40'; ctx.fillRect(x, y, s, s); }
+    drawWalls(ctx, x, y, s, cell.doors, '#3b2a1a', Math.max(2, CS * 0.045));
+    // door stubs to unbuilt squares
+    for (let d = 0; d < 4; d++) {
+      if (!cell.doors[d]) continue;
+      const nr = r + DY[d], nc = c + DX[d];
+      if (!inb(nr, nc) || G.grid[nr][nc]) continue;
+      const cx = x + s / 2 + DX[d] * s / 2, cy = y + s / 2 + DY[d] * s / 2;
+      ctx.fillStyle = G.locks[edgeKey(r, c, d)] === 'locked' ? '#a8473f' : '#3b2a1a88';
+      ctx.beginPath(); ctx.arc(cx + DX[d] * 4, cy + DY[d] * 4, Math.max(2, CS * 0.04), 0, 7); ctx.fill();
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = Math.floor(CS * 0.3) + 'px "Segoe UI Emoji","Apple Color Emoji",serif';
+    ctx.fillStyle = '#3b2a1a';
+    ctx.fillText(rm.icon, x + s / 2, y + s * 0.4);
+    const fs = Math.max(8, Math.floor(CS * 0.12));
+    ctx.font = 'bold ' + fs + 'px Georgia';
+    const lines = wrapText(rm.name, s - 6);
+    lines.forEach((ln, i) => ctx.fillText(ln, x + s / 2, y + s * 0.74 + i * fs * 1.05 - (lines.length - 1) * fs * 0.4));
+  }
+  // walkable hover path
+  if (hover && !busy()) {
+    const cell = G.grid[hover.r] && G.grid[hover.r][hover.c];
+    if (cell && !(hover.r === pr && hover.c === pc)) {
+      const p = pathTo(hover.r, hover.c);
+      if (p) {
+        ctx.strokeStyle = p.length <= G.steps ? '#d9a636cc' : '#a8473fcc'; ctx.lineWidth = 3; ctx.setLineDash([2, 6]);
+        ctx.beginPath(); ctx.moveTo(OX + pc * CS + CS / 2, OY + pr * CS + CS / 2);
+        p.forEach(([r, c]) => ctx.lineTo(OX + c * CS + CS / 2, OY + r * CS + CS / 2));
+        ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#3b2a1a'; ctx.font = 'bold ' + Math.max(10, CS * 0.16) + 'px Georgia';
+        ctx.fillText(p.length + '👣', OX + hover.c * CS + CS * 0.78, OY + hover.r * CS + CS * 0.18);
+      }
+    }
+  }
+  // token
+  tok.x += (pc - tok.x) * 0.25; tok.y += (pr - tok.y) * 0.25;
+  const tx = OX + tok.x * CS + CS / 2, ty = OY + tok.y * CS + CS * 0.5;
+  const glow = ctx.createRadialGradient(tx, ty, 2, tx, ty, CS * 0.5);
+  glow.addColorStop(0, 'rgba(255,200,90,' + (0.35 + pulse * 0.15) + ')'); glow.addColorStop(1, 'rgba(255,200,90,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(tx, ty, CS * 0.5, 0, 7); ctx.fill();
+  ctx.fillStyle = '#7a1f1a'; ctx.strokeStyle = '#efe3c8'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(tx + CS * 0.26, ty + CS * 0.2, Math.max(4, CS * 0.09), 0, 7); ctx.fill(); ctx.stroke();
+  requestAnimationFrame(draw);
+}
+
+function cellAt(e) {
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left - OX, y = e.clientY - r.top - OY;
+  const c = Math.floor(x / CS), rr = Math.floor(y / CS);
+  return inb(rr, c) ? { r: rr, c } : null;
+}
+cv.addEventListener('pointermove', e => { hover = cellAt(e); });
+cv.addEventListener('pointerleave', () => { hover = null; });
+cv.addEventListener('click', e => {
+  const h = cellAt(e); if (!h || busy()) return;
+  const { r, c } = G.pos;
+  if (h.r === r && h.c === c) { if (G.grid[r][c].id === 'observatory') openCipher(); return; }
+  const dr = h.r - r, dc = h.c - c;
+  if (Math.abs(dr) + Math.abs(dc) === 1) {
+    const d = DY.findIndex((v, i) => v === dr && DX[i] === dc);
+    if (!G.grid[h.r][h.c] || canPass(r, c, d)) { tryDir(d); return; }
+  }
+  if (G.grid[h.r][h.c]) {
+    const p = pathTo(h.r, h.c);
+    if (p) walkPath(p); else logMsg('No known route to the ' + RM[G.grid[h.r][h.c].id].name + '.');
+  }
+});
+
+// ---------- Input ----------
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (G && G.draft) {
+    if (k >= '1' && k <= '5') { pickCard(+k - 1); e.preventDefault(); }
+    else if (k === ' ') { reroll(); e.preventDefault(); }
+    return;
+  }
+  if (!ovCipher.classList.contains('hide')) {
+    if (k === 'escape') ovCipher.classList.add('hide');
+    else if (k === 'enter') submitDial();
+    return;
+  }
+  if (!ovJournal.classList.contains('hide') || !ovHelp.classList.contains('hide')) {
+    if (k === 'escape' || k === 'j') { ovJournal.classList.add('hide'); ovHelp.classList.add('hide'); }
+    return;
+  }
+  if (!ovMenu.classList.contains('hide')) { if (k === 'enter') btnStart.click(); return; }
+  const map = { arrowup:0, w:0, arrowright:1, d:1, arrowdown:2, s:2, arrowleft:3, a:3 };
+  if (k in map) { tryDir(map[k]); e.preventDefault(); }
+  else if (k === 'j') { renderJournal(); ovJournal.classList.remove('hide'); }
+});
+
+btnReroll.onclick = reroll;
+btnSubmitDial.onclick = submitDial;
+$('btnClearDial').onclick = () => { dial = []; renderDial(); };
+$('btnLeaveDial').onclick = () => { ovCipher.classList.add('hide'); checkEnd(); };
+$('btnJournal').onclick = () => { renderJournal(); ovJournal.classList.remove('hide'); };
+$('btnMenuJournal').onclick = () => { renderJournal(); ovJournal.classList.remove('hide'); };
+$('btnCloseJournal').onclick = () => ovJournal.classList.add('hide');
+$('btnHelp').onclick = () => ovHelp.classList.remove('hide');
+$('btnCloseHelp').onclick = () => ovHelp.classList.add('hide');
+$('btnEnd').onclick = () => {
+  if (!G || G.over || busy()) return;
+  if (confirm('End the day now? Coins you hold go to the estate fund.')) endDay('You turn in early. The manor creaks and reshuffles overnight.');
+};
+$('btnMute').onclick = () => { try { AC && AC.toggleMute(); } catch (e) {} updateUI(); };
+btnStart.onclick = () => { ovMenu.classList.add('hide'); newDay(); };
+
+// ---------- Boot ----------
+loadSave();
+showMenu('Grundriss',
+  '<p><i>The Drafted Manor.</i> Your great-aunt left you a house that rebuilds itself every night. Draft it room by room, from the Foyer on rank 1 to the Observatory on rank 9, and crack the three-sigil dial to claim it.</p>' +
+  '<p class="small">Days lived: ' + S.days + ' · Estates claimed: ' + S.wins + ' · Best rank: ' + (9 - S.bestRank) + '/9 · Clues: ' + S.cipher.revealed + '</p>' +
+  (S.days === 0 ? '<p class="small">New here? Press <b>?</b> in the side panel during play for the rules.</p>' : ''));
+resize();
+requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

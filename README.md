@@ -31,6 +31,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
 * **Action & Roguelike:**
   * [`games/microwave.html`](games/microwave.html) — *Microwave Meltdown: Die Büro-Mikrowelle (High-Stakes Plasma & Kernschmelze-Timing)*
   * [`games/survivor.html`](games/survivor.html) — *Crypt Survivor: Rogue Dawn (Bullet-Heaven Roguelite)*
+  * [`games/grundriss.html`](games/grundriss.html) — *Grundriss: Das gezeichnete Herrenhaus (Roguelike-Raum-Drafting, Schritte/Schlüssel/Edelsteine & Sigillen-Deduktion über mehrere Tage)*
   * [`games/spire.html`](games/spire.html) — *Spire of Cards (Deckbuilder)*
   * [`games/neondefense.html`](games/neondefense.html) — *Cyber Defense: Neon Grid (Sci-Fi Tower Defense)*
   * [`games/squidgame.html`](games/squidgame.html) — *Squid Survival: Die 45.6 Mrd. Won Spiele*
