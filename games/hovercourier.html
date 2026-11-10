@@ -161,7 +161,7 @@ setTimeout(function() {
 <div class="overlay" id="menu">
   <div class="card">
     <h1>HOVER COURIER</h1>
-    <div class="sub">Neo-Stadt, 03:00 Uhr. Du bist Kurier mit Schwebegleiter.<br><span style="color:#ffb020">① Hol die Bestellung im Shop ab (gelber Strahl, +5s).</span><br><span style="color:#ff2bd6">② Bring sie zum Kunden (pinker Strahl, +15s).</span><br>Crashes beschädigen das Paket und kosten Lohn. Schnelle Lieferung = Trinkgeld.<br>Turbo hilft, aber das Triebwerk überhitzt.</div>
+    <div class="sub">Neo-Stadt, 03:00 Uhr. Du bist Kurier mit Schwebegleiter.<br><span style="color:#ffb020">① Hol die Bestellung im Shop ab (gelber Strahl, +5s).</span><br><span style="color:#ff2bd6">② Bring sie zum Kunden (pinker Strahl, +15s).</span><br>Crashes beschädigen das Paket und kosten Lohn. Schnelle Lieferung = Trinkgeld, Lieferserie = mehr Lohn.<br><span style="color:#00e5ff">Leuchtpfeile auf der Straße sind Speed-Pads (in Pfeilrichtung überfahren).</span><br>Turbo hilft, aber das Triebwerk überhitzt.</div>
     <div class="ctrl">
       <b>W / ↑</b><span>Gas</span>
       <b>S / ↓</b><span>Bremse / Rückwärts</span>
@@ -362,6 +362,10 @@ const BLOCK = PITCH - ROAD;
 const HALF = N * PITCH / 2;
 const LIMIT = HALF + ROAD / 2;
 const roadPos = (k) => k * PITCH - HALF;
+const IN = 2.5;           // building setback from the curb
+const CURB_H = 0.25;
+const onBlock = (v) => (((v + HALF - ROAD / 2) % PITCH) + PITCH) % PITCH < BLOCK;
+const groundAt = (x, z) => (onBlock(x) && onBlock(z) ? CURB_H : 0);
 
 // --- Collision broadphase (spatial hash of AABBs) ---
 const CELL = 24;
@@ -462,6 +466,7 @@ function building(x0, z0, w, d, outer, detail) {
   const cx = x0 + w / 2, cz = z0 + d / 2, base = 0.25;
   addBox(bldGeos[v], w, h, d, cx, base + h / 2, cz);
   const b = { minX: x0, maxX: x0 + w, minZ: z0, maxZ: z0 + d, h };
+  if (detail.solid) addCol(x0, x0 + w, z0, z0 + d);
   // setback tower
   if (h > 50 && rnd() < 0.55) {
     const w2 = w * rr(0.5, 0.8), d2 = d * rr(0.5, 0.8), h2 = rr(10, 40);
@@ -497,15 +502,17 @@ for (let i = -2; i <= N + 1; i++) for (let j = -2; j <= N + 1; j++) {
   const cx = x0 + BLOCK / 2, cz = z0 + BLOCK / 2;
   const core = i >= -1 && i <= N && j >= -1 && j <= N;
   sidewalkGeos.push(new THREE.BoxGeometry(BLOCK, 0.25, BLOCK).translate(cx, 0.125, cz));
-  addCol(x0, x0 + BLOCK, z0, z0 + BLOCK);
+  // Hitboxes match the facades: inner blocks collide per building (sidewalks and alleys are flyable),
+  // the perimeter ring is one sealed box per block so nobody slips out of the city.
+  const inner = i >= 0 && i < N && j >= 0 && j < N;
+  if (core && !inner) addCol(x0 + IN, x0 + BLOCK - IN, z0 + IN, z0 + BLOCK - IN);
   // curb glow
   const curb = new THREE.Color(pick(NEON));
   addNeon(cx, 0.26, z0, BLOCK, 0.05, 0.25, curb, 0.9); addNeon(cx, 0.26, z0 + BLOCK, BLOCK, 0.05, 0.25, curb, 0.9);
   addNeon(x0, 0.26, cz, 0.25, 0.05, BLOCK, curb, 0.9); addNeon(x0 + BLOCK, 0.26, cz, 0.25, 0.05, BLOCK, curb, 0.9);
 
   const distC = Math.hypot(cx, cz);
-  const detail = { signs: core, hMul: clamp(1.35 - distC / 650, 0.55, 1.35) };
-  const IN = 2.5;
+  const detail = { signs: core, solid: inner, hMul: clamp(1.35 - distC / 650, 0.55, 1.35) };
   if (rnd() < 0.28) {
     building(x0 + IN, z0 + IN, BLOCK - IN * 2, BLOCK - IN * 2, [1, 1, 1, 1], detail);
   } else {
@@ -649,6 +656,10 @@ const holoRings = [];
     for (const [x, z, sx, sz] of [[LIMIT, p, 0.2, ROAD], [-LIMIT, p, 0.2, ROAD], [p, LIMIT, ROAD, 0.2], [p, -LIMIT, ROAD, 0.2]]) {
       addNeon(x, 0.4, z, sx, 0.2, sz, '#ff3050', 3); addNeon(x, 6, z, sx, 0.2, sz, '#ff3050', 3);
     }
+    // solid barrier behind the glowing plane (overlaps the perimeter blocks to seal the sidewalk strips)
+    const w = ROAD / 2 + IN, T = 8;
+    addCol(LIMIT, LIMIT + T, p - w, p + w); addCol(-LIMIT - T, -LIMIT, p - w, p + w);
+    addCol(p - w, p + w, LIMIT, LIMIT + T); addCol(p - w, p + w, -LIMIT - T, -LIMIT);
   }
   scene.add(new THREE.Mesh(mergeGeometries(geos), barMat));
 }
@@ -705,6 +716,37 @@ function updateRain(dt) {
     rainPos[o + 3] = d.x + 0.25; rainPos[o + 4] = d.y + 1.6; rainPos[o + 5] = d.z + 0.1;
   }
   rainGeo.attributes.position.needsUpdate = true;
+}
+
+// --- Impact sparks ---
+const SPARKS = 90;
+const sparkPos = new Float32Array(SPARKS * 3).fill(-999), sparkVel = new Float32Array(SPARKS * 3), sparkLife = new Float32Array(SPARKS);
+const sparkGeo = new THREE.BufferGeometry();
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+const sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 0.45, map: radialTex, color: new THREE.Color(3, 1.7, 0.5), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+sparks.frustumCulled = false;
+scene.add(sparks);
+let sparkI = 0;
+function emitSparks(x, y, z, nx, nz, count) {
+  for (let n = 0; n < count; n++) {
+    const i = sparkI = (sparkI + 1) % SPARKS, o = i * 3;
+    sparkPos[o] = x; sparkPos[o + 1] = y; sparkPos[o + 2] = z;
+    sparkVel[o] = nx * (3 + Math.random() * 9) + (Math.random() - 0.5) * 10;
+    sparkVel[o + 1] = 2 + Math.random() * 7;
+    sparkVel[o + 2] = nz * (3 + Math.random() * 9) + (Math.random() - 0.5) * 10;
+    sparkLife[i] = 0.25 + Math.random() * 0.35;
+  }
+}
+function updateSparks(dt) {
+  for (let i = 0; i < SPARKS; i++) {
+    if (sparkLife[i] <= 0) continue;
+    const o = i * 3;
+    sparkLife[i] -= dt;
+    if (sparkLife[i] <= 0) { sparkPos[o + 1] = -999; continue; }
+    sparkVel[o + 1] -= 22 * dt;
+    sparkPos[o] += sparkVel[o] * dt; sparkPos[o + 1] += sparkVel[o + 1] * dt; sparkPos[o + 2] += sparkVel[o + 2] * dt;
+  }
+  sparkGeo.attributes.position.needsUpdate = true;
 }
 
 // ================= Hovercraft =================
@@ -991,8 +1033,9 @@ function startGame() {
   Object.assign(state, {
     mode: 'play', paused: false, vy: 0, yaw: 0, yawRate: 0, heat: 0, overheat: 0, boosting: false, drifting: false,
     driftTime: 0, driftPts: 0, time: 45, score: 0, delivered: 0, topSpeed: 0, pitch: 0, roll: 0, prevVf: 0, accelS: 0, shake: 0, lastTick: 0, fov: 68, camRoll: 0,
-    speed: 0, thrustLvl: 0, driftAudio: 0, broken: 0,
+    speed: 0, thrustLvl: 0, driftAudio: 0, broken: 0, streak: 0, hitCd: 0, groundY: 0,
   });
+  for (const c of chevrons) c.cd = 0;
   state.pos.set(0, 1.35, 0); state.vel.set(0, 0, 0);
   newOrder();
   camPos.set(0, 5, -10);
@@ -1030,10 +1073,11 @@ const ACCEL = 26, BOOST_ACCEL = 32, BRAKE = 42, REVERSE = 14, MAX_REV = 14;
 const DRAG1 = 0.3, DRAG2 = 0.01367;
 const GRIP = 9, DRIFT_GRIP = 1.3;
 const HOVER_H = 1.35, SPRING_K = 60, SPRING_D = 9;
-const RADIUS = 1.7;
-const raycaster = new THREE.Raycaster();
-const DOWN = new THREE.Vector3(0, -1, 0);
-const rayOrigin = new THREE.Vector3();
+// Hull hitbox: three circles along the nose axis [offset, radius] that trace the visible hull
+// (nose tip at +2.8, engine pods at ±1.7, nozzles at -2.5) instead of one circle around the center.
+const HULL = [[1.7, 1.05], [0.2, 1.5], [-1.2, 1.6]];
+const HULL_REACH = 3.4;
+const PAD_KICK = 16;
 
 let driftTimer = null;
 
@@ -1131,41 +1175,73 @@ function physics(dt, t) {
   S.pos.x += S.vel.x * dt;
   S.pos.z += S.vel.z * dt;
 
-  // --- collisions (circle vs AABB) ---
-  let impact = 0;
-  const resolve = (nx, nz, push) => {
+  // --- speed pads: crossing a holo arrow in its direction kicks the craft forward and vents heat ---
+  for (const c of chevrons) {
+    if (c.cd > 0) { c.cd -= dt; continue; }
+    const ex = S.pos.x - c.x, ez = S.pos.z - c.z;
+    if (Math.abs(ex * c.dx + ez * c.dz) > 5 || Math.abs(ex * c.dz - ez * c.dx) > 2.6) continue;
+    if (S.vel.x * c.dx + S.vel.z * c.dz < 4) continue;
+    c.cd = 2;
+    S.vel.x += c.dx * PAD_KICK; S.vel.z += c.dz * PAD_KICK;
+    if (S.overheat <= 0) S.heat = Math.max(0, S.heat - 25);
+    S.score += 10;
+    flash('SPEED-PAD!', '#00e5ff', 0.7);
+    Audio.beep(440, 0.1, 'sawtooth', 0.08); Audio.beep(880, 0.16, 'sawtooth', 0.08, 0.07);
+  }
+
+  // --- collisions (hull circles vs AABB) ---
+  let impact = 0, hitX = 0, hitZ = 0, hitNX = 0, hitNZ = 0;
+  const resolve = (nx, nz, push, off, px, pz) => {
     S.pos.x += nx * push; S.pos.z += nz * push;
+    // contact away from the center of mass turns the craft: a nose hit swings the nose off the wall
+    const lever = off * (nx * Math.cos(S.yaw) - nz * Math.sin(S.yaw));
+    S.yaw += clamp(lever * push * 0.06, -0.05, 0.05);
     const vn = S.vel.x * nx + S.vel.z * nz;
     if (vn < 0) {
-      S.vel.x -= nx * vn * 1.35; S.vel.z -= nz * vn * 1.35;
-      S.vel.x *= 0.9; S.vel.z *= 0.9;
-      impact = Math.max(impact, -vn);
+      S.vel.x -= nx * vn * 1.3; S.vel.z -= nz * vn * 1.3;
+      // speed loss scales with how hard the hit was, so scraping along a wall barely slows the craft
+      const keepV = 1 - clamp(-vn * 0.012, 0, 0.3);
+      S.vel.x *= keepV; S.vel.z *= keepV;
+      S.yawRate += clamp(lever * -vn * 0.02, -1.2, 1.2);
+      if (-vn > impact) { impact = -vn; hitX = px; hitZ = pz; hitNX = nx; hitNZ = nz; }
     }
   };
-  for (const c of queryCols(S.pos.x, S.pos.z, RADIUS + 1, tmpCols)) {
-    const cx = clamp(S.pos.x, c.minX, c.maxX), cz = clamp(S.pos.z, c.minZ, c.maxZ);
-    const dx = S.pos.x - cx, dz = S.pos.z - cz, d2 = dx * dx + dz * dz;
-    if (d2 >= RADIUS * RADIUS) continue;
-    if (d2 > 1e-8) { const d = Math.sqrt(d2); resolve(dx / d, dz / d, RADIUS - d); }
-    else {
-      const pen = [[S.pos.x - c.minX, -1, 0], [c.maxX - S.pos.x, 1, 0], [S.pos.z - c.minZ, 0, -1], [c.maxZ - S.pos.z, 0, 1]].sort((a, b) => a[0] - b[0])[0];
-      resolve(pen[1], pen[2], pen[0] + RADIUS);
+  const cols = queryCols(S.pos.x, S.pos.z, HULL_REACH, tmpCols);
+  for (let pass = 0; pass < 2; pass++) {
+    let hit = false;
+    for (const [off, r] of HULL) for (const c of cols) {
+      const px = S.pos.x + Math.sin(S.yaw) * off, pz = S.pos.z + Math.cos(S.yaw) * off;
+      const qx = clamp(px, c.minX, c.maxX), qz = clamp(pz, c.minZ, c.maxZ);
+      const dx = px - qx, dz = pz - qz, d2 = dx * dx + dz * dz;
+      if (d2 >= r * r) continue;
+      hit = true;
+      if (d2 > 1e-8) { const d = Math.sqrt(d2); resolve(dx / d, dz / d, r - d, off, qx, qz); }
+      else {
+        // circle center is inside the box: leave through the nearest face
+        const pen = [[px - c.minX, -1, 0], [c.maxX - px, 1, 0], [pz - c.minZ, 0, -1], [c.maxZ - pz, 0, 1]].sort((a, b) => a[0] - b[0])[0];
+        resolve(pen[1], pen[2], pen[0] + r, off, px, pz);
+      }
     }
+    if (!hit) break;
   }
-  const lim = LIMIT - RADIUS;
-  if (S.pos.x > lim) resolve(-1, 0, S.pos.x - lim); if (S.pos.x < -lim) resolve(1, 0, -lim - S.pos.x);
-  if (S.pos.z > lim) resolve(0, -1, S.pos.z - lim); if (S.pos.z < -lim) resolve(0, 1, -lim - S.pos.z);
-  if (impact > 5) {
+  // safety net behind the collider ring
+  const lim = LIMIT + IN;
+  if (S.pos.x > lim) resolve(-1, 0, S.pos.x - lim, 0, S.pos.x, S.pos.z); if (S.pos.x < -lim) resolve(1, 0, -lim - S.pos.x, 0, S.pos.x, S.pos.z);
+  if (S.pos.z > lim) resolve(0, -1, S.pos.z - lim, 0, S.pos.x, S.pos.z); if (S.pos.z < -lim) resolve(0, 1, -lim - S.pos.z, 0, S.pos.x, S.pos.z);
+  S.hitCd -= dt;
+  if (impact > 1.5 && Math.hypot(S.vel.x, S.vel.z) > 8) emitSparks(hitX, S.pos.y, hitZ, hitNX, hitNZ, Math.round(clamp(impact * 0.5, 1, 14)));
+  if (impact > 5 && S.hitCd <= 0) {
+    S.hitCd = 0.25;
     Audio.thud(clamp(impact / 30, 0.2, 1));
     S.shake = Math.max(S.shake, clamp(impact / 30, 0.15, 1));
     S.vy += impact * 0.08;
-    S.yawRate *= 0.5;
     // crashes damage the package on board
     if (S.phase === 'deliver' && impact > 8) {
       const dmg = Math.round(clamp((impact - 6) * 1.6, 3, 40));
       S.cond = Math.max(0, S.cond - dmg);
       if (S.cond <= 0) {
         S.broken++;
+        S.streak = 0;
         flash('PAKET ZERSTÖRT! Auftrag storniert', '#ff3047', 2);
         Audio.alarm();
         newOrder();
@@ -1173,8 +1249,8 @@ function physics(dt, t) {
     }
   }
 
-  // --- hover: spring-damper over flat ground ---
-  const groundY = 0;
+  // --- hover: spring-damper over the ground (sidewalks sit a curb higher) ---
+  const groundY = S.groundY = groundAt(S.pos.x, S.pos.z);
   const targetH = engineOn ? HOVER_H + Math.sin(t * 2.3) * 0.06 : 0.6 + Math.random() * 0.08;
   const h = S.pos.y - groundY;
   S.vy += (SPRING_K * (targetH - h) - SPRING_D * S.vy) * dt;
@@ -1219,7 +1295,7 @@ function updateCraftVisuals(t, dt) {
   for (const f of flames) { f.scale.set(1 + fl * 0.4, 1 + fl * 0.4, 0.2 + fl * 3.2); f.visible = fl > 0.02; }
   if (S.boosting) flameMat.color.setRGB(2.4, 0.8, 2.6); else flameMat.color.setRGB(0.4, 1.8, 2.4);
 
-  hoverGlow.position.set(S.pos.x, 0.05, S.pos.z);
+  hoverGlow.position.set(S.pos.x, (S.groundY || 0) + 0.05, S.pos.z);
   hoverGlow.rotation.y = S.yaw;
   hoverGlow.material.color.copy(heatCol).multiplyScalar(S.overheat > 0 ? 0.35 : 0.5);
   headLight.intensity = S.overheat > 0 ? 0 : 120;
@@ -1372,9 +1448,12 @@ function gameLogic(dt) {
       // pay = distance-based fee scaled by package condition, plus a tip for a fast run (~110 km/h avg)
       const fee = Math.round((100 + S.targetDist0 * 0.4) * S.cond / 100);
       const tip = Math.max(0, Math.round((S.targetDist0 / 30 - S.legTime) * 12 * S.cond / 100));
-      S.score += fee + tip;
+      // delivery streak: +10% pay per intact delivery in a row (max x2), reset by a destroyed package
+      const mult = 1 + Math.min(S.streak, 10) * 0.1;
+      S.streak++;
+      S.score += Math.round((fee + tip) * mult);
       S.time += DELIVER_BONUS;
-      flash('ZUGESTELLT! +' + fee + (tip ? '  TRINKGELD +' + tip : '') + '  ·  +' + DELIVER_BONUS + 's', '#ff2bd6', 1.8);
+      flash('ZUGESTELLT! +' + Math.round(fee * mult) + (tip ? '  TRINKGELD +' + Math.round(tip * mult) : '') + (mult > 1 ? '  SERIE ×' + mult.toFixed(1) : '') + '  ·  +' + DELIVER_BONUS + 's', '#ff2bd6', 1.8);
       Audio.chime();
       newOrder();
     }
@@ -1394,7 +1473,8 @@ function frame() {
   if (!state.paused) elapsed += dt;
 
   if (running) {
-    const steps = dt > 0.02 ? 2 : 1;
+    // sub-step so the hull never moves more than ~0.7 m per collision test (no tunnelling through poles)
+    const steps = clamp(Math.ceil(state.speed * dt / 0.7), dt > 0.02 ? 2 : 1, 4);
     for (let i = 0; i < steps; i++) physics(dt / steps, elapsed);
     gameLogic(dt);
   }
@@ -1416,6 +1496,7 @@ function frame() {
   if (!state.paused) {
     updateSky(elapsed);
     updateRain(dt);
+    updateSparks(dt);
     chevronTex.offset.y -= dt * 0.8;
     for (const r of holoRings) r.rotation.y += dt * 0.6;
     for (const s of signMats) if (s.flicker) {
