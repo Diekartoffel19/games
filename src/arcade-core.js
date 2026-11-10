@@ -277,7 +277,8 @@ const ArcadeCore = (() => {
     'kofferstapler': 'ks_best',
     'microwave': 'mw_best',
     'magnet': 'mag_best',
-    'ballistics': 'ballistics_best'
+    'ballistics': 'ballistics_best',
+    'gischtjagd': 'gischtjagd_wins'
   };
 
   function getScore(gameKey) {

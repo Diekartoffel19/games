@@ -2,7 +2,7 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (35 Spiele)
+## 🧊 Bestehende 3D-Spiele (36 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (6 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 53 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (35 Spiele)
+## 🧊 Bestehende 3D-Spiele (36 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -186,6 +186,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 33 | 🚅 **ICE-Lokführer 3D** | [`games/lokfuehrer.html`](games/lokfuehrer.html) | `racing` | Three.js | First-Person ICE-Führerstand, CatmullRom-Spline, Schienen/Schwellen/Oberleitung, Sifa-Schaltung, millimetergenaue Bahnsteighalte, Kaffee-Balance |
 | 34 | ❄️ **Thermal Nomad 3D** | [games/thermal_nomad.html](games/thermal_nomad.html) | physics | Three.js + Godot 4.3 C# | Arktisches Thermoregulation-Survival: Exakte Euler-Differentialgleichungen (Tsurf, Tcore), Sonnen-Okklusion per Multi-Raycast, Reflektions-Spiegel, Thermo-Schilde, Aerosol-Nebel, gezogener Lastenschlitten & Heat Spire Trek |
 | 35 | 🌝 **Mondputzer 3D** | [`games/mondputzer.html`](games/mondputzer.html) | `sim` | Three.js | First-Person auf Kugel-Planeten (Quaternion-Tangentenbewegung, Pointer-Lock), Wischen per Blickstrahl mit Tempo-Bonus, Staub als 512×256-Kugelraster mit Displacement-/Bump-Höhe und wegfliegenden Instanced-Flocken, Härtestufen, 8 Putzgeräte & 8 Upgrades, Putzroboter-KI, Meteoriten, Mondgesicht mit Blickverfolgung, 5 Monde + Endlosschleife, Spielstand im localStorage |
+| 36 | 🚤 **Gischtjagd 3D** | [`games/gischtjagd.html`](games/gischtjagd.html) | `racing` | Three.js | Rennboot-Grand-Prix auf 3 Spline-Strecken, Wellen-Shader mit Streckenmaske, Arcade-Driftphysik mit Drift-Turbo, Nitro, Schanzen, Boost-Pads, Windschatten, 5 KI-Gegner mit Gummiband |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
