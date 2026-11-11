@@ -2,7 +2,7 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (36 Spiele)
+## 🧊 Bestehende 3D-Spiele (37 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (6 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 53 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (36 Spiele)
+## 🧊 Bestehende 3D-Spiele (37 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -187,6 +187,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 34 | ❄️ **Thermal Nomad 3D** | [games/thermal_nomad.html](games/thermal_nomad.html) | physics | Three.js + Godot 4.3 C# | Arktisches Thermoregulation-Survival: Exakte Euler-Differentialgleichungen (Tsurf, Tcore), Sonnen-Okklusion per Multi-Raycast, Reflektions-Spiegel, Thermo-Schilde, Aerosol-Nebel, gezogener Lastenschlitten & Heat Spire Trek |
 | 35 | 🌝 **Mondputzer 3D** | [`games/mondputzer.html`](games/mondputzer.html) | `sim` | Three.js | First-Person-Kehrsimulation auf Kugel-Planeten (Quaternion-Tangentenbewegung, Pointer-Lock): Kehren nur bei gehaltener Maustaste mit Tempo-Bonus und begrenzter Stiel-Reichweite, Staub als 512×256-Kugelraster mit Displacement, Waben-Sektoren (Fibonacci-Gitter) mit Abschluss-Bonus, Behälter → Kapseln → Depot-Verkauf, 8 Werkzeuge von Zahnbürste bis Mega-Sauger, 10 Upgrades, Saugroboter-KI, Meteoriten, Helmlampe für die Nachtseite, 5 Monde + Endlosschleife, Spielstand im localStorage |
 | 36 | 🚤 **Gischtjagd 3D** | [`games/gischtjagd.html`](games/gischtjagd.html) | `racing` | Three.js | Rennboot-Grand-Prix auf 3 Spline-Strecken, Wellen-Shader mit Streckenmaske, Arcade-Driftphysik mit Drift-Turbo, Nitro, Schanzen, Boost-Pads, Windschatten, 5 KI-Gegner mit Gummiband |
+| 37 | 🧊 **Zauberwürfel 3D** | [`games/zauberwuerfel.html`](games/zauberwuerfel.html) | `puzzle` | Three.js | NxN-Würfel 2×2 bis 7×7, Schicht-Rotation per Pivot-Group mit Easing, Orbit-Kamera, Tastatur mit Ebenenwahl, Auto-Lösen über invertierte Zughistorie |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
@@ -224,7 +225,7 @@ Die restlichen 53 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
    - *Pixel Alchemy (Sandbox), Game of Life*  
    *Begründung:* Partikelsimulationen mit fallendem Sand, Wasser und Feuer leben von der schnellen 2D-Zellmatrix. In 3D (Voxel-Physik) sinkt die Partikelanzahl von Millionen auf wenige Tausend bei extremem Rechenaufwand.
 5. **Reine 2D-Geometrie- & Schnitt-Puzzles:**
-   - *Pizza-Präzisionsschnitt, Spiegel-Zwillinge, Seed Maze, Zeitschleife, Echo-Dunkel, Zauberwürfel (`games/zauberwuerfel.html`)*  
+   - *Pizza-Präzisionsschnitt, Spiegel-Zwillinge, Seed Maze, Zeitschleife, Echo-Dunkel*  
    *Begründung:* Mechaniken wie exaktes 50/50-Zerschneiden einer Fläche oder parallele Spiegelung auf X/Y-Achsen sind mathematisch an 2D-Flächen gebunden.
 6. **2D-Physikbrücken & Seil-Simulationen:**
    - *Brückenbauer, Spaghetti-Brücken-Duell, Physik-Labor, Magnet-Puzzler*  
