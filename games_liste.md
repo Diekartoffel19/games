@@ -224,7 +224,7 @@ Die restlichen 53 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
    - *Pixel Alchemy (Sandbox), Game of Life*  
    *Begründung:* Partikelsimulationen mit fallendem Sand, Wasser und Feuer leben von der schnellen 2D-Zellmatrix. In 3D (Voxel-Physik) sinkt die Partikelanzahl von Millionen auf wenige Tausend bei extremem Rechenaufwand.
 5. **Reine 2D-Geometrie- & Schnitt-Puzzles:**
-   - *Pizza-Präzisionsschnitt, Spiegel-Zwillinge, Seed Maze, Zeitschleife, Echo-Dunkel*  
+   - *Pizza-Präzisionsschnitt, Spiegel-Zwillinge, Seed Maze, Zeitschleife, Echo-Dunkel, Zauberwürfel (`games/zauberwuerfel.html`)*  
    *Begründung:* Mechaniken wie exaktes 50/50-Zerschneiden einer Fläche oder parallele Spiegelung auf X/Y-Achsen sind mathematisch an 2D-Flächen gebunden.
 6. **2D-Physikbrücken & Seil-Simulationen:**
    - *Brückenbauer, Spaghetti-Brücken-Duell, Physik-Labor, Magnet-Puzzler*  

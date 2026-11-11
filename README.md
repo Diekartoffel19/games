@@ -44,6 +44,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/buerostuhl.html`](games/buerostuhl.html) — *Bürostuhl GP*
   * [`games/skytower.html`](games/skytower.html) — *Sky Tower 3D Stack Master*
 * **Klassiker & Puzzles:**
+  * [`games/zauberwuerfel.html`](games/zauberwuerfel.html) — *Zauberwürfel (2×2 bis 7×7, Tastatursteuerung mit Ebenenwahl, Tastenhilfe, Timer & Auto-Lösen)*
   * Tetris, Snake, 2048, Suika Game, Flappy Bird, Doodle Jump, Breakout, Globle Earth u.v.m.
 
 ---

@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zauberwürfel</title>
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<style>
+  :root {
+    --bg: #f4f4f2; --fg: #222; --muted: #666; --panel: #fff; --border: #ccc; --accent: #2a6df4;
+    --face: min(150px, 22vw);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #18191b; --fg: #e8e8e8; --muted: #999; --panel: #232427; --border: #444; --accent: #6b9bff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 760px; margin: 0 auto; }
+  .back { display: inline-block; margin-bottom: 8px; color: var(--fg); text-decoration: none; font-weight: 700; }
+  .back:hover { color: var(--accent); }
+  h1 { font-size: 1.4rem; margin: 0 0 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  button, select { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  label { display: flex; gap: 6px; align-items: center; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); margin-bottom: 12px; }
+  .stats b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  #status { min-height: 1.4em; font-weight: 600; margin-bottom: 8px; }
+  #status.win { color: #1a9a4a; }
+
+  .net { display: grid; grid-template-columns: repeat(4, var(--face)); grid-template-rows: repeat(3, var(--face)); gap: 4px; justify-content: center; margin: 8px 0 16px; }
+  .face { display: grid; gap: 2px; background: #111; padding: 2px; border-radius: 4px; position: relative; }
+  .cell { border-radius: 2px; transition: background-color .12s; }
+  .face .tag { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    font-weight: 700; font-size: calc(var(--face) / 4); color: #000; text-shadow: 0 0 4px #fff, 0 0 8px #fff; pointer-events: none; }
+  .show-keys .face .tag { display: flex; }
+
+  #help { display: none; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+  #help.open { display: block; }
+  #help table { border-collapse: collapse; width: 100%; }
+  #help td { padding: 3px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  kbd { font-family: ui-monospace, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--bg); }
+  #log { font-family: ui-monospace, monospace; color: var(--muted); word-break: break-word; min-height: 1.2em; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="../index.html">← Arcade</a>
+  <h1>Zauberwürfel</h1>
+
+  <div class="bar">
+    <label>Größe
+      <select id="size">
+        <option value="2">2×2</option>
+        <option value="3" selected>3×3</option>
+        <option value="4">4×4</option>
+        <option value="5">5×5</option>
+        <option value="6">6×6</option>
+        <option value="7">7×7</option>
+      </select>
+    </label>
+    <button id="btnScramble">Mischen (Leertaste)</button>
+    <button id="btnReset">Zurücksetzen</button>
+    <button id="btnAuto">Auto-Lösen (Enter)</button>
+    <button id="btnHelp">Tasten (H)</button>
+    <label>Tempo <input id="speed" type="range" min="30" max="600" value="150"></label>
+  </div>
+
+  <div class="stats">
+    <span>Züge: <b id="moves">0</b></span>
+    <span>Zeit: <b id="time">0.0</b>s</span>
+    <span>Ebene: <b id="depth">1</b></span>
+    <span>Bestzeit: <b id="best">–</b></span>
+  </div>
+  <div id="status"></div>
+
+  <div class="net" id="net"></div>
+  <div id="log"></div>
+
+  <div id="help">
+    <table>
+      <tr><td><kbd>R</kbd> <kbd>L</kbd> <kbd>U</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>B</kbd></td><td>Seite drehen im Uhrzeigersinn (Rechts, Links, Oben, Unten, Vorne, Hinten)</td></tr>
+      <tr><td><kbd>Shift</kbd> + Buchstabe</td><td>Gegen den Uhrzeigersinn</td></tr>
+      <tr><td><kbd>1</kbd> … <kbd>9</kbd></td><td>Ebene für den nächsten Zug wählen (z. B. <kbd>2</kbd> <kbd>R</kbd> = zweite Schicht von rechts). Für große Würfel.</td></tr>
+      <tr><td><kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd></td><td>Ganzen Würfel drehen (wie R / U / F), mit <kbd>Shift</kbd> andersrum</td></tr>
+      <tr><td><kbd>Leertaste</kbd></td><td>Mischen</td></tr>
+      <tr><td><kbd>Backspace</kbd> / <kbd>Strg</kbd>+<kbd>Z</kbd></td><td>Letzten Zug rückgängig</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>Auto-Modus: löst den Würfel automatisch</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Auto-Modus stoppen</td></tr>
+      <tr><td><kbd>H</kbd></td><td>Diese Hilfe und Beschriftung der Seiten ein/aus</td></tr>
+    </table>
+  </div>
+</main>
+
+<script>
+const COLORS = { U: '#ffffff', D: '#ffd500', F: '#009b48', B: '#0046ad', R: '#b71234', L: '#ff5800' };
+const NORMALS = { U: [0,1,0], D: [0,-1,0], F: [0,0,1], B: [0,0,-1], R: [1,0,0], L: [-1,0,0] };
+// Position in the 4x3 net (column, row)
+const LAYOUT = { U: [2,1], L: [1,2], F: [2,2], R: [3,2], B: [4,2], D: [2,3] };
+// Clockwise turn: axis, which side, quarter turns (+1 = counter-clockwise around +axis)
+const BASE = { R: [0,1,-1], L: [0,-1,1], U: [1,1,-1], D: [1,-1,1], F: [2,1,-1], B: [2,-1,1] };
+
+let N = 3, stickers = [], cells = {};
+let history = [];          // moves since solved state, used by auto mode and undo
+let depth = 1;
+let userMoves = 0, startTime = 0, timerId = null;
+let state = 'idle';        // idle | ready | running
+let autoId = null;
+
+const $ = id => document.getElementById(id);
+
+function init(n) {
+  stopAuto();
+  N = n; stickers = []; history = []; depth = 1;
+  const m = n - 1;
+  for (const [face, nrm] of Object.entries(NORMALS)) {
+    const ax = nrm.findIndex(v => v !== 0);
+    const [o1, o2] = [0,1,2].filter(i => i !== ax);
+    for (let a = -m; a <= m; a += 2)
+      for (let b = -m; b <= m; b += 2) {
+        const p = [0,0,0]; p[ax] = nrm[ax] * m; p[o1] = a; p[o2] = b;
+        stickers.push({ p, n: [...nrm], c: face });
+      }
+  }
+  buildNet();
+  resetStats();
+  showBest();
+  setStatus('');
+  render();
+}
+
+function buildNet() {
+  const net = $('net'); net.innerHTML = ''; cells = {};
+  for (const [face, [col, row]] of Object.entries(LAYOUT)) {
+    const el = document.createElement('div');
+    el.className = 'face';
+    el.style.gridColumn = col; el.style.gridRow = row;
+    el.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+    cells[face] = [];
+    for (let i = 0; i < N * N; i++) {
+      const c = document.createElement('div'); c.className = 'cell';
+      el.appendChild(c); cells[face].push(c);
+    }
+    const tag = document.createElement('div'); tag.className = 'tag'; tag.textContent = face;
+    el.appendChild(tag);
+    net.appendChild(el);
+  }
+}
+
+function faceOf(n) {
+  for (const [f, v] of Object.entries(NORMALS)) if (v[0] === n[0] && v[1] === n[1] && v[2] === n[2]) return f;
+}
+
+function rowCol(face, [x, y, z]) {
+  const m = N - 1;
+  switch (face) {
+    case 'F': return [(m - y) / 2, (x + m) / 2];
+    case 'B': return [(m - y) / 2, (m - x) / 2];
+    case 'R': return [(m - y) / 2, (m - z) / 2];
+    case 'L': return [(m - y) / 2, (z + m) / 2];
+    case 'U': return [(z + m) / 2, (x + m) / 2];
+    case 'D': return [(m - z) / 2, (x + m) / 2];
+  }
+}
+
+function render() {
+  for (const s of stickers) {
+    const f = faceOf(s.n);
+    const [r, c] = rowCol(f, s.p);
+    cells[f][r * N + c].style.background = COLORS[s.c];
+  }
+  $('moves').textContent = userMoves;
+  $('depth').textContent = depth;
+  $('log').textContent = history.slice(-30).map(m => m.name).join(' ');
+}
+
+// Rotate vector around axis by q quarter turns (right-hand rule)
+function rot(v, axis, q) {
+  q = ((q % 4) + 4) % 4;
+  let [x, y, z] = v;
+  for (let i = 0; i < q; i++) {
+    if (axis === 0) [y, z] = [-z, y];
+    else if (axis === 1) [z, x] = [-x, z];
+    else [x, y] = [-y, x];
+  }
+  return [x, y, z];
+}
+
+function apply(mv) {
+  for (const s of stickers) {
+    if (mv.layers.includes(s.p[mv.axis])) {
+      s.p = rot(s.p, mv.axis, mv.q);
+      s.n = rot(s.n, mv.axis, mv.q);
+    }
+  }
+}
+
+const normQ = q => { q = ((q % 4) + 4) % 4; return q === 3 ? -1 : q; };
+
+// Store move; merge with previous move on same layers so auto-solve stays short
+function record(mv) {
+  const last = history[history.length - 1];
+  if (last && last.axis === mv.axis && last.layers.join() === mv.layers.join()) {
+    const q = normQ(last.q + mv.q);
+    if (q === 0) history.pop();
+    else history[history.length - 1] = { ...last, q, name: nameFor(last.base, last.depth, q) };
+  } else history.push(mv);
+}
+
+function nameFor(base, d, q) {
+  const prefix = d > 1 ? d : '';
+  const cw = base in BASE ? BASE[base][2] : -1;
+  const suffix = q === 2 || q === -2 ? '2' : (q === cw ? '' : "'");
+  return prefix + base + suffix;
+}
+
+function faceMove(face, d, prime) {
+  d = Math.min(d, N);
+  const [axis, side, q0] = BASE[face];
+  const q = prime ? -q0 : q0;
+  return { axis, layers: [side * (N - 1 - 2 * (d - 1))], q, base: face, depth: d, name: nameFor(face, d, q) };
+}
+
+function cubeRotation(letter, prime) {
+  const axis = { x: 0, y: 1, z: 2 }[letter];
+  const layers = []; for (let c = -(N - 1); c <= N - 1; c += 2) layers.push(c);
+  const q = prime ? 1 : -1;
+  return { axis, layers, q, base: letter, depth: 1, name: nameFor(letter, 1, q) };
+}
+
+function isSolved() {
+  const seen = {};
+  for (const s of stickers) {
+    const f = faceOf(s.n);
+    if (seen[f] === undefined) seen[f] = s.c;
+    else if (seen[f] !== s.c) return false;
+  }
+  return true;
+}
+
+function doMove(mv, byUser) {
+  apply(mv);
+  record(mv);
+  if (byUser) {
+    userMoves++;
+    if (state === 'ready') startTimer();
+  }
+  render();
+  if (state === 'running' && isSolved()) {
+    stopTimer();
+    state = 'idle';
+    const t = +((performance.now() - startTime) / 1000).toFixed(1);
+    const record = saveBest(t);
+    setStatus(`Gelöst! ${userMoves} Züge in ${t.toFixed(1)}s` + (record ? ' – neue Bestzeit!' : ''), true);
+  }
+}
+
+function undo() {
+  const last = history.pop();
+  if (!last) return;
+  apply({ ...last, q: -last.q });
+  render();
+}
+
+function scramble() {
+  stopAuto();
+  init(N);
+  const faces = Object.keys(BASE);
+  const count = Math.max(20, N * 10);
+  const maxDepth = Math.max(1, Math.floor(N / 2));
+  let prev = '';
+  for (let i = 0; i < count; i++) {
+    let f; do { f = faces[Math.floor(Math.random() * 6)]; } while (f === prev);
+    prev = f;
+    const d = 1 + Math.floor(Math.random() * maxDepth);
+    doMove(faceMove(f, d, Math.random() < 0.5), false);
+  }
+  state = 'ready';
+  setStatus('Gemischt. Timer startet beim ersten Zug.');
+}
+
+// Auto mode: plays back the inverse of all recorded moves
+function startAuto() {
+  if (autoId || !history.length) {
+    if (!history.length) setStatus(isSolved() ? 'Würfel ist schon gelöst.' : '');
+    return;
+  }
+  stopTimer();
+  state = 'idle';
+  $('btnAuto').classList.add('on');
+  $('btnAuto').textContent = 'Stopp (Esc)';
+  setStatus('Auto-Modus läuft …');
+  const step = () => {
+    const last = history.pop();
+    if (!last) { stopAuto(); setStatus('Automatisch gelöst.', true); return; }
+    apply({ ...last, q: -last.q });
+    render();
+    autoId = setTimeout(step, 630 - $('speed').value);
+  };
+  autoId = setTimeout(step, 100);
+}
+
+function stopAuto() {
+  if (autoId) clearTimeout(autoId);
+  autoId = null;
+  $('btnAuto').classList.remove('on');
+  $('btnAuto').textContent = 'Auto-Lösen (Enter)';
+}
+
+function resetStats() {
+  stopTimer(); userMoves = 0; state = 'idle'; $('time').textContent = '0.0';
+}
+function startTimer() {
+  state = 'running'; startTime = performance.now();
+  timerId = setInterval(() => { $('time').textContent = ((performance.now() - startTime) / 1000).toFixed(1); }, 100);
+}
+function stopTimer() { if (timerId) clearInterval(timerId); timerId = null; }
+
+// Best time per cube size, stored via ArcadeCore (hub shows 3x3)
+const bestKey = () => N === 3 ? 'zauberwuerfel' : `zauberwuerfel_best_${N}`;
+function getBest() {
+  const v = window.ArcadeCore ? ArcadeCore.getScore(bestKey()) : null;
+  return v === null ? null : Number(v);
+}
+function saveBest(t) {
+  const best = getBest();
+  if (best !== null && best <= t) return false;
+  if (window.ArcadeCore) { ArcadeCore.saveScore(bestKey(), t); if (ArcadeCore.coin) ArcadeCore.coin(); }
+  showBest();
+  return true;
+}
+function showBest() {
+  const b = getBest();
+  $('best').textContent = b === null ? '–' : b.toFixed(1) + 's';
+}
+
+function setStatus(text, win) {
+  const el = $('status'); el.textContent = text; el.classList.toggle('win', !!win);
+}
+
+function toggleHelp() {
+  const open = $('help').classList.toggle('open');
+  $('net').classList.toggle('show-keys', open);
+  $('btnHelp').classList.toggle('on', open);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') { if (e.key !== 'Escape') return; }
+  const k = e.key.toLowerCase();
+
+  if (k === 'escape') { stopAuto(); setStatus('Auto-Modus gestoppt.'); return; }
+  if (k === 'h' && !e.ctrlKey) { toggleHelp(); return; }
+  if (autoId) return; // no manual moves during auto mode
+
+  if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  if (k === ' ') { e.preventDefault(); scramble(); return; }
+  if (k === 'enter') { e.preventDefault(); startAuto(); return; }
+  if (k === 'backspace') { e.preventDefault(); undo(); return; }
+
+  if (/^[1-9]$/.test(e.key)) { depth = Math.min(+e.key, N); render(); return; }
+  if (/^digit[1-9]$/i.test(e.code)) { depth = Math.min(+e.code.slice(5), N); render(); return; } // Shift+digit
+
+  const up = k.toUpperCase();
+  if (up in BASE) { doMove(faceMove(up, depth, e.shiftKey), true); depth = 1; render(); return; }
+  if ('xyz'.includes(k) && k.length === 1) { doMove(cubeRotation(k, e.shiftKey), true); return; }
+});
+
+$('size').addEventListener('change', e => { init(+e.target.value); e.target.blur(); });
+$('btnScramble').onclick = e => { scramble(); e.target.blur(); };
+$('btnReset').onclick = e => { init(N); e.target.blur(); };
+$('btnAuto').onclick = e => { autoId ? stopAuto() : startAuto(); e.target.blur(); };
+$('btnHelp').onclick = e => { toggleHelp(); e.target.blur(); };
+
+init(3);
+</script>
+</body>
+</html>
