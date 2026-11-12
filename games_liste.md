@@ -2,7 +2,7 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (37 Spiele)
+## 🧊 Bestehende 3D-Spiele (38 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (6 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 53 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (37 Spiele)
+## 🧊 Bestehende 3D-Spiele (38 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -188,6 +188,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 35 | 🌝 **Mondputzer 3D** | [`games/mondputzer.html`](games/mondputzer.html) | `sim` | Three.js | First-Person-Kehrsimulation auf Kugel-Planeten (Quaternion-Tangentenbewegung, Pointer-Lock): Kehren nur bei gehaltener Maustaste mit Tempo-Bonus und begrenzter Stiel-Reichweite, Staub als 512×256-Kugelraster mit Displacement, Waben-Sektoren (Fibonacci-Gitter) mit Abschluss-Bonus, Behälter → Kapseln → Depot-Verkauf, 8 Werkzeuge von Zahnbürste bis Mega-Sauger, 10 Upgrades, Saugroboter-KI, Meteoriten, Helmlampe für die Nachtseite, 5 Monde + Endlosschleife, Spielstand im localStorage |
 | 36 | 🚤 **Gischtjagd 3D** | [`games/gischtjagd.html`](games/gischtjagd.html) | `racing` | Three.js | Rennboot-Grand-Prix auf 3 Spline-Strecken, Wellen-Shader mit Streckenmaske, Arcade-Driftphysik mit Drift-Turbo, Nitro, Schanzen, Boost-Pads, Windschatten, 5 KI-Gegner mit Gummiband |
 | 37 | 🧊 **Zauberwürfel 3D** | [`games/zauberwuerfel.html`](games/zauberwuerfel.html) | `puzzle` | Three.js | NxN-Würfel 2×2 bis 7×7, Schicht-Rotation per Pivot-Group mit Easing, Orbit-Kamera, Tastatur mit Ebenenwahl, Auto-Lösen über invertierte Zughistorie |
+| 38 | 🎯 **Fernschuss 3D** | [`games/fernschuss.html`](games/fernschuss.html) | `action` | Three.js | Scharfschützen-Schießstand: echte Geschoss-Simulation (Fall, Wind, Flugzeit 850 m/s) mit Segment-Treffertests, Zielfernrohr 4×–16× mit Mil-Punkten, Visier-Nullpunkt, Entfernungsmesser, Atem-Schwanken, Kugelkamera, 7 Missionen (Flaschen, Melonen, Dosen-Luftschüsse, Stahlgongs, Ballons, Tontauben, Laufscheiben, Drohne) |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
@@ -212,9 +213,9 @@ Diese 6 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von eine
 
 Die restlichen 53 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
 
-1. **Reine Gitter- & Zahlenspiele (Grid Classics):**
-   - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match*  
-   *Begründung:* Präzise Eingaben im Millisekundentakt erfordern maximale Übersicht ohne Kamera-Verdeckung, Tiefenunschärfe oder Perspektivverzerrung. 3D-Tetris oder 3D-Snake schaffen visuelle Hürden statt Spielspaß.
+1. **Reine Gitter- & Zahlenspiele (Grid Classics & Terminal Roguelikes):**
+   - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`)*  
+   *Begründung:* Präzise Eingaben im Millisekundentakt und Hex-/Bytecode-Matrizen erfordern maximale Übersicht ohne Kamera-Verdeckung, Tiefenunschärfe oder Perspektivverzerrung. 3D-Tetris oder 3D-Snake schaffen visuelle Hürden statt Spielspaß.
 2. **Karten- & Deckbuilder-Systeme:**
    - *Spire of Cards, Backpack Gladiator, Grundriss (Raum-Drafting-Roguelike, `games/grundriss.html`)*  
    *Begründung:* Inventarverwaltung und Kartenstapel benötigen saubere 2D-GUIs mit Tooltips und Hover-Zuständen. 3D-Karten verlangsamen das schnelle Lesen.

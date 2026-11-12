@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>HEAP//BREACH — Architecture Hacking Rogue-lite</title>
+<meta name="description" content="Terminal Architecture Hacking Rogue-lite: Battle Garbage Collectors, Watchdog Timers, and OS Kernels inside a live CPU memory heap. Modify bytecode, allocate walls, overwrite enemy pointers, and overflow registers.">
+<meta name="theme-color" content="#050806">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+  :root {
+    --bg: #050806;
+    --panel: #0a100c;
+    --border: #1d3b26;
+    --fg: #4ef58c;
+    --dim: #256f42;
+    --hi: #b5ffd0;
+    --amber: #f5b942;
+    --red: #ff4757;
+    --cyan: #2ed573;
+    --blue: #48dbfb;
+    --purple: #be2edd;
+  }
+  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Courier New", Consolas, Monaco, monospace;
+    font-size: 13px;
+  }
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: 46px 1fr 130px;
+    width: 100vw; height: 100vh;
+    gap: 6px; padding: 6px;
+    position: relative;
+  }
+  @media (max-width: 900px) {
+    #app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 44px 1fr 220px 100px;
+    }
+  }
+  .box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  /* CRT Scanline overlay */
+  #crt {
+    position: fixed; inset: 0; pointer-events: none; z-index: 900;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.22) 3px
+    );
+  }
+  #topbar {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px; gap: 10px;
+    background: #070d09;
+  }
+  .brand {
+    font-weight: 900; font-size: 15px; letter-spacing: 1px; color: var(--hi);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .brand a {
+    color: var(--dim); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 3px 8px;
+  }
+  .brand a:hover { color: var(--hi); border-color: var(--fg); }
+  .stats-row {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .stat { display: flex; align-items: baseline; gap: 5px; }
+  .stat .k { color: var(--dim); font-size: 11px; }
+  .stat .v { color: var(--hi); font-weight: bold; font-size: 14px; }
+  .stat .v.warn { color: var(--amber); }
+  .stat .v.bad { color: var(--red); }
+
+  #canvasWrap {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    background: #030604;
+  }
+  canvas {
+    display: block;
+    width: 100%; height: 100%;
+    cursor: crosshair;
+  }
+
+  #sidebar {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 8px; overflow-y: auto;
+  }
+  .sec-title {
+    font-size: 11px; font-weight: bold; color: var(--bg);
+    background: var(--fg); padding: 2px 6px; letter-spacing: 1px;
+    display: flex; justify-content: space-between;
+  }
+  .reg-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+  }
+  .reg-card {
+    border: 1px solid var(--border); padding: 5px 7px; background: #050906;
+  }
+  .reg-card.hot { border-color: var(--amber); background: #1a1204; }
+  .reg-card.crit { border-color: var(--red); background: #220609; animation: pulse 0.8s infinite alternate; }
+  @keyframes pulse { from { opacity: 0.8; } to { opacity: 1; } }
+  .reg-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
+  .reg-val { font-size: 15px; font-weight: bold; color: var(--hi); margin: 2px 0; }
+  .reg-bar { height: 4px; background: #112217; width: 100%; position: relative; }
+  .reg-fill { height: 100%; background: var(--fg); transition: width 0.15s; }
+
+  .tool-list { display: flex; flex-direction: column; gap: 4px; }
+  .tool-btn {
+    text-align: left; font-family: inherit; font-size: 12px;
+    background: #060b08; color: var(--fg); border: 1px solid var(--border);
+    padding: 6px 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+  }
+  .tool-btn:hover { border-color: var(--fg); }
+  .tool-btn.active {
+    background: #102818; border-color: var(--hi); color: var(--hi);
+    box-shadow: inset 3px 0 0 var(--hi);
+  }
+  .tool-row1 { display: flex; justify-content: space-between; font-weight: bold; }
+  .tool-cost { color: var(--amber); font-size: 11px; }
+  .tool-desc { color: var(--dim); font-size: 11px; }
+  .tool-btn.active .tool-desc { color: #8ce6ad; }
+
+  #inspector {
+    border: 1px solid var(--border); background: #050906; padding: 6px 8px;
+    font-size: 12px; line-height: 1.4; min-height: 92px;
+  }
+  #inspector .addr { color: var(--amber); font-weight: bold; }
+  #inspector .op { color: var(--hi); font-weight: bold; }
+
+  #bottombar {
+    grid-column: 1 / -1;
+    display: grid; grid-template-columns: 1fr 340px; gap: 6px;
+  }
+  @media (max-width: 900px) {
+    #bottombar { grid-template-columns: 1fr; }
+  }
+  #logBox {
+    padding: 6px 10px; overflow-y: auto; font-size: 12px; line-height: 1.45;
+    background: #040705;
+  }
+  .log-line { white-space: pre-wrap; margin-bottom: 2px; }
+  .log-sys { color: var(--dim); }
+  .log-hack { color: var(--blue); }
+  .log-warn { color: var(--amber); }
+  .log-bad { color: var(--red); }
+  .log-good { color: var(--hi); }
+
+  #controlsBox {
+    padding: 6px 8px; display: flex; flex-direction: column; justify-content: space-between;
+    background: #060b08;
+  }
+  .dpad {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+  }
+  .ctrl-btn {
+    font-family: inherit; font-size: 12px; font-weight: bold;
+    background: #0b160f; color: var(--fg); border: 1px solid var(--border);
+    padding: 6px 4px; cursor: pointer; text-align: center;
+  }
+  .ctrl-btn:hover { border-color: var(--fg); color: var(--hi); }
+  .ctrl-btn:active { background: var(--fg); color: #000; }
+
+  /* Modal Overlay for Upgrades & Game Over */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(2, 5, 3, 0.88);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 800; padding: 16px;
+  }
+  .hidden { display: none !important; }
+  .modal {
+    background: var(--panel); border: 2px solid var(--fg);
+    max-width: 580px; width: 100%; padding: 18px;
+    box-shadow: 0 0 30px rgba(78, 245, 140, 0.15);
+  }
+  .modal h2 { margin: 0 0 8px; color: var(--hi); letter-spacing: 1px; font-size: 18px; }
+  .modal p { margin: 0 0 14px; color: var(--fg); line-height: 1.4; }
+  .patch-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .patch-btn {
+    text-align: left; font-family: inherit; background: #060c08;
+    border: 1px solid var(--border); color: var(--fg); padding: 10px 12px;
+    cursor: pointer;
+  }
+  .patch-btn:hover { border-color: var(--hi); background: #0f2216; }
+  .patch-btn strong { color: var(--hi); display: block; font-size: 14px; margin-bottom: 3px; }
+  .patch-btn span { color: var(--dim); font-size: 12px; }
+  .action-btn {
+    font-family: inherit; font-weight: bold; font-size: 14px;
+    background: var(--fg); color: #000; border: none; padding: 10px 16px;
+    cursor: pointer; width: 100%; letter-spacing: 1px;
+  }
+  .action-btn:hover { background: var(--hi); }
+</style>
+</head>
+<body>
+<div id="crt"></div>
+<div id="app">
+  <header id="topbar" class="box">
+    <div class="brand">
+      <a href="../index.html">&lt; HUB</a>
+      <span>HEAP//BREACH</span>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><span class="k">RING</span><span class="v" id="uiFloor">3 (USER)</span></div>
+      <div class="stat"><span class="k">SEED</span><span class="v" id="uiSeed">0x0000</span></div>
+      <div class="stat"><span class="k">CYCLE</span><span class="v" id="uiTurn">0</span></div>
+      <div class="stat"><span class="k">INTEGRITY</span><span class="v" id="uiHp">100/100</span></div>
+      <div class="stat"><span class="k">HEAP_RAM</span><span class="v" id="uiRam">64/64B</span></div>
+      <div class="stat"><span class="k">SCORE</span><span class="v" id="uiScore">0</span></div>
+      <div class="stat"><span class="k">BEST</span><span class="v" id="uiBest">0</span></div>
+    </div>
+  </header>
+
+  <main id="canvasWrap" class="box">
+    <canvas id="heapCanvas"></canvas>
+  </main>
+
+  <aside id="sidebar" class="box">
+    <div class="sec-title"><span>CPU REGISTERS (8-BIT)</span><span>&gt;0xFF = BOMB</span></div>
+    <div class="reg-grid" id="regGrid"></div>
+
+    <div class="sec-title"><span>LIVE BYTECODE EXPLOITS</span><span>KEYS 1-5</span></div>
+    <div class="tool-list" id="toolList"></div>
+
+    <div class="sec-title"><span>ADDRESS INSPECTOR</span><span id="inspCoord">0x0000</span></div>
+    <div id="inspector">Hover or select any memory cell to inspect live bytecode, pointers, and daemon processes.</div>
+  </aside>
+
+  <section id="bottombar">
+    <div id="logBox" class="box"></div>
+    <div id="controlsBox" class="box">
+      <div style="font-size:11px; color:var(--dim);">MOVE: WASD/Arrows | WAIT: Space | HACK: Click Cell | SEED: [R]</div>
+      <div class="dpad">
+        <button class="ctrl-btn" onclick="Game.stepPlayer(0,-1)">▲ W</button>
+        <button class="ctrl-btn" onclick="Game.stepPlayer(-1,0)">◀ A</button>
+        <button class="ctrl-btn" onclick="Game.stepPlayer(0,1)">▼ S</button>
+        <button class="ctrl-btn" onclick="Game.stepPlayer(1,0)">▶ D</button>
+        <button class="ctrl-btn" onclick="Game.stepPlayer(0,0)">WAIT</button>
+      </div>
+      <div style="display:flex; gap:4px;">
+        <button class="ctrl-btn" style="flex:1" onclick="Game.promptSeed()">SET SEED</button>
+        <button class="ctrl-btn" style="flex:1" onclick="Game.restart()">NEW DUMP (R)</button>
+        <button class="ctrl-btn" id="muteBtn" onclick="Game.toggleSound()">SND</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Upgrade / Escalation Modal -->
+<div id="patchModal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2 id="modalTitle">SYSCALL ESCALATION ACHIEVED</h2>
+    <p id="modalDesc">Select a kernel-level firmware patch before descending into the next memory ring:</p>
+    <div class="patch-list" id="patchList"></div>
+  </div>
+</div>
+
+<!-- Game Over / Victory Modal -->
+<div id="overModal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2 id="overTitle">SEGMENTATION FAULT (CORE DUMPED)</h2>
+    <p id="overStats"></p>
+    <button class="action-btn" onclick="Game.restart()">RE-INJECT PAYLOAD (ENTER)</button>
+  </div>
+</div>
+
+<script>
+const Game = (() => {
+  const COLS = 16;
+  const ROWS = 12;
+  const BASE_ADDR = 0x4000;
+
+  // Bytecode definitions
+  const BYTES = {
+    NOP:   { op: 0x90, mnem: 'NOP',   name: 'Free Heap (NOP)',     walk: true,  color: '#1b4d2e', desc: 'Unallocated executable NOP sled. Safe traversal.' },
+    ALLOC: { op: 0xCC, mnem: 'INT3',  name: 'Allocated Wall',      walk: false, color: '#2b3830', desc: 'Locked memory page (0xCC). Blocks movement & LOS.' },
+    ADD:   { op: 0x01, mnem: 'ADD',   name: 'Register +0x38',      walk: true,  color: '#3ec972', desc: 'Stepping executes ADD (+56) on target register. regenerates +4B RAM.' },
+    SHL:   { op: 0xD1, mnem: 'SHL',   name: 'Bitshift Left',       walk: true,  color: '#48dbfb', desc: 'Adds +0x50 to EAX & EBX. High overflow potential.' },
+    FREE:  { op: 0x00, mnem: 'NULL',  name: 'Null Page Hazard',    walk: true,  color: '#ff4757', desc: 'Deallocated Null Pointer zone. Deals 12 DMG & drains 6B RAM.' },
+    CACHE: { op: 0xF4, mnem: 'DATA',  name: 'Heap Cache Dump',     walk: true,  color: '#f5b942', desc: 'Recover +22B RAM, +15 Integrity, and +150 Score.' },
+    SYS:   { op: 0x0F, mnem: 'SYSC',  name: 'Syscall Vector',      walk: true,  color: '#be2edd', desc: 'Privilege escalation gate to next CPU Ring.' }
+  };
+
+  const TOOLS = [
+    { id: 0, key: '1', name: 'MOVE / BASH', cost: 0, range: 1, desc: 'Click adjacent cell to move or melee-corrupt daemon (18 DMG).' },
+    { id: 1, key: '2', name: 'MALLOC(0xCC)', cost: 8, range: 5, desc: 'Allocate locked 0xCC wall block or deallocate existing wall to 0x90.' },
+    { id: 2, key: '3', name: 'PTR_HIJACK', cost: 14, range: 6, desc: 'Overwrite enemy target pointer -> forces daemon to hunt nearest enemy!' },
+    { id: 3, key: '4', name: 'REG_INJECT', cost: 12, range: 6, desc: 'Inject +0x68 into cell register. If >0xFF, triggers 3x3 Overflow Bomb!' },
+    { id: 4, key: '5', name: 'NOP_SLED', cost: 10, range: 4, desc: 'Teleport rogue pointer directly to target NOP/ADD cell within range 4.' }
+  ];
+
+  // Pure deterministic PRNG (Mulberry32)
+  function makeRng(seed) {
+    let s = seed >>> 0;
+    return function() {
+      s = (s + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Deterministic State
+  let S = null;
+  let hoverCell = { x: 0, y: 0 };
+  let animParticles = [];
+  let flashCells = [];
+
+  const canvas = document.getElementById('heapCanvas');
+  const ctx = canvas.getContext('2d');
+
+  function log(msg, cls = 'log-sys') {
+    const box = document.getElementById('logBox');
+    const div = document.createElement('div');
+    div.className = 'log-line ' + cls;
+    div.textContent = `[${String(S ? S.turn : 0).padStart(3, '0')}] ${msg}`;
+    box.appendChild(div);
+    while (box.children.length > 40) box.removeChild(box.firstChild);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function addrOf(x, y) {
+    return BASE_ADDR + (y * COLS + x) * 4;
+  }
+
+  function hex(n, pad = 2) {
+    return '0x' + (n >>> 0).toString(16).toUpperCase().padStart(pad, '0');
+  }
+
+  function createInitialState(seedInput) {
+    const seed = (seedInput !== undefined ? seedInput : ((Date.now() ^ 0xA5A55A5A) >>> 0)) & 0xFFFF;
+    return {
+      seed,
+      rngState: seed,
+      floor: 1, // 1=Ring3(User), 2=Ring2(Driver), 3=Ring1(Hypervisor), 4=Ring0(Kernel)
+      turn: 0,
+      score: 0,
+      tool: 0,
+      player: {
+        x: 1, y: 1,
+        hp: 100, maxHp: 100,
+        ram: 64, maxRam: 64,
+        meleeDmg: 20,
+        bombBonus: 0,
+        ramRegen: 2
+      },
+      regs: { EAX: 0x20, EBX: 0x30, ECX: 0x10, EDX: 0x00 },
+      grid: [],
+      enemies: [],
+      gameOver: false,
+      victory: false
+    };
+  }
+
+  function generateFloor() {
+    const rng = makeRng((S.seed * 31337 + S.floor * 997) >>> 0);
+    const regNames = ['EAX', 'EBX', 'ECX', 'EDX'];
+    S.grid = [];
+
+    for (let y = 0; y < ROWS; y++) {
+      const row = [];
+      for (let x = 0; x < COLS; x++) {
+        const r = rng();
+        let type = 'NOP';
+        if (r < 0.19) type = 'ALLOC';
+        else if (r < 0.34) type = 'ADD';
+        else if (r < 0.40) type = 'SHL';
+        else if (r < 0.45) type = 'FREE';
+        else if (r < 0.50) type = 'CACHE';
+
+        row.push({
+          x, y,
+          type,
+          reg: regNames[Math.floor(rng() * 4)],
+          rawHex: Math.floor(rng() * 256)
+        });
+      }
+      S.grid.push(row);
+    }
+
+    // Place player top-left region
+    S.player.x = 1;
+    S.player.y = 1;
+    S.grid[1][1].type = 'NOP';
+    S.grid[1][2].type = 'NOP';
+    S.grid[2][1].type = 'NOP';
+
+    // Carve deterministic path from (1,1) to syscall exit (COLS-2, ROWS-2)
+    const ex = COLS - 2;
+    const ey = ROWS - 2;
+    let cx = 1, cy = 1;
+    while (cx !== ex || cy !== ey) {
+      if (cx < ex && (cy === ey || rng() < 0.58)) cx++;
+      else if (cy < ey) cy++;
+      if (S.grid[cy][cx].type === 'ALLOC' || S.grid[cy][cx].type === 'FREE') {
+        S.grid[cy][cx].type = rng() < 0.35 ? 'ADD' : 'NOP';
+      }
+    }
+    S.grid[ey][ex].type = 'SYS';
+
+    // Spawn Enemies based on CPU Ring
+    S.enemies = [];
+    const gcCount = 2 + S.floor;
+    const wdCount = 1 + Math.floor(S.floor * 0.8);
+    const krnCount = S.floor >= 2 ? (S.floor - 1) : 0;
+
+    function spawnEnemy(kind) {
+      for (let tries = 0; tries < 60; tries++) {
+        const x = Math.floor(rng() * COLS);
+        const y = Math.floor(rng() * ROWS);
+        const dist = Math.abs(x - S.player.x) + Math.abs(y - S.player.y);
+        if (dist < 5 || (x === ex && y === ey)) continue;
+        if (S.grid[y][x].type === 'ALLOC') S.grid[y][x].type = 'NOP';
+        if (S.enemies.some(e => e.x === x && e.y === y)) continue;
+
+        const defs = {
+          GC:  { name: 'GC_SWEEPER', sym: 'GC', color: '#f5b942', hp: 28 + S.floor * 6, dmg: 10 + S.floor * 2, desc: 'Garbage Collector: Sweeps memory & zeroes cells to 0x00 NULL hazards.' },
+          WDT: { name: 'WATCHDOG_TMR', sym: 'WD', color: '#48dbfb', hp: 24 + S.floor * 5, dmg: 13 + S.floor * 2, desc: 'Watchdog Timer: Fires ranged IRQ interrupt bolts down aligned rows/cols.' },
+          KRN: { name: 'KERNEL_PANIC', sym: 'KP', color: '#ff4757', hp: 48 + S.floor * 12, dmg: 18 + S.floor * 3, desc: 'OS Kernel Enforcer: Heavy armor; deallocates 0xCC walls & executes fatal traps.' }
+        };
+        const d = defs[kind];
+        S.enemies.push({
+          id: Math.floor(rng() * 0xFFFF),
+          kind,
+          name: d.name,
+          sym: d.sym,
+          color: d.color,
+          desc: d.desc,
+          x, y,
+          hp: d.hp, maxHp: d.hp,
+          dmg: d.dmg,
+          ptrMode: 'PLAYER', // 'PLAYER' or 'ROGUE' (hijacked)
+          hijackTurns: 0
+        });
+        break;
+      }
+    }
+
+    for (let i = 0; i < gcCount; i++) spawnEnemy('GC');
+    for (let i = 0; i < wdCount; i++) spawnEnemy('WDT');
+    for (let i = 0; i < krnCount; i++) spawnEnemy('KRN');
+
+    const ringNames = ['3 (USER)', '2 (DRIVER)', '1 (HYPERVISOR)', '0 (KERNEL_CORE)'];
+    document.getElementById('uiFloor').textContent = ringNames[Math.min(3, S.floor - 1)];
+    log(`DUMP LOADED: Ring ${ringNames[Math.min(3, S.floor - 1)]} @ Seed ${hex(S.seed, 4)}`, 'log-good');
+    updateUI();
+  }
+
+  function addFlash(x, y, color, text = '') {
+    flashCells.push({ x, y, color, text, alpha: 1.0 });
+  }
+
+  function triggerRegisterVal(regName, delta, centerCell) {
+    S.regs[regName] += delta;
+    if (S.regs[regName] > 0xFF) {
+      // Register Overflow Bomb!
+      S.regs[regName] = S.regs[regName] & 0xFF;
+      const bx = centerCell ? centerCell.x : S.player.x;
+      const by = centerCell ? centerCell.y : S.player.y;
+      const dmg = 38 + S.player.bombBonus;
+
+      if (window.ArcadeCore) ArcadeCore.explosion();
+      log(`OVERFLOW TRAP [${regName} > 0xFF]! 3x3 Hex Bomb @ ${hex(addrOf(bx, by), 4)} (${dmg} DMG)!`, 'log-hack');
+
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = bx + dx, ny = by + dy;
+          if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+          addFlash(nx, ny, '#ff4757', '0xFF!');
+          // Destroy walls into NOP
+          if (S.grid[ny][nx].type === 'ALLOC' || S.grid[ny][nx].type === 'FREE') {
+            S.grid[ny][nx].type = 'NOP';
+          }
+          // Damage enemies in 3x3
+          S.enemies.forEach(e => {
+            if (e.x === nx && e.y === ny) {
+              e.hp -= dmg;
+              S.score += 25;
+            }
+          });
+        }
+      }
+      cleanupDeadEnemies();
+    }
+  }
+
+  function cleanupDeadEnemies() {
+    for (let i = S.enemies.length - 1; i >= 0; i--) {
+      if (S.enemies[i].hp <= 0) {
+        const dead = S.enemies[i];
+        log(`DAEMON KILLED: ${dead.name} [${hex(dead.id, 4)}] -> +12B RAM`, 'log-good');
+        S.player.ram = Math.min(S.player.maxRam, S.player.ram + 12);
+        S.score += 120 * S.floor;
+        addFlash(dead.x, dead.y, '#4ef58c', 'KILL');
+        S.enemies.splice(i, 1);
+      }
+    }
+  }
+
+  function applyCellEffect(x, y) {
+    const cell = S.grid[y][x];
+    if (cell.type === 'ADD') {
+      S.player.ram = Math.min(S.player.maxRam, S.player.ram + 4);
+      log(`EXEC ${hex(addrOf(x, y), 4)}: ADD ${cell.reg}, 0x38`, 'log-sys');
+      triggerRegisterVal(cell.reg, 0x38, cell);
+    } else if (cell.type === 'SHL') {
+      log(`EXEC ${hex(addrOf(x, y), 4)}: SHL EAX/EBX, +0x50`, 'log-hack');
+      triggerRegisterVal('EAX', 0x50, cell);
+      triggerRegisterVal('EBX', 0x50, cell);
+    } else if (cell.type === 'FREE') {
+      S.player.hp -= 12;
+      S.player.ram = Math.max(0, S.player.ram - 6);
+      if (window.ArcadeCore) ArcadeCore.hit();
+      log(`NULL POINTER DEREFERENCE @ ${hex(addrOf(x, y), 4)}! -12 Integrity, -6B RAM`, 'log-bad');
+      addFlash(x, y, '#ff4757', 'SEGFAULT');
+    } else if (cell.type === 'CACHE') {
+      S.player.ram = Math.min(S.player.maxRam, S.player.ram + 22);
+      S.player.hp = Math.min(S.player.maxHp, S.player.hp + 15);
+      S.score += 150;
+      cell.type = 'NOP';
+      if (window.ArcadeCore) ArcadeCore.coin();
+      log(`CACHE DUMP RECOVERED: +22B RAM, +15 Integrity`, 'log-good');
+      addFlash(x, y, '#f5b942', '+CACHE');
+    } else if (cell.type === 'SYS') {
+      if (window.ArcadeCore) ArcadeCore.powerup();
+      S.score += 400 * S.floor;
+      if (S.floor >= 4) {
+        triggerEndGame(true);
+      } else {
+        openPatchModal();
+      }
+      return true; // Floor changed
+    }
+    return false;
+  }
+
+  function stepPlayer(dx, dy) {
+    if (S.gameOver || !document.getElementById('patchModal').classList.contains('hidden')) return;
+
+    const nx = S.player.x + dx;
+    const ny = S.player.y + dy;
+
+    if (dx === 0 && dy === 0) {
+      // Wait cycle
+      S.player.ram = Math.min(S.player.maxRam, S.player.ram + S.player.ramRegen + 3);
+      log(`IDLE_NOP: Reclaimed +${S.player.ramRegen + 3}B Heap RAM.`, 'log-sys');
+      if (window.ArcadeCore) ArcadeCore.pop(0.8);
+      endPlayerTurn();
+      return;
+    }
+
+    if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return;
+
+    // Check enemy melee
+    const enemy = S.enemies.find(e => e.x === nx && e.y === ny);
+    if (enemy) {
+      enemy.hp -= S.player.meleeDmg;
+      S.score += 20;
+      if (window.ArcadeCore) ArcadeCore.hit();
+      addFlash(nx, ny, '#4ef58c', `-${S.player.meleeDmg}`);
+      log(`MEM_SMASH -> ${enemy.name} (${S.player.meleeDmg} DMG)`, 'log-hack');
+      cleanupDeadEnemies();
+      endPlayerTurn();
+      return;
+    }
+
+    const cell = S.grid[ny][nx];
+    if (!BYTES[cell.type].walk) {
+      log(`BLOCKED: ${hex(addrOf(nx, ny), 4)} is locked (0xCC Wall). Use MALLOC to free.`, 'log-warn');
+      if (window.ArcadeCore) ArcadeCore.pop(0.5);
+      return;
+    }
+
+    S.player.x = nx;
+    S.player.y = ny;
+    if (window.ArcadeCore) ArcadeCore.pop(1.1);
+
+    const escalated = applyCellEffect(nx, ny);
+    if (!escalated) endPlayerTurn();
+  }
+
+  function executeClickCell(tx, ty) {
+    if (S.gameOver || !document.getElementById('patchModal').classList.contains('hidden')) return;
+    const dist = Math.abs(tx - S.player.x) + Math.abs(ty - S.player.y);
+    const tool = TOOLS[S.tool];
+
+    if (S.tool === 0) {
+      if (dist === 1) stepPlayer(tx - S.player.x, ty - S.player.y);
+      else if (dist === 0) stepPlayer(0, 0);
+      else log(`Distance ${dist} > range 1. Select an exploit [2-5] or click adjacent cell.`, 'log-warn');
+      return;
+    }
+
+    if (dist > tool.range) {
+      log(`OUT OF RANGE: ${tool.name} max range is ${tool.range} cells.`, 'log-warn');
+      return;
+    }
+    if (S.player.ram < tool.cost) {
+      log(`OUT OF HEAP RAM: Need ${tool.cost}B (Have ${S.player.ram}B). Step on ADD/CACHE or WAIT.`, 'log-bad');
+      return;
+    }
+
+    const cell = S.grid[ty][tx];
+    const enemy = S.enemies.find(e => e.x === tx && e.y === ty);
+
+    if (S.tool === 1) {
+      // MALLOC / FREE 0xCC Wall
+      if (enemy || (tx === S.player.x && ty === S.player.y) || cell.type === 'SYS') {
+        log(`CANNOT MALLOC: Address occupied by entity or Syscall vector.`, 'log-warn');
+        return;
+      }
+      S.player.ram -= tool.cost;
+      if (cell.type === 'ALLOC') {
+        cell.type = 'NOP';
+        log(`FREE(${hex(addrOf(tx, ty), 4)}): Wall deallocated -> 0x90 NOP.`, 'log-hack');
+        addFlash(tx, ty, '#4ef58c', '0x90');
+      } else {
+        cell.type = 'ALLOC';
+        log(`MALLOC(${hex(addrOf(tx, ty), 4)}): Allocated 0xCC Wall barrier.`, 'log-hack');
+        addFlash(tx, ty, '#48dbfb', '0xCC');
+      }
+      if (window.ArcadeCore) ArcadeCore.merge(2);
+      endPlayerTurn();
+    } else if (S.tool === 2) {
+      // PTR_HIJACK
+      if (!enemy) {
+        log(`PTR_HIJACK requires targeting an active enemy daemon.`, 'log-warn');
+        return;
+      }
+      S.player.ram -= tool.cost;
+      enemy.ptrMode = 'ROGUE';
+      enemy.hijackTurns = 4;
+      enemy.hp -= 10;
+      S.score += 60;
+      if (window.ArcadeCore) ArcadeCore.powerup();
+      log(`PTR_HIJACK: Overwrote ${enemy.name} target pointer -> ROGUE for 4 cycles!`, 'log-hack');
+      addFlash(tx, ty, '#be2edd', 'PTR_HACK');
+      cleanupDeadEnemies();
+      endPlayerTurn();
+    } else if (S.tool === 3) {
+      // REG_INJECT
+      S.player.ram -= tool.cost;
+      if (window.ArcadeCore) ArcadeCore.merge(4);
+      log(`REG_INJECT @ ${hex(addrOf(tx, ty), 4)} -> ${cell.reg} +0x68`, 'log-hack');
+      addFlash(tx, ty, '#f5b942', '+0x68');
+      if (enemy) enemy.hp -= 14;
+      triggerRegisterVal(cell.reg, 0x68, cell);
+      cleanupDeadEnemies();
+      endPlayerTurn();
+    } else if (S.tool === 4) {
+      // NOP_SLED (Blink)
+      if (enemy || !BYTES[cell.type].walk) {
+        log(`NOP_SLED requires an unblocked, unoccupied memory address.`, 'log-warn');
+        return;
+      }
+      S.player.ram -= tool.cost;
+      S.player.x = tx;
+      S.player.y = ty;
+      if (window.ArcadeCore) ArcadeCore.jump();
+      log(`JMP ${hex(addrOf(tx, ty), 4)}: Executed NOP sled jump!`, 'log-hack');
+      addFlash(tx, ty, '#48dbfb', 'JMP');
+      const escalated = applyCellEffect(tx, ty);
+      if (!escalated) endPlayerTurn();
+    }
+  }
+
+  function hasClearLine(x0, y0, x1, y1) {
+    if (x0 === x1) {
+      const minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
+      for (let y = minY + 1; y < maxY; y++) {
+        if (!BYTES[S.grid[y][x0].type].walk) return false;
+      }
+      return true;
+    }
+    if (y0 === y1) {
+      const minX = Math.min(x0, x1), maxX = Math.max(x0, x1);
+      for (let x = minX + 1; x < maxX; x++) {
+        if (!BYTES[S.grid[y0][x].type].walk) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function endPlayerTurn() {
+    S.turn++;
+    S.player.ram = Math.min(S.player.maxRam, S.player.ram + S.player.ramRegen);
+
+    // Enemy Deterministic Execution Phase
+    for (let i = 0; i < S.enemies.length; i++) {
+      const e = S.enemies[i];
+      if (e.hp <= 0) continue;
+
+      // Determine target (Player or nearest other Enemy if pointer hijacked)
+      let targ = S.player;
+      if (e.ptrMode === 'ROGUE') {
+        e.hijackTurns--;
+        if (e.hijackTurns <= 0) e.ptrMode = 'PLAYER';
+        let bestDist = 999;
+        S.enemies.forEach(other => {
+          if (other !== e && other.hp > 0) {
+            const d = Math.abs(other.x - e.x) + Math.abs(other.y - e.y);
+            if (d < bestDist) { bestDist = d; targ = other; }
+          }
+        });
+      }
+
+      const dist = Math.abs(targ.x - e.x) + Math.abs(targ.y - e.y);
+
+      // Watchdog Ranged IRQ Bolt
+      if (e.kind === 'WDT' && dist <= 4 && dist > 1 && (e.x === targ.x || e.y === targ.y) && hasClearLine(e.x, e.y, targ.x, targ.y)) {
+        targ.hp -= e.dmg;
+        addFlash(targ.x, targ.y, '#ff4757', `IRQ -${e.dmg}`);
+        if (targ === S.player) {
+          if (window.ArcadeCore) ArcadeCore.hit();
+          log(`${e.name} fired Watchdog IRQ Bolt -> -${e.dmg} Integrity!`, 'log-bad');
+        } else {
+          log(`HIJACKED ${e.name} bolted ${targ.name} for ${e.dmg} DMG!`, 'log-hack');
+        }
+        continue;
+      }
+
+      // Adjacent Melee Attack
+      if (dist === 1) {
+        targ.hp -= e.dmg;
+        addFlash(targ.x, targ.y, '#ff4757', `-${e.dmg}`);
+        if (targ === S.player) {
+          if (window.ArcadeCore) ArcadeCore.hit();
+          log(`${e.name} executed fault strike -> -${e.dmg} Integrity!`, 'log-bad');
+        } else {
+          log(`HIJACKED ${e.name} corrupted ${targ.name} (-${e.dmg} HP)!`, 'log-hack');
+        }
+        continue;
+      }
+
+      // Movement Step toward target
+      const dirs = [
+        { dx: Math.sign(targ.x - e.x), dy: 0 },
+        { dx: 0, dy: Math.sign(targ.y - e.y) }
+      ];
+      if (Math.abs(targ.y - e.y) > Math.abs(targ.x - e.x)) dirs.reverse();
+
+      for (const d of dirs) {
+        if (d.dx === 0 && d.dy === 0) continue;
+        const nx = e.x + d.dx, ny = e.y + d.dy;
+        if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+        if (S.enemies.some(o => o !== e && o.hp > 0 && o.x === nx && o.y === ny)) continue;
+        if (nx === S.player.x && ny === S.player.y) continue;
+
+        const destCell = S.grid[ny][nx];
+        // Kernel Panic smashes through 0xCC walls!
+        if (destCell.type === 'ALLOC') {
+          if (e.kind === 'KRN') {
+            destCell.type = 'NOP';
+            addFlash(nx, ny, '#ff4757', 'BREAK');
+            log(`${e.name} smashed allocated wall @ ${hex(addrOf(nx, ny), 4)}!`, 'log-warn');
+          } else {
+            continue;
+          }
+        }
+
+        // Garbage Collector corrupts previous ADD/SHL cell into 0x00 NULL hazard occasionally
+        if (e.kind === 'GC' && (S.grid[e.y][e.x].type === 'ADD' || S.grid[e.y][e.x].type === 'SHL')) {
+          S.grid[e.y][e.x].type = 'FREE';
+        }
+
+        e.x = nx;
+        e.y = ny;
+        break;
+      }
+    }
+
+    cleanupDeadEnemies();
+
+    if (S.player.hp <= 0) {
+      S.player.hp = 0;
+      triggerEndGame(false);
+    }
+
+    updateUI();
+  }
+
+  function openPatchModal() {
+    const modal = document.getElementById('patchModal');
+    const list = document.getElementById('patchList');
+    const patches = [
+      {
+        title: 'OVERCLOCK_ALU (+14 Bomb DMG, +6 Melee DMG)',
+        desc: 'Increases register overflow explosion damage and direct pointer bash damage.',
+        apply: () => { S.player.bombBonus += 14; S.player.meleeDmg += 6; }
+      },
+      {
+        title: 'EXPAND_HEAP (+24B Max RAM & Full RAM Restore)',
+        desc: 'Allocates extended virtual memory pages and +1 RAM regen per cycle.',
+        apply: () => { S.player.maxRam += 24; S.player.ram = S.player.maxRam; S.player.ramRegen += 1; }
+      },
+      {
+        title: 'ECC_PARITY_RESTORE (+45 Integrity & +20 Max Integrity)',
+        desc: 'Repairs corrupted sectors and hardens kernel thread health.',
+        apply: () => { S.player.maxHp += 20; S.player.hp = Math.min(S.player.maxHp, S.player.hp + 45); }
+      }
+    ];
+
+    list.innerHTML = '';
+    patches.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'patch-btn';
+      btn.innerHTML = `<strong>${p.title}</strong><span>${p.desc}</span>`;
+      btn.onclick = () => {
+        p.apply();
+        modal.classList.add('hidden');
+        S.floor++;
+        generateFloor();
+      };
+      list.appendChild(btn);
+    });
+    modal.classList.remove('hidden');
+  }
+
+  function triggerEndGame(won) {
+    S.gameOver = true;
+    S.victory = won;
+    if (won) S.score += 1500 + S.player.hp * 10;
+
+    const prevBest = (window.ArcadeCore && ArcadeCore.getScore('heapbreach')) || 0;
+    if (S.score > prevBest && window.ArcadeCore) {
+      ArcadeCore.saveScore('heapbreach', S.score);
+    }
+    if (window.ArcadeCore) {
+      if (won) ArcadeCore.powerup();
+      else ArcadeCore.gameOver();
+    }
+
+    const modal = document.getElementById('overModal');
+    document.getElementById('overTitle').textContent = won
+      ? 'RING 0 ROOTKIT INSTALLED — SYSTEM OWNED!'
+      : 'SEGMENTATION FAULT (CORE DUMPED)';
+    document.getElementById('overStats').innerHTML =
+      `Final Score: <b>${S.score}</b> | Cycles: <b>${S.turn}</b> | Seed: <b>${hex(S.seed, 4)}</b><br>` +
+      (won ? 'You conquered the OS Kernel and seized Ring 0 execution!' : 'Your rogue pointer was terminated by system protection daemons.');
+    modal.classList.remove('hidden');
+    updateUI();
+  }
+
+  function updateUI() {
+    document.getElementById('uiSeed').textContent = hex(S.seed, 4);
+    document.getElementById('uiTurn').textContent = S.turn;
+    const hpEl = document.getElementById('uiHp');
+    hpEl.textContent = `${S.player.hp}/${S.player.maxHp}`;
+    hpEl.className = 'v' + (S.player.hp <= 30 ? ' bad' : S.player.hp <= 60 ? ' warn' : '');
+
+    document.getElementById('uiRam').textContent = `${S.player.ram}/${S.player.maxRam}B`;
+    document.getElementById('uiScore').textContent = S.score;
+    const best = Math.max(S.score, (window.ArcadeCore && ArcadeCore.getScore('heapbreach')) || 0);
+    document.getElementById('uiBest').textContent = best;
+
+    // Registers
+    const rGrid = document.getElementById('regGrid');
+    rGrid.innerHTML = Object.entries(S.regs).map(([k, val]) => {
+      const pct = Math.min(100, Math.round((val / 255) * 100));
+      const cls = val >= 200 ? 'crit' : val >= 140 ? 'hot' : '';
+      return `<div class="reg-card ${cls}">
+        <div class="reg-head"><span>${k}</span><span>${pct}%</span></div>
+        <div class="reg-val">${hex(val, 2)}</div>
+        <div class="reg-bar"><div class="reg-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+
+    // Tools
+    const tList = document.getElementById('toolList');
+    tList.innerHTML = TOOLS.map(t => `
+      <button class="tool-btn ${S.tool === t.id ? 'active' : ''}" onclick="Game.selectTool(${t.id})">
+        <div class="tool-row1"><span>[${t.key}] ${t.name}</span><span class="tool-cost">${t.cost > 0 ? t.cost + 'B RAM' : '0B'}</span></div>
+        <div class="tool-desc">${t.desc}</div>
+      </button>
+    `).join('');
+
+    updateInspector();
+  }
+
+  function updateInspector() {
+    if (!S || !S.grid.length) return;
+    const { x, y } = hoverCell;
+    const cell = S.grid[y] && S.grid[y][x];
+    if (!cell) return;
+    const b = BYTES[cell.type];
+    const enemy = S.enemies.find(e => e.x === x && e.y === y);
+    const addr = hex(addrOf(x, y), 4);
+    document.getElementById('inspCoord').textContent = addr;
+
+    let html = `<div><span class="addr">${addr}</span> : <span class="op">${hex(b.op, 2)} ${b.mnem} ${cell.reg}</span> — ${b.name}</div>`;
+    html += `<div style="color:var(--dim);margin-top:2px;">${b.desc}</div>`;
+    if (enemy) {
+      html += `<div style="margin-top:5px;color:${enemy.color};font-weight:bold;">` +
+              `DAEMON: ${enemy.name} | HP: ${enemy.hp}/${enemy.maxHp} | DMG: ${enemy.dmg} | PTR: ${enemy.ptrMode}</div>` +
+              `<div style="color:var(--fg);font-size:11px;">${enemy.desc}</div>`;
+    } else if (x === S.player.x && y === S.player.y) {
+      html += `<div style="margin-top:5px;color:var(--hi);font-weight:bold;">@ ROGUE_PTR (YOU) — Active Execution Thread</div>`;
+    }
+    document.getElementById('inspector').innerHTML = html;
+  }
+
+  function selectTool(id) {
+    S.tool = id;
+    if (window.ArcadeCore) ArcadeCore.pop(1.3);
+    updateUI();
+  }
+
+  function resizeCanvas() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+
+  function render() {
+    requestAnimationFrame(render);
+    if (!S || !S.grid.length) return;
+
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.fillStyle = '#030604';
+    ctx.fillRect(0, 0, W, H);
+
+    const padLeft = 58;
+    const padTop = 26;
+    const cw = Math.floor((W - padLeft - 10) / COLS);
+    const ch = Math.floor((H - padTop - 10) / ROWS);
+
+    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.textBaseline = 'middle';
+
+    // Column hex headers
+    for (let x = 0; x < COLS; x++) {
+      ctx.fillStyle = '#256f42';
+      ctx.textAlign = 'center';
+      ctx.fillText('+' + (x * 4).toString(16).toUpperCase().padStart(2, '0'), padLeft + x * cw + cw / 2, 13);
+    }
+
+    // Row base addresses + Cells
+    for (let y = 0; y < ROWS; y++) {
+      ctx.fillStyle = '#256f42';
+      ctx.textAlign = 'right';
+      ctx.fillText(hex(addrOf(0, y), 4), padLeft - 8, padTop + y * ch + ch / 2);
+
+      for (let x = 0; x < COLS; x++) {
+        const cell = S.grid[y][x];
+        const b = BYTES[cell.type];
+        const rx = padLeft + x * cw;
+        const ry = padTop + y * ch;
+
+        // Cell background
+        ctx.fillStyle = cell.type === 'ALLOC' ? '#121c16' :
+                        cell.type === 'FREE'  ? '#24070b' :
+                        cell.type === 'SYS'   ? '#210b29' :
+                        cell.type === 'CACHE' ? '#241b06' : '#07110a';
+        ctx.fillRect(rx + 1, ry + 1, cw - 2, ch - 2);
+
+        // Cell border
+        const isHover = (hoverCell.x === x && hoverCell.y === y);
+        const dist = Math.abs(x - S.player.x) + Math.abs(y - S.player.y);
+        const inToolRange = S.tool > 0 && dist <= TOOLS[S.tool].range;
+
+        ctx.strokeStyle = isHover ? '#b5ffd0' : inToolRange ? '#285e3c' : '#112618';
+        ctx.lineWidth = isHover ? 1.5 : 1;
+        ctx.strokeRect(rx + 1.5, ry + 1.5, cw - 3, ch - 3);
+
+        // Bytecode hex & mnemonic
+        ctx.textAlign = 'center';
+        ctx.fillStyle = b.color;
+        const hexStr = b.op.toString(16).toUpperCase().padStart(2, '0');
+        ctx.font = `bold ${Math.max(10, Math.min(13, Math.floor(ch * 0.32)))}px "Courier New", monospace`;
+        ctx.fillText(hexStr, rx + cw / 2, ry + ch * 0.36);
+
+        ctx.font = `${Math.max(9, Math.min(11, Math.floor(ch * 0.25)))}px "Courier New", monospace`;
+        ctx.fillStyle = cell.type === 'ADD' ? '#7be0a0' : b.color;
+        const subLabel = cell.type === 'ADD' ? cell.reg : b.mnem;
+        ctx.fillText(subLabel, rx + cw / 2, ry + ch * 0.72);
+      }
+    }
+
+    // Draw Pointer Vector lines from Enemies to their Target
+    S.enemies.forEach(e => {
+      const ex = padLeft + e.x * cw + cw / 2;
+      const ey = padTop + e.y * ch + ch / 2;
+      ctx.save();
+      ctx.strokeStyle = e.ptrMode === 'ROGUE' ? 'rgba(190,46,221,0.55)' : 'rgba(255,71,87,0.22)';
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(padLeft + S.player.x * cw + cw / 2, padTop + S.player.y * ch + ch / 2);
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    // Draw Enemies
+    S.enemies.forEach(e => {
+      const rx = padLeft + e.x * cw;
+      const ry = padTop + e.y * ch;
+      ctx.fillStyle = '#050806';
+      ctx.fillRect(rx + 3, ry + 3, cw - 6, ch - 6);
+      ctx.strokeStyle = e.ptrMode === 'ROGUE' ? '#be2edd' : e.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(rx + 3, ry + 3, cw - 6, ch - 6);
+
+      ctx.fillStyle = e.ptrMode === 'ROGUE' ? '#be2edd' : e.color;
+      ctx.font = `bold ${Math.max(11, Math.floor(ch * 0.36))}px "Courier New", monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText(e.sym, rx + cw / 2, ry + ch * 0.42);
+
+      // HP bar
+      const hpW = (cw - 10) * Math.max(0, e.hp / e.maxHp);
+      ctx.fillStyle = '#220808';
+      ctx.fillRect(rx + 5, ry + ch - 8, cw - 10, 4);
+      ctx.fillStyle = e.color;
+      ctx.fillRect(rx + 5, ry + ch - 8, hpW, 4);
+    });
+
+    // Draw Player (@EIP)
+    const px = padLeft + S.player.x * cw;
+    const py = padTop + S.player.y * ch;
+    ctx.fillStyle = '#0c2e19';
+    ctx.fillRect(px + 2, py + 2, cw - 4, ch - 4);
+    ctx.strokeStyle = '#b5ffd0';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px + 2, py + 2, cw - 4, ch - 4);
+    ctx.fillStyle = '#b5ffd0';
+    ctx.font = `bold ${Math.max(12, Math.floor(ch * 0.42))}px "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('@EIP', px + cw / 2, py + ch * 0.52);
+
+    // Draw Flashes
+    for (let i = flashCells.length - 1; i >= 0; i--) {
+      const f = flashCells[i];
+      const fx = padLeft + f.x * cw;
+      const fy = padTop + f.y * ch;
+      ctx.save();
+      ctx.globalAlpha = f.alpha;
+      ctx.fillStyle = f.color;
+      ctx.fillRect(fx + 1, fy + 1, cw - 2, ch - 2);
+      if (f.text) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(f.text, fx + cw / 2, fy + ch / 2);
+      }
+      ctx.restore();
+      f.alpha -= 0.045;
+      if (f.alpha <= 0) flashCells.splice(i, 1);
+    }
+  }
+
+  function cellFromMouse(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = ev.clientX - rect.left;
+    const my = ev.clientY - rect.top;
+    const padLeft = 58, padTop = 26;
+    const cw = Math.floor((canvas.width - padLeft - 10) / COLS);
+    const ch = Math.floor((canvas.height - padTop - 10) / ROWS);
+    const x = Math.floor((mx - padLeft) / cw);
+    const y = Math.floor((my - padTop) / ch);
+    if (x >= 0 && x < COLS && y >= 0 && y < ROWS) return { x, y };
+    return null;
+  }
+
+  canvas.addEventListener('mousemove', ev => {
+    const c = cellFromMouse(ev);
+    if (c && (c.x !== hoverCell.x || c.y !== hoverCell.y)) {
+      hoverCell = c;
+      updateInspector();
+    }
+  });
+
+  canvas.addEventListener('click', ev => {
+    const c = cellFromMouse(ev);
+    if (c) {
+      hoverCell = c;
+      executeClickCell(c.x, c.y);
+    }
+  });
+
+  window.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' && S && S.gameOver) {
+      restart();
+      return;
+    }
+    const k = ev.key.toLowerCase();
+    if (k === 'w' || ev.key === 'ArrowUp') { ev.preventDefault(); stepPlayer(0, -1); }
+    else if (k === 's' || ev.key === 'ArrowDown') { ev.preventDefault(); stepPlayer(0, 1); }
+    else if (k === 'a' || ev.key === 'ArrowLeft') { ev.preventDefault(); stepPlayer(-1, 0); }
+    else if (k === 'd' || ev.key === 'ArrowRight') { ev.preventDefault(); stepPlayer(1, 0); }
+    else if (ev.key === ' ') { ev.preventDefault(); stepPlayer(0, 0); }
+    else if (k >= '1' && k <= '5') { selectTool(Number(k) - 1); }
+    else if (k === 'r') { restart(); }
+  });
+
+  window.addEventListener('resize', resizeCanvas);
+
+  function restart(customSeed) {
+    document.getElementById('overModal').classList.add('hidden');
+    document.getElementById('patchModal').classList.add('hidden');
+    document.getElementById('logBox').innerHTML = '';
+    S = createInitialState(customSeed);
+    log('INITIATING HEAP//BREACH... Reach SYSC (0x0F) across 4 CPU Rings.', 'log-good');
+    generateFloor();
+  }
+
+  function promptSeed() {
+    const input = prompt('Enter deterministic Hex or Integer Seed (e.g. 0x1337 or 4919):', hex(S.seed, 4));
+    if (!input) return;
+    const parsed = input.trim().startsWith('0x') ? parseInt(input, 16) : parseInt(input, 10);
+    if (!isNaN(parsed)) restart(parsed & 0xFFFF);
+  }
+
+  function toggleSound() {
+    if (window.ArcadeCore) {
+      const m = ArcadeCore.toggleMute();
+      document.getElementById('muteBtn').textContent = m ? 'MUTE' : 'SND';
+    }
+  }
+
+  // Boot
+  setTimeout(() => {
+    resizeCanvas();
+    restart(0x1337);
+    requestAnimationFrame(render);
+  }, 0);
+
+  return {
+    stepPlayer,
+    selectTool,
+    restart,
+    promptSeed,
+    toggleSound,
+    getState: () => S
+  };
+})();
+</script>
+</body>
+</html>
