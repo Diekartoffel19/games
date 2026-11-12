@@ -160,7 +160,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 7 | 🏝️ **Insel-Schmiede 3D** | [`games/terraform.html`](games/terraform.html) | `sim` | Three.js | Dynamisches Höhennetz (Deformable Mesh) & Wälder |
 | 8 | ⛷️ **Kuh auf Ski 3D** | [`games/kuhski3d.html`](games/kuhski3d.html) | `racing` | Three.js | Endlose 3D-Alpenpiste, Schanzen & Muh-Saltos |
 | 9 | 🦹 **Das stille Badezimmer 3D** | [`games/badezimmer.html`](games/badezimmer.html) | `stealth` | Three.js | First-Person Ego-Schleichen, Quietsch-Dielen |
-| 10 | 🏎️ **Stadium Rush (Polytrack 3D)** | [`games/stadiumrush.html`](games/stadiumrush.html) | `racing` | Three.js | 24 Strecken, 3D-Rampen, Drift-Spuren, Ghost-Car |
+| 10 | 🏎️ **Stadium Rush (Polytrack 3D)** | [`games/stadiumrush.html`](games/stadiumrush.html) | `racing` | Three.js | 36 Strecken, 3D-Rampen, Drift-Spuren, Ghost-Car |
 | 11 | 🏝️ **Drift Isles** | [`games/driftisles.html`](games/driftisles.html) | `action` | Three.js | 3D-Voxel-Welt, Höhlen, Crafting, Tag/Nacht |
 | 12 | 🏗️ **Sky Tower 3D: Stack Master** | [`games/skytower.html`](games/skytower.html) | `skill` | Three.js | 3D-Block-Stapeln mit Kantenabschnitt |
 | 13 | 🏃‍♂️ **Mega Obby 3D: Sky Parkour** | [`games/obby.html`](games/obby.html) | `skill` | Three.js | 3D-Jump'n'Run mit 15 Plattform-Stages |
