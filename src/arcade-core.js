@@ -281,6 +281,7 @@ const ArcadeCore = (() => {
     'gischtjagd': 'gischtjagd_wins',
     'grundriss': 'grundriss_wins',
     'zauberwuerfel': 'zauberwuerfel_best_3',
+    'fernschuss': 'fernschuss_best',
     'heapbreach': 'heapbreach_best'
   };
 

@@ -31,6 +31,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
 * **Action & Roguelike:**
   * [`games/heapbreach.html`](games/heapbreach.html) — *HEAP//BREACH (Terminal Architecture Hacking Rogue-lite: Live-Bytecode-Manipulation im CPU-Heap, Pointer-Hijacking, 0xCC-Wall-Allokation & Register-Overflow-Bomben gegen Garbage Collectors, Watchdog Timers & OS Kernels)*
   * [`games/microwave.html`](games/microwave.html) — *Microwave Meltdown: Die Büro-Mikrowelle (High-Stakes Plasma & Kernschmelze-Timing)*
+  * [`games/fernschuss.html`](games/fernschuss.html) — *Fernschuss 3D (Scharfschützen-Schießstand: Zielfernrohr, Wind, Geschossfall, Kugelkamera, 7 Missionen bis 760 m)*
   * [`games/survivor.html`](games/survivor.html) — *Crypt Survivor: Rogue Dawn (Bullet-Heaven Roguelite)*
   * [`games/grundriss.html`](games/grundriss.html) — *Grundriss: Das gezeichnete Herrenhaus (Roguelike-Raum-Drafting, Schritte/Schlüssel/Edelsteine & Sigillen-Deduktion über mehrere Tage)*
   * [`games/spire.html`](games/spire.html) — *Spire of Cards (Deckbuilder)*
