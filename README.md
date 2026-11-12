@@ -29,6 +29,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/boatsim.html`](games/boatsim.html) — *Boot- & Wellen-Simulator*
   * [`games/tycoon.html`](games/tycoon.html) — *3D City Tycoon*
 * **Action & Roguelike:**
+  * [`games/heapbreach.html`](games/heapbreach.html) — *HEAP//BREACH (Terminal Architecture Hacking Rogue-lite: Live-Bytecode-Manipulation im CPU-Heap, Pointer-Hijacking, 0xCC-Wall-Allokation & Register-Overflow-Bomben gegen Garbage Collectors, Watchdog Timers & OS Kernels)*
   * [`games/microwave.html`](games/microwave.html) — *Microwave Meltdown: Die Büro-Mikrowelle (High-Stakes Plasma & Kernschmelze-Timing)*
   * [`games/survivor.html`](games/survivor.html) — *Crypt Survivor: Rogue Dawn (Bullet-Heaven Roguelite)*
   * [`games/grundriss.html`](games/grundriss.html) — *Grundriss: Das gezeichnete Herrenhaus (Roguelike-Raum-Drafting, Schritte/Schlüssel/Edelsteine & Sigillen-Deduktion über mehrere Tage)*

@@ -280,7 +280,8 @@ const ArcadeCore = (() => {
     'ballistics': 'ballistics_best',
     'gischtjagd': 'gischtjagd_wins',
     'grundriss': 'grundriss_wins',
-    'zauberwuerfel': 'zauberwuerfel_best_3'
+    'zauberwuerfel': 'zauberwuerfel_best_3',
+    'heapbreach': 'heapbreach_best'
   };
 
   function getScore(gameKey) {
