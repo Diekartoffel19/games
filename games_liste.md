@@ -2,8 +2,8 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (38 Spiele)
-3. **⭐ Top 3D-Upgrade-Kandidaten (6 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
+## 🧊 Bestehende 3D-Spiele (39 Spiele)
+3. **⭐ Top 3D-Upgrade-Kandidaten (5 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 53 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
 ---
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (38 Spiele)
+## 🧊 Bestehende 3D-Spiele (39 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -189,23 +189,23 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 36 | 🚤 **Gischtjagd 3D** | [`games/gischtjagd.html`](games/gischtjagd.html) | `racing` | Three.js | Rennboot-Grand-Prix auf 3 Spline-Strecken, Wellen-Shader mit Streckenmaske, Arcade-Driftphysik mit Drift-Turbo, Nitro, Schanzen, Boost-Pads, Windschatten, 5 KI-Gegner mit Gummiband |
 | 37 | 🧊 **Zauberwürfel 3D** | [`games/zauberwuerfel.html`](games/zauberwuerfel.html) | `puzzle` | Three.js | NxN-Würfel 2×2 bis 7×7, Schicht-Rotation per Pivot-Group mit Easing, Orbit-Kamera, Tastatur mit Ebenenwahl, Auto-Lösen über invertierte Zughistorie |
 | 38 | 🎯 **Fernschuss 3D** | [`games/fernschuss.html`](games/fernschuss.html) | `action` | Three.js | Scharfschützen-Schießstand: echte Geschoss-Simulation mit quadratischem Luftwiderstand (`V0 = 880 m/s`), Winddrift, schallverzögertem Trefferton und Segment-/Zylinder-/OBB-Treffertests, 3D-Gewehr mit Verschluss-Animation & Hülsenauswurf, FFP-Zielfernrohr 4×–20× mit Beleuchtung & Windage-Baum, Visier-Nullpunkt, Ballistik-Tabelle bis 1000 m, Entfernungsmesser, Atem-Schwanken mit Herzschlag, prädiktiver Kugelkamera, böigem Wind mit eigener Richtung je Talabschnitt (4 Fahnen), Spotter-Ansage der Ablage in Mil + Einschlagmarker, Fallplatten, explosiven Fässern mit Kettenreaktion, Tageszeiten (Morgen/Tag/bewölkt/Dämmerung), 12 Missionen mit Sonderaufgabe für den dritten Stern & freiem Übungsstand (100–1000 m) |
+| 39 | 🦑 **Squid Survival 3D** | [`games/squidgame.html`](games/squidgame.html) | `action` | Three.js | Low-Poly-Survival-Show mit 5 Minispielen: Wächter-Roboter dreht den Kopf um 180° mit Scharfschützen-Lasern, Dalgona-Keks als CanvasTexture mit Nadel-Raycast & Feuerzeug, Tauziehen über dem Abgrund mit Sturz-Animation, Glasbrücke mit Splitter-Physik & NPC-Vorgängern, Schlamm-Finale im Regen (LineSegments-Regen, Blitze), Shader-Partikel |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
 ---
 
-## ⭐ Kuratierte 3D-Upgrade-Kandidaten (6 Spiele)
+## ⭐ Kuratierte 3D-Upgrade-Kandidaten (5 Spiele)
 
-Diese 6 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von einem Umstieg auf 3D** (bessere Physik, räumliche Immersion, First-Person-Perspektive oder echtes Ragdoll):
+Diese 5 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von einem Umstieg auf 3D** (bessere Physik, räumliche Immersion, First-Person-Perspektive oder echtes Ragdoll):
 
 | # | Spiel | Aktuelle Datei | Warum 3D massiven Mehrwert bringt | Geplantes 3D-Konzept |
 |---|-------|----------------|------------------------------------|----------------------|
 | 1 | 🚇 **Subway Dodger (Schwarzfahrer)** | [`games/schwarzfahrer.html`](games/schwarzfahrer.html) | Waggon-Flucht & Sitze-Verstecken sind 3D-Raumprobleme | Durch 3D-U-Bahn-Waggons hechten, hinter Sitzen ducken, Kontrolleur umkurven |
-| 2 | 🦑 **Squid Survival (Rotes Licht)** | [`games/squidgame.html`](games/squidgame.html) | Das Erkennen der drehenden Riesenpuppe verlangt Tiefe | 3D-Arena, Roboter-Puppe dreht Kopf um 180°, Glasbrücke mit Fall-Physik |
-| 3 | 🚀 **Furz-Rakete** | [`games/furzrakete.html`](games/furzrakete.html) | Raketenstart vom Klo zum Mond erfordert sphärischen Raum | 3D-Erde verlassen, Wolkenschichten durchstoßen, Mondkrater-Landung |
-| 4 | 🗺️ **HEXFRONT: Tactical Warfare** | [`games/hexfront.html`](games/hexfront.html) | Tabletop-Spiele wirken als 3D-Diorama unvergleichlich | Tilt-Shift Miniatur-3D-Schlachtfeld, 3D-Hexfelder mit Höhenstufen |
-| 5 | 🥙 **Döner Tycoon** | [`games/doener.html`](games/doener.html) | Fleisch am rotierenden Spieß schneiden ist 3D-Handwerk | First-Person-Theke: 3D-Spieß drehen, Streifen schneiden, Brot befüllen |
-| 6 | 🍲 **Microwave Meltdown** | [`games/microwave.html`](games/microwave.html) | Aufblähende Marshmallows & Plasma funken räumlich | Blick durch 3D-Sicherheitsglas in Mikrowelle, rotierender 3D-Glasteller |
+| 2 | 🚀 **Furz-Rakete** | [`games/furzrakete.html`](games/furzrakete.html) | Raketenstart vom Klo zum Mond erfordert sphärischen Raum | 3D-Erde verlassen, Wolkenschichten durchstoßen, Mondkrater-Landung |
+| 3 | 🗺️ **HEXFRONT: Tactical Warfare** | [`games/hexfront.html`](games/hexfront.html) | Tabletop-Spiele wirken als 3D-Diorama unvergleichlich | Tilt-Shift Miniatur-3D-Schlachtfeld, 3D-Hexfelder mit Höhenstufen |
+| 4 | 🥙 **Döner Tycoon** | [`games/doener.html`](games/doener.html) | Fleisch am rotierenden Spieß schneiden ist 3D-Handwerk | First-Person-Theke: 3D-Spieß drehen, Streifen schneiden, Brot befüllen |
+| 5 | 🍲 **Microwave Meltdown** | [`games/microwave.html`](games/microwave.html) | Aufblähende Marshmallows & Plasma funken räumlich | Blick durch 3D-Sicherheitsglas in Mikrowelle, rotierender 3D-Glasteller |
 
 ---
 
