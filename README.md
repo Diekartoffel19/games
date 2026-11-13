@@ -43,7 +43,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
 * **Racing & 3D:**
   * [`games/gischtjagd.html`](games/gischtjagd.html) — *Gischtjagd 3D (Rennboot-Grand-Prix: Drift-Turbo, Nitro, Schanzen, 3 Strecken, 5 KI-Gegner)*
   * [`games/lokfuehrer.html`](games/lokfuehrer.html) — *ICE-Lokführer 3D: Bitte zurückbleiben! (Führerstand-Simulation, Spline-Gleise, Sifa, Bahnsteighalte & Verspätungen)*
-  * [`games/stadiumrush.html`](games/stadiumrush.html) — *Stadium Rush (Polytrack & Trackmania 3D-Zeitfahren)*
+  * [`games/stadiumrush.html`](games/stadiumrush.html) — *Stadium Rush (Polytrack & Trackmania 3D-Zeitfahren, 48 Strecken A01–V48 in 3 Saisons)*
   * [`games/buerostuhl.html`](games/buerostuhl.html) — *Bürostuhl GP*
   * [`games/skytower.html`](games/skytower.html) — *Sky Tower 3D Stack Master*
 * **Klassiker & Puzzles:**
