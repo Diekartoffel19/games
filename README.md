@@ -37,7 +37,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/grundriss.html`](games/grundriss.html) — *Grundriss: Das gezeichnete Herrenhaus (Roguelike-Raum-Drafting, Schritte/Schlüssel/Edelsteine & Sigillen-Deduktion über mehrere Tage)*
   * [`games/spire.html`](games/spire.html) — *Spire of Cards (Deckbuilder)*
   * [`games/neondefense.html`](games/neondefense.html) — *Cyber Defense: Neon Grid (Sci-Fi Tower Defense)*
-  * [`games/squidgame.html`](games/squidgame.html) — *Squid Survival: Die 45.6 Mrd. Won Spiele*
+  * [`games/squidgame.html`](games/squidgame.html) — *Squid Survival 3D: Die 45.6 Mrd. Won Spiele (Three.js-Survival-Show: 5 Minispiele in Low-Poly-3D-Arenen – Rotes Licht mit Wächter-Roboter, Dalgona-Keks, Tauziehen über dem Abgrund, Glasbrücke mit Splitter-Physik, Finale im Regen)*
   * [`games/superhot.html`](games/superhot.html) — *SUPERHOT 2D (Time moves only when you move)*
   * [`games/buckshot.html`](games/buckshot.html) — *Buckshot Roulette*
 * **Racing & 3D:**
