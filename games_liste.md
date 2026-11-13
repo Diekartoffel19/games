@@ -234,3 +234,6 @@ Die restlichen 53 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 7. **Kurzweilige Cartoon- & Reaktions-Microgames:**
    - *Mini-Wahnsinn, Omas Nachschlag, Katzen-Chaos, Tauben-Terror, Flappy Bird, Knet-Sumo, Anime Clicker, Bad Haircut, Stinkefuß*  
    *Begründung:* Der Charme dieser Spiele beruht auf spontanem WarioWare-Slapstick und handgezeichneten 2D-Vektor-/Pixel-Sprites.
+8. **Top-Down-Schleichspiele mit Licht & Schatten:**
+   - *Omas WLAN (`games/omaswlan.html`)*  
+   *Begründung:* Das Spiel lebt von der Draufsicht: Handy-Licht und Taschenlampen-Kegel werden per 2D-Raycasting als Sichtlinien-Polygone in eine Dunkelheitsebene geschnitten, Lärmringe breiten sich sichtbar durch Wände aus. In 3D würden Decken und Wände genau diese Übersicht über Geräusche, Licht und Sichtlinien verdecken.
