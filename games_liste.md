@@ -2,7 +2,7 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (39 Spiele)
+## 🧊 Bestehende 3D-Spiele (40 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (5 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 53 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (39 Spiele)
+## 🧊 Bestehende 3D-Spiele (40 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -190,6 +190,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 37 | 🧊 **Zauberwürfel 3D** | [`games/zauberwuerfel.html`](games/zauberwuerfel.html) | `puzzle` | Three.js | NxN-Würfel 2×2 bis 7×7, Schicht-Rotation per Pivot-Group mit Easing, Orbit-Kamera, Tastatur mit Ebenenwahl, Auto-Lösen über invertierte Zughistorie |
 | 38 | 🎯 **Fernschuss 3D** | [`games/fernschuss.html`](games/fernschuss.html) | `action` | Three.js | Scharfschützen-Schießstand: echte Geschoss-Simulation mit quadratischem Luftwiderstand (`V0 = 880 m/s`), Winddrift, schallverzögertem Trefferton und Segment-/Zylinder-/OBB-Treffertests, 3D-Gewehr mit Verschluss-Animation & Hülsenauswurf, FFP-Zielfernrohr 4×–20× mit Beleuchtung & Windage-Baum, Visier-Nullpunkt, Ballistik-Tabelle bis 1000 m, Entfernungsmesser, Atem-Schwanken mit Herzschlag, prädiktiver Kugelkamera, böigem Wind mit eigener Richtung je Talabschnitt (4 Fahnen), Spotter-Ansage der Ablage in Mil + Einschlagmarker, Fallplatten, explosiven Fässern mit Kettenreaktion, Tageszeiten (Morgen/Tag/bewölkt/Dämmerung), 12 Missionen mit Sonderaufgabe für den dritten Stern & freiem Übungsstand (100–1000 m) |
 | 39 | 🦑 **Squid Survival 3D** | [`games/squidgame.html`](games/squidgame.html) | `action` | Three.js | Low-Poly-Survival-Show mit 5 Minispielen: Wächter-Roboter dreht den Kopf um 180° mit Scharfschützen-Lasern, Dalgona-Keks als CanvasTexture mit Nadel-Raycast & Feuerzeug, Tauziehen über dem Abgrund mit Sturz-Animation, Glasbrücke mit Splitter-Physik & NPC-Vorgängern, Schlamm-Finale im Regen (LineSegments-Regen, Blitze), Shader-Partikel |
+| 40 | 🚀 **Raketenbau 3D** | [`games/raketenbau.html`](games/raketenbau.html) | `sim` | Three.js | Raketen-Werkstatt mit 15 Bauteilen (Kapseln, Tanks, Flüssig-/Vakuum-/Feststofftriebwerke, Stufentrenner, Leitwerk, Fallschirm) inkl. Δv-/TWR-Analyse pro Stufe; Flug mit 2D-Orbitalmechanik (Gravitation ~1/r², exponentielle Atmosphäre, druckabhängiger Isp, Luftwiderstand & aerodynamische Stabilität), Stufentrennung mit Trümmer-Physik, gereffter Fallschirm, SAS (Stabil/Pro-/Retrograd), Zeitraffer, Kartenansicht mit Kegelschnitt-Bahn & Ap/Pe, Kugel-Planet mit prozeduraler Textur + exakter Boden-Kappe, logarithmischer Tiefenpuffer, Shader-Partikel für Flamme/Rauch/Plasma, 9 Missionen mit Geld & Freischaltungen |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
