@@ -15,6 +15,7 @@
 <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
 <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="../src/arcade-core.js"></script>
 <style>
   html, body { margin:0; padding:0; overflow:hidden; background:#05070d; height:100%; }
@@ -502,8 +503,59 @@ function lathe(pts, smooth = false, seg = 40) {
 
 const partCache = {};
 function makePart(id) {
-  if (!partCache[id]) partCache[id] = makePartTemplate(id);
+  if (!partCache[id]) partCache[id] = blenderParts && blenderParts[id] ? blenderTemplate(id) : makePartTemplate(id);
   return partCache[id].clone(true);
+}
+
+// ---------- Blender-Modelle (models/raketenbau_parts.js, Quelle: models/raketenbau_parts.blend) ----------
+// Die Geometrie kommt aus Blender, die Materialien werden über ihren Namen auf M abgebildet,
+// damit Texturen und Beleuchtung gleich bleiben. Bis die Datei geladen ist, gelten die prozeduralen Teile.
+let blenderParts = null;
+const sootInner = MS(0x141416, { metalness: 0.3, roughness: 0.8 }); // Düseninnenseite: eigene Fläche mit Normalen nach innen
+function blenderTemplate(id) {
+  const g = blenderParts[id].clone(true);
+  g.userData.nozzles = makePartTemplate(id).userData.nozzles; // Flammenpositionen wie bisher
+  return g;
+}
+function loadBlenderParts() {
+  if (!THREE.GLTFLoader) return;
+  const s = document.createElement('script');
+  s.src = 'models/raketenbau_parts.js';
+  s.onload = () => {
+    try {
+      const raw = atob(window.RAKETENBAU_GLB); delete window.RAKETENBAU_GLB;
+      const bin = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) bin[i] = raw.charCodeAt(i);
+      new THREE.GLTFLoader().parse(bin.buffer, '', gltf => {
+        const map = {};
+        Object.keys(PARTS).forEach(id => {
+          const n = gltf.scene.getObjectByName(id);
+          if (!n) return;
+          n.parent.remove(n); n.position.set(0, 0, 0);
+          n.traverse(o => {
+            if (!o.isMesh) return;
+            o.material = o.material.name === 'soot' ? sootInner : (M[o.material.name] || o.material);
+            // quantisierte Attribute (KHR_mesh_quantization) in Float32 umwandeln: der Raycaster von r128 entnormalisiert nicht
+            Object.keys(o.geometry.attributes).forEach(k => {
+              const a = o.geometry.attributes[k];
+              if (!a.normalized && !a.isInterleavedBufferAttribute) return;
+              const src = a.isInterleavedBufferAttribute ? a.data.array : a.array;
+              const div = a.normalized ? { Int8Array: 127, Uint8Array: 255, Int16Array: 32767, Uint16Array: 65535 }[src.constructor.name] || 1 : 1;
+              const out = new Float32Array(a.count * a.itemSize), get = ['getX', 'getY', 'getZ', 'getW'];
+              for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) out[i * a.itemSize + c] = Math.max(a[get[c]](i) / div, -1);
+              o.geometry.setAttribute(k, new THREE.BufferAttribute(out, a.itemSize));
+            });
+            o.geometry.computeBoundingBox(); o.geometry.computeBoundingSphere();
+          });
+          map[id] = n;
+        });
+        if (!Object.keys(map).length) return;
+        blenderParts = map;
+        Object.keys(partCache).forEach(k => delete partCache[k]);
+        refreshBuild();
+      }, e => console.warn('Raketenbau: Blender-Modelle nicht lesbar', e));
+    } catch (e) { console.warn('Raketenbau: Blender-Modelle nicht lesbar', e); }
+  };
+  document.head.appendChild(s);
 }
 function makePartTemplate(id) {
   const d = PARTS[id], g = new THREE.Group(), r = d.w / 2, h = d.h;
@@ -2040,6 +2092,7 @@ function loop(now) {
 }
 renderCatalog();
 refreshBuild();
+loadBlenderParts();
 requestAnimationFrame(loop);
 </script>
 </body>
