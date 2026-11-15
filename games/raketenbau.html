@@ -253,7 +253,8 @@ BODY_LIST.forEach(b => {
   if (!b.parent) { b.soi = Infinity; b.n = 0; return; }
   const p = BODIES[b.parent];
   b.n = Math.sqrt(p.mu / (b.dist ** 3)) * 0.22; // langsame Umlaufbewegung für stabile Transfers
-  b.soi = b.dist * Math.pow(b.mu / p.mu, 0.4) * 1.35;
+  // Laplace-SOI, aber nie über 40 % des Bahnradius – sonst läge der Mutterkörper (z. B. die Erde) selbst im SOI
+  b.soi = Math.min(b.dist * Math.pow(b.mu / p.mu, 0.4) * 1.35, b.dist * 0.4);
 });
 function updateBodies(t) {
   BODY_LIST.forEach(b => {
@@ -276,14 +277,18 @@ function rhoBody(b, h) {
 }
 function rhoAt(h) { return rhoBody(BODIES.earth, h); }
 function findSOI(x, y) {
-  // Prüfe zuerst Monde von Planeten (Europa/Titan), dann Planeten/Erdmonde, sonst Erde
-  for (const b of BODY_LIST) {
-    if (b.parent && b.parent !== 'earth' && Math.hypot(x - b.x, y - b.y) < b.soi) return b;
-  }
-  for (const b of BODY_LIST) {
-    if (b.parent === 'earth' && Math.hypot(x - b.x, y - b.y) < b.soi) return b;
-  }
-  return BODIES.earth;
+  // Prüfe zuerst Monde von Planeten (Europa/Titan), dann Planeten/Erdmonde, sonst Erde.
+  // Bei überlappenden SOIs gewinnt der Körper, in dessen SOI man relativ am tiefsten steckt.
+  const pick = filter => {
+    let best = null, bestK = 1;
+    for (const b of BODY_LIST) {
+      if (!filter(b)) continue;
+      const k = Math.hypot(x - b.x, y - b.y) / b.soi;
+      if (k < bestK) { bestK = k; best = b; }
+    }
+    return best;
+  };
+  return pick(b => b.parent && b.parent !== 'earth') || pick(b => b.parent === 'earth') || BODIES.earth;
 }
 
 // ======================= Bauteile & Vektor-Symbole =======================
@@ -1457,17 +1462,27 @@ class PSys {
     this.mat = new THREE.ShaderMaterial({ uniforms: { uScale: { value: 500 } }, vertexShader: P_VERT, fragmentShader: P_FRAG,
       transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
     this.points = new THREE.Points(geo, this.mat); this.points.frustumCulled = false; this.geo = geo;
+    // Lokaler Ursprung (double): Positionen relativ dazu speichern, sonst frisst Float32 bei ~1e6 m die Bewegung
+    this.ox = 0; this.oy = 0;
     world.add(this.points);
+  }
+  rebase(x, y) {
+    const dx = x - this.ox, dy = y - this.oy;
+    if (Math.abs(dx) < 500 && Math.abs(dy) < 500) return;
+    for (let i = 0; i < this.n; i++) { this.pos[i * 3] -= dx; this.pos[i * 3 + 1] -= dy; }
+    this.ox = x; this.oy = y; this.points.position.set(x, y, 0);
   }
   emit(x, y, z, vx, vy, vz, life, s0, s1, a0, r, g, b, drag) {
     if (this.n >= this.max) return;
     const i = this.n++, i3 = i * 3;
-    this.pos[i3] = x; this.pos[i3 + 1] = y; this.pos[i3 + 2] = z;
+    this.pos[i3] = x - this.ox; this.pos[i3 + 1] = y - this.oy; this.pos[i3 + 2] = z;
     this.vel[i3] = vx; this.vel[i3 + 1] = vy; this.vel[i3 + 2] = vz;
     this.life[i] = this.maxLife[i] = life; this.s0[i] = s0; this.s1[i] = s1; this.a0[i] = a0; this.drag[i] = drag;
     this.col[i3] = r; this.col[i3 + 1] = g; this.col[i3 + 2] = b;
   }
-  update(dt) {
+  update(dt, body) {
+    // Himmelskörper relativ zum lokalen Ursprung – Partikel prallen an der Oberfläche ab statt darin zu verschwinden
+    const gx = body ? body.x - this.ox : 0, gy = body ? body.y - this.oy : 0, gR = body ? body.R + 0.4 : 0;
     for (let i = 0; i < this.n; i++) {
       this.life[i] -= dt;
       if (this.life[i] <= 0) {
@@ -1481,13 +1496,27 @@ class PSys {
       const t = 1 - this.life[i] / this.maxLife[i], i3 = i * 3, k = Math.exp(-this.drag[i] * dt);
       this.vel[i3] *= k; this.vel[i3 + 1] *= k; this.vel[i3 + 2] *= k;
       this.pos[i3] += this.vel[i3] * dt; this.pos[i3 + 1] += this.vel[i3 + 1] * dt; this.pos[i3 + 2] += this.vel[i3 + 2] * dt;
+      if (body) {
+        const rx = this.pos[i3] - gx, ry = this.pos[i3 + 1] - gy, rz = this.pos[i3 + 2], r = Math.hypot(rx, ry, rz);
+        if (r < gR && r > 0) {
+          const nx = rx / r, ny = ry / r, nz = rz / r, k2 = gR / r;
+          this.pos[i3] = gx + rx * k2; this.pos[i3 + 1] = gy + ry * k2; this.pos[i3 + 2] = rz * k2;
+          const vn = this.vel[i3] * nx + this.vel[i3 + 1] * ny + this.vel[i3 + 2] * nz;
+          if (vn < 0) {
+            // Aufprallenergie seitlich verteilen: Rauch wälzt sich über den Boden
+            const tx = this.vel[i3] - vn * nx, ty = this.vel[i3 + 1] - vn * ny, tz = this.vel[i3 + 2] - vn * nz;
+            const tl = Math.hypot(tx, ty, tz) || 1, boost = -vn * 0.7 / tl;
+            this.vel[i3] = tx * (1 + boost) - vn * 0.1 * nx; this.vel[i3 + 1] = ty * (1 + boost) - vn * 0.1 * ny; this.vel[i3 + 2] = tz * (1 + boost) - vn * 0.1 * nz;
+          }
+        }
+      }
       this.size[i] = lerp(this.s0[i], this.s1[i], t);
       this.alpha[i] = this.a0[i] * (1 - t) * Math.min(1, t * 8 + 0.3);
     }
     this.geo.setDrawRange(0, this.n);
     this.aPos.needsUpdate = this.aSize.needsUpdate = this.aAlpha.needsUpdate = this.aCol.needsUpdate = true;
   }
-  clear() { this.n = 0; this.geo.setDrawRange(0, 0); }
+  clear() { this.n = 0; this.geo.setDrawRange(0, 0); this.ox = this.oy = 0; this.points.position.set(0, 0, 0); }
 }
 const fireP = new PSys(1800, true);
 const smokeP = new PSys(3500, false);
@@ -2200,7 +2229,12 @@ function flightFrame(dtReal) {
     if (!paused) checkMissions(s);
   }
   if (f.ended && !paused) { f.endTimer -= dtReal; if (f.endTimer <= 0) { finishFlight(); return; } }
-  if (!paused) { emitEffects(dtReal, warp); fireP.update(Math.min(dtReal, 0.05) * Math.min(warp, 2)); smokeP.update(Math.min(dtReal, 0.05) * Math.min(warp, 2)); }
+  if (!paused) {
+    fireP.rebase(f.x, f.y); smokeP.rebase(f.x, f.y);
+    emitEffects(dtReal, warp);
+    const pdt = Math.min(dtReal, 0.05) * Math.min(warp, 2);
+    fireP.update(pdt, b); smokeP.update(pdt, b);
+  }
   // Ton
   const thrFrac = f.destroyed ? 0 : clamp(f.thrustNow / Math.max(1, f.massNow * G0) / 2, 0, 1);
   engineSound(paused ? 0 : thrFrac * (0.25 + 0.75 * Math.min(1, rhoBody(b, alt) / RHO0 * 2 + 0.05)));
