@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Bubble Fusion 0G — Zero-Gravity 2048 Merge Physics</title>
+<meta name="description" content="2048 meets zero gravity: push wobbly liquid bubbles into a weightless box, aim and choose your force, and fuse equal numbers into ever bigger bubbles.">
+<meta name="keywords" content="2048 physics game, bubble merge, zero gravity puzzle, liquid bubbles browser game">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Bubble Fusion 0G — Zero-Gravity 2048 Merge Physics">
+<meta property="og:description" content="2048 meets zero gravity: push wobbly liquid bubbles into a weightless box and fuse equal numbers into ever bigger bubbles.">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bubble Fusion 0G — Zero-Gravity 2048 Merge Physics">
+<meta name="twitter:description" content="2048 meets zero gravity: push wobbly liquid bubbles into a weightless box and fuse equal numbers into ever bigger bubbles.">
+<link rel="stylesheet" href="../style.css">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+  html, body { height: 100%; }
+  body {
+    padding: 8px;
+    background: radial-gradient(ellipse at 50% 20%, #131c3a 0%, #070913 62%);
+    overflow: hidden;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .wrap {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .hud {
+    width: min(96vw, 480px);
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    padding-left: 92px; /* room for the back link */
+  }
+  .box {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 4px 6px;
+    min-width: 0;
+  }
+  .box .l { font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: #8d9ac4; }
+  .box .v { font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #f4f4f5;
+    border-radius: 10px;
+    width: 40px;
+    font-size: 1.05rem;
+    cursor: pointer;
+  }
+  .btn:hover { background: rgba(255, 255, 255, 0.13); }
+  .pressure {
+    width: min(96vw, 480px);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8d9ac4;
+  }
+  .pressure .track {
+    flex: 1;
+    height: 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.07);
+    overflow: hidden;
+  }
+  .pressure .fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 6px;
+    background: #5eead4;
+  }
+  .stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  canvas {
+    background: transparent;
+    height: 100%;
+    max-width: 100%;
+    aspect-ratio: 480 / 780;
+    touch-action: none;
+    cursor: grab;
+    display: block;
+  }
+  canvas.grabbing { cursor: grabbing; }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5, 7, 16, 0.72);
+    backdrop-filter: blur(4px);
+  }
+  .overlay.show { display: flex; }
+  .card2 {
+    background: #121733;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 18px;
+    padding: 22px 28px;
+    max-width: 320px;
+  }
+  .card2 h2 { margin: 0 0 6px; font-size: 1.5rem; }
+  .card2 p { margin: 4px 0; color: #aab4d8; font-size: 0.95rem; }
+  .card2 b { color: #fff; }
+  .card2 button {
+    margin-top: 14px;
+    padding: 11px 26px;
+    font-size: 1rem;
+    font-weight: 800;
+    border: none;
+    border-radius: 12px;
+    color: #06202a;
+    background: linear-gradient(180deg, #7dd3fc, #38bdf8);
+    cursor: pointer;
+  }
+  @media (max-width: 420px) {
+    .hud { padding-left: 84px; }
+    .box .v { font-size: 0.92rem; }
+  }
+</style>
+</head>
+<body>
+
+<a class="back" href="../index.html" title="Back to the game collection">‹ Arcade</a>
+
+<div class="wrap">
+  <div class="hud">
+    <div class="box"><div class="l">Score</div><div class="v" id="score">0</div></div>
+    <div class="box"><div class="l">Best</div><div class="v" id="best">0</div></div>
+    <div class="box"><div class="l">Top</div><div class="v" id="top">2</div></div>
+    <button class="btn" id="muteBtn" title="Sound (M)">🔊</button>
+    <button class="btn" id="restartBtn" title="Restart (R)">↻</button>
+  </div>
+  <div class="pressure">
+    <span>Pressure</span>
+    <div class="track"><div class="fill" id="pressureFill"></div></div>
+  </div>
+  <div class="stage">
+    <canvas id="game" width="480" height="780"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="card2">
+        <h2>Box burst!</h2>
+        <p>Too much pressure in the box.</p>
+        <p>Score <b id="ovScore">0</b> · Best <b id="ovBest">0</b></p>
+        <p>Biggest bubble <b id="ovTop">2</b></p>
+        <button id="againBtn">Play again</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- Setup ----------
+const AC = window.ArcadeCore || null;
+const snd = (name, ...args) => { try { if (AC && AC[name]) AC[name](...args); } catch (e) {} };
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const elScore = document.getElementById('score');
+const elBest = document.getElementById('best');
+const elTop = document.getElementById('top');
+const elFill = document.getElementById('pressureFill');
+const elOverlay = document.getElementById('overlay');
+
+const VW = 480, VH = 780;
+const BX = 12, BW = 456, BR = BX + BW;      // box left / width / right
+const TRAY_Y = 12, TRAY_H = 112;
+const LINE_Y = TRAY_Y + TRAY_H;             // membrane between tray and box
+const BOX_B = VH - 12;                      // box bottom
+const BOX_AREA = BW * (BOX_B - LINE_Y);
+const FILL_LIMIT = 0.70;                    // packed fraction that bursts the box
+const BURST_TIME = 4;                       // seconds over the limit before game over
+const H = 1 / 120;                          // physics step
+const DRAG = 0.9;                           // velocity damping in the box (1/s)
+const SLOTS = [BX + BW * 0.2, BX + BW * 0.5, BX + BW * 0.8];
+const TAU = Math.PI * 2;
+const RIM = 18;                             // rim points per bubble (soft outline)
+const RC = [], RS = [];
+for (let i = 0; i < RIM; i++) { RC.push(Math.cos(i * TAU / RIM)); RS.push(Math.sin(i * TAU / RIM)); }
+const BEST_KEY = 'bubblefusion';
+
+const radiusOf = lvl => Math.min(200, 21 * Math.pow(1.22, lvl - 1));
+const valueOf = lvl => Math.pow(2, lvl);
+
+// Colour per level: [hue, saturation]
+const HUES = [195, 168, 135, 52, 28, 350, 300, 265, 222, 12, 45, 0];
+const palette = [];
+function colors(lvl) {
+  if (!palette[lvl]) {
+    const h = HUES[Math.min(lvl, HUES.length) - 1];
+    const white = lvl >= 12;
+    palette[lvl] = {
+      light: white ? '#ffffff' : `hsla(${h},100%,84%,0.95)`,
+      mid: white ? '#dbe7ff' : `hsla(${h},88%,60%,0.9)`,
+      dark: white ? '#9fb4e8' : `hsla(${h},80%,38%,0.92)`,
+      rim: white ? '#ffffff' : `hsla(${h},100%,88%,0.9)`,
+      text: white ? '#1a2550' : `hsl(${h},75%,13%)`,
+      solid: white ? '#ffffff' : `hsl(${h},90%,66%)`
+    };
+  }
+  return palette[lvl];
+}
+
+// ---------- State ----------
+let bubbles, fx, slots, slotTimer, uid;
+let score, best, maxLvl, combo, lastMerge, time, fill, fillShown, danger, over, won, launches, shake;
+let grab = null, aim = null, lastTick = 0, lastBeat = 0;
+let dust = [];
+
+function readBest() {
+  let v = null;
+  try { v = AC ? AC.getScore(BEST_KEY) : localStorage.getItem(BEST_KEY); } catch (e) {}
+  return Number(v) || 0;
+}
+function writeBest(v) {
+  try { if (AC) AC.saveScore(BEST_KEY, v); else localStorage.setItem(BEST_KEY, v); } catch (e) {}
+}
+
+function makeBubble(lvl, x, y, state) {
+  return {
+    id: ++uid, lvl, x, y, vx: 0, vy: 0,
+    r: radiusOf(lvl),
+    rs: 1, rsv: 0,            // radius scale spring (pop-in / growth)
+    state,                    // 'tray' | 'enter' | 'box'
+    t: 0, cd: 0, slot: -1,
+    seed: Math.random() * TAU,
+    rim: new Float32Array(RIM), rimV: new Float32Array(RIM), tgt: new Float32Array(RIM),
+    contacts: [],
+    dead: false
+  };
+}
+
+function rollLevel() {
+  const top = Math.max(3, Math.min(5, maxLvl - 3));
+  let total = 0;
+  for (let l = 1; l <= top; l++) total += Math.pow(0.55, l - 1);
+  let pick = Math.random() * total;
+  for (let l = 1; l <= top; l++) {
+    pick -= Math.pow(0.55, l - 1);
+    if (pick <= 0) return l;
+  }
+  return 1;
+}
+
+function spawnTray(s) {
+  const b = makeBubble(rollLevel(), SLOTS[s], TRAY_Y + TRAY_H / 2, 'tray');
+  b.slot = s;
+  b.rs = 0.05;
+  b.rsv = 3;
+  slots[s] = b;
+  bubbles.push(b);
+  ripple(b, 90);
+}
+
+function reset() {
+  bubbles = []; fx = []; slots = [null, null, null]; slotTimer = [0, 0, 0]; uid = 0;
+  score = 0; maxLvl = 1; combo = 0; lastMerge = -9; time = 0;
+  fill = 0; fillShown = 0; danger = 0; over = false; won = false; launches = 0; shake = 0;
+  grab = null; aim = null;
+  best = readBest();
+  for (let s = 0; s < 3; s++) spawnTray(s);
+  elOverlay.classList.remove('show');
+  hudDirty = true;
+}
+
+// ---------- Soft rim helpers ----------
+// Squash along an axis (mode-2 wobble), used for impacts.
+function poke(b, ang, amt) {
+  for (let i = 0; i < RIM; i++) b.rimV[i] -= amt * Math.cos(2 * (i * TAU / RIM - ang));
+}
+// Random multi-lobe ripple, used for pops and merges.
+function ripple(b, amt) {
+  const ph = Math.random() * TAU, lobes = 3 + (Math.random() * 3 | 0);
+  for (let i = 0; i < RIM; i++) b.rimV[i] += amt * Math.sin(lobes * i * TAU / RIM + ph);
+}
+const physR = b => b.r * Math.min(1, b.rs);
+const visR = b => b.r * b.rs * 1.04;
+
+function updateRim(b, dt) {
+  const vr = visR(b), tgt = b.tgt, rim = b.rim, rv = b.rimV;
+  let dent = 0;
+  for (let i = 0; i < RIM; i++) tgt[i] = 0;
+  // Flatten the outline against every contact plane (foam-like faces).
+  for (let k = 0; k < b.contacts.length; k += 3) {
+    const ca = b.contacts[k], sa = b.contacts[k + 1], p = b.contacts[k + 2];
+    for (let i = 0; i < RIM; i++) {
+      const cs = RC[i] * ca + RS[i] * sa;
+      if (cs > 0.08) {
+        const lim = p / cs - vr;
+        if (lim < tgt[i]) tgt[i] = lim;
+      }
+    }
+  }
+  const minT = -0.7 * vr;
+  for (let i = 0; i < RIM; i++) { if (tgt[i] < minT) tgt[i] = minT; dent += tgt[i]; }
+  // Displaced liquid bulges out where the bubble is free.
+  const bulge = Math.min(vr * 0.12, -dent / RIM * 0.6);
+  for (let i = 0; i < RIM; i++) if (tgt[i] === 0) tgt[i] = bulge;
+  const lim = vr * 0.45;
+  for (let i = 0; i < RIM; i++) {
+    const a = rim[(i + RIM - 1) % RIM], c = rim[(i + 1) % RIM];
+    rv[i] += (420 * (tgt[i] - rim[i]) + 260 * (a + c - 2 * rim[i]) - 11 * rv[i]) * dt;
+  }
+  for (let i = 0; i < RIM; i++) {
+    rim[i] += rv[i] * dt;
+    if (rim[i] > lim) { rim[i] = lim; rv[i] = 0; }
+    else if (rim[i] < -0.75 * vr) { rim[i] = -0.75 * vr; rv[i] = 0; }
+  }
+}
+
+// ---------- Effects ----------
+function burst(x, y, color, n, speed) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU, s = speed * (0.35 + Math.random() * 0.65);
+    fx.push({ k: 'p', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0, max: 0.5 + Math.random() * 0.5, size: 2 + Math.random() * 3.5, color });
+  }
+}
+function ring(x, y, r0, r1, color) { fx.push({ k: 'r', x, y, r0, r1, life: 0, max: 0.45, color }); }
+function floatText(x, y, str, color, size) { fx.push({ k: 't', x, y, str, life: 0, max: 0.95, color, size }); }
+
+function bounceTick(speed) {
+  if (speed < 130 || time - lastTick < 0.07) return;
+  lastTick = time;
+  snd('playTone', 150 + Math.random() * 70, 0.05, 'sine', Math.min(0.06, speed / 9000));
+}
+
+// ---------- Merge ----------
+function merge(a, b, born) {
+  a.dead = b.dead = true;
+  const lvl = a.lvl + 1;
+  const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+  const n = makeBubble(lvl, x, y, y > LINE_Y ? 'box' : 'enter');
+  n.vx = (a.vx + b.vx) / 2;
+  n.vy = (a.vy + b.vy) / 2;
+  n.rs = a.r / n.r;
+  n.rsv = 2.4;
+  n.cd = 0.13;                 // short pause so chains play out one beat at a time
+  ripple(n, 130);
+  born.push(n);
+
+  combo = (time - lastMerge < 1.1) ? combo + 1 : 1;
+  lastMerge = time;
+  const pts = valueOf(lvl) * combo;
+  score += pts;
+  hudDirty = true;
+
+  const c = colors(lvl);
+  fx.push({ k: 'g', x: a.x, y: a.y, tx: x, ty: y, r: a.r, life: 0, max: 0.14, color: colors(a.lvl).solid });
+  fx.push({ k: 'g', x: b.x, y: b.y, tx: x, ty: y, r: b.r, life: 0, max: 0.14, color: colors(a.lvl).solid });
+  ring(x, y, n.r * 0.7, n.r * 2.3, c.solid);
+  burst(x, y, c.solid, 8 + lvl * 2, 130 + lvl * 22);
+  floatText(x, y - n.r * 0.3, '+' + pts, '#ffffff', 15 + Math.min(14, lvl * 1.4));
+  if (combo > 1) floatText(x, y - n.r * 0.3 - 24, 'x' + combo + ' combo', '#fde047', 14 + Math.min(10, combo * 2));
+  if (lvl >= 4) shake = Math.max(shake, Math.min(11, lvl * 0.9));
+
+  // Shockwave: nudge the neighbours outward.
+  const range = n.r * 2.6;
+  for (const o of bubbles) {
+    if (o.dead || o.state === 'tray') continue;
+    const dx = o.x - x, dy = o.y - y, d = Math.hypot(dx, dy) || 1;
+    if (d < range + o.r) {
+      const f = (1 - d / (range + o.r)) * (80 + lvl * 24) * Math.min(1, (n.r * n.r) / (o.r * o.r));
+      o.vx += dx / d * f;
+      o.vy += dy / d * f;
+      poke(o, Math.atan2(-dy, -dx), f * 0.5);
+    }
+  }
+
+  snd('merge', lvl + combo - 1);
+  if (lvl > maxLvl) {
+    maxLvl = lvl;
+    if (lvl >= 5) floatText(x, y + n.r * 0.3 + 22, 'NEW ' + valueOf(lvl) + '!', c.solid, 20);
+    if (lvl === 11 && !won) {
+      won = true;
+      snd('powerup');
+      floatText(VW / 2, VH / 2, '2048!', '#fde047', 64);
+      for (let i = 0; i < 8; i++) burst(BX + Math.random() * BW, LINE_Y + Math.random() * (BOX_B - LINE_Y), colors(1 + (i % 11)).solid, 14, 320);
+      shake = 16;
+    }
+  }
+}
+
+// ---------- Physics ----------
+function wall(b, pen, nx, ny) {
+  // Soft wall: push back part of the penetration, reflect the inbound velocity.
+  const corr = Math.min(pen * 0.6, 7);
+  b.x += nx * corr;
+  b.y += ny * corr;
+  const vn = b.vx * nx + b.vy * ny;
+  if (vn < 0) {
+    b.vx -= 1.55 * vn * nx;
+    b.vy -= 1.55 * vn * ny;
+    if (vn < -60) {
+      poke(b, Math.atan2(-ny, -nx), Math.min(240, -vn * 0.45));
+      bounceTick(-vn);
+    }
+  }
+}
+
+function step(dt) {
+  time += dt;
+
+  for (let s = 0; s < 3; s++) {
+    if (!slots[s]) {
+      slotTimer[s] -= dt;
+      if (slotTimer[s] <= 0) { spawnTray(s); snd('playTone', 520 + Math.random() * 120, 0.06, 'sine', 0.04); }
+    }
+  }
+
+  const dragBox = Math.exp(-DRAG * dt), dragTray = Math.exp(-6 * dt);
+  for (const b of bubbles) {
+    b.t += dt;
+    if (b.cd > 0) b.cd -= dt;
+    b.rsv += (200 * (1 - b.rs) - 14 * b.rsv) * dt;
+    b.rs += b.rsv * dt;
+    if (b.rs < 0.03) b.rs = 0.03;
+    if (b.state === 'tray') {
+      // Floats around its slot on a soft spring.
+      let hx = SLOTS[b.slot] + Math.sin(time * 0.9 + b.seed) * 7;
+      let hy = TRAY_Y + TRAY_H / 2 + Math.cos(time * 1.15 + b.seed * 2) * 5;
+      if (grab === b && aim && aim.valid) { hx -= aim.nx * aim.pow * 16; hy -= aim.ny * aim.pow * 16; }
+      b.vx += (hx - b.x) * 45 * dt;
+      b.vy += (hy - b.y) * 45 * dt;
+      b.vx *= dragTray; b.vy *= dragTray;
+    } else {
+      // Zero gravity: only drag and a faint ambient current.
+      b.vx += Math.sin(time * 0.31 + b.y * 0.012 + b.seed) * 5 * dt;
+      b.vy += Math.cos(time * 0.27 + b.x * 0.012 + b.seed) * 5 * dt;
+      if (b.state === 'enter' && b.vy < 140) b.vy += 620 * dt;   // membrane pulls it in
+      b.vx *= dragBox; b.vy *= dragBox;
+    }
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+  }
+
+  const born = [];
+  const n = bubbles.length;
+  for (let it = 0; it < 2; it++) {
+    const rec = it === 1;
+    if (rec) for (const b of bubbles) b.contacts.length = 0;
+    for (let i = 0; i < n; i++) {
+      const a = bubbles[i];
+      if (a.dead) continue;
+      const ra = physR(a), aTray = a.state === 'tray';
+      for (let j = i + 1; j < n; j++) {
+        const b = bubbles[j];
+        if (b.dead || (b.state === 'tray') !== aTray) continue;
+        const rb = physR(b), R = ra + rb;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const lim = R * 1.04;
+        if (dx > lim || dx < -lim || dy > lim || dy < -lim) continue;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= lim * lim) continue;
+        const d = Math.sqrt(d2) || 0.01;
+        const nx = dx / d, ny = dy / d;
+        if (d < R) {
+          if (!aTray && a.lvl === b.lvl && a.cd <= 0 && b.cd <= 0) { merge(a, b, born); break; }
+          const ma = ra * ra, mb = rb * rb, inv = 1 / (ma + mb);
+          const corr = (R - d) * 0.45;
+          a.x -= nx * corr * mb * inv; a.y -= ny * corr * mb * inv;
+          b.x += nx * corr * ma * inv; b.y += ny * corr * ma * inv;
+          const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+          if (vn < 0) {
+            const jimp = -1.3 * vn / (1 / ma + 1 / mb);
+            a.vx -= jimp / ma * nx; a.vy -= jimp / ma * ny;
+            b.vx += jimp / mb * nx; b.vy += jimp / mb * ny;
+            if (vn < -60) {
+              const ang = Math.atan2(ny, nx), amt = Math.min(240, -vn * 0.4);
+              poke(a, ang, amt * mb * inv * 2);
+              poke(b, ang, amt * ma * inv * 2);
+              bounceTick(-vn);
+            }
+          }
+        }
+        if (rec) {
+          const pa = d * ra / R;
+          a.contacts.push(nx, ny, pa);
+          b.contacts.push(-nx, -ny, d - pa);
+        }
+      }
+    }
+    // Walls
+    for (const b of bubbles) {
+      if (b.dead) continue;
+      const r = physR(b);
+      const top = b.state === 'box' ? LINE_Y : TRAY_Y;
+      const bottom = b.state === 'tray' ? LINE_Y : BOX_B;
+      if (b.x - r < BX) wall(b, BX - (b.x - r), 1, 0);
+      if (b.x + r > BR) wall(b, b.x + r - BR, -1, 0);
+      if (b.y - r < top) wall(b, top - (b.y - r), 0, 1);
+      if (b.y + r > bottom) wall(b, b.y + r - bottom, 0, -1);
+      if (rec) {
+        const m = r * 1.04;
+        if (b.x - BX < m) b.contacts.push(-1, 0, b.x - BX);
+        if (BR - b.x < m) b.contacts.push(1, 0, BR - b.x);
+        if (b.y - top < m) b.contacts.push(0, -1, b.y - top);
+        if (bottom - b.y < m) b.contacts.push(0, 1, bottom - b.y);
+      }
+    }
+  }
+
+  if (born.length) {
+    bubbles = bubbles.filter(b => !b.dead);
+    for (const nb of born) bubbles.push(nb);
+  }
+
+  let area = 0;
+  for (const b of bubbles) {
+    if (b.state === 'enter' && (b.y - physR(b) >= LINE_Y || (b.t > 1.4 && b.y > LINE_Y))) b.state = 'box';
+    if (b.state !== 'tray') area += Math.PI * b.r * b.r;
+    updateRim(b, dt);
+  }
+  fill = area / BOX_AREA;
+
+  if (fill > FILL_LIMIT) {
+    danger += dt;
+    if (time - lastBeat > 0.5) { lastBeat = time; snd('playTone', 96, 0.14, 'sine', 0.14); }
+    if (danger >= BURST_TIME) gameOver();
+  } else if (danger > 0) {
+    danger = Math.max(0, danger - dt * 2);
+  }
+}
+
+function stepFx(dt) {
+  for (const f of fx) {
+    f.life += dt;
+    if (f.k === 'p') {
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      f.vx *= Math.exp(-2.4 * dt); f.vy *= Math.exp(-2.4 * dt);
+    } else if (f.k === 't') {
+      f.y -= 34 * dt;
+    }
+  }
+  fx = fx.filter(f => f.life < f.max);
+  if (fx.length > 500) fx.splice(0, fx.length - 500);
+  shake *= Math.exp(-9 * dt);
+  fillShown += (fill - fillShown) * Math.min(1, dt * 8);
+  for (const m of dust) {
+    m.x += m.vx * dt; m.y += m.vy * dt;
+    if (m.x < BX) m.x += BW; else if (m.x > BR) m.x -= BW;
+    if (m.y < TRAY_Y) m.y += BOX_B - TRAY_Y; else if (m.y > BOX_B) m.y -= BOX_B - TRAY_Y;
+  }
+}
+
+function gameOver() {
+  if (over) return;
+  over = true;
+  grab = null; aim = null;
+  canvas.classList.remove('grabbing');
+  if (score > best) { best = score; writeBest(best); }
+  for (const b of bubbles) if (b.state !== 'tray') burst(b.x, b.y, colors(b.lvl).solid, 5, 260);
+  shake = 18;
+  snd('gameOver');
+  document.getElementById('ovScore').textContent = score;
+  document.getElementById('ovBest').textContent = best;
+  document.getElementById('ovTop').textContent = valueOf(maxLvl);
+  elOverlay.classList.add('show');
+  hudDirty = true;
+}
+
+// ---------- Input ----------
+function toLocal(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * VW, y: (e.clientY - r.top) / r.height * VH };
+}
+
+function pickTray(p) {
+  let bestB = null, bestD = Infinity;
+  for (const b of slots) {
+    if (!b || b.rs < 0.6) continue;
+    // In the tray: closest bubble. Below it: the bubble above the pointer.
+    const d = p.y < LINE_Y + 16 ? Math.hypot(p.x - b.x, p.y - b.y) : Math.abs(p.x - b.x);
+    if (d < bestD) { bestD = d; bestB = b; }
+  }
+  return bestB;
+}
+
+function updateAim(p) {
+  const dx = p.x - aim.sx, dy = p.y - aim.sy;
+  const len = Math.hypot(dx, dy);
+  aim.valid = len > 14 && dy > len * 0.12;
+  aim.pow = Math.max(0, Math.min(1, (len - 14) / 170));
+  if (len > 0.01) { aim.nx = dx / len; aim.ny = dy / len; }
+  aim.speed = 190 + aim.pow * 1150;
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (over || grab) return;
+  const p = toLocal(e);
+  const b = pickTray(p);
+  if (!b) return;
+  e.preventDefault();
+  grab = b;
+  aim = { id: e.pointerId, sx: p.x, sy: p.y, nx: 0, ny: 1, pow: 0, speed: 0, valid: false };
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  canvas.classList.add('grabbing');
+  poke(b, Math.PI / 2, 60);
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (!grab || !aim || e.pointerId !== aim.id) return;
+  updateAim(toLocal(e));
+});
+
+function release(e, fire) {
+  if (!grab || !aim || e.pointerId !== aim.id) return;
+  if (fire) updateAim(toLocal(e));
+  const b = grab;
+  if (fire && aim.valid && !over && b.state === 'tray') {
+    b.state = 'enter';
+    b.t = 0;
+    b.vx = aim.nx * aim.speed;
+    b.vy = aim.ny * aim.speed;
+    slots[b.slot] = null;
+    slotTimer[b.slot] = 0.38;
+    b.slot = -1;
+    poke(b, Math.atan2(aim.ny, aim.nx), 120 + aim.pow * 160);
+    burst(b.x, b.y, colors(b.lvl).solid, 4 + (aim.pow * 8 | 0), 80 + aim.pow * 160);
+    snd('pop', 0.75 + aim.pow * 0.7);
+    launches++;
+  }
+  grab = null; aim = null;
+  canvas.classList.remove('grabbing');
+}
+canvas.addEventListener('pointerup', e => release(e, true));
+canvas.addEventListener('pointercancel', e => release(e, false));
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+const muteBtn = document.getElementById('muteBtn');
+function syncMute() { muteBtn.textContent = AC && AC.isMuted() ? '🔇' : '🔊'; }
+function toggleMute() { if (AC) AC.toggleMute(); syncMute(); }
+muteBtn.addEventListener('click', toggleMute);
+document.getElementById('restartBtn').addEventListener('click', reset);
+document.getElementById('againBtn').addEventListener('click', reset);
+window.addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') reset();
+  else if (e.key === 'm' || e.key === 'M') toggleMute();
+});
+
+// ---------- Rendering ----------
+let hudDirty = true;
+function drawHud() {
+  if (hudDirty) {
+    hudDirty = false;
+    elScore.textContent = score;
+    elBest.textContent = Math.max(best, score);
+    elTop.textContent = valueOf(maxLvl);
+  }
+  const f = Math.min(1, fillShown / FILL_LIMIT);
+  elFill.style.width = (f * 100).toFixed(1) + '%';
+  elFill.style.background = f > 0.97 ? '#f43f5e' : f > 0.8 ? '#fb923c' : f > 0.6 ? '#fde047' : '#5eead4';
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+const PX = new Float32Array(RIM), PY = new Float32Array(RIM);
+function drawBubble(b) {
+  const vr = visR(b);
+  if (vr < 1.5) return;
+  const c = colors(b.lvl);
+  for (let i = 0; i < RIM; i++) {
+    const rr = Math.max(vr * 0.25, vr + b.rim[i]);
+    PX[i] = b.x + RC[i] * rr;
+    PY[i] = b.y + RS[i] * rr;
+  }
+  ctx.beginPath();
+  ctx.moveTo((PX[RIM - 1] + PX[0]) / 2, (PY[RIM - 1] + PY[0]) / 2);
+  for (let i = 0; i < RIM; i++) {
+    const j = (i + 1) % RIM;
+    ctx.quadraticCurveTo(PX[i], PY[i], (PX[i] + PX[j]) / 2, (PY[i] + PY[j]) / 2);
+  }
+  ctx.closePath();
+  const g = ctx.createRadialGradient(b.x - vr * 0.35, b.y - vr * 0.4, vr * 0.08, b.x, b.y, vr * 1.08);
+  g.addColorStop(0, c.light);
+  g.addColorStop(0.62, c.mid);
+  g.addColorStop(1, c.dark);
+  if (b.lvl >= 11) { ctx.shadowColor = c.solid; ctx.shadowBlur = 26; }
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = Math.max(1.2, vr * 0.05);
+  ctx.strokeStyle = c.rim;
+  ctx.stroke();
+
+  // Gloss
+  ctx.save();
+  ctx.translate(b.x - vr * 0.36, b.y - vr * 0.44);
+  ctx.rotate(-0.62);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, vr * 0.26, vr * 0.13, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.arc(b.x + vr * 0.42, b.y + vr * 0.5, vr * 0.06, 0, TAU);
+  ctx.fill();
+
+  const label = String(valueOf(b.lvl));
+  const fs = vr * (label.length <= 2 ? 0.86 : label.length === 3 ? 0.66 : 0.52);
+  if (fs >= 6) {
+    ctx.font = `800 ${fs.toFixed(1)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = c.text;
+    ctx.fillText(label, b.x, b.y + fs * 0.05);
+  }
+}
+
+function drawAim() {
+  const b = grab;
+  if (!b || !aim || b.state !== 'tray') return;
+  const r = physR(b);
+  // Power ring
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.beginPath(); ctx.arc(b.x, b.y, r + 9, 0, TAU); ctx.stroke();
+  if (!aim.valid) return;
+  const hue = 165 - aim.pow * 165;
+  ctx.strokeStyle = `hsl(${hue},95%,62%)`;
+  ctx.beginPath(); ctx.arc(b.x, b.y, r + 9, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0.03, aim.pow)); ctx.stroke();
+
+  // Predicted path: straight flight with wall bounces, stops at the first bubble.
+  let x = b.x, y = b.y, dx = aim.nx, dy = aim.ny;
+  const total = Math.min(1100, aim.speed / DRAG * 0.8);
+  const stepLen = 7;
+  let hit = null;
+  ctx.fillStyle = `hsl(${hue},95%,70%)`;
+  for (let s = 0; s < total; s += stepLen) {
+    x += dx * stepLen; y += dy * stepLen;
+    if (x - r < BX) { x = BX + r; dx = -dx; }
+    else if (x + r > BR) { x = BR - r; dx = -dx; }
+    if (y + r > BOX_B) { y = BOX_B - r; dy = -dy; }
+    else if (y - r < TRAY_Y) { y = TRAY_Y + r; dy = -dy; }
+    for (const o of bubbles) {
+      if (o.state === 'tray' || o.dead) continue;
+      const rr = r + physR(o);
+      if ((o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) < rr * rr) { hit = o; break; }
+    }
+    if (hit) break;
+    if ((s / stepLen | 0) % 3 === 0) {
+      ctx.globalAlpha = 0.85 * (1 - s / total) + 0.1;
+      ctx.beginPath(); ctx.arc(x, y, 2 + aim.pow * 1.8, 0, TAU); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([5, 5]);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = hit && hit.lvl === b.lvl ? '#ffffff' : `hsla(${hue},95%,70%,0.7)`;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawFx() {
+  for (const f of fx) {
+    const t = f.life / f.max;
+    if (f.k === 'p') {
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = f.color;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.size * (1 - t * 0.6), 0, TAU); ctx.fill();
+    } else if (f.k === 'r') {
+      const e = 1 - (1 - t) * (1 - t);
+      ctx.globalAlpha = (1 - t) * 0.8;
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = 5 * (1 - t) + 1;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * e, 0, TAU); ctx.stroke();
+    } else if (f.k === 'g') {
+      ctx.globalAlpha = 0.75 * (1 - t);
+      ctx.fillStyle = f.color;
+      ctx.beginPath(); ctx.arc(f.x + (f.tx - f.x) * t, f.y + (f.ty - f.y) * t, f.r * (1 - t * 0.35), 0, TAU); ctx.fill();
+    } else if (f.k === 't') {
+      const pop = t < 0.15 ? 0.6 + t / 0.15 * 0.5 : 1.1 - Math.min(0.1, (t - 0.15) * 0.5);
+      ctx.globalAlpha = t > 0.6 ? (1 - t) / 0.4 : 1;
+      ctx.font = `900 ${(f.size * pop).toFixed(1)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(5,8,20,0.75)';
+      ctx.strokeText(f.str, f.x, f.y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.str, f.x, f.y);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function draw() {
+  ctx.setTransform(scalePx, 0, 0, scalePx, 0, 0);
+  ctx.clearRect(0, 0, VW, VH);
+  ctx.save();
+  if (shake > 0.3) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+
+  // Box glass
+  roundRect(BX - 4, TRAY_Y - 4, BW + 8, BOX_B - TRAY_Y + 8, 20);
+  const bg = ctx.createLinearGradient(0, TRAY_Y, 0, BOX_B);
+  bg.addColorStop(0, '#172048');
+  bg.addColorStop(0.16, '#0d1330');
+  bg.addColorStop(1, '#080b1d');
+  ctx.fillStyle = bg;
+  ctx.fill();
+  const hot = Math.min(1, danger / BURST_TIME);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = fill > FILL_LIMIT
+    ? `rgba(244,63,94,${0.55 + 0.45 * Math.sin(time * 14)})`
+    : 'rgba(150,175,255,0.32)';
+  ctx.stroke();
+
+  ctx.save();
+  roundRect(BX - 2, TRAY_Y - 2, BW + 4, BOX_B - TRAY_Y + 4, 18);
+  ctx.clip();
+
+  // Dust motes drifting in zero gravity
+  ctx.fillStyle = 'rgba(190,210,255,0.35)';
+  for (const m of dust) { ctx.globalAlpha = m.a; ctx.fillRect(m.x, m.y, m.s, m.s); }
+  ctx.globalAlpha = 1;
+
+  // Tray glow + membrane
+  const tg = ctx.createLinearGradient(0, TRAY_Y, 0, LINE_Y);
+  tg.addColorStop(0, 'rgba(125,211,252,0.13)');
+  tg.addColorStop(1, 'rgba(125,211,252,0.02)');
+  ctx.fillStyle = tg;
+  ctx.fillRect(BX, TRAY_Y, BW, TRAY_H);
+  ctx.setLineDash([3, 9]);
+  ctx.lineDashOffset = -time * 14;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(125,211,252,0.5)';
+  ctx.beginPath(); ctx.moveTo(BX, LINE_Y); ctx.lineTo(BR, LINE_Y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (hot > 0) {
+    ctx.fillStyle = `rgba(244,63,94,${0.16 * hot})`;
+    ctx.fillRect(BX, LINE_Y, BW, BOX_B - LINE_Y);
+  }
+
+  for (const b of bubbles) if (b.state !== 'tray') drawBubble(b);
+  for (const b of bubbles) if (b.state === 'tray' && b !== grab) drawBubble(b);
+  ctx.restore();
+
+  drawAim();
+  if (grab && grab.state === 'tray') drawBubble(grab);
+  drawFx();
+
+  if (fill > FILL_LIMIT && !over) {
+    ctx.font = '900 150px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillText(String(Math.max(1, Math.ceil(BURST_TIME - danger))), VW / 2, (LINE_Y + BOX_B) / 2);
+    ctx.font = '800 18px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,200,210,0.9)';
+    ctx.fillText('OVERPRESSURE — MERGE NOW', VW / 2, (LINE_Y + BOX_B) / 2 + 92);
+  }
+
+  if (launches < 2 && !over) {
+    const a = 0.55 + 0.25 * Math.sin(time * 3);
+    ctx.font = '700 17px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = `rgba(215,228,255,${a})`;
+    ctx.fillText('Drag a bubble downward and release to push it', VW / 2, LINE_Y + 150);
+    ctx.font = '500 14px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.fillStyle = `rgba(170,185,225,${a})`;
+    ctx.fillText('Longer drag = more force · equal numbers fuse', VW / 2, LINE_Y + 176);
+  }
+  ctx.restore();
+}
+
+// ---------- Loop ----------
+let scalePx = 1;
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const w = Math.max(240, Math.round((r.width || VW) * dpr));
+  canvas.width = w;
+  canvas.height = Math.round(w * VH / VW);
+  scalePx = w / VW;
+}
+window.addEventListener('resize', resize);
+
+let lastT = 0, acc = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000 || 0);
+  lastT = now;
+  if (!over) {
+    acc += dt;
+    while (acc >= H) { step(H); acc -= H; if (over) break; }
+  }
+  stepFx(dt);
+  drawHud();
+  draw();
+  requestAnimationFrame(frame);
+}
+
+for (let i = 0; i < 46; i++) {
+  dust.push({
+    x: BX + Math.random() * BW, y: TRAY_Y + Math.random() * (BOX_B - TRAY_Y),
+    vx: (Math.random() - 0.5) * 7, vy: (Math.random() - 0.5) * 7,
+    s: 1 + Math.random() * 1.6, a: 0.15 + Math.random() * 0.5
+  });
+}
+reset();
+resize();
+syncMute();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
