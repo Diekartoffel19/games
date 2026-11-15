@@ -215,7 +215,7 @@ Diese 5 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von eine
 Die restlichen 54 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
 
 1. **Reine Gitter- & Zahlenspiele (Grid Classics & Terminal Roguelikes):**
-   - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`), Bubble Fusion 0G (`games/bubblefusion.html`)*  
+   - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`), Bubble Fusion (`games/bubblefusion.html`)*  
    *Begründung:* Präzise Eingaben im Millisekundentakt und Hex-/Bytecode-Matrizen erfordern maximale Übersicht ohne Kamera-Verdeckung, Tiefenunschärfe oder Perspektivverzerrung. 3D-Tetris oder 3D-Snake schaffen visuelle Hürden statt Spielspaß.
 2. **Karten- & Deckbuilder-Systeme:**
    - *Spire of Cards, Backpack Gladiator, Grundriss (Raum-Drafting-Roguelike, `games/grundriss.html`)*  
