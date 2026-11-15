@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Bubble Fusion — Squishy 2048 Soft-Body Puzzle</title>
-<meta name="description" content="Squishy 2048 im gezeichneten Sobosuba-Stil: Ziele und schieße verformbare Gelee-Blobs in den Behälter, nutze die leichte Anziehungskraft und verschmelze gleiche Zahlen bis 2048!">
+<title>Bubble Fusion — Squishy 2048 Liquid Jelly Puzzle</title>
+<meta name="description" content="Squishy 2048 im gezeichneten Sobosuba-Stil: Ziele und schieße flüssige, wackelige Gelee-Blobs in den Behälter, nutze die leichte Anziehungskraft und verschmelze gleiche Zahlen bis 2048!">
 <meta name="keywords" content="sobosuba online, 2048 physics game, squishy blob merge, bubble fusion, soft body puzzle">
 <meta name="robots" content="index, follow">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Bubble Fusion — Squishy 2048 Soft-Body Puzzle">
-<meta property="og:description" content="Squishy 2048 im gezeichneten Sobosuba-Stil: Schieße verformbare Gelee-Blobs in den Behälter und verschmelze gleiche Zahlen!">
+<meta property="og:title" content="Bubble Fusion — Squishy 2048 Liquid Jelly Puzzle">
+<meta property="og:description" content="Squishy 2048 im gezeichneten Sobosuba-Stil: Schieße flüssige Gelee-Blobs in den Behälter und verschmelze gleiche Zahlen!">
 <meta property="og:locale" content="de_DE">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Bubble Fusion — Squishy 2048 Soft-Body Puzzle">
-<meta name="twitter:description" content="Squishy 2048 im gezeichneten Sobosuba-Stil: Schieße verformbare Gelee-Blobs in den Behälter und verschmelze gleiche Zahlen!">
+<meta name="twitter:title" content="Bubble Fusion — Squishy 2048 Liquid Jelly Puzzle">
+<meta name="twitter:description" content="Squishy 2048 im gezeichneten Sobosuba-Stil: Schieße flüssige Gelee-Blobs in den Behälter und verschmelze gleiche Zahlen!">
 <link rel="stylesheet" href="../style.css">
 <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
 <script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
@@ -27,7 +27,7 @@
     overscroll-behavior: none;
     user-select: none;
     -webkit-user-select: none;
-    font-family: "Comic Sans MS", "Chalkboard SE", "Marker Felt", "Arial Rounded MT Bold", system-ui, sans-serif;
+    font-family: "Arial Rounded MT Bold", "Varela Round", "Nunito", "Chalkboard SE", system-ui, sans-serif;
   }
   .wrap {
     height: 100%;
@@ -218,47 +218,47 @@ const DANGER_Y = 152;                       // blobs stacked above this trigger 
 const BURST_TIME = 3.6;                     // seconds of sensor contact before game over
 
 const H = 1 / 120;                          // physics timestep
-const GRAV = 195;                           // gentle downward gravity ("leichte Anziehungskraft")
-const SAME_PULL = 145;                      // gentle attraction between nearby equal numbers
-const SAME_RANGE = 32;                      // surface distance within which equal numbers attract
-const DRAG = 1.65;                          // viscous damping in chamber
-const CR = 0.86;                            // core collision factor (squishy cushions with rounded shoulders)
-const SKIN_GAP = 5.4;                       // dark separation gap between touching blobs
+const GRAV = 190;                           // gentle downward gravity ("leichte Anziehungskraft")
+const SAME_PULL = 155;                      // gentle attraction between nearby equal numbers
+const SAME_RANGE = 34;                      // surface distance within which equal numbers attract
+const DRAG = 1.45;                          // viscous damping in chamber
+const CR = 0.76;                            // deep liquid squish core factor
+const SKIN_GAP = 3.8;                       // separation gap between touching liquid skins
 const MAX_QUEUE = 7;                        // 7 blobs in the top queue like Sobosuba
 const TAU = Math.PI * 2;
-const RIM = 28;                             // polygonal hand-drawn vertices per blob
+const RIM = 40;                             // high-res smooth spline points around liquid perimeter
 const RC = new Float32Array(RIM), RS = new Float32Array(RIM);
+const C2 = new Float32Array(RIM), S2 = new Float32Array(RIM);
 for (let i = 0; i < RIM; i++) {
-  RC[i] = Math.cos(i * TAU / RIM);
-  RS[i] = Math.sin(i * TAU / RIM);
+  const th = i * TAU / RIM;
+  RC[i] = Math.cos(th);
+  RS[i] = Math.sin(th);
+  C2[i] = Math.cos(2 * th);
+  S2[i] = Math.sin(2 * th);
 }
 const BEST_KEY = 'bubblefusion';
 const WIN_LVL = 12;                         // 2048
 
-// Radius scaling matching Sobosuba screenshot proportions:
-// 1 -> 18px, 2 -> 22.5px, 4 -> 28px, 8 -> 34.5px, 16 -> 43px, 32 -> 53px, 64 -> 65px, 128 -> 80px, 256 -> 98px
 const radiusOf = lvl => 18 * Math.pow(1.236, lvl - 1);
 const valueOf = lvl => Math.pow(2, lvl - 1);
 
-// Exact Sobosuba colour palette from reference image:
-// 1: Red, 2: Mustard Yellow, 4: Lime Green, 8: Mint Turquoise,
-// 16: Cobalt Blue, 32: Purple, 64: Hot Pink, 128: Orange, 256: Cream Yellow
+// Sobosuba colour palette with rich liquid shading pairs (base, highlight, shadow)
 const PALETTE = [
-  '#dc2c2c', // 1   - red
-  '#dec435', // 2   - mustard yellow
-  '#52e02c', // 4   - lime green
-  '#35dfa2', // 8   - mint turquoise
-  '#2c70e3', // 16  - blue
-  '#872ee3', // 32  - purple
-  '#e038aa', // 64  - pink
-  '#da6427', // 128 - orange
-  '#f6fa97', // 256 - pale cream yellow
-  '#4ce0ff', // 512 - cyan
-  '#ff9f40', // 1024 - gold orange
-  '#ffffff'  // 2048 - white
+  { base: '#e03131', hi: '#ff7070', sh: '#a81919' }, // 1   - red
+  { base: '#e3c736', hi: '#fff078', sh: '#ad9214' }, // 2   - yellow
+  { base: '#54e32e', hi: '#99ff7a', sh: '#2ea312' }, // 4   - lime green
+  { base: '#36e0a4', hi: '#82ffd2', sh: '#18a372' }, // 8   - mint turquoise
+  { base: '#3074eb', hi: '#78adff', sh: '#1748a6' }, // 16  - blue
+  { base: '#8c32eb', hi: '#c282ff', sh: '#5815a3' }, // 32  - purple
+  { base: '#e63cb0', hi: '#ff8adc', sh: '#a31977' }, // 64  - pink
+  { base: '#e06728', hi: '#ffa56e', sh: '#9e3e0e' }, // 128 - orange
+  { base: '#f5fa96', hi: '#ffffff', sh: '#c1c754' }, // 256 - cream yellow
+  { base: '#4ce0ff', hi: '#a6f1ff', sh: '#1ba0bd' }, // 512 - cyan
+  { base: '#ff9f40', hi: '#ffd094', sh: '#bd6511' }, // 1024 - amber
+  { base: '#ffffff', hi: '#ffffff', sh: '#c7d2fe' }  // 2048 - pure white
 ];
-const BEYOND = ['#ff6b6b', '#b983ff', '#5ee6c4', '#ffe66d'];
-const colorOf = lvl => lvl <= PALETTE.length ? PALETTE[lvl - 1] : BEYOND[(lvl - PALETTE.length - 1) % BEYOND.length];
+const styleOf = lvl => PALETTE[(lvl - 1) % PALETTE.length];
+const colorOf = lvl => styleOf(lvl).base;
 
 // ---------- State ----------
 let bubbles, trayRow, fx, spawnTimer, uid;
@@ -274,21 +274,21 @@ function writeBest(v) {
   try { if (AC) AC.saveScore(BEST_KEY, v); else localStorage.setItem(BEST_KEY, v); } catch (e) {}
 }
 
-// ---------- Soft-Body Blob Construction ----------
+// ---------- Liquid Jelly Soft-Body Construction ----------
 function trayScaleOf(lvl) {
   const r = radiusOf(lvl);
   return Math.min(0.90, 31 / r);
 }
 
-function makeBubble(lvl, x, y, state, initAspect = 1) {
+function makeBubble(lvl, x, y, state, initQx = 0) {
   const r = radiusOf(lvl);
-  // In the top tray, '8' and higher are wide horizontal pills (aspect < 1), '4' is slightly tall
-  let targetAspect = initAspect; // aspect > 1 means taller vertically; aspect < 1 means wider horizontally
+  // qx > 0 means wider horizontally, qx < 0 means taller vertically
+  let restQx = initQx;
   if (state === 'tray') {
-    if (lvl >= 4) targetAspect = 0.67;
-    else if (lvl === 3) targetAspect = 1.08;
-    else if (lvl === 2) targetAspect = 0.90;
-    else targetAspect = 0.96;
+    if (lvl >= 4) restQx = 0.34;
+    else if (lvl === 3) restQx = -0.07;
+    else if (lvl === 2) restQx = 0.09;
+    else restQx = 0.03;
   }
   const ts = state === 'tray' ? trayScaleOf(lvl) : 1.0;
 
@@ -297,13 +297,18 @@ function makeBubble(lvl, x, y, state, initAspect = 1) {
     lvl,
     x, y,
     vx: 0, vy: 0,
+    pvx: 0, pvy: 0,             // previous velocity for inertial liquid sloshing
     r,
-    rs: state === 'tray' ? ts * 0.4 : 0.75,
+    rs: state === 'tray' ? ts * 0.4 : 0.72,
     rsv: 0,
     ts,
-    aspect: targetAspect,       // sqrt(ry / rx): >1 vertical sausage, <1 horizontal pill
-    targetAspect,
-    sqX: 0, sqY: 0,             // accumulated horizontal vs vertical squeeze
+    // 2D Quadrupole Jelly Oscillator: (qx, qy) = 2-lobe elliptical squash & diagonal shear
+    qx: restQx,
+    qy: 0,
+    qvx: 0,
+    qvy: 0,
+    restQx,
+    fxQx: 0, fxQy: 0,           // external squeeze forces on the quadrupole
     state,                      // 'tray' | 'enter' | 'box'
     t: 0,
     cd: 0,
@@ -316,37 +321,53 @@ function makeBubble(lvl, x, y, state, initAspect = 1) {
     px: new Float32Array(RIM),
     py: new Float32Array(RIM),
     cx: x, cy: y,
-    contacts: [],               // stores (dx, dy, rB_eff, isWall)
+    contacts: [],
     dead: false
   };
 
-  // Pronounced hand-drawn organic rest shape (potato / bean / amoeba lobes + occasional fold on big blobs)
-  const p1 = Math.random() * TAU, p2 = Math.random() * TAU, p3 = Math.random() * TAU;
-  const a1 = 0.055 + Math.random() * 0.05;
-  const a2 = 0.045 + Math.random() * 0.045;
-  const a3 = 0.025 + Math.random() * 0.025;
-  const cleftAng = Math.PI * (0.45 + Math.random() * 0.25); // bottom-ish organic fold on larger blobs
-  const hasCleft = lvl >= 6 ? 0.14 : 0;
+  // Gentle, smooth organic rest contour (no sharp dents or glitchy spikes)
+  const p1 = Math.random() * TAU, p2 = Math.random() * TAU;
+  const a1 = 0.025 + Math.random() * 0.02;
+  const a2 = 0.018 + Math.random() * 0.015;
   for (let i = 0; i < RIM; i++) {
     const th = i * TAU / RIM;
-    let dAng = Math.abs(Math.atan2(Math.sin(th - cleftAng), Math.cos(th - cleftAng)));
-    const pinch = hasCleft * Math.exp(-(dAng * dAng) / 0.045);
-    b.lump[i] = a1 * Math.cos(2 * th + p1) + a2 * Math.sin(3 * th + p2) + a3 * Math.cos(4 * th + p3) - pinch;
+    b.lump[i] = a1 * Math.cos(2 * th + p1) + a2 * Math.sin(3 * th + p2);
   }
   return b;
 }
 
+// Excite both whole-body quadrupole jiggle and traveling surface capillary waves!
 function poke(b, ang, amt) {
-  for (let i = 0; i < RIM; i++) b.rimV[i] -= amt * Math.cos(2 * (i * TAU / RIM - ang));
+  const c2 = Math.cos(2 * ang), s2 = Math.sin(2 * ang);
+  b.qvx -= c2 * amt * 0.014;
+  b.qvy -= s2 * amt * 0.014;
+  for (let i = 0; i < RIM; i++) {
+    const da = i * TAU / RIM - ang;
+    b.rimV[i] -= amt * (0.65 * Math.cos(2 * da) + 0.35 * Math.cos(3 * da));
+  }
 }
+
 function ripple(b, amt) {
-  const ph = Math.random() * TAU, lobes = 3 + (Math.random() * 2 | 0);
-  for (let i = 0; i < RIM; i++) b.rimV[i] += amt * Math.sin(lobes * i * TAU / RIM + ph);
+  const ph = Math.random() * TAU;
+  b.qvx += (Math.random() - 0.5) * amt * 0.03;
+  b.qvy += (Math.random() - 0.5) * amt * 0.03;
+  for (let i = 0; i < RIM; i++) {
+    const th = i * TAU / RIM;
+    b.rimV[i] += amt * (0.6 * Math.sin(3 * th + ph) + 0.4 * Math.cos(4 * th - ph));
+  }
 }
 
 const visR = b => b.r * b.rs;
-const rxOf = b => b.r * Math.min(b.rs, b.ts) / b.aspect;
-const ryOf = b => b.r * Math.min(b.rs, b.ts) * b.aspect;
+// Directional radius at unit vector (nx, ny) accounting for quadrupole deformation (qx, qy)
+function dirRadius(b, nx, ny) {
+  const base = b.r * Math.min(b.rs, b.ts);
+  const c2 = nx * nx - ny * ny;
+  const s2 = 2 * nx * ny;
+  const stretch = Math.max(0.56, Math.min(1.58, 1 + b.qx * c2 + b.qy * s2));
+  return base * stretch;
+}
+const rxOf = b => dirRadius(b, 1, 0);
+const ryOf = b => dirRadius(b, 0, 1);
 
 function rollLevel(avoid1 = -1) {
   const weights = [0.40, 0.30, 0.18, 0.12];
@@ -367,7 +388,7 @@ function spawnIntoTray() {
   const lvl = rollLevel(last ? last.lvl : -1);
   const startX = last ? Math.min(BR_TOP - 22, last.x + rxOf(last) + radiusOf(lvl)) : VW / 2;
   const b = makeBubble(lvl, startX, TRAY_Y, 'tray');
-  ripple(b, 55);
+  ripple(b, 75);
   trayRow.push(b);
   bubbles.push(b);
 }
@@ -401,8 +422,7 @@ function reset() {
   over = false; won = false; launches = 0; shake = 0;
   grab = null; aim = null;
   best = readBest();
-  // Initial Sobosuba-style 7-blob queue
-  const initialQueue = [2, 4, 1, 3, 1, 2, 1]; // 2, 8, 1, 4, 1, 2, 1
+  const initialQueue = [2, 4, 1, 3, 1, 2, 1];
   for (let s = 0; s < MAX_QUEUE; s++) {
     const b = makeBubble(initialQueue[s], VW / 2, TRAY_Y, 'tray');
     trayRow.push(b);
@@ -413,58 +433,71 @@ function reset() {
   hudDirty = true;
 }
 
-// ---------- Soft-Body Rim & Local Pocket / Cleft Deformation ----------
+// ---------- Liquid Rim & Quadrupole Jelly Solver ----------
 function updateRim(b, dt) {
   const vr = visR(b);
-  const invAsp = 1 / b.aspect, asp = b.aspect;
   const cap = b.cap, tgt = b.tgt, rim = b.rim, rv = b.rimV;
 
-  // Adapt aspect ratio smoothly to horizontal vs vertical squeezing!
-  if (b.state === 'box') {
-    const netSq = b.sqX - b.sqY;
-    // Squeezed horizontally (netSq > 0) -> elongates vertically (aspect > 1, like 128 on right wall!)
-    // Squeezed vertically (netSq < 0) -> flattens horizontally (aspect < 1, like 64 on bottom floor!)
-    const desired = Math.max(0.70, Math.min(1.52, b.targetAspect + netSq * 0.22));
-    b.aspect += (desired - b.aspect) * Math.min(1, dt * 6);
-  } else {
-    b.aspect += (b.targetAspect - b.aspect) * Math.min(1, dt * 8);
+  // 1. Update 2D Quadrupole Jelly Oscillator (underdamped spring + contact squeeze)
+  const targetQx = (b.state === 'tray' ? b.restQx : 0) + Math.max(-0.44, Math.min(0.44, b.fxQx * 0.28));
+  const targetQy = Math.max(-0.38, Math.min(0.38, b.fxQy * 0.28));
+  // Low damping (3.6) + lively spring (42) = continuous multi-bounce whole-body jelly jiggle!
+  b.qvx += (42 * (targetQx - b.qx) - 3.6 * b.qvx) * dt;
+  b.qvy += (42 * (targetQy - b.qy) - 3.6 * b.qvy) * dt;
+  b.qx += b.qvx * dt;
+  b.qy += b.qvy * dt;
+  const qMag = Math.hypot(b.qx, b.qy);
+  if (qMag > 0.46) {
+    b.qx = (b.qx / qMag) * 0.46;
+    b.qy = (b.qy / qMag) * 0.46;
   }
 
-  // Base radius along each angle for the elliptical + organic rest shape
+  // 2. Inertial liquid sloshing from center acceleration + ambient liquid breathing
+  const ax = (b.vx - b.pvx) / Math.max(dt, 0.001);
+  const ay = (b.vy - b.pvy) / Math.max(dt, 0.001);
+  b.pvx = b.vx;
+  b.pvy = b.vy;
+  const accMag = Math.min(900, Math.hypot(ax, ay));
+  if (accMag > 12) {
+    const accAng = Math.atan2(ay, ax);
+    b.qvx -= Math.cos(2 * accAng) * accMag * 0.004 * dt;
+    b.qvy -= Math.sin(2 * accAng) * accMag * 0.004 * dt;
+    for (let i = 0; i < RIM; i++) {
+      const da = i * TAU / RIM - accAng;
+      rv[i] -= accMag * 0.11 * Math.cos(2 * da) * dt;
+    }
+  }
+
   for (let i = 0; i < RIM; i++) cap[i] = Infinity;
 
-  // Process contacts: walls are flat planes, neighboring blobs are curved local spheres (creates pockets & clefts!)
+  // 3. Contact constraints: walls & curved neighbor pockets
   const cl = b.contacts;
   for (let k = 0; k < cl.length; k += 4) {
-    const type = cl[k]; // 0 = wall plane (nx, ny, dist), 1 = curved neighbor sphere (cx, cy, rEff)
+    const type = cl[k];
     const c1 = cl[k + 1], c2 = cl[k + 2], c3 = cl[k + 3];
     if (type === 0) {
-      // Wall plane at distance c3 along normal (c1, c2)
       for (let i = 0; i < RIM; i++) {
-        const ux = RC[i] * invAsp, uy = RS[i] * asp;
-        const uLen = Math.hypot(ux, uy) || 1;
-        const dirX = ux / uLen, dirY = uy / uLen;
+        const dirX = RC[i], dirY = RS[i];
         const cs = dirX * c1 + dirY * c2;
         if (cs > 0.06) {
           const maxDist = c3 / cs;
-          const baseDist = vr * uLen;
+          const stretch = Math.max(0.56, 1 + b.qx * C2[i] + b.qy * S2[i]);
+          const baseDist = vr * stretch;
           const delta = maxDist - baseDist;
           if (delta < cap[i]) cap[i] = delta;
         }
       }
     } else {
-      // Curved sphere centered at (c1, c2) relative to b, with radius c3
       const rEff2 = c3 * c3;
       for (let i = 0; i < RIM; i++) {
-        const ux = RC[i] * invAsp, uy = RS[i] * asp;
-        const uLen = Math.hypot(ux, uy) || 1;
-        const dirX = ux / uLen, dirY = uy / uLen;
+        const dirX = RC[i], dirY = RS[i];
         const proj = c1 * dirX + c2 * dirY;
         if (proj > 0) {
           const perp2 = (c1 * c1 + c2 * c2) - proj * proj;
           if (perp2 < rEff2) {
             const maxDist = proj - Math.sqrt(rEff2 - perp2);
-            const baseDist = vr * uLen;
+            const stretch = Math.max(0.56, 1 + b.qx * C2[i] + b.qy * S2[i]);
+            const baseDist = vr * stretch;
             const delta = maxDist - baseDist;
             if (delta < cap[i]) cap[i] = delta;
           }
@@ -479,45 +512,51 @@ function updateRim(b, dt) {
     if (cap[i] < 0) dent -= cap[i];
     else free++;
   }
-  // Incompressible liquid: displaced volume bulges out wherever the blob is free!
-  const bulge = free ? Math.min(vr * 0.34, (dent / free) * 0.85) : 0;
+  const bulge = free ? Math.min(vr * 0.42, (dent / free) * 0.92) : 0;
   for (let i = 0; i < RIM; i++) {
-    const restMod = b.lump[i] * vr;
-    tgt[i] = Math.min(restMod + bulge, cap[i]);
+    const breath = Math.sin(time * 2.8 + i * TAU / RIM * 3 + b.seed) * vr * 0.012;
+    tgt[i] = Math.min(b.lump[i] * vr + breath + bulge, cap[i]);
   }
-  // Surface-tension shoulder rounding so contact transitions are soft bulbous curves, not sharp Voronoi corners
-  for (let pass = 0; pass < 2; pass++) {
+
+  // Smooth surface-tension shoulders so liquid flows smoothly around contacts
+  for (let pass = 0; pass < 3; pass++) {
     let prev = tgt[RIM - 1];
     const first = tgt[0];
     for (let i = 0; i < RIM; i++) {
       const next = (i + 1 === RIM) ? first : tgt[i + 1];
       const cur = tgt[i];
-      tgt[i] = cur * 0.56 + (prev + next) * 0.22;
+      tgt[i] = cur * 0.52 + (prev + next) * 0.24;
       prev = cur;
     }
   }
 
-  const lim = vr * 0.45;
+  // 4. Traveling surface capillary wave equation (low damping = 3.8, high wave speed = 740 -> super jiggly liquid!)
+  const lim = vr * 0.55;
   for (let i = 0; i < RIM; i++) {
     const a = rim[(i + RIM - 1) % RIM], c = rim[(i + 1) % RIM];
-    rv[i] += (480 * (tgt[i] - rim[i]) + 195 * (a + c - 2 * rim[i]) - 14 * rv[i]) * dt;
+    rv[i] += (155 * (tgt[i] - rim[i]) + 740 * (a + c - 2 * rim[i]) - 3.8 * rv[i]) * dt;
   }
+
   let sx = 0, sy = 0;
   for (let i = 0; i < RIM; i++) {
     rim[i] += rv[i] * dt;
-    if (rim[i] > lim) { rim[i] = lim; rv[i] = 0; }
-    else if (rim[i] < -0.72 * vr) { rim[i] = -0.72 * vr; rv[i] = 0; }
+    // Never cross a neighbor/wall contact boundary so bubbles never overlap!
+    const hardCap = cap[i] + 0.8;
+    if (rim[i] > hardCap) {
+      rim[i] = hardCap;
+      if (rv[i] > 0) rv[i] *= -0.25;
+    }
+    if (rim[i] > lim) { rim[i] = lim; rv[i] *= -0.3; }
+    else if (rim[i] < -0.68 * vr) { rim[i] = -0.68 * vr; rv[i] *= -0.3; }
 
-    const ux = RC[i] * invAsp, uy = RS[i] * asp;
-    const uLen = Math.hypot(ux, uy) || 1;
-    const rr = Math.max(vr * 0.24, vr * uLen + rim[i]);
-    const x = b.x + (ux / uLen) * rr;
-    const y = b.y + (uy / uLen) * rr;
+    const stretch = Math.max(0.56, 1 + b.qx * C2[i] + b.qy * S2[i]);
+    const rr = Math.max(vr * 0.24, vr * stretch + rim[i]);
+    const x = b.x + RC[i] * rr;
+    const y = b.y + RS[i] * rr;
     b.px[i] = x;
     b.py[i] = y;
     sx += x; sy += y;
   }
-  // Visual centroid of the deformed polygon (places the number right in the middle of the squished shape!)
   b.cx = sx / RIM;
   b.cy = sy / RIM;
 }
@@ -533,7 +572,7 @@ function ring(x, y, r0, r1, color) { fx.push({ k: 'r', x, y, r0, r1, life: 0, ma
 function floatText(x, y, str, color, size) { fx.push({ k: 't', x, y, str, life: 0, max: 0.9, color, size }); }
 
 function bounceTick(speed) {
-  if (speed < 135 || time - lastTick < 0.07) return;
+  if (speed < 120 || time - lastTick < 0.07) return;
   lastTick = time;
   snd('playTone', 135 + Math.random() * 55, 0.045, 'sine', Math.min(0.055, speed / 9500));
 }
@@ -557,13 +596,16 @@ function merge(a, b, born) {
   const lvl = a.lvl + 1;
   const x = (a.x + b.x) * 0.5;
   const y = (a.y + b.y) * 0.5;
-  const nb = makeBubble(lvl, x, y, inTray ? 'tray' : 'box', (a.aspect + b.aspect) * 0.5);
+  const nb = makeBubble(lvl, x, y, inTray ? 'tray' : 'box', (a.qx + b.qx) * 0.5);
   nb.vx = (a.vx + b.vx) * 0.5;
   nb.vy = (a.vy + b.vy) * 0.5;
   nb.rs = a.r / nb.r;
-  nb.rsv = 2.4;
+  nb.rsv = 3.2;
   nb.cd = 0.13;
-  ripple(nb, 115);
+  // Strong liquid slosh along the merge axis!
+  const mergeAng = Math.atan2(b.y - a.y, b.x - a.x);
+  poke(nb, mergeAng + Math.PI * 0.5, 220);
+  ripple(nb, 145);
 
   if (inTray) {
     if (trayIdx >= 0 && trayIdx <= trayRow.length) trayRow.splice(trayIdx, 0, nb);
@@ -586,8 +628,8 @@ function merge(a, b, born) {
   hudDirty = true;
 
   const col = colorOf(lvl), old = colorOf(a.lvl);
-  fx.push({ k: 'g', x: a.x, y: a.y, tx: x, ty: y, r: visR(a), life: 0, max: 0.12, color: old });
-  fx.push({ k: 'g', x: b.x, y: b.y, tx: x, ty: y, r: visR(b), life: 0, max: 0.12, color: old });
+  fx.push({ k: 'g', x: a.x, y: a.y, tx: x, ty: y, r: visR(a), life: 0, max: 0.13, color: old });
+  fx.push({ k: 'g', x: b.x, y: b.y, tx: x, ty: y, r: visR(b), life: 0, max: 0.13, color: old });
   ring(x, y, nb.r * 0.65, nb.r * 1.9, col);
   burst(x, y, col, 7 + lvl * 2, 120 + lvl * 18);
   floatText(x, y - nb.r * 0.3, '+' + pts, '#ffffff', 16 + Math.min(12, lvl * 1.2));
@@ -595,15 +637,15 @@ function merge(a, b, born) {
   if (lvl >= 5) shake = Math.max(shake, Math.min(10, lvl * 0.8));
 
   if (!inTray) {
-    const range = nb.r * 2.2;
+    const range = nb.r * 2.4;
     for (const o of bubbles) {
       if (o.dead || o.state === 'tray') continue;
       const dx = o.x - x, dy = o.y - y, d = Math.hypot(dx, dy) || 1;
       if (d < range + o.r) {
-        const f = (1 - d / (range + o.r)) * (65 + lvl * 18) * Math.min(1, (nb.r * nb.r) / (o.r * o.r));
+        const f = (1 - d / (range + o.r)) * (70 + lvl * 18) * Math.min(1, (nb.r * nb.r) / (o.r * o.r));
         o.vx += (dx / d) * f;
         o.vy += (dy / d) * f;
-        poke(o, Math.atan2(-dy, -dx), f * 0.45);
+        poke(o, Math.atan2(-dy, -dx), f * 0.85);
       }
     }
   }
@@ -616,7 +658,7 @@ function merge(a, b, born) {
       won = true;
       snd('powerup');
       floatText(VW / 2, VH / 2, '2048!', '#f6fa97', 64);
-      for (let i = 0; i < 8; i++) burst(BX + Math.random() * BW, RELEASE_Y + Math.random() * (BOX_B - RELEASE_Y), PALETTE[i], 14, 300);
+      for (let i = 0; i < 8; i++) burst(BX + Math.random() * BW, RELEASE_Y + Math.random() * (BOX_B - RELEASE_Y), PALETTE[i].base, 14, 300);
       shake = 14;
     }
   }
@@ -624,16 +666,15 @@ function merge(a, b, born) {
 
 // ---------- Physics Step ----------
 function wall(b, pen, nx, ny) {
-  const corr = Math.min(pen * 0.65, 8);
+  const corr = Math.min(pen * 0.6, 8);
   b.x += nx * corr;
   b.y += ny * corr;
   const vn = b.vx * nx + b.vy * ny;
   if (vn < 0) {
-    // Low restitution (1.18) so blobs thud and squish against walls rather than bouncing wildly
-    b.vx -= 1.18 * vn * nx;
-    b.vy -= 1.18 * vn * ny;
-    if (vn < -65) {
-      poke(b, Math.atan2(-ny, -nx), Math.min(220, -vn * 0.42));
+    b.vx -= 1.22 * vn * nx;
+    b.vy -= 1.22 * vn * ny;
+    if (vn < -35) {
+      poke(b, Math.atan2(-ny, -nx), Math.min(280, -vn * 0.72));
       bounceTick(-vn);
     }
   }
@@ -649,7 +690,6 @@ function computeTrayTargets() {
     const b = trayRow[i];
     const w = rxOf(b) * 2;
     widths[i] = w;
-    // Pull adjacent same-number blobs in the top bar together so they auto-merge!
     const sameNext = i + 1 < n && trayRow[i + 1].lvl === b.lvl;
     const g = i + 1 < n ? (sameNext ? -14 : 2.5) : 0;
     gaps[i] = g;
@@ -662,12 +702,6 @@ function computeTrayTargets() {
     curX += widths[i] + gaps[i];
   }
   return targets;
-}
-
-// Elliptical directional radius of blob b along unit vector (nx, ny)
-function dirRadius(b, nx, ny) {
-  const rx = rxOf(b), ry = ryOf(b);
-  return Math.hypot(rx * nx, ry * ny);
 }
 
 function step(dt) {
@@ -688,23 +722,26 @@ function step(dt) {
     while (ig > 0 && trayRow[ig - 1] && trayRow[ig - 1].lvl !== grab.lvl && grab.x < trayRow[ig - 1].x) {
       trayRow[ig] = trayRow[ig - 1];
       trayRow[ig - 1] = grab;
+      poke(trayRow[ig], 0, 55);
       ig--;
     }
     while (ig >= 0 && ig < trayRow.length - 1 && trayRow[ig + 1] && trayRow[ig + 1].lvl !== grab.lvl && grab.x > trayRow[ig + 1].x) {
       trayRow[ig] = trayRow[ig + 1];
       trayRow[ig + 1] = grab;
+      poke(trayRow[ig], Math.PI, 55);
       ig++;
     }
   }
 
   const trayTargets = computeTrayTargets();
   const dragBox = Math.exp(-DRAG * dt);
-  const dragTray = Math.exp(-8.5 * dt);
+  const dragTray = Math.exp(-8.0 * dt);
 
   for (const b of bubbles) {
     b.t += dt;
     if (b.cd > 0) b.cd -= dt;
-    b.rsv += (210 * (b.ts - b.rs) - 15 * b.rsv) * dt;
+    // Bouncier radius scale spring (underdamped so new/merged blobs wobble in size too!)
+    b.rsv += (190 * (b.ts - b.rs) - 9.5 * b.rsv) * dt;
     b.rs += b.rsv * dt;
     if (b.rs < 0.05) b.rs = 0.05;
 
@@ -714,8 +751,8 @@ function step(dt) {
       let hy = TRAY_Y;
       if (grab === b && aim) {
         if (aim.valid) {
-          hx -= aim.nx * aim.pow * 12;
-          hy -= aim.ny * aim.pow * 9;
+          hx -= aim.nx * aim.pow * 14;
+          hy -= aim.ny * aim.pow * 10;
         } else {
           const rx = rxOf(b);
           hx = Math.max(BX_TOP + rx + 4, Math.min(BR_TOP - rx - 4, aim.px));
@@ -728,7 +765,6 @@ function step(dt) {
       b.vx *= dragTray;
       b.vy *= dragTray;
     } else {
-      // Gentle downward gravity ("leichte Anziehungskraft") in the chamber
       const spd = Math.hypot(b.vx, b.vy);
       const gScale = spd > 360 ? 0.42 : 1.0;
       b.vy += GRAV * gScale * dt;
@@ -747,8 +783,8 @@ function step(dt) {
     if (rec) {
       for (const b of bubbles) {
         b.contacts.length = 0;
-        b.sqX = 0;
-        b.sqY = 0;
+        b.fxQx = 0;
+        b.fxQy = 0;
       }
     }
 
@@ -761,13 +797,12 @@ function step(dt) {
         if (b.dead || (b.state === 'tray') !== aTray) continue;
 
         const dx = b.x - a.x, dy = b.y - a.y;
-        const maxReach = (a.r + b.r) * 1.45 + SAME_RANGE;
+        const maxReach = (a.r + b.r) * 1.55 + SAME_RANGE;
         if (dx > maxReach || dx < -maxReach || dy > maxReach || dy < -maxReach) continue;
 
         const d = Math.hypot(dx, dy) || 0.01;
         const nx = dx / d, ny = dy / d;
 
-        // Directional elliptical radii along the line of centers
         const ra = dirRadius(a, nx, ny);
         const rb = dirRadius(b, nx, ny);
         const V = ra + rb;
@@ -792,12 +827,11 @@ function step(dt) {
           }
         }
 
-        // Skip pushing apart in the top bar when dragging a blob past others or when matching blobs are merging
         const skipTrayBlock = aTray && ((a.lvl === b.lvl && trayCanMerge) || ((a === grab || b === grab) && aim && !aim.valid));
         if (d < R && !skipTrayBlock) {
           const ma = a.r * a.r, mb = b.r * b.r, inv = 1 / (ma + mb);
           const pen = R - d;
-          const corr = pen * 0.45;
+          const corr = pen * 0.42;
           a.x -= nx * corr * mb * inv;
           a.y -= ny * corr * mb * inv;
           b.x += nx * corr * ma * inv;
@@ -805,14 +839,13 @@ function step(dt) {
 
           const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
           if (vn < 0) {
-            // Soft inelastic jelly collision (1.12) so piles settle calmly
-            const jimp = -1.12 * vn / (1 / ma + 1 / mb);
+            const jimp = -1.16 * vn / (1 / ma + 1 / mb);
             a.vx -= (jimp / ma) * nx;
             a.vy -= (jimp / ma) * ny;
             b.vx += (jimp / mb) * nx;
             b.vy += (jimp / mb) * ny;
-            if (vn < -65) {
-              const ang = Math.atan2(ny, nx), amt = Math.min(210, -vn * 0.36);
+            if (vn < -30) {
+              const ang = Math.atan2(ny, nx), amt = Math.min(270, -vn * 0.65);
               poke(a, ang, amt * mb * inv * 2);
               poke(b, ang, amt * ma * inv * 2);
               bounceTick(-vn);
@@ -820,22 +853,24 @@ function step(dt) {
           }
         }
 
-        // Record curved pocket/cleft contact when blobs touch visually
-        if (rec && d < V * 1.06 + SKIN_GAP) {
+        // Record curved pocket/cleft contact & 2D quadrupole squeeze along contact angle
+        if (rec && d < V * 1.08 + SKIN_GAP) {
           const sq = Math.max(0, (V - d) / V);
-          a.sqX += Math.abs(nx) * sq;
-          a.sqY += Math.abs(ny) * sq;
-          b.sqX += Math.abs(nx) * sq;
-          b.sqY += Math.abs(ny) * sq;
+          // Contact along (nx, ny) compresses along (nx, ny) -> quadrupole force is -(nx^2 - ny^2, 2*nx*ny)
+          const c2 = nx * nx - ny * ny;
+          const s2 = 2 * nx * ny;
+          a.fxQx -= c2 * sq * 1.4;
+          a.fxQy -= s2 * sq * 1.4;
+          b.fxQx -= c2 * sq * 1.4;
+          b.fxQy -= s2 * sq * 1.4;
 
           const gap = aTray ? 1.8 : SKIN_GAP;
-          // Curved sphere interface: small neighbor carves a local round pocket/cleft into larger blob!
-          const dSurfA = Math.max(ra * 0.32, d * (ra / V) - gap * 0.5);
+          const dSurfA = Math.max(ra * 0.30, d * (ra / V) - gap * 0.5);
           const rEffA = rb * (1 + (rb / ra) * 0.85) + gap;
           const cDistA = dSurfA + rEffA;
           a.contacts.push(1, nx * cDistA, ny * cDistA, rEffA);
 
-          const dSurfB = Math.max(rb * 0.32, d * (rb / V) - gap * 0.5);
+          const dSurfB = Math.max(rb * 0.30, d * (rb / V) - gap * 0.5);
           const rEffB = ra * (1 + (ra / rb) * 0.85) + gap;
           const cDistB = dSurfB + rEffB;
           b.contacts.push(1, -nx * cDistB, -ny * cDistB, rEffB);
@@ -874,40 +909,42 @@ function step(dt) {
       if (b.y - ry < topW) wall(b, topW - (b.y - ry), 0, 1);
       if (b.y + ry > botW) wall(b, (b.y + ry) - botW, 0, -1);
 
-      // Bottom-left 45° chamfered corner normal: (1/sqrt2, -1/sqrt2)
       const inv2 = Math.SQRT1_2;
-      const rDiag = dirRadius(b, inv2, inv2) * CR;
-      const vDiag = dirRadius(b, inv2, inv2);
+      const rDiag1 = dirRadius(b, inv2, -inv2) * CR;
+      const vDiag1 = dirRadius(b, inv2, -inv2);
       const distBL = ((b.x - BX) + (BOX_B - b.y) - CHAMFER) * inv2;
-      if (distBL < rDiag) wall(b, rDiag - distBL, inv2, -inv2);
+      if (distBL < rDiag1) wall(b, rDiag1 - distBL, inv2, -inv2);
 
-      // Bottom-right 45° chamfered corner normal: (-1/sqrt2, -1/sqrt2)
+      const rDiag2 = dirRadius(b, -inv2, -inv2) * CR;
+      const vDiag2 = dirRadius(b, -inv2, -inv2);
       const distBR = ((BR - b.x) + (BOX_B - b.y) - CHAMFER) * inv2;
-      if (distBR < rDiag) wall(b, rDiag - distBR, -inv2, -inv2);
+      if (distBR < rDiag2) wall(b, rDiag2 - distBR, -inv2, -inv2);
 
       if (rec) {
         const pad = 2.0;
         if (b.x - leftW < vrx * 1.06) {
           b.contacts.push(0, -1, 0, Math.max(4, b.x - leftW - pad));
-          b.sqX += 0.35;
+          b.fxQx -= 0.45;
         }
         if (rightW - b.x < vrx * 1.06) {
           b.contacts.push(0, 1, 0, Math.max(4, rightW - b.x - pad));
-          b.sqX += 0.35;
+          b.fxQx -= 0.45;
         }
         if (b.y - topW < vry * 1.06) {
           b.contacts.push(0, 0, -1, Math.max(4, b.y - topW - pad));
-          b.sqY += 0.35;
+          b.fxQx += 0.45;
         }
         if (botW - b.y < vry * 1.06) {
           b.contacts.push(0, 0, 1, Math.max(4, botW - b.y - pad));
-          b.sqY += 0.35;
+          b.fxQx += 0.45;
         }
-        if (distBL < vDiag * 1.06) {
+        if (distBL < vDiag1 * 1.06) {
           b.contacts.push(0, -inv2, inv2, Math.max(4, distBL - pad));
+          b.fxQy += 0.4;
         }
-        if (distBR < vDiag * 1.06) {
+        if (distBR < vDiag2 * 1.06) {
           b.contacts.push(0, inv2, inv2, Math.max(4, distBR - pad));
+          b.fxQy -= 0.4;
         }
       }
     }
@@ -918,7 +955,6 @@ function step(dt) {
     for (const nb of born) bubbles.push(nb);
   }
 
-  // Update soft-body polygon rims & check top overflow sensors
   sensorL = false;
   sensorR = false;
   let highCount = 0;
@@ -991,7 +1027,7 @@ function toLocal(e) {
 function pickTray(p) {
   let pick = null, bestD = Infinity;
   for (const b of trayRow) {
-    if (!b || b.dead || b.rs < 0.35) continue;
+    if (!b || b.dead || b.rs < 0.25) continue;
     const d = p.y < RELEASE_Y + 24 ? Math.hypot(p.x - b.x, p.y - b.y) : Math.abs(p.x - b.x);
     if (d < bestD) { bestD = d; pick = b; }
   }
@@ -999,10 +1035,17 @@ function pickTray(p) {
 }
 
 function updateAim(p) {
+  const prevPx = aim.px, prevPy = aim.py;
   aim.px = p.x;
   aim.py = p.y;
+  // Wiggling pointer excites liquid jiggle on grabbed blob!
+  if (grab) {
+    const mdx = p.x - prevPx, mdy = p.y - prevPy;
+    const mSpd = Math.hypot(mdx, mdy);
+    if (mSpd > 2) poke(grab, Math.atan2(mdy, mdx), Math.min(45, mSpd * 1.8));
+  }
+
   let dx = p.x - aim.sx, dy = p.y - aim.sy;
-  // Activate downward shot only when pulling down out of the top bar (or pulling up above top bar)
   const pullingDown = dy > 22 && p.y > RELEASE_Y - 12;
   const pullingUp = dy < -22 && p.y < TOP_Y;
   if (pullingUp) { dx = -dx; dy = -dy; }
@@ -1025,7 +1068,7 @@ canvas.addEventListener('pointerdown', e => {
   aim = { id: e.pointerId, sx: p.x, sy: p.y, px: p.x, py: p.y, nx: 0, ny: 1, pow: 0, speed: 0, valid: false };
   try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   canvas.classList.add('grabbing');
-  poke(b, Math.PI / 2, 45);
+  poke(b, Math.PI / 2, 75);
 });
 
 canvas.addEventListener('pointermove', e => {
@@ -1041,12 +1084,12 @@ function release(e, fire) {
     b.state = 'enter';
     b.t = 0;
     b.ts = 1.0;
-    b.targetAspect = 1.0;
+    b.restQx = 0;
     trayRow = trayRow.filter(x => x !== b);
     if (spawnTimer <= 0) spawnTimer = 0.24;
     b.vx = aim.nx * aim.speed;
     b.vy = aim.ny * aim.speed;
-    poke(b, Math.atan2(aim.ny, aim.nx), 110 + aim.pow * 150);
+    poke(b, Math.atan2(aim.ny, aim.nx), 160 + aim.pow * 180);
     burst(b.x, b.y, colorOf(b.lvl), 4 + (aim.pow * 6 | 0), 75 + aim.pow * 140);
     snd('pop', 0.75 + aim.pow * 0.65);
     launches++;
@@ -1069,7 +1112,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'm' || e.key === 'M') toggleMute();
 });
 
-// ---------- Hand-Drawn / Sobosuba Style Rendering ----------
+// ---------- Drawn Liquid-Jelly Bubble & Number Rendering ----------
 const DIGIT_STROKES = {
   '0': [[[0.2,0.06],[0.8,0.06],[0.88,0.2],[0.88,0.8],[0.8,0.94],[0.2,0.94],[0.12,0.8],[0.12,0.2],[0.2,0.06]]],
   '1': [[[0.20,0.20],[0.52,0.06],[0.52,0.94]], [[0.22,0.94],[0.82,0.94]]],
@@ -1084,19 +1127,25 @@ const DIGIT_STROKES = {
   '9': [[[0.86,0.50],[0.24,0.50],[0.12,0.38],[0.12,0.18],[0.24,0.06],[0.76,0.06],[0.88,0.20],[0.88,0.80],[0.74,0.94],[0.18,0.94]]]
 };
 
-function drawHandNumber(str, cx, cy, h, seed) {
+function drawHandNumber(b, str, cx, cy, h) {
   const w = h * 0.60;
   const gap = h * 0.16;
   const totalW = str.length * w + (str.length - 1) * gap;
-  let startX = cx - totalW * 0.5;
-  const startY = cy - h * 0.5;
-  const boil = ((time * 6.5 + seed) | 0);
+  let startX = -totalW * 0.5;
+  const startY = -h * 0.5;
 
   ctx.save();
+  ctx.translate(cx, cy);
+  // Number squashes, stretches, and tilts slightly with the liquid jelly!
+  const sx = Math.max(0.76, Math.min(1.28, 1 + b.qx * 0.38));
+  const sy = Math.max(0.76, Math.min(1.28, 1 - b.qx * 0.38));
+  ctx.rotate(b.qy * 0.25);
+  ctx.scale(sx, sy);
+
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#0e0e0e';
-  ctx.lineWidth = Math.max(2.6, h * 0.215);
+  ctx.strokeStyle = '#111111';
+  ctx.lineWidth = Math.max(2.7, h * 0.22);
 
   for (let c = 0; c < str.length; c++) {
     const strokes = DIGIT_STROKES[str[c]];
@@ -1105,10 +1154,8 @@ function drawHandNumber(str, cx, cy, h, seed) {
         const pts = strokes[s];
         ctx.beginPath();
         for (let p = 0; p < pts.length; p++) {
-          const jx = Math.sin(boil * 1.7 + c * 3.1 + p * 2.3) * 0.35;
-          const jy = Math.cos(boil * 2.1 + c * 1.9 + p * 2.9) * 0.35;
-          const x = startX + pts[p][0] * w + jx;
-          const y = startY + pts[p][1] * h + jy;
+          const x = startX + pts[p][0] * w;
+          const y = startY + pts[p][1] * h;
           if (p === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
@@ -1120,38 +1167,90 @@ function drawHandNumber(str, cx, cy, h, seed) {
   ctx.restore();
 }
 
-function drawBubble(b) {
-  if (visR(b) < 2) return;
-  const px = b.px, py = b.py;
-  const boil = ((time * 7 + b.id * 1.3) | 0);
-
-  // Drawn polygonal silhouette matching Sobosuba's faceted hand-drawn look
+function traceSmoothLoop(px, py, cx = 0, cy = 0, scale = 1, ox = 0, oy = 0) {
   ctx.beginPath();
+  const xLast = cx + (px[RIM - 1] - cx) * scale + ox;
+  const yLast = cy + (py[RIM - 1] - cy) * scale + oy;
+  const x0 = cx + (px[0] - cx) * scale + ox;
+  const y0 = cy + (py[0] - cy) * scale + oy;
+  ctx.moveTo((xLast + x0) * 0.5, (yLast + y0) * 0.5);
   for (let i = 0; i < RIM; i++) {
-    const jx = Math.sin(boil * 1.9 + i * 2.7 + b.seed) * 0.55;
-    const jy = Math.cos(boil * 2.3 + i * 3.1 + b.seed) * 0.55;
-    const x = px[i] + jx;
-    const y = py[i] + jy;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    const j = (i + 1) % RIM;
+    const xi = cx + (px[i] - cx) * scale + ox;
+    const yi = cy + (py[i] - cy) * scale + oy;
+    const xj = cx + (px[j] - cx) * scale + ox;
+    const yj = cy + (py[j] - cy) * scale + oy;
+    ctx.quadraticCurveTo(xi, yi, (xi + xj) * 0.5, (yi + yj) * 0.5);
   }
   ctx.closePath();
+}
 
-  // Pure flat vibrant fill (exact Sobosuba style)
-  ctx.fillStyle = colorOf(b.lvl);
+function drawBubble(b) {
+  const vr = visR(b);
+  if (vr < 2) return;
+  const px = b.px, py = b.py;
+  const st = styleOf(b.lvl);
+
+  // 1. Outer smooth liquid silhouette (shaded rim base)
+  traceSmoothLoop(px, py);
+  ctx.fillStyle = st.sh;
   ctx.fill();
 
-  // Crisp hand-drawn dark contour
+  // 2. Main cel-shaded liquid body (inset slightly from bottom-right to create a drawn 2D liquid depth rim!)
+  ctx.save();
+  ctx.clip();
+  traceSmoothLoop(px, py, b.cx, b.cy, 0.96, -vr * 0.035, -vr * 0.045);
+  ctx.fillStyle = st.base;
+  ctx.fill();
+
+  // 3. Soft inner liquid core glow near top-left (deforms with the blob!)
+  traceSmoothLoop(px, py, b.cx, b.cy, 0.68, -vr * 0.10, -vr * 0.12);
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = st.hi;
+  ctx.fill();
+
+  // 4. Smooth curved cartoon liquid specular crescent + shine droplet along upper-left curve
+  ctx.globalAlpha = 0.50;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const hiW = Math.max(2.0, Math.min(5.0, vr * 0.105));
+  ctx.lineWidth = hiW;
+  ctx.beginPath();
+  const iStart = Math.round(RIM * 0.56);
+  const iEnd = Math.round(RIM * 0.67);
+  for (let i = iStart; i <= iEnd; i++) {
+    const idx0 = i % RIM, idx1 = (i + 1) % RIM;
+    const x0 = b.cx + (px[idx0] - b.cx) * 0.76;
+    const y0 = b.cy + (py[idx0] - b.cy) * 0.76;
+    const x1 = b.cx + (px[idx1] - b.cx) * 0.76;
+    const y1 = b.cy + (py[idx1] - b.cy) * 0.76;
+    if (i === iStart) ctx.moveTo(x0, y0);
+    else ctx.quadraticCurveTo(x0, y0, (x0 + x1) * 0.5, (y0 + y1) * 0.5);
+  }
+  ctx.stroke();
+  // Small liquid shine dot next to the crescent
+  const dotIdx = Math.round(RIM * 0.71) % RIM;
+  const dxDot = b.cx + (px[dotIdx] - b.cx) * 0.75;
+  const dyDot = b.cy + (py[dotIdx] - b.cy) * 0.75;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(dxDot, dyDot, hiW * 0.55, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+
+  // 5. Crisp drawn ink contour around the liquid drop
+  traceSmoothLoop(px, py);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.lineWidth = 2.4;
-  ctx.strokeStyle = '#070707';
+  ctx.strokeStyle = '#0a0a0a';
   ctx.stroke();
 
-  // Hand-drawn number at visual centroid (compact size across all blob levels just like in screenshot!)
+  // 6. Drawn number at visual centroid that squashes & stretches with the jelly
   const label = String(valueOf(b.lvl));
   const digitH = Math.min(21, Math.max(13.5, 13.5 + b.lvl * 0.85)) * Math.min(1, b.rs * 1.1);
-  drawHandNumber(label, b.cx, b.cy, digitH, b.seed);
+  drawHandNumber(b, label, b.cx, b.cy, digitH);
 }
 
 function drawContainerFrame() {
@@ -1220,7 +1319,7 @@ function drawContainerWallsOnTop() {
   ctx.lineTo(VW - 22, TOP_Y - 11);
   ctx.stroke();
 
-  // Two small white overflow sensor nubs under the top bar (exact match to screenshot)
+  // Two small white overflow sensor nubs under the top bar
   for (const [sx, active] of [[SENSOR_LX, sensorL], [SENSOR_RX, sensorR]]) {
     ctx.fillStyle = active ? '#ff4d4d' : '#d8d8d8';
     ctx.beginPath();
@@ -1316,7 +1415,7 @@ function drawFx() {
     } else if (f.k === 't') {
       const pop = t < 0.15 ? 0.6 + t / 0.15 * 0.5 : 1.1 - Math.min(0.1, (t - 0.15) * 0.5);
       ctx.globalAlpha = t > 0.6 ? (1 - t) / 0.4 : 1;
-      ctx.font = `900 ${(f.size * pop).toFixed(1)}px "Comic Sans MS", "Chalkboard SE", system-ui, sans-serif`;
+      ctx.font = `900 ${(f.size * pop).toFixed(1)}px "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 5;
@@ -1359,7 +1458,7 @@ function draw() {
   if (danger > 0.35 && !over) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '900 110px "Comic Sans MS", "Chalkboard SE", system-ui, sans-serif';
+    ctx.font = '900 110px "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255, 80, 80, 0.28)';
     ctx.fillText(String(Math.max(1, Math.ceil(BURST_TIME - danger))), VW / 2, VH / 2);
   }
@@ -1368,7 +1467,7 @@ function draw() {
     const a = 0.5 + 0.25 * Math.sin(time * 3);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '700 16px "Comic Sans MS", "Chalkboard SE", system-ui, sans-serif';
+    ctx.font = '700 15px "Arial Rounded MT Bold", "Varela Round", system-ui, sans-serif';
     ctx.fillStyle = `rgba(195,195,195,${a})`;
     ctx.fillText('Oben in der Leiste mergen oder nach unten ziehen & schießen', VW / 2, 210);
   }
