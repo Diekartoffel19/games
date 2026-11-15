@@ -224,8 +224,8 @@ const SAME_RANGE = 34;                      // surface distance within which equ
 const DRAG = 1.45;                          // viscous damping in chamber
 const CR = 0.76;                            // deep liquid squish core factor
 const SKIN_GAP = 3.8;                       // separation gap between touching liquid skins
-const MIN_QUEUE = 4;                        // always keep at least 4 blobs in the top queue
-const MAX_QUEUE = 5;                        // max 5 blobs in the top queue
+const MIN_QUEUE = 4;                        // always keep 4 blobs in the top queue
+const MAX_QUEUE = 4;                        // max 4 blobs in the top queue
 const TAU = Math.PI * 2;
 const RIM = 40;                             // high-res smooth spline points around liquid perimeter
 const RC = new Float32Array(RIM), RS = new Float32Array(RIM);
@@ -371,14 +371,18 @@ const rxOf = b => dirRadius(b, 1, 0);
 const ryOf = b => dirRadius(b, 0, 1);
 
 function rollLevel(avoid1 = -1) {
-  const weights = [0.40, 0.30, 0.18, 0.12];
-  for (let tries = 0; tries < 8; tries++) {
+  const weights = [0.28, 0.25, 0.22, 0.16, 0.09];
+  const inTray = new Set(trayRow.map(b => b.lvl));
+  const preferFresh = Math.random() < 0.78;
+  for (let tries = 0; tries < 12; tries++) {
     let r = Math.random(), acc = 0, pick = 1;
     for (let i = 0; i < weights.length; i++) {
       acc += weights[i];
       if (r <= acc) { pick = i + 1; break; }
     }
-    if (pick !== avoid1 || tries === 7) return pick;
+    if (pick === avoid1 && tries < 10) continue;
+    if (preferFresh && inTray.has(pick) && tries < 8) continue;
+    return pick;
   }
   return 1;
 }
@@ -423,7 +427,7 @@ function reset() {
   over = false; won = false; launches = 0; shake = 0;
   grab = null; aim = null;
   best = readBest();
-  const initialQueue = [2, 4, 1, 3, 1];
+  const initialQueue = [1, 3, 2, 4];
   for (let s = 0; s < MAX_QUEUE; s++) {
     const b = makeBubble(initialQueue[s], VW / 2, TRAY_Y, 'tray');
     trayRow.push(b);
@@ -691,7 +695,8 @@ function computeTrayTargets() {
     const b = trayRow[i];
     const w = rxOf(b) * 2;
     widths[i] = w;
-    const g = i + 1 < n ? 2.5 : 0;
+    const sameNext = i + 1 < n && trayRow[i + 1].lvl === b.lvl;
+    const g = i + 1 < n ? (sameNext ? -14 : 2.5) : 0;
     gaps[i] = g;
     totalW += w + g;
   }
@@ -723,7 +728,22 @@ function step(dt) {
     }
   }
 
-  // Tray blobs keep their queue order; blocking neighbors cannot be bypassed by dragging.
+  // Allow sliding a grabbed blob horizontally in the top bar to reorder or merge with neighbors
+  if (grab && grab.state === 'tray' && !grab.dead && aim && !aim.valid) {
+    let ig = trayRow.indexOf(grab);
+    while (ig > 0 && trayRow[ig - 1] && trayRow[ig - 1].lvl !== grab.lvl && grab.x < trayRow[ig - 1].x) {
+      trayRow[ig] = trayRow[ig - 1];
+      trayRow[ig - 1] = grab;
+      poke(trayRow[ig], 0, 55);
+      ig--;
+    }
+    while (ig >= 0 && ig < trayRow.length - 1 && trayRow[ig + 1] && trayRow[ig + 1].lvl !== grab.lvl && grab.x > trayRow[ig + 1].x) {
+      trayRow[ig] = trayRow[ig + 1];
+      trayRow[ig + 1] = grab;
+      poke(trayRow[ig], Math.PI, 55);
+      ig++;
+    }
+  }
 
   const trayTargets = computeTrayTargets();
   const dragBox = Math.exp(-DRAG * dt);
@@ -747,14 +767,8 @@ function step(dt) {
           hy -= aim.ny * aim.pow * 10;
         } else {
           const rx = rxOf(b);
-          let minHx = BX_TOP + rx + 4;
-          let maxHx = BR_TOP - rx - 4;
-          const leftB = idx > 0 ? trayRow[idx - 1] : null;
-          const rightB = idx >= 0 && idx < trayRow.length - 1 ? trayRow[idx + 1] : null;
-          if (leftB && leftB.lvl !== b.lvl) minHx = Math.max(minHx, leftB.x + rxOf(leftB) + rx - 4);
-          if (rightB && rightB.lvl !== b.lvl) maxHx = Math.min(maxHx, rightB.x - rxOf(rightB) - rx + 4);
-          hx = Math.max(minHx, Math.min(maxHx, aim.px));
-          hy = TRAY_Y + Math.max(-6, Math.min(6, aim.py - TRAY_Y));
+          hx = Math.max(BX_TOP + rx + 4, Math.min(BR_TOP - rx - 4, aim.px));
+          hy = TRAY_Y + Math.max(-10, Math.min(12, aim.py - TRAY_Y));
         }
       }
       const kSpring = (grab === b && aim && !aim.valid) ? 135 : 55;
@@ -808,14 +822,14 @@ function step(dt) {
         const surfGap = d - V;
 
         // Same-number merge & gentle magnetic attraction ("leichte Anziehungskraft")
-        const trayCanMerge = aTray && (a === grab || b === grab) && aim && !aim.valid && Math.abs(trayRow.indexOf(a) - trayRow.indexOf(b)) === 1;
+        const trayCanMerge = aTray && (a === grab || b === grab || Math.abs(trayRow.indexOf(a) - trayRow.indexOf(b)) === 1);
         if (a.lvl === b.lvl && a.cd <= 0 && b.cd <= 0) {
           const canMerge = !aTray || trayCanMerge;
-          if (canMerge && d < V * (aTray ? 0.72 : 0.96)) {
+          if (canMerge && d < V * (aTray ? 1.04 : 0.96)) {
             merge(a, b, born);
             break;
           }
-          if (canMerge && !aTray && it === 0 && surfGap < SAME_RANGE && surfGap > -V) {
+          if (canMerge && it === 0 && surfGap < SAME_RANGE && surfGap > -V) {
             const pull = SAME_PULL * (1 - Math.max(0, surfGap) / SAME_RANGE) * dt;
             const ma = a.r * a.r, mb = b.r * b.r, inv = 1 / (ma + mb);
             a.vx += nx * pull * mb * inv * 2;
@@ -825,7 +839,7 @@ function step(dt) {
           }
         }
 
-        const skipTrayBlock = aTray && a.lvl === b.lvl && trayCanMerge;
+        const skipTrayBlock = aTray && ((a.lvl === b.lvl && trayCanMerge) || ((a === grab || b === grab) && aim && !aim.valid));
         if (d < R && !skipTrayBlock) {
           const ma = a.r * a.r, mb = b.r * b.r, inv = 1 / (ma + mb);
           const pen = R - d;
