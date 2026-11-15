@@ -27,7 +27,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/propaganda.html`](games/propaganda.html) — *Wähl Mich! — Propaganda Simulator*
   * [`games/doener.html`](games/doener.html) — *Döner Tycoon*
   * [`games/boatsim.html`](games/boatsim.html) — *Boot- & Wellen-Simulator*
-  * [`games/raketenbau.html`](games/raketenbau.html) — *Raketenbau 3D (Rakete aus 23 Blender-Bauteilen bauen, mit Mehrkörper-Orbitalphysik zu Mond, Mars, Venus, Jupiter, Europa & Titan fliegen, 17 Missionen)*
+  * [`games/raketenbau.html`](games/raketenbau.html) — *Raketenbau 3D (Rakete aus 37 Blender-Bauteilen mit SVG-Bauteil-Symbolen bauen, mit Mehrkörper-Orbitalphysik zu Mond, Mars, Venus, Jupiter, Europa & Titan fliegen, 17 Missionen)*
   * [`games/tycoon.html`](games/tycoon.html) — *3D City Tycoon*
 * **Action & Roguelike:**
   * [`games/omaswlan.html`](games/omaswlan.html) — *Omas WLAN (Top-Down-Schleich-Horror im Dunkeln: Handy-Licht mit Sichtlinien-Schatten, Lärm durch Wände & Etagen, knarzende Dielen, Physik-Krempel, Chihuahua-KI mit Leckerli-Ablenkung, Oma-KI mit Taschenlampe & Klo-Gängen, Router-Steck-Minispiel, 3 Nächte inkl. Gewitter)*
