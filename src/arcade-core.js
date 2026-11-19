@@ -241,6 +241,7 @@ const ArcadeCore = (() => {
 
   // Canonical Highscore Mapping
   const SCORE_KEYS = {
+    'scharfschuetze': 'scharfschuetze_best',
     '2048': 'best2048',
     'tetris': 'tetrisBest',
     'flappybird': 'flappyBest',

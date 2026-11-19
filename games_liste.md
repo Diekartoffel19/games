@@ -238,3 +238,6 @@ Die restlichen 54 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 8. **Top-Down-Schleichspiele mit Licht & Schatten:**
    - *Omas WLAN (`games/omaswlan.html`)*  
    *Begründung:* Das Spiel lebt von der Draufsicht: Handy-Licht und Taschenlampen-Kegel werden per 2D-Raycasting als Sichtlinien-Polygone in eine Dunkelheitsebene geschnitten, Lärmringe breiten sich sichtbar durch Wände aus. In 3D würden Decken und Wände genau diese Übersicht über Geräusche, Licht und Sichtlinien verdecken.
+9. **2D-Präzisions-Schießstände mit Lupen-Zielfernrohr:**
+   - *Scharfschütze: Ziel-Einsatz (`games/scharfschuetze.html`)*  
+   *Begründung:* Scharfe 2D-Silhouetten, klare Deckungs-Lanes (100m/250m/420m) und ein direkt am Mauszeiger vergrößerndes FFP-MIL-DOT-Zielfernrohr garantieren sofortige Lesbarkeit von Weakspots, Zivilisten-Warnungen und Windfahnen ohne Kameraverlust.
