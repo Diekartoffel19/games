@@ -2,7 +2,7 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (39 Spiele)
+## 🧊 Bestehende 3D-Spiele (40 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (5 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 54 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (39 Spiele)
+## 🧊 Bestehende 3D-Spiele (40 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -190,6 +190,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 37 | 🧊 **Zauberwürfel 3D** | [`games/zauberwuerfel.html`](games/zauberwuerfel.html) | `puzzle` | Three.js | NxN-Würfel 2×2 bis 7×7, Schicht-Rotation per Pivot-Group mit Easing, Orbit-Kamera, Tastatur mit Ebenenwahl, Auto-Lösen über invertierte Zughistorie |
 | 38 | 🦑 **Squid Survival 3D** | [`games/squidgame.html`](games/squidgame.html) | `action` | Three.js | Low-Poly-Survival-Show mit 5 Minispielen: Wächter-Roboter dreht den Kopf um 180° mit Scharfschützen-Lasern, Dalgona-Keks als CanvasTexture mit Nadel-Raycast & Feuerzeug, Tauziehen über dem Abgrund mit Sturz-Animation, Glasbrücke mit Splitter-Physik & NPC-Vorgängern, Schlamm-Finale im Regen (LineSegments-Regen, Blitze), Shader-Partikel |
 | 39 | 🚀 **Raketenbau 3D** | [`games/raketenbau.html`](games/raketenbau.html) | `sim` | Three.js | Raketen-Werkstatt mit 37 Blender-modellierten Bauteilen und maßgeschneiderten SVG-Symbolen (Kapseln, Mondfähre, Kosmos-Sonde, Rettungsturm, Aerospitze, Hitzeschilde 1,25/2,5m, Tanks S–XXL inkl. Kryo-Kugeltank & 1,25→2,5m-Adapter, 11 Triebwerke inkl. Kolibri, Falke-Zwilling, Aerospike, Nuklear, Ionen, Vasimr-Plasma & Titan-V 5×-Cluster, 3 Feststoffbooster, Stufentrenner 1,25/2,5m, Leitwerk, Gitterflossen, Landebeine, Solar-/RCS-Modul, RTG-Isotopenbatterie, Fallschirm) inkl. Δv-/TWR-Analyse pro Stufe; Flug mit Mehrkörper-Orbitalmechanik zu 8 Himmelskörpern (Erde, Mond, Phobos, Venus, Mars, Jupiter mit Ringen, Europa, Titan), SOI-Wechsel, 5 Flugcomputer-Autopiloten (Orbit-Aufstieg mit Gravity-Turn & Max-Q, Zirkularisierung, Hohmann-Transfer, Suicide-Burn-Landung, Hover) + Auto-Staging, 3D-Weltraumbahnhof (Wasserturm, Kontrollturm, rotierendes Radar, Windsack, Flutlichter, Gebirge, Vogelschwarm, Polarlichter, 3D-Krater & Eistürme), Tageszeiten-Wahl, Zeitraffer bis ×2000, Sonnensystem-Kartenansicht mit Kegelschnitt-Bahn & Ap/Pe, 17 Missionen mit Geld & Freischaltungen |
+| 40 | 🎯 **Scharfschütze 3D** | [`games/scharfschuetze.html`](games/scharfschuetze.html) | `action` | Three.js | 3D-Scharfschützen-Tal vom Hochstand (75m–260m+): 6 Zieltypen (3D-Zielscheibe mit Ringen, artikulierter Läufer hinter 3D-Deckung, Gepanzert mit zerstörbarer Brustplatte & leuchtendem Visier-Weakspot, 3D-Drohne mit Rotoren, Explosiv-Fass mit 3D-Druckwelle, Zivilisten-Sperrziel), 3D-Gewehr-Viewmodel mit Rückstoß, Kammerstängel-Animation & Hülsenauswurf, FFP-MIL-DOT-Zielfernrohr (4×–12×) mit Laser-Entfernungsmesser & Windage-Baum, 3D-Windfahnen, Atem-Schwanken, 4 Themen-Missionen (Tag, Industrie, Gebirge, Nacht mit Scheinwerfer) & Endlos-Schießstand |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
@@ -237,6 +238,3 @@ Die restlichen 54 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 8. **Top-Down-Schleichspiele mit Licht & Schatten:**
    - *Omas WLAN (`games/omaswlan.html`)*  
    *Begründung:* Das Spiel lebt von der Draufsicht: Handy-Licht und Taschenlampen-Kegel werden per 2D-Raycasting als Sichtlinien-Polygone in eine Dunkelheitsebene geschnitten, Lärmringe breiten sich sichtbar durch Wände aus. In 3D würden Decken und Wände genau diese Übersicht über Geräusche, Licht und Sichtlinien verdecken.
-9. **2D-Präzisions-Schießstände mit Lupen-Zielfernrohr:**
-   - *Scharfschütze: Ziel-Einsatz (`games/scharfschuetze.html`)*  
-   *Begründung:* Scharfe 2D-Silhouetten, klare Deckungs-Lanes (100m/250m/420m) und ein direkt am Mauszeiger vergrößerndes FFP-MIL-DOT-Zielfernrohr garantieren sofortige Lesbarkeit von Weakspots, Zivilisten-Warnungen und Windfahnen ohne Kameraverlust.
