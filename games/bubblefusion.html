@@ -365,7 +365,7 @@ const DANGER_Y = 152;                       // blobs stacked above this trigger 
 const BURST_TIME = 3.6;                     // seconds of sensor contact before game over
 
 const H = 1 / 120;                          // physics timestep
-const GRAV = 190;                           // gentle downward gravity ("leichte Anziehungskraft")
+const GRAV = 125;                           // gentle downward gravity ("leichte Anziehungskraft")
 const SAME_PULL = 155;                      // gentle attraction between nearby equal numbers
 const SAME_RANGE = 34;                      // surface distance within which equal numbers attract
 const DRAG = 1.45;                          // viscous damping in chamber
@@ -377,12 +377,17 @@ const TAU = Math.PI * 2;
 const RIM = 40;                             // high-res smooth spline points around liquid perimeter
 const RC = new Float32Array(RIM), RS = new Float32Array(RIM);
 const C2 = new Float32Array(RIM), S2 = new Float32Array(RIM);
+const C3 = new Float32Array(RIM), S3 = new Float32Array(RIM);
+// Scratch buffers for updateRim (not re-entrant, reused for every bubble)
+const BASE = new Float32Array(RIM);
 for (let i = 0; i < RIM; i++) {
   const th = i * TAU / RIM;
   RC[i] = Math.cos(th);
   RS[i] = Math.sin(th);
   C2[i] = Math.cos(2 * th);
   S2[i] = Math.sin(2 * th);
+  C3[i] = Math.cos(3 * th);
+  S3[i] = Math.sin(3 * th);
 }
 const BEST_KEY = 'bubblefusion';
 const WIN_LVL = 12;                         // 2048
@@ -486,6 +491,7 @@ function makeBubble(lvl, x, y, state, initQx = 0) {
 
 // Excite both whole-body quadrupole jiggle and traveling surface capillary waves!
 function poke(b, ang, amt) {
+  amt *= 1.15;                  // slightly extra jiggle on every impact
   const c2 = Math.cos(2 * ang), s2 = Math.sin(2 * ang);
   b.qvx -= c2 * amt * 0.014;
   b.qvy -= s2 * amt * 0.014;
@@ -594,9 +600,9 @@ function updateRim(b, dt) {
   // 1. Update 2D Quadrupole Jelly Oscillator (underdamped spring + contact squeeze)
   const targetQx = (b.state === 'tray' ? b.restQx : 0) + Math.max(-0.44, Math.min(0.44, b.fxQx * 0.28));
   const targetQy = Math.max(-0.38, Math.min(0.38, b.fxQy * 0.28));
-  // Low damping (3.6) + lively spring (42) = continuous multi-bounce whole-body jelly jiggle!
-  b.qvx += (42 * (targetQx - b.qx) - 3.6 * b.qvx) * dt;
-  b.qvy += (42 * (targetQy - b.qy) - 3.6 * b.qvy) * dt;
+  // Low damping (3.0) + lively spring (42) = continuous multi-bounce whole-body jelly jiggle!
+  b.qvx += (42 * (targetQx - b.qx) - 3.0 * b.qvx) * dt;
+  b.qvy += (42 * (targetQy - b.qy) - 3.0 * b.qvy) * dt;
   b.qx += b.qvx * dt;
   b.qy += b.qvy * dt;
   const qMag = Math.hypot(b.qx, b.qy);
@@ -613,15 +619,21 @@ function updateRim(b, dt) {
   const accMag = Math.min(900, Math.hypot(ax, ay));
   if (accMag > 12) {
     const accAng = Math.atan2(ay, ax);
-    b.qvx -= Math.cos(2 * accAng) * accMag * 0.004 * dt;
-    b.qvy -= Math.sin(2 * accAng) * accMag * 0.004 * dt;
-    for (let i = 0; i < RIM; i++) {
-      const da = i * TAU / RIM - accAng;
-      rv[i] -= accMag * 0.11 * Math.cos(2 * da) * dt;
-    }
+    const ca = Math.cos(2 * accAng), sa = Math.sin(2 * accAng);
+    b.qvx -= ca * accMag * 0.004 * dt;
+    b.qvy -= sa * accMag * 0.004 * dt;
+    // cos(2*(th - a)) = cos2th*cos2a + sin2th*sin2a  (no per-point trig)
+    const k = accMag * 0.11 * dt;
+    for (let i = 0; i < RIM; i++) rv[i] -= k * (C2[i] * ca + S2[i] * sa);
   }
 
-  for (let i = 0; i < RIM; i++) cap[i] = Infinity;
+  // Per-point quadrupole stretch, computed once per step instead of per contact
+  const qx = b.qx, qy = b.qy;
+  for (let i = 0; i < RIM; i++) {
+    const s = 1 + qx * C2[i] + qy * S2[i];
+    BASE[i] = vr * (s > 0.56 ? s : 0.56);
+    cap[i] = Infinity;
+  }
 
   // 3. Contact constraints: walls & curved neighbor pockets
   const cl = b.contacts;
@@ -633,25 +645,19 @@ function updateRim(b, dt) {
         const dirX = RC[i], dirY = RS[i];
         const cs = dirX * c1 + dirY * c2;
         if (cs > 0.06) {
-          const maxDist = c3 / cs;
-          const stretch = Math.max(0.56, 1 + b.qx * C2[i] + b.qy * S2[i]);
-          const baseDist = vr * stretch;
-          const delta = maxDist - baseDist;
+          const delta = c3 / cs - BASE[i];
           if (delta < cap[i]) cap[i] = delta;
         }
       }
     } else {
       const rEff2 = c3 * c3;
+      const cLen2 = c1 * c1 + c2 * c2;
       for (let i = 0; i < RIM; i++) {
-        const dirX = RC[i], dirY = RS[i];
-        const proj = c1 * dirX + c2 * dirY;
+        const proj = c1 * RC[i] + c2 * RS[i];
         if (proj > 0) {
-          const perp2 = (c1 * c1 + c2 * c2) - proj * proj;
+          const perp2 = cLen2 - proj * proj;
           if (perp2 < rEff2) {
-            const maxDist = proj - Math.sqrt(rEff2 - perp2);
-            const stretch = Math.max(0.56, 1 + b.qx * C2[i] + b.qy * S2[i]);
-            const baseDist = vr * stretch;
-            const delta = maxDist - baseDist;
+            const delta = proj - Math.sqrt(rEff2 - perp2) - BASE[i];
             if (delta < cap[i]) cap[i] = delta;
           }
         }
@@ -666,9 +672,13 @@ function updateRim(b, dt) {
     else free++;
   }
   const bulge = free ? Math.min(vr * 0.42, (dent / free) * 0.92) : 0;
+  // sin(phi + 3th) = sin(phi)*cos(3th) + cos(phi)*sin(3th)  (2 trig calls per bubble, not 40)
+  const phi = time * 2.8 + b.seed;
+  const bs = Math.sin(phi) * vr * 0.017, bc = Math.cos(phi) * vr * 0.017;
+  const lump = b.lump;
   for (let i = 0; i < RIM; i++) {
-    const breath = Math.sin(time * 2.8 + i * TAU / RIM * 3 + b.seed) * vr * 0.012;
-    tgt[i] = Math.min(b.lump[i] * vr + breath + bulge, cap[i]);
+    const v = lump[i] * vr + bs * C3[i] + bc * S3[i] + bulge;
+    tgt[i] = v < cap[i] ? v : cap[i];
   }
 
   // Smooth surface-tension shoulders so liquid flows smoothly around contacts
@@ -683,14 +693,15 @@ function updateRim(b, dt) {
     }
   }
 
-  // 4. Traveling surface capillary wave equation (low damping = 3.8, high wave speed = 740 -> super jiggly liquid!)
+  // 4. Traveling surface capillary wave equation (low damping = 3.2, high wave speed = 740 -> super jiggly liquid!)
   const lim = vr * 0.55;
   for (let i = 0; i < RIM; i++) {
-    const a = rim[(i + RIM - 1) % RIM], c = rim[(i + 1) % RIM];
-    rv[i] += (155 * (tgt[i] - rim[i]) + 740 * (a + c - 2 * rim[i]) - 3.8 * rv[i]) * dt;
+    const a = rim[i === 0 ? RIM - 1 : i - 1], c = rim[i === RIM - 1 ? 0 : i + 1];
+    rv[i] += (155 * (tgt[i] - rim[i]) + 740 * (a + c - 2 * rim[i]) - 3.2 * rv[i]) * dt;
   }
 
   let sx = 0, sy = 0;
+  const bx = b.x, by = b.y, minR = vr * 0.24, px = b.px, py = b.py;
   for (let i = 0; i < RIM; i++) {
     rim[i] += rv[i] * dt;
     // Never cross a neighbor/wall contact boundary so bubbles never overlap!
@@ -702,12 +713,12 @@ function updateRim(b, dt) {
     if (rim[i] > lim) { rim[i] = lim; rv[i] *= -0.3; }
     else if (rim[i] < -0.68 * vr) { rim[i] = -0.68 * vr; rv[i] *= -0.3; }
 
-    const stretch = Math.max(0.56, 1 + b.qx * C2[i] + b.qy * S2[i]);
-    const rr = Math.max(vr * 0.24, vr * stretch + rim[i]);
-    const x = b.x + RC[i] * rr;
-    const y = b.y + RS[i] * rr;
-    b.px[i] = x;
-    b.py[i] = y;
+    let rr = BASE[i] + rim[i];
+    if (rr < minR) rr = minR;
+    const x = bx + RC[i] * rr;
+    const y = by + RS[i] * rr;
+    px[i] = x;
+    py[i] = y;
     sx += x; sy += y;
   }
   b.cx = sx / RIM;
@@ -753,7 +764,7 @@ function merge(a, b, born) {
   nb.vx = (a.vx + b.vx) * 0.5;
   nb.vy = (a.vy + b.vy) * 0.5;
   nb.rs = a.r / nb.r;
-  nb.rsv = 3.2;
+  nb.rsv = 5.5;                 // stronger size overshoot -> juicy "pop" on merge
   // Strong liquid slosh along the merge axis!
   const mergeAng = Math.atan2(b.y - a.y, b.x - a.x);
   poke(nb, mergeAng + Math.PI * 0.5, 220);
@@ -788,8 +799,12 @@ function merge(a, b, born) {
   const col = colorOf(lvl), old = colorOf(a.lvl);
   fx.push({ k: 'g', x: a.x, y: a.y, tx: x, ty: y, r: visR(a), life: 0, max: 0.13, color: old });
   fx.push({ k: 'g', x: b.x, y: b.y, tx: x, ty: y, r: visR(b), life: 0, max: 0.13, color: old });
+  fx.push({ k: 'f', b: nb, r: nb.r, life: 0, max: 0.18 });   // white impact flash on the new blob
   ring(x, y, nb.r * 0.65, nb.r * 1.9, col);
-  burst(x, y, col, 7 + lvl * 2, 120 + lvl * 18);
+  if (combo > 1) ring(x, y, nb.r * 0.9, nb.r * 2.6, '#ffffff');
+  burst(x, y, col, 9 + lvl * 2, 140 + lvl * 18);
+  shake = Math.max(shake, 2.2 + Math.min(4, lvl) * 0.45 + Math.min(3, combo - 1));
+  try { if (navigator.vibrate) navigator.vibrate(lvl >= 6 ? [16, 28, 22] : 10 + Math.min(14, combo * 3)); } catch (e) {}
   floatText(x, y - nb.r * 0.3, '+' + pts, '#ffffff', 16 + Math.min(12, lvl * 1.2));
   if (combo > 1) floatText(x, y - nb.r * 0.3 - 24, 'x' + combo + '!', '#f6fa97', 15 + Math.min(10, combo * 2));
   if (lvl >= 5) shake = Math.max(shake, Math.min(10, lvl * 0.8));
@@ -907,7 +922,7 @@ function step(dt) {
     b.t += dt;
     if (b.cd > 0) b.cd -= dt;
     // Bouncier radius scale spring (underdamped so new/merged blobs wobble in size too!)
-    b.rsv += (190 * (b.ts - b.rs) - 9.5 * b.rsv) * dt;
+    b.rsv += (190 * (b.ts - b.rs) - 8.2 * b.rsv) * dt;
     b.rs += b.rsv * dt;
     if (b.rs < 0.05) b.rs = 0.05;
 
@@ -1159,11 +1174,15 @@ function stepFx(dt) {
     if (f.k === 'p') {
       f.x += f.vx * dt; f.y += f.vy * dt;
       f.vx *= Math.exp(-2.5 * dt); f.vy *= Math.exp(-2.5 * dt);
+      f.vy += 240 * dt;             // droplets arc down like a splash
     } else if (f.k === 't') {
       f.y -= 32 * dt;
     }
   }
-  fx = fx.filter(f => f.life < f.max);
+  // In-place compaction (no new array per frame)
+  let w = 0;
+  for (let i = 0; i < fx.length; i++) if (fx[i].life < fx[i].max) fx[w++] = fx[i];
+  fx.length = w;
   if (fx.length > 400) fx.splice(0, fx.length - 400);
   shake *= Math.exp(-9 * dt);
 }
@@ -1314,24 +1333,37 @@ function drawHandNumber(b, str, cx, cy, h) {
   ctx.strokeStyle = '#111111';
   ctx.lineWidth = Math.max(2.7, h * 0.22);
 
+  // All digit strokes in one path -> a single stroke() call per number
+  ctx.beginPath();
   for (let c = 0; c < str.length; c++) {
     const strokes = DIGIT_STROKES[str[c]];
     if (strokes) {
       for (let s = 0; s < strokes.length; s++) {
         const pts = strokes[s];
-        ctx.beginPath();
         for (let p = 0; p < pts.length; p++) {
           const x = startX + pts[p][0] * w;
           const y = startY + pts[p][1] * h;
           if (p === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
-        ctx.stroke();
       }
     }
     startX += w + gap;
   }
+  ctx.stroke();
   ctx.restore();
+}
+
+// Outer silhouette as reusable Path2D (fill + clip + ink stroke share one trace)
+function smoothLoopPath(px, py) {
+  const p = new Path2D();
+  p.moveTo((px[RIM - 1] + px[0]) * 0.5, (py[RIM - 1] + py[0]) * 0.5);
+  for (let i = 0; i < RIM; i++) {
+    const j = i === RIM - 1 ? 0 : i + 1;
+    p.quadraticCurveTo(px[i], py[i], (px[i] + px[j]) * 0.5, (py[i] + py[j]) * 0.5);
+  }
+  p.closePath();
+  return p;
 }
 
 function traceSmoothLoop(px, py, cx = 0, cy = 0, scale = 1, ox = 0, oy = 0) {
@@ -1359,13 +1391,13 @@ function drawBubble(b) {
   const st = styleOf(b.lvl);
 
   // 1. Outer smooth liquid silhouette (shaded rim base)
-  traceSmoothLoop(px, py);
+  const outer = smoothLoopPath(px, py);
   ctx.fillStyle = st.sh;
-  ctx.fill();
+  ctx.fill(outer);
 
   // 2. Main cel-shaded liquid body (inset slightly from bottom-right to create a drawn 2D liquid depth rim!)
   ctx.save();
-  ctx.clip();
+  ctx.clip(outer);
   traceSmoothLoop(px, py, b.cx, b.cy, 0.96, -vr * 0.035, -vr * 0.045);
   ctx.fillStyle = st.base;
   ctx.fill();
@@ -1407,12 +1439,11 @@ function drawBubble(b) {
   ctx.restore();
 
   // 5. Crisp drawn ink contour around the liquid drop
-  traceSmoothLoop(px, py);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.lineWidth = 2.4;
   ctx.strokeStyle = '#0a0a0a';
-  ctx.stroke();
+  ctx.stroke(outer);
 
   // 6. Drawn number at visual centroid that squashes & stretches with the jelly
   const label = String(valueOf(b.lvl));
@@ -1575,6 +1606,11 @@ function drawFx() {
       ctx.strokeStyle = f.color;
       ctx.lineWidth = 5 * (1 - t) + 1;
       ctx.beginPath(); ctx.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * e, 0, TAU); ctx.stroke();
+    } else if (f.k === 'f') {
+      if (f.b.dead) { f.life = f.max; continue; }
+      ctx.globalAlpha = 0.6 * (1 - t) * (1 - t);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(f.b.cx, f.b.cy, visR(f.b) * (0.75 + 0.45 * t), 0, TAU); ctx.fill();
     } else if (f.k === 'g') {
       ctx.globalAlpha = 0.78 * (1 - t);
       ctx.fillStyle = f.color;
@@ -1601,10 +1637,17 @@ function drawHud() {
     elScore.textContent = score;
     elBest.textContent = Math.max(best, score);
   }
+  // Touch the DOM only when the bar actually changes (avoids per-frame style recalc)
   const f = Math.min(1, danger / BURST_TIME);
-  elFill.style.width = (f * 100).toFixed(1) + '%';
-  elFill.style.background = f > 0.75 ? '#dc2c2c' : f > 0.4 ? '#da6427' : '#35dfa2';
+  const w = (f * 100).toFixed(1);
+  if (w !== lastFillW) {
+    lastFillW = w;
+    elFill.style.width = w + '%';
+    const bg = f > 0.75 ? '#dc2c2c' : f > 0.4 ? '#da6427' : '#35dfa2';
+    if (bg !== lastFillBg) { lastFillBg = bg; elFill.style.background = bg; }
+  }
 }
+let lastFillW = '', lastFillBg = '';
 
 function draw() {
   ctx.setTransform(scalePx, 0, 0, scalePx, 0, 0);
@@ -1653,7 +1696,7 @@ function fit() {
   const h = w * VH / VW;
   canvas.style.width = w + 'px';
   canvas.style.height = h + 'px';
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
   scalePx = canvas.width / VW;
@@ -1661,12 +1704,16 @@ function fit() {
 window.addEventListener('resize', fit);
 
 let lastT = 0, acc = 0;
+const MAX_STEPS = 4;
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000 || 0);
   lastT = now;
   if (!over) {
     acc += dt;
-    while (acc >= H) { step(H); acc -= H; if (over) break; }
+    // Cap substeps per frame so a slow frame can't snowball into ever slower frames
+    let steps = 0;
+    while (acc >= H && steps < MAX_STEPS) { step(H); acc -= H; steps++; if (over) break; }
+    if (steps === MAX_STEPS && acc > H) acc = 0;
   }
   stepFx(dt);
   drawHud();
