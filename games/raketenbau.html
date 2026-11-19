@@ -223,7 +223,23 @@
   .tech-detail .td-act.ready { background:linear-gradient(135deg,#0ea5e9,#22c55e); border:none; color:#041a14; box-shadow:0 2px 12px rgba(14,165,233,.35); }
   .tech-detail .td-act.done { background:rgba(34,197,94,.16); border-color:rgba(74,222,128,.4); color:#86efac; cursor:default; }
 
+  /* ---------- Tutorial ---------- */
+  #tutRing { position:fixed; z-index:46; pointer-events:none; border:2px solid #ffd36a; border-radius:12px; box-shadow:0 0 0 4px rgba(255,211,106,.18), 0 0 22px rgba(255,211,106,.45); animation:tutPulse 1.2s ease-in-out infinite; transition:left .2s, top .2s, width .2s, height .2s; }
+  @keyframes tutPulse { 50% { box-shadow:0 0 0 9px rgba(255,211,106,.08), 0 0 30px rgba(255,211,106,.6); } }
+  #tutCard { position:fixed; z-index:47; width:320px; max-width:calc(100vw - 16px); box-sizing:border-box; padding:14px 16px 12px; border-radius:14px; background:rgba(10,16,32,.96); border:1px solid rgba(255,211,106,.55); box-shadow:0 10px 34px rgba(0,0,0,.55); font-size:14px; line-height:1.45; transition:left .2s, top .2s; }
+  #tutCard .tut-step { font-size:10px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#ffd36a; margin-bottom:4px; display:flex; justify-content:space-between; }
+  #tutCard h4 { margin:0 0 6px; font-size:16px; color:#fff; }
+  #tutCard p { margin:0; color:#cfdaf0; }
+  #tutCard b { color:#fff; background:rgba(255,255,255,.14); padding:0 5px; border-radius:5px; }
+  #tutCard .tut-wait { margin-top:8px; font-size:12px; color:#7fe0ff; font-style:italic; }
+  #tutCard .tut-row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:12px; }
+  #tutCard .tut-skip { background:none; border:none; color:#7c89a3; font-size:12px; padding:0; text-decoration:underline; }
+  #tutCard .tut-next { padding:7px 16px; border-radius:9px; border:none; font-weight:800; background:linear-gradient(135deg,#ff7a2f,#ff3d5a); color:#fff; }
+  #tutCard .tut-bar { height:3px; border-radius:2px; background:rgba(255,255,255,.1); margin-top:10px; overflow:hidden; }
+  #tutCard .tut-bar > i { display:block; height:100%; background:linear-gradient(90deg,#ffd36a,#ff7a2f); }
+
   @media (max-width: 820px) {
+    .tb-lbl { display:none; }
     #topbar { gap:6px; padding:0 8px; }
     #topbar .title { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .mode-switch button { font-size:11px; padding:3px 6px; }
@@ -267,6 +283,7 @@
   <button id="btnTech" class="tb-btn" title="Forschungsbaum & Bauteile freischalten">🌳 Forschungsbaum <span id="techBadge" class="badge hidden">0</span></button>
   <div id="sciBox" title="Forschungspunkte (durch Flüge & Missionen)">🔬 <span id="science">0</span></div>
   <div id="moneyBox" title="Budget für Raketenstarts">💰 <span id="money">0</span></div>
+  <button id="btnTut" class="tb-btn" title="Geführtes Tutorial starten">🎓<span class="tb-lbl"> Tutorial</span></button>
   <button id="btnReset" class="tb-btn" title="Fortschritt zurücksetzen">↺</button>
   <button id="muteBtn" class="tb-btn" title="Ton an/aus">🔊</button>
 </div>
@@ -335,6 +352,8 @@
 </div>
 
 <div id="toasts"></div>
+<div id="tutRing" class="hidden"></div>
+<div id="tutCard" class="hidden"></div>
 
 <div id="techOverlay" class="overlay hidden">
   <div class="box panel tech-box">
@@ -2318,6 +2337,7 @@ function renderCatalog() {
       const st = partStatus(id);
       const c = document.createElement('div');
       c.className = 'card' + (st.unlocked ? '' : st.canBuy ? ' unlockable' : ' locked');
+      c.dataset.part = id;
       c.title = d.desc || '';
       let sub = partInfo(d), right = free ? 'Frei' : `${fmtMoney(d.cost)} 💰`;
       if (!st.unlocked) {
@@ -4243,10 +4263,114 @@ function loop(now) {
     renderer.render(fScene, fCam);
   }
 }
+// ======================= Tutorial =======================
+// Geführter Durchlauf: Rakete bauen → erster Flug → Flugbericht → Forschung → Fallschirm einbauen.
+// Info-Schritte warten auf „Weiter“, Aktions-Schritte (done) rücken automatisch vor, sobald der Spieler es getan hat.
+const techOpen = () => !$('techOverlay').classList.contains('hidden');
+const TUT = [
+  { m: 'build', h: 'Willkommen in der Raketenwerkstatt! 🚀', x: 'In diesem Tutorial baust du deine erste Rakete, fliegst sie in den Himmel und schaltest danach neue Technik frei. Das dauert etwa 3 Minuten.', next: 'Los geht’s' },
+  { m: 'build', t: '#catalog', h: 'Der Bauteil-Katalog', x: 'Hier liegen alle Bauteile – Kapseln, Tanks, Triebwerke und mehr. Gesperrte Teile schaltest du später mit Forschungspunkten 🔬 frei.', next: true },
+  { m: 'build', t: '#btnClear', h: 'Leere Startrampe', x: 'Wir fangen ganz von vorn an. Klicke auf <b>Alles weg</b>.', done: () => !save.design.length },
+  { m: 'build', t: '[data-part="pod"]', h: '1 · Die Kapsel', x: 'Jede Rakete braucht eine Kapsel: Sie ist das Cockpit und steuert die Lage. Klicke auf <b>Kapsel „Spatz“</b>.', done: () => save.design.some(id => PARTS[id].wheel) },
+  { m: 'build', t: '[data-part="tankS"]', h: '2 · Treibstoff', x: 'Neue Teile hängen sich unten am <b>blauen Ring</b> an. Klicke auf <b>Tank S</b>.', done: () => save.design.some(id => PARTS[id].fuel) },
+  { m: 'build', t: '[data-part="funke"]', h: '3 · Triebwerk', x: 'Ganz unten sitzt das Triebwerk und verbrennt den Treibstoff aus dem Tank darüber. Klicke auf <b>Triebwerk „Funke“</b>.', done: () => save.design.some(id => PARTS[id].thrust) },
+  { m: 'build', t: '#statsBox', h: 'Rakete prüfen', x: '<b>Δv</b> ist die Reichweite deiner Rakete – der Balken zeigt, ob es fürs All, den Orbit oder den Mond reicht. <b>TWR</b> über 1 heißt: Sie hebt ab. Jeder Start kostet 💰. Tipp: Hintergrund ziehen dreht die Kamera, Mausrad zoomt.', next: true },
+  { m: 'build', t: '#btnLaunch', h: 'Startklar!', x: 'Rote ⛔-Meldungen blockieren den Start, gelbe ⚠️ sind nur Tipps. Klicke auf <b>Starten</b>.', done: () => mode === 'flight' },
+  { m: 'flight', t: '#hudTL', h: 'Fluginstrumente', x: 'Hier siehst du Höhe, Geschwindigkeit und Steigrate. <b>Apoapsis</b> und <b>Periapsis</b> sind höchster und tiefster Punkt deiner Bahn – wichtig für den Orbit.', next: true },
+  { m: 'flight', t: '#hudBL', h: 'Steuerung', x: 'Die Balken zeigen <b>Schub</b> und <b>Treibstoff</b>, die Kugel (Navball) deine Ausrichtung. <b>W/S</b> = Schub, <b>A/D</b> = neigen. Dazu der Lage-Assistent (<b>1–5</b>) und Autopiloten (<b>6–9</b>).', next: true },
+  { m: 'flight', t: '#guide', pos: 'below', h: 'Dein Flugassistent', x: 'Diese Zeile sagt dir jederzeit, was als Nächstes zu tun ist. Wenn du nicht weiterweißt: einfach ihr folgen!', next: true },
+  { m: 'flight', t: '#guide', pos: 'below', h: 'Zündung! 🔥', x: 'Drücke die <b>Leertaste</b> (oder unten rechts <b>STUFE</b>), um das Triebwerk zu zünden.', done: () => !F || F.ignited },
+  { m: 'flight', t: '#hAlt', h: 'Ab nach oben', x: 'Der Lage-Assistent hält die Rakete gerade. Beobachte die Höhe – Ziel der ersten Mission ist <b>1 km</b>.', done: () => !F || F.maxAlt > 1000 || F.ended },
+  { m: 'flight', t: '#hudTR', h: 'Missionen & Landung', x: 'Missionen bringen 💰 Geld und 🔬 Forschungspunkte. Ohne Fallschirm wird die Landung hart – diesmal ist das okay. Warte den Aufprall ab oder beende den Flug mit <b>Esc</b>.', done: () => mode === 'result' },
+  { m: 'result', t: '#resultScreen .box', h: 'Flugbericht', x: 'Nach jedem Flug gibt es 💰 für Missionen und 🔬 für Höhe, Rekorde und Telemetrie. Wird das Geld knapp, springt die Förderung ein. Klicke <b>Zurück zur Werkstatt</b>.', done: () => mode === 'build' },
+  { m: 'build', t: '#btnTech', pos: 'below', h: 'Forschungsbaum', x: 'Mit Forschungspunkten 🔬 schaltest du neue Teile frei. Öffne den <b>Forschungsbaum</b>.', done: () => techOpen() || isUnlocked('chute') },
+  { m: 'build', t: '.tree-node[data-id="chute"]', h: 'Fallschirm freischalten', x: 'Der <b>Fallschirm</b> kostet 15 🔬. Klicke auf den grünen <b>🔓</b>-Knopf am Bauteil. (Zu wenig 🔬? Schließe den Baum und flieg noch einmal.)', done: () => isUnlocked('chute'),
+    enter: () => { if (techOpen()) selectTechNode('chute', true, false); } },
+  { m: 'build', t: '#btnTechClose', h: 'Zurück in die Werkstatt', x: 'Super! Schließe den Forschungsbaum wieder.', done: () => !techOpen() },
+  { m: 'build', t: '[data-part="chute"]', h: 'Fallschirm einbauen', x: 'Klicke im Katalog auf <b>Fallschirm</b>.', done: () => save.design.includes('chute') },
+  { m: 'build', t: '#btnUp', h: 'Nach oben damit', x: 'Der Fallschirm gehört ganz <b>nach oben</b> auf die Kapsel. Ziehe ihn an der Rakete hoch – oder klicke <b>▲</b>, bis er oben sitzt.', done: () => save.design[0] === 'chute' },
+  { m: 'build', t: '#missionList', keep: true, h: 'Deine Missionen', x: 'Hier stehen alle Missionen nach Kapiteln. Jetzt klappt auch „Heil zurück“: Drücke im Sinkflug <b>P</b> für den Fallschirm – oder <b>C</b> für Auto-Fallschirm.', next: true },
+  { m: 'build', keep: true, h: 'Tutorial geschafft! 🎓', x: 'Nächste Schritte: mehr Tanks für mehr Δv, <b>Stufentrenner</b> für mehrstufige Raketen und Autopilot <b>6</b> für den Weg in den Orbit. <b>✨ Beispiel</b> liefert jederzeit eine fertige Rakete. Viel Spaß!', next: 'Fertig' },
+];
+let tut = null;
+function tutStart() {
+  if (mode !== 'build') { toast('Tutorial nur in der Werkstatt startbar', 'bad'); return; }
+  closeTech();
+  tut = { i: -1 };
+  tutGo(0);
+}
+function tutEnd() {
+  tut = null;
+  save.tutorialDone = true; persist();
+  $('tutCard').classList.add('hidden'); $('tutRing').classList.add('hidden');
+}
+function tutGo(i) {
+  if (i >= TUT.length) { tutEnd(); toast('🎓 Tutorial abgeschlossen!', 'good'); return; }
+  tut.i = i; tut.scrolled = false;
+  const s = TUT[i];
+  if (s.enter) s.enter();
+  const nextLbl = s.next === true ? 'Weiter ➜' : s.next;
+  const card = $('tutCard');
+  card.innerHTML = `<div class="tut-step"><span>🎓 Tutorial</span><span>${i + 1} / ${TUT.length}</span></div>
+    <h4>${s.h}</h4><p>${s.x}</p>${s.next ? '' : '<div class="tut-wait">👉 Probier es aus – es geht automatisch weiter.</div>'}
+    <div class="tut-row"><button type="button" class="tut-skip">Tutorial beenden</button>${s.next ? `<button type="button" class="tut-next">${nextLbl}</button>` : ''}</div>
+    <div class="tut-bar"><i style="width:${(i + 1) / TUT.length * 100}%"></i></div>`;
+  card.querySelector('.tut-skip').onclick = e => { e.currentTarget.blur(); tutEnd(); };
+  const nb = card.querySelector('.tut-next');
+  if (nb) nb.onclick = e => { e.currentTarget.blur(); sfx.click(); tutGo(tut.i + 1); };
+}
+function tutVisibleEl(sel) {
+  const el = sel && document.querySelector(sel);
+  if (!el || !el.getClientRects().length) return null;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 ? el : null;
+}
+function tutTick() {
+  if (!tut) return;
+  let s = TUT[tut.i];
+  // Erledigte Aktionen überspringen; Info-Schritte einer vergangenen Phase verwerfen
+  while ((s.done && s.done()) || (s.next && !s.keep && s.m !== mode)) {
+    tutGo(tut.i + 1);
+    if (!tut) return;
+    s = TUT[tut.i];
+  }
+  const card = $('tutCard'), ring = $('tutRing');
+  if (s.m !== mode) { card.classList.add('hidden'); ring.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const el = tutVisibleEl(s.t);
+  if (el && !tut.scrolled) { tut.scrolled = true; try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {} }
+  const W = innerWidth, H = innerHeight, cw = card.offsetWidth, ch = card.offsetHeight, g = 14, pad = 8, top = 52;
+  let x, y;
+  if (el) {
+    const r = el.getBoundingClientRect();
+    ring.classList.remove('hidden');
+    ring.style.left = (r.left - 5) + 'px'; ring.style.top = (r.top - 5) + 'px';
+    ring.style.width = (r.width + 6) + 'px'; ring.style.height = (r.height + 6) + 'px';
+    const cx = clamp(r.left + r.width / 2 - cw / 2, pad, W - cw - pad), cy = clamp(r.top, top, H - ch - pad);
+    const opts = {
+      right: r.right + g + cw <= W - pad && [r.right + g, cy],
+      left: r.left - g - cw >= pad && [r.left - g - cw, cy],
+      below: r.bottom + g + ch <= H - pad && [cx, r.bottom + g],
+      above: r.top - g - ch >= top && [cx, r.top - g - ch],
+    };
+    const hit = [s.pos, 'right', 'left', 'below', 'above'].filter(Boolean).map(k => opts[k]).find(Boolean);
+    if (hit) [x, y] = hit;
+    else { x = (W - cw) / 2; y = r.top + r.height / 2 > H / 2 ? top : H - ch - pad; }
+  } else {
+    ring.classList.add('hidden');
+    x = (W - cw) / 2; y = Math.max(top, H * 0.26);
+  }
+  card.style.left = Math.round(x) + 'px'; card.style.top = Math.round(y) + 'px';
+}
+setInterval(tutTick, 120);
+window.addEventListener('resize', tutTick);
+$('btnTut').onclick = e => { e.currentTarget.blur(); tutStart(); };
+
 renderCatalog();
 refreshBuild();
 loadBlenderParts();
 requestAnimationFrame(loop);
+if (!save.tutorialDone && !save.flights && !save.done.length) setTimeout(tutStart, 700);
 </script>
 </body>
 </html>
