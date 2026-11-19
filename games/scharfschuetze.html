@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Scharfschütze 3D: Ziel-Einsatz</title>
-  <meta name="description" content="3D-Scharfschützen-Schießstand mit Three.js: 6 verschiedene Zieltypen, FFP-MIL-DOT-Zielfernrohr (4x–12x), echte 3D-Ballistik mit Kugel-Drop & Wind, Deckungen, 3D-Gewehr mit Repetier-Animation, 4 Missionen & Endlos-Modus." />
+  <meta name="description" content="3D-Scharfschützen-Schießstand mit Three.js: 6 verschiedene Zieltypen, FFP-MIL-DOT-Zielfernrohr (4x–12x), echte 3D-Ballistik mit Wind & Kugel-Drop, 3D-Trefferphysik, 4 Missionen & Endlos-Modus." />
   <meta name="theme-color" content="#0b0f14" />
   <link rel="icon" type="image/x-icon" href="../src/favicon.ico" />
   <script src="../src/arcade-core.js"></script>
@@ -64,6 +64,10 @@
       display: block;
       touch-action: none;
       cursor: crosshair;
+    }
+
+    canvas#gl.scoped {
+      cursor: none;
     }
 
     canvas#scope-canvas {
@@ -310,12 +314,51 @@
     #unscoped-crosshair::after {
       content: '';
       position: absolute;
-      background: rgba(255, 255, 255, 0.78);
+      background: rgba(255, 255, 255, 0.82);
       box-shadow: 0 0 2px #000;
     }
 
     #unscoped-crosshair::before { left: 11px; top: 0; width: 2px; height: 24px; }
     #unscoped-crosshair::after { top: 11px; left: 0; width: 24px; height: 2px; }
+
+    #hitmarker {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 28px;
+      height: 28px;
+      margin: -14px 0 0 -14px;
+      pointer-events: none;
+      z-index: 9;
+      opacity: 0;
+      transition: opacity 0.08s ease-out, transform 0.08s ease-out;
+    }
+
+    #hitmarker::before,
+    #hitmarker::after {
+      content: '';
+      position: absolute;
+      left: 13px;
+      top: 2px;
+      width: 2.5px;
+      height: 24px;
+      background: #f8fafc;
+      box-shadow: 0 0 4px #000;
+    }
+
+    #hitmarker::before { transform: rotate(45deg); }
+    #hitmarker::after { transform: rotate(-45deg); }
+
+    #hitmarker.crit::before,
+    #hitmarker.crit::after {
+      background: #facc15;
+      box-shadow: 0 0 8px #f59e0b;
+    }
+
+    #hitmarker.show {
+      opacity: 1;
+      transform: scale(1.18);
+    }
 
     .hidden { display: none !important; }
 
@@ -480,6 +523,7 @@
   <canvas id="gl"></canvas>
   <canvas id="scope-canvas"></canvas>
   <div id="unscoped-crosshair"></div>
+  <div id="hitmarker"></div>
   <div id="flash"></div>
   <div id="float-layer"></div>
 
@@ -519,7 +563,7 @@
       <button id="btn-scope" class="icon-btn" type="button" title="Zielfernrohr (Rechtsklick / Space)">SCOPE</button>
       <button id="btn-zoom" class="icon-btn" type="button" title="Zoom wechseln (E / Mausrad)">ZOOM</button>
       <button id="btn-reload" class="icon-btn" type="button" title="Nachladen (R)">LADEN</button>
-      <button id="btn-lock" class="icon-btn" type="button" title="Maus-Steuerung sperren">MAUS-ZIELEN</button>
+      <button id="btn-lock" class="icon-btn" type="button" title="FPS-Maus-Sperre umschalten (L)">FPS-MAUS</button>
     </div>
 
     <div class="ammo-box">
@@ -535,18 +579,18 @@
       <div class="badge">3D SCHARFSCHÜTZEN-SIMULATION</div>
       <h1>SCHARFSCHÜTZE 3D</h1>
       <p class="subtitle">
-        Beobachte das 3D-Tal vom Hochstand aus. Identifiziere 6 verschiedene Zieltypen,
-        kompensiere 3D-Wind, Geschossabfall (MIL-DOT) und Deckungen.
+        Feste Stellung auf dem Hochstand — kein Laufen nötig. Zielen rein mit der Maus:
+        identifiziere 6 verschiedene Zieltypen und kompensiere 3D-Wind, Kugel-Drop und Deckung.
       </p>
 
       <div class="target-legend">
         <div class="legend-item">
           <span class="swatch swatch-standard"></span>
-          <div><strong>Zielscheibe</strong><small>3D-Ringe (Bullseye = 250)</small></div>
+          <div><strong>Zielscheibe</strong><small>3D-Ringe (Bullseye = 250 Pkt)</small></div>
         </div>
         <div class="legend-item">
           <span class="swatch swatch-runner"></span>
-          <div><strong>Läufer</strong><small>Patrouilliert hinter 3D-Deckungen</small></div>
+          <div><strong>Läufer</strong><small>Sprintet zwischen 3D-Deckungen</small></div>
         </div>
         <div class="legend-item">
           <span class="swatch swatch-armored"></span>
@@ -554,7 +598,7 @@
         </div>
         <div class="legend-item">
           <span class="swatch swatch-drone"></span>
-          <div><strong>Drohne</strong><small>Fliegt im 3D-Luftraum mit Zeitfenster</small></div>
+          <div><strong>Drohne</strong><small>Schneller 3D-Schweber mit Zeitfenster</small></div>
         </div>
         <div class="legend-item">
           <span class="swatch swatch-explosive"></span>
@@ -569,7 +613,7 @@
       <div id="mission-list" class="mission-grid"></div>
 
       <div class="controls-footer">
-        <span><strong>Maus / Ziehen / WASD:</strong> Zielen</span>
+        <span><strong>Maus bewegen:</strong> Zielen (kein Laufen!)</span>
         <span><strong>Linksklick:</strong> Schießen</span>
         <span><strong>Rechtsklick / Space / Q:</strong> Zielfernrohr</span>
         <span><strong>Mausrad / 1-3 / E:</strong> Zoom (4x / 8x / 12x)</span>
@@ -631,8 +675,8 @@
     const GAME_ID = 'scharfschuetze';
     const RECORDS_KEY = 'scharfschuetze_records_v1';
 
-    // === Ballistik- & Optik-Konstanten ===
-    const BULLET_SPEED = 420; // m/s (spürbarer Drop & Vorhalt bei 155-260 m)
+    // === Ballistik & Optik ===
+    const BULLET_SPEED = 420;
     const GRAVITY = 9.81;
     const ZERO_DIST_M = 75;
     const ZERO_PITCH_RAD = Math.atan2(0.5 * GRAVITY * Math.pow(ZERO_DIST_M / BULLET_SPEED, 2), ZERO_DIST_M);
@@ -647,7 +691,7 @@
     ];
     const MAG_SIZE = 5;
     const RELOAD_SEC = 1.35;
-    const BOLT_SEC = 0.58;
+    const BOLT_SEC = 0.55;
     const MAX_STRIKES = 3;
 
     const LANES = [
@@ -666,10 +710,10 @@
     };
 
     const THEMES = {
-      day: { sky: 0x87b8db, fog: 0x9ac4e2, fogNear: 90, fogFar: 390, ground: 0x3b593a, hill: 0x2f4938, sunColor: 0xfff3d6, sunInt: 1.35, hemiTop: 0xdcf0ff, hemiBot: 0x3f5734, hemiInt: 0.75, coverColor: 0x6b7280, night: false },
-      industrial: { sky: 0x6e544b, fog: 0x7c5f55, fogNear: 80, fogFar: 360, ground: 0x3a3a40, hill: 0x2c282b, sunColor: 0xffb884, sunInt: 1.25, hemiTop: 0xffccb0, hemiBot: 0x2c2c33, hemiInt: 0.7, coverColor: 0x475569, night: false },
-      mountain: { sky: 0x7aa4c4, fog: 0x99b9cf, fogNear: 85, fogFar: 360, ground: 0x71808e, hill: 0x485b6e, sunColor: 0xeef7ff, sunInt: 1.3, hemiTop: 0xdff2ff, hemiBot: 0x42505d, hemiInt: 0.85, coverColor: 0x57534e, night: false },
-      night: { sky: 0x050b16, fog: 0x07101f, fogNear: 75, fogFar: 340, ground: 0x111a24, hill: 0x0a111a, sunColor: 0x6ea8ff, sunInt: 0.65, hemiTop: 0x24426b, hemiBot: 0x0b1017, hemiInt: 0.55, coverColor: 0x1f2937, night: true },
+      day: { sky: 0x87b8db, fog: 0x9ac4e2, fogNear: 90, fogFar: 390, ground: 0x3b593a, hill: 0x2f4938, sunColor: 0xfff3d6, sunInt: 1.35, hemiTop: 0xdcf0ff, hemiBot: 0x3f5734, hemiInt: 0.75, coverColor: 0x6b7280, moteColor: 0xfef3c7, night: false },
+      industrial: { sky: 0x6e544b, fog: 0x7c5f55, fogNear: 80, fogFar: 360, ground: 0x3a3a40, hill: 0x2c282b, sunColor: 0xffb884, sunInt: 1.25, hemiTop: 0xffccb0, hemiBot: 0x2c2c33, hemiInt: 0.7, coverColor: 0x475569, moteColor: 0xfdba74, night: false },
+      mountain: { sky: 0x7aa4c4, fog: 0x99b9cf, fogNear: 85, fogFar: 360, ground: 0x71808e, hill: 0x485b6e, sunColor: 0xeef7ff, sunInt: 1.3, hemiTop: 0xdff2ff, hemiBot: 0x42505d, hemiInt: 0.85, coverColor: 0x57534e, moteColor: 0xffffff, night: false },
+      night: { sky: 0x050b16, fog: 0x07101f, fogNear: 75, fogFar: 340, ground: 0x111a24, hill: 0x0a111a, sunColor: 0x6ea8ff, sunInt: 0.65, hemiTop: 0x24426b, hemiBot: 0x0b1017, hemiInt: 0.55, coverColor: 0x1f2937, moteColor: 0x7dd3fc, night: true },
     };
 
     const MISSIONS = [
@@ -774,7 +818,7 @@
       },
     ];
 
-    // === Sound Engine (ArcadeCore integriert) ===
+    // === Sound Engine ===
     class SoundEngine {
       constructor() { this.fallbackCtx = null; }
       isMuted() { return typeof ArcadeCore !== 'undefined' && ArcadeCore.isMuted ? ArcadeCore.isMuted() : false; }
@@ -853,15 +897,19 @@
           o.stop(now + off + 0.09);
         });
       }
-      hit(critical) {
-        if (critical && typeof ArcadeCore !== 'undefined' && ArcadeCore.sounds) { ArcadeCore.sounds.coin(); return; }
+      hit(critical, combo = 1) {
+        if (critical && typeof ArcadeCore !== 'undefined' && ArcadeCore.sounds && combo <= 2) {
+          ArcadeCore.sounds.coin();
+          return;
+        }
         const ctx = this.getCtx();
         if (!ctx) return;
         const now = ctx.currentTime;
+        const pitchScale = 1 + Math.min(0.45, (combo - 1) * 0.06);
         const o = ctx.createOscillator();
         o.type = critical ? 'sine' : 'triangle';
-        o.frequency.setValueAtTime(critical ? 1320 : 460, now);
-        o.frequency.exponentialRampToValueAtTime(critical ? 1780 : 250, now + 0.12);
+        o.frequency.setValueAtTime((critical ? 1280 : 460) * pitchScale, now);
+        o.frequency.exponentialRampToValueAtTime((critical ? 1780 : 250) * pitchScale, now + 0.12);
         const g = ctx.createGain();
         g.gain.setValueAtTime(critical ? 0.24 : 0.17, now);
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
@@ -908,7 +956,7 @@
       dryFire() { if (typeof ArcadeCore !== 'undefined' && ArcadeCore.sounds) ArcadeCore.sounds.playTone(920, 0.05, 'square', 0.08); }
     }
 
-    // === Three.js Szene & Aufbau ===
+    // === Three.js Szene ===
     const glCanvas = document.getElementById('gl');
     const scopeCanvas = document.getElementById('scope-canvas');
     const scopeCtx = scopeCanvas.getContext('2d');
@@ -920,8 +968,9 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
+    const PERCH_POS = new THREE.Vector3(0, 7.2, 0);
     const camera = new THREE.PerspectiveCamera(UNSCOPED_FOV, window.innerWidth / window.innerHeight, 0.08, 650);
-    camera.position.set(0, 7.2, 0);
+    camera.position.copy(PERCH_POS);
     camera.rotation.order = 'YXZ';
     scene.add(camera);
 
@@ -930,18 +979,16 @@
     const sunLight = new THREE.DirectionalLight(0xfff3d6, 1.35);
     sunLight.position.set(45, 70, 35);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.mapSize.set(1024, 1024);
     Object.assign(sunLight.shadow.camera, { left: -90, right: 90, top: 80, bottom: -260, near: 10, far: 380 });
     sunLight.shadow.bias = -0.0005;
     scene.add(sunLight);
 
-    // Suchscheinwerfer für Nacht-Mission
     const nightSpot = new THREE.SpotLight(0x7dd3fc, 2.2, 340, Math.PI / 11, 0.45, 0.5);
     nightSpot.position.set(0, 26, -30);
     const nightSpotTarget = new THREE.Object3D();
     nightSpotTarget.position.set(0, 0, -160);
-    scene.add(nightSpot);
-    scene.add(nightSpotTarget);
+    scene.add(nightSpot, nightSpotTarget);
     nightSpot.target = nightSpotTarget;
     nightSpot.visible = false;
 
@@ -955,7 +1002,7 @@
     searchBeamMesh.visible = false;
     scene.add(searchBeamMesh);
 
-    // 3D Sniper Rifle Viewmodel (an Kamera befestigt)
+    // 3D Gewehr Viewmodel
     const rifleGroup = new THREE.Group();
     const darkMetal = new THREE.MeshStandardMaterial({ color: 0x222831, roughness: 0.4, metalness: 0.75, flatShading: true });
     const stockMat = new THREE.MeshStandardMaterial({ color: 0x3a4337, roughness: 0.7, metalness: 0.15, flatShading: true });
@@ -993,7 +1040,6 @@
     rifleGroup.position.copy(RIFLE_REST_POS);
     camera.add(rifleGroup);
 
-    // Welt-Gruppen
     const envGroup = new THREE.Group();
     const coverGroup = new THREE.Group();
     const targetGroup = new THREE.Group();
@@ -1002,9 +1048,9 @@
 
     let groundMesh = null;
     const windFlags = [];
+    const windMotes = [];
 
     function terrainHeightAt(x, z) {
-      // Flaches Tal im Zentrum, leicht ansteigende Seitenhügel & Fern-Berge
       const sideLift = Math.max(0, (Math.abs(x) - 42) * 0.16);
       const backLift = z < -285 ? (-285 - z) * 0.22 : 0;
       const wave = Math.sin(x * 0.06) * Math.cos(z * 0.04) * 0.45;
@@ -1014,6 +1060,7 @@
     function buildEnvironment(themeName) {
       while (envGroup.children.length > 0) envGroup.remove(envGroup.children[0]);
       windFlags.length = 0;
+      windMotes.length = 0;
 
       const theme = THEMES[themeName] || THEMES.day;
       scene.background = new THREE.Color(theme.sky);
@@ -1027,7 +1074,6 @@
       nightSpot.visible = !!theme.night;
       searchBeamMesh.visible = !!theme.night;
 
-      // Tal-Terrain mit Höhenprofil
       const geo = new THREE.PlaneGeometry(240, 420, 48, 64);
       geo.rotateX(-Math.PI / 2);
       const pos = geo.attributes.position;
@@ -1045,7 +1091,6 @@
       groundMesh.receiveShadow = true;
       envGroup.add(groundMesh);
 
-      // Hochstand-Plattform unter Spieler
       const deck = new THREE.Mesh(
         new THREE.BoxGeometry(8, 0.6, 5),
         new THREE.MeshStandardMaterial({ color: 0x4b382a, roughness: 0.9, flatShading: true })
@@ -1053,7 +1098,6 @@
       deck.position.set(0, 5.2, -1);
       envGroup.add(deck);
 
-      // Distanz-Balken & Schilder bei 75m / 155m / 260m
       LANES.forEach((lane) => {
         const line = new THREE.Mesh(
           new THREE.BoxGeometry(92, 0.08, 0.35),
@@ -1062,7 +1106,6 @@
         line.position.set(0, terrainHeightAt(0, lane.z) + 0.06, lane.z);
         envGroup.add(line);
 
-        // Entfernungsschild links
         const post = new THREE.Mesh(
           new THREE.CylinderGeometry(0.14, 0.14, 3.2, 6),
           new THREE.MeshStandardMaterial({ color: 0x475569, flatShading: true })
@@ -1094,7 +1137,6 @@
         envGroup.add(signBoard);
       });
 
-      // Kulissen (Bäume / Industrie-Türme / Felsen)
       const propMat = new THREE.MeshStandardMaterial({ color: theme.hill, roughness: 0.85, flatShading: true });
       for (let i = 0; i < 28; i++) {
         const side = i % 2 === 0 ? -1 : 1;
@@ -1116,7 +1158,7 @@
         }
       }
 
-      // 3D Windfahnen an allen 3 Distanzen (rechts im Blickfeld)
+      // 3D Windfahnen rechts
       [
         { x: 24, z: -75 },
         { x: 30, z: -155 },
@@ -1141,9 +1183,18 @@
         envGroup.add(pivot);
         windFlags.push({ pivot, flag });
       });
+
+      // Schwebende 3D-Wind-Partikel (Schnee / Staub / Nebel) für spürbaren Wind
+      const moteGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+      const moteMat = new THREE.MeshBasicMaterial({ color: theme.moteColor, transparent: true, opacity: 0.55 });
+      for (let i = 0; i < 60; i++) {
+        const m = new THREE.Mesh(moteGeo, moteMat);
+        m.position.set((Math.random() - 0.5) * 110, 2 + Math.random() * 20, -45 - Math.random() * 230);
+        envGroup.add(m);
+        windMotes.push({ mesh: m, fallRate: 0.8 + Math.random() * 1.4 });
+      }
     }
 
-    // === 3D Cover & Targets Factory ===
     function buildCovers(mission) {
       while (coverGroup.children.length > 0) coverGroup.remove(coverGroup.children[0]);
       const theme = THEMES[mission.theme] || THEMES.day;
@@ -1153,7 +1204,7 @@
       const meshes = [];
       (mission.covers || []).forEach((c) => {
         const lane = LANES[c.laneId];
-        const cz = lane.z + 2.4; // leicht vor den Zielen der Lane
+        const cz = lane.z + 2.4;
         const cy = terrainHeightAt(c.x, cz);
         const box = new THREE.Mesh(new THREE.BoxGeometry(c.width, c.height, c.depth), mat);
         box.position.set(c.x, cy + c.height / 2, cz);
@@ -1200,7 +1251,7 @@
       let armorMesh = null;
       let leftLeg = null;
       let rightLeg = null;
-      let rotorMeshes = [];
+      const rotorMeshes = [];
 
       const target = {
         id: nextTargetId++,
@@ -1250,7 +1301,7 @@
         group.add(stand);
 
         const outer = new THREE.Mesh(
-          new THREE.CylinderGeometry(1.1, 1.1, 0.14, 20),
+          new THREE.CylinderGeometry(1.1, 1.1, 0.14, 22),
           new THREE.MeshStandardMaterial({ color: 0xf1f5f9, emissive: isNight ? 0x1e293b : 0x000000, flatShading: true })
         );
         outer.rotation.x = Math.PI / 2;
@@ -1266,7 +1317,7 @@
         addHitMesh(mid, 'mid', false);
 
         const bull = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.32, 0.32, 0.22, 16),
+          new THREE.CylinderGeometry(0.34, 0.34, 0.22, 16),
           new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: isNight ? 0x450a0a : 0x000000, flatShading: true })
         );
         bull.rotation.x = Math.PI / 2;
@@ -1312,9 +1363,8 @@
           group.add(rot);
           rotorMeshes.push(rot);
         });
-        target.vx = (Math.random() < 0.5 ? -1 : 1) * (5.8 + Math.random() * 4.5);
+        target.vx = (Math.random() < 0.5 ? -1 : 1) * (5.5 + Math.random() * 4.2);
       } else {
-        // Humanoide 3D-Silhouetten: runner, armored, civilian
         const legColor = type === 'civilian' ? 0x1e3a8a : type === 'armored' ? 0x334155 : 0x431407;
         const legMat = new THREE.MeshStandardMaterial({ color: legColor, flatShading: true });
         leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.95, 0.34), legMat);
@@ -1346,20 +1396,19 @@
           vest.position.y = 1.52;
           group.add(vest);
 
-          // Schwebender Zivilisten-Warn-Diamant über Kopf
           const badge = new THREE.Mesh(
-            new THREE.OctahedronGeometry(0.28, 0),
+            new THREE.OctahedronGeometry(0.3, 0),
             new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
           );
           badge.position.y = 2.95;
           group.add(badge);
         } else if (type === 'armored') {
           armorMesh = new THREE.Mesh(
-            new THREE.BoxGeometry(1.06, 0.9, 0.16),
+            new THREE.BoxGeometry(1.06, 0.92, 0.18),
             new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.65, roughness: 0.35, flatShading: true })
           );
-          armorMesh.position.set(0, 1.5, 0.3);
-          group.add(armorMesh);
+          armorMesh.position.set(0, 1.5, 0.31);
+          addHitMesh(armorMesh, 'body', false);
           target.armorMesh = armorMesh;
         }
 
@@ -1381,13 +1430,13 @@
         }
 
         if (type === 'runner') {
-          target.vx = (Math.random() < 0.5 ? -1 : 1) * (4.4 + Math.random() * 3.4);
+          target.vx = (Math.random() < 0.5 ? -1 : 1) * (4.2 + Math.random() * 3.2);
           target.patrolMinX = Math.max(-spreadX - 4, x - 16);
           target.patrolMaxX = Math.min(spreadX + 4, x + 16);
         } else if (type === 'civilian') {
           target.vx = (Math.random() < 0.5 ? -1 : 1) * (2.6 + Math.random() * 1.8);
         } else if (type === 'armored') {
-          target.vx = (Math.random() < 0.5 ? -1 : 1) * (1.8 + Math.random() * 1.4);
+          target.vx = (Math.random() < 0.5 ? -1 : 1) * (1.8 + Math.random() * 1.3);
           target.patrolMinX = Math.max(-spreadX - 4, x - 10);
           target.patrolMaxX = Math.min(spreadX + 4, x + 10);
         }
@@ -1397,8 +1446,9 @@
       return target;
     }
 
-    // === 3D Partikel, Tracer & Einschlagmarker ===
+    // === 3D Partikel, Tracer, Tumble & Einschlagmarker ===
     const particles3D = [];
+    const dyingTargets3D = [];
     const shots3D = [];
     const shells3D = [];
     const hitMarkers3D = [];
@@ -1453,7 +1503,20 @@
       hitMarkers3D.push({ mesh: marker, life: 2.2, maxLife: 2.2 });
     }
 
-    // === 3D Floating World-to-Screen Popups ===
+    function sendTargetKnockdown(target) {
+      if (target.type === 'explosive') {
+        targetGroup.remove(target.group);
+        return;
+      }
+      dyingTargets3D.push({
+        group: target.group,
+        type: target.type,
+        life: target.type === 'drone' ? 0.95 : 0.65,
+        vy: target.type === 'drone' ? -2 : 0,
+        spin: (Math.random() - 0.5) * 4,
+      });
+    }
+
     const floatLayer = document.getElementById('float-layer');
     const floatItems = [];
     function addFloatMessage(worldPos, text, cssColor) {
@@ -1487,7 +1550,7 @@
       }
     }
 
-    // === Spielzustand & Simulation ===
+    // === Spielzustand ===
     const sound = new SoundEngine();
     const state = {
       phase: 'MENU', // MENU | PLAYING | PAUSED | VICTORY | DEFEAT
@@ -1505,10 +1568,18 @@
       recoilYaw: 0,
       rifleKickZ: 0,
       boltAnim: 0,
+      camShake: 0,
+
+      // Free-Aim State (ohne Pointer-Lock & ohne Laufen!)
+      freeTargetYaw: 0,
+      freeTargetPitch: -0.055,
+      scopeAnchorMouseX: 0,
+      scopeAnchorMouseY: 0,
+      scopeAnchorYaw: 0,
+      scopeAnchorPitch: -0.055,
 
       isScoped: false,
       scopeIdx: 0,
-      currentFov: UNSCOPED_FOV,
 
       wantBreathHold: false,
       isHoldingBreath: false,
@@ -1536,20 +1607,23 @@
       bannerText: '',
       bannerAlert: false,
       endReason: '',
-    };
 
-    const keysDown = new Set();
+      bulletCam: null, // Final-Kill Slow-Mo Kamera
+    };
 
     function clearWorldDynamics() {
       while (targetGroup.children.length > 0) targetGroup.remove(targetGroup.children[0]);
       while (fxGroup.children.length > 0) fxGroup.remove(fxGroup.children[0]);
       state.targets.length = 0;
+      dyingTargets3D.length = 0;
       particles3D.length = 0;
       shots3D.length = 0;
       shells3D.length = 0;
       hitMarkers3D.length = 0;
       floatItems.forEach((f) => f.el.remove());
       floatItems.length = 0;
+      state.bulletCam = null;
+      camera.position.copy(PERCH_POS);
     }
 
     function setBanner(text, alert, duration) {
@@ -1558,12 +1632,21 @@
       state.bannerTimer = duration;
     }
 
-    function spawnNextTarget() {
+    let hitmarkerTimeout = null;
+    const hitmarkerEl = document.getElementById('hitmarker');
+    function showHitmarker(critical) {
+      hitmarkerEl.classList.toggle('crit', !!critical);
+      hitmarkerEl.classList.add('show');
+      if (hitmarkerTimeout) clearTimeout(hitmarkerTimeout);
+      hitmarkerTimeout = setTimeout(() => hitmarkerEl.classList.remove('show'), 140);
+    }
+
+    function spawnNextTarget(forceHostile = false) {
       const aliveHostiles = state.targets.filter((t) => t.alive && t.hostile).length;
       const aliveCivilians = state.targets.filter((t) => t.alive && t.isCivilian).length;
       const aliveUtilities = state.targets.filter((t) => t.alive && t.isUtility).length;
 
-      if (state.mission.civilianChance > 0 && aliveCivilians < 2 && Math.random() < state.mission.civilianChance) {
+      if (!forceHostile && state.mission.civilianChance > 0 && aliveCivilians < 2 && Math.random() < state.mission.civilianChance) {
         state.targets.push(createTarget3D('civilian', state.mission, state.targets));
         return;
       }
@@ -1577,7 +1660,7 @@
         roll -= entries[i][1];
         if (roll <= 0) { chosen = entries[i][0]; break; }
       }
-      if (chosen === 'explosive' && aliveUtilities >= 2) chosen = 'runner';
+      if (chosen === 'explosive' && (forceHostile || aliveUtilities >= 2)) chosen = 'runner';
       state.targets.push(createTarget3D(chosen, state.mission, state.targets));
     }
 
@@ -1599,10 +1682,14 @@
       state.recoilYaw = 0;
       state.rifleKickZ = 0;
       state.boltAnim = 0;
+      state.camShake = 0;
+      state.freeTargetYaw = 0;
+      state.freeTargetPitch = -0.05;
 
       state.isScoped = false;
       state.scopeIdx = 0;
-      state.currentFov = UNSCOPED_FOV;
+      camera.fov = UNSCOPED_FOV;
+      camera.updateProjectionMatrix();
 
       state.wantBreathHold = false;
       state.isHoldingBreath = false;
@@ -1628,33 +1715,49 @@
       state.coverMeshes = buildCovers(state.mission);
 
       const initialCount = Math.min(3, state.mission.maxActiveHostiles);
-      for (let i = 0; i < initialCount; i++) spawnNextTarget();
+      for (let i = 0; i < initialCount; i++) spawnNextTarget(true);
       if (state.mission.civilianChance > 0) state.targets.push(createTarget3D('civilian', state.mission, state.targets));
 
       setBanner(state.mission.title, false, 2.5);
       syncOverlays();
-      try { glCanvas.requestPointerLock?.(); } catch (_) {}
+    }
+
+    function resetScopeAnchor() {
+      state.scopeAnchorMouseX = lastClientX;
+      state.scopeAnchorMouseY = lastClientY;
+      state.scopeAnchorYaw = state.yaw;
+      state.scopeAnchorPitch = state.pitch;
     }
 
     function toggleScope(force) {
-      if (state.phase !== 'PLAYING') return;
-      state.isScoped = typeof force === 'boolean' ? force : !state.isScoped;
+      if (state.phase !== 'PLAYING' || state.bulletCam) return;
+      const next = typeof force === 'boolean' ? force : !state.isScoped;
+      if (next === state.isScoped) return;
+      state.isScoped = next;
+      if (next) {
+        resetScopeAnchor();
+      } else {
+        state.freeTargetYaw = state.yaw;
+        state.freeTargetPitch = state.pitch;
+      }
     }
 
     function cycleZoom(delta) {
-      if (state.phase !== 'PLAYING') return;
-      if (!state.isScoped) state.isScoped = true;
+      if (state.phase !== 'PLAYING' || state.bulletCam) return;
+      if (!state.isScoped) toggleScope(true);
       state.scopeIdx = Math.max(0, Math.min(SCOPE_LEVELS.length - 1, state.scopeIdx + delta));
+      resetScopeAnchor();
     }
 
     function setZoomIdx(idx) {
-      if (state.phase !== 'PLAYING') return;
+      if (state.phase !== 'PLAYING' || state.bulletCam) return;
       state.scopeIdx = Math.max(0, Math.min(SCOPE_LEVELS.length - 1, idx));
-      state.isScoped = true;
+      if (!state.isScoped) toggleScope(true);
+      else resetScopeAnchor();
     }
 
     function startReload() {
-      if (state.phase !== 'PLAYING') return;
+      if (state.phase !== 'PLAYING' || state.bulletCam) return;
       if (state.reloadTimer > 0 || state.ammo >= MAG_SIZE) return;
       state.reloadTimer = RELOAD_SEC;
       sound.reload();
@@ -1662,7 +1765,7 @@
     }
 
     function fire() {
-      if (state.phase !== 'PLAYING') return;
+      if (state.phase !== 'PLAYING' || state.bulletCam) return;
       if (state.reloadTimer > 0 || state.boltTimer > 0) return;
       if (state.ammo <= 0) {
         sound.dryFire();
@@ -1677,7 +1780,6 @@
       sound.shot();
       spawnShellCasing();
 
-      // Kamerarichtung inkl. 75m Nullpunkt-Erhöhung
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
       const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
       const zeroQuat = new THREE.Quaternion().setFromAxisAngle(camRight, ZERO_PITCH_RAD);
@@ -1685,7 +1787,7 @@
 
       const startPos = camera.position.clone().addScaledVector(forward, 1.2);
       const tracerMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.11, 8, 8),
+        new THREE.SphereGeometry(0.12, 8, 8),
         new THREE.MeshBasicMaterial({ color: 0xfef08a })
       );
       tracerMesh.position.copy(startPos);
@@ -1699,9 +1801,8 @@
         active: true,
       });
 
-      // Rückstoß
-      state.recoilPitch += state.isScoped ? 0.012 : 0.025;
-      state.recoilYaw += (Math.random() - 0.5) * 0.008;
+      state.recoilPitch += state.isScoped ? 0.01 : 0.022;
+      state.recoilYaw += (Math.random() - 0.5) * 0.006;
       state.rifleKickZ = 0.16;
 
       if (state.ammo === 0) setBanner('MAGAZIN LEER — [R] NACHLADEN', true, 1.8);
@@ -1709,13 +1810,23 @@
 
     function resolveHit3D(target, hitMesh, hitPoint) {
       const cfg = TARGET_CONFIGS[target.type];
-      const zone = hitMesh.userData.zone;
-      const critical = !!hitMesh.userData.critical;
+      let zone = hitMesh.userData.zone;
+      let critical = !!hitMesh.userData.critical;
+
+      // Exakte Kreisring-Prüfung auf Standard-Zielscheibe gegen Schrägtreffer-Verzerrung
+      if (target.type === 'standard') {
+        const local = target.group.worldToLocal(hitPoint.clone());
+        const radial = Math.hypot(local.x, local.y - 1.95);
+        if (radial <= 0.36) { zone = 'bullseye'; critical = true; }
+        else if (radial <= 0.72) { zone = 'mid'; critical = false; }
+        else { zone = 'outer'; critical = false; }
+      }
+
       const distBonus = target.distanceM >= 220 ? 90 : target.distanceM >= 140 ? 40 : 0;
 
       if (target.isCivilian) {
         target.alive = false;
-        targetGroup.remove(target.group);
+        sendTargetKnockdown(target);
         state.score = Math.max(0, state.score + cfg.basePoints);
         state.strikes += 1;
         state.combo = 1;
@@ -1732,22 +1843,24 @@
 
       if (target.type === 'explosive') {
         target.alive = false;
-        targetGroup.remove(target.group);
+        sendTargetKnockdown(target);
         sound.explosion();
+        state.camShake = 0.35;
+        showHitmarker(true);
         const blastR = 14.5;
         let chainKills = 0;
         let chainCiv = 0;
         let pts = cfg.basePoints;
         const center = target.group.position.clone().add(new THREE.Vector3(0, 1.2, 0));
         spawnExplosionRing3D(center, blastR);
-        spawnParticles3D(center, 0xf97316, 28, 16, 0.75);
+        spawnParticles3D(center, 0xf97316, 30, 17, 0.75);
 
         for (let i = 0; i < state.targets.length; i++) {
           const other = state.targets[i];
           if (!other.alive || other.id === target.id) continue;
           if (other.group.position.distanceTo(target.group.position) <= blastR) {
             other.alive = false;
-            targetGroup.remove(other.group);
+            sendTargetKnockdown(other);
             if (other.isCivilian) {
               chainCiv += 1;
               pts -= 300;
@@ -1777,17 +1890,20 @@
         target.flinchTimer = 1.25;
         if (target.armorMesh) {
           target.group.remove(target.armorMesh);
+          const idx = target.hitMeshes.indexOf(target.armorMesh);
+          if (idx >= 0) target.hitMeshes.splice(idx, 1);
           target.armorMesh = null;
         }
         state.score += 40;
+        showHitmarker(false);
         sound.armorClang();
-        spawnParticles3D(hitPoint, 0x38bdf8, 14, 9, 0.4);
+        spawnParticles3D(hitPoint, 0x38bdf8, 16, 10, 0.42);
         addFloatMessage(hitPoint, 'PANZERUNG ZERSTÖRT!', '#38bdf8');
         return;
       }
 
       target.alive = false;
-      targetGroup.remove(target.group);
+      sendTargetKnockdown(target);
       let base = cfg.basePoints;
       if (critical) base = cfg.critPoints;
       else if (zone === 'mid' && cfg.midPoints) base = cfg.midPoints;
@@ -1800,7 +1916,8 @@
       state.combo = Math.min(8, state.combo + 1);
       if (state.mission.endless) state.timeLeftSec += critical ? 7 : 4;
 
-      sound.hit(critical);
+      showHitmarker(critical);
+      sound.hit(critical, state.combo);
       spawnParticles3D(hitPoint, critical ? 0xfacc15 : 0x4ade80, 16, 8.5, 0.5);
 
       let label = `+${total}`;
@@ -1817,17 +1934,26 @@
         label = `WEITSCHUSS +${total}`;
       }
       addFloatMessage(hitPoint, label, critical ? '#facc15' : '#4ade80');
+
+      // Finale Kill-Cam Slow-Mo für den letzten benötigten Treffer einer Mission
+      if (!state.mission.endless && state.kills >= state.mission.goal && state.strikes < MAX_STRIKES) {
+        state.bulletCam = {
+          focus: hitPoint.clone(),
+          timer: 0.9,
+        };
+        state.isScoped = false;
+      }
     }
 
     function stepShots3D(dt) {
-      const activeHitMeshes = [...state.coverMeshes];
-      for (let i = 0; i < state.targets.length; i++) {
-        if (state.targets[i].alive) activeHitMeshes.push(...state.targets[i].hitMeshes);
-      }
-
       for (let i = shots3D.length - 1; i >= 0; i--) {
         const s = shots3D[i];
         if (!s.active) continue;
+
+        const activeHitMeshes = [...state.coverMeshes];
+        for (let t = 0; t < state.targets.length; t++) {
+          if (state.targets[t].alive) activeHitMeshes.push(...state.targets[t].hitMeshes);
+        }
 
         const prevPos = s.pos.clone();
         s.vel.x += WIND_ACCEL_FACTOR * state.windMps * dt;
@@ -1851,7 +1977,7 @@
               spawnParticles3D(h.point, 0x94a3b8, 10, 6, 0.38);
               spawnImpactMarker(h.point, 0x94a3b8);
               addFloatMessage(h.point, 'DECKUNG', '#94a3b8');
-            } else if (h.object.userData.targetRef) {
+            } else if (h.object.userData.targetRef && h.object.userData.targetRef.alive) {
               resolveHit3D(h.object.userData.targetRef, h.object, h.point);
             }
             shots3D.splice(i, 1);
@@ -1859,7 +1985,6 @@
           }
         }
 
-        // Boden-Kollision
         const groundY = terrainHeightAt(nextPos.x, nextPos.z);
         if (nextPos.y <= groundY) {
           nextPos.y = groundY + 0.08;
@@ -1894,25 +2019,20 @@
       raycaster.set(camera.position, dir);
       raycaster.far = 360;
       const hits = raycaster.intersectObjects(hitList, false);
-      if (hits.length > 0) {
-        state.measuredRangeM = Math.max(20, Math.round(hits[0].distance));
-      } else {
-        state.measuredRangeM = 260;
-      }
+      state.measuredRangeM = hits.length > 0 ? Math.max(20, Math.round(hits[0].distance)) : 260;
     }
 
-    // === Scope 2D Overlay Rendering (FFP MIL-DOT) ===
+    // === HiDPI Scope 2D Overlay ===
     function drawScopeOverlay() {
-      const w = scopeCanvas.width;
-      const h = scopeCanvas.height;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
       scopeCtx.clearRect(0, 0, w, h);
-      if (state.phase !== 'PLAYING' || !state.isScoped) return;
+      if (state.phase !== 'PLAYING' || !state.isScoped || state.bulletCam) return;
 
       const cx = w / 2;
       const cy = h / 2;
       const radius = Math.min(w, h) * 0.42;
 
-      // Schwarze Maske außerhalb des Rohrs
       scopeCtx.save();
       scopeCtx.fillStyle = 'rgba(2, 5, 10, 0.94)';
       scopeCtx.beginPath();
@@ -1921,7 +2041,6 @@
       scopeCtx.fill();
       scopeCtx.restore();
 
-      // Glasrand-Vignette
       scopeCtx.save();
       scopeCtx.beginPath();
       scopeCtx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -1933,11 +2052,9 @@
       scopeCtx.fillStyle = vig;
       scopeCtx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
 
-      // Exakte FFP-MIL-Berechnung aus aktuellem camera.fov!
       const fovRad = THREE.MathUtils.degToRad(camera.fov);
       const pxPerMil = (h / 2) / Math.tan(fovRad / 2) * 0.001;
 
-      // Feine Achsenlinien
       scopeCtx.strokeStyle = 'rgba(10, 15, 22, 0.85)';
       scopeCtx.lineWidth = 1.4;
       scopeCtx.beginPath();
@@ -1947,7 +2064,6 @@
       scopeCtx.lineTo(cx, cy + radius);
       scopeCtx.stroke();
 
-      // Dicke äußere Stadia-Balken
       scopeCtx.strokeStyle = '#05080d';
       scopeCtx.lineWidth = 5;
       scopeCtx.beginPath();
@@ -1959,13 +2075,12 @@
       scopeCtx.lineTo(cx, cy + radius);
       scopeCtx.stroke();
 
-      // FFP MIL-Dots auf Hauptachsen (jeder 1 MIL, markant bei 5 MIL)
       const maxMil = Math.min(18, Math.floor((radius * 0.65) / pxPerMil));
       for (let m = 1; m <= maxMil; m++) {
         const d = m * pxPerMil;
         const r = m % 5 === 0 ? 3.2 : 1.9;
         scopeCtx.fillStyle = '#0f172a';
-        scopeCtx.strokeStyle = 'rgba(248, 250, 252, 0.7)';
+        scopeCtx.strokeStyle = 'rgba(248, 250, 252, 0.72)';
         scopeCtx.lineWidth = 1;
         [
           [cx - d, cy],
@@ -1980,7 +2095,6 @@
         });
       }
 
-      // Windage-Baum (untere Haltepunkte für Drop + Seitenwind)
       [2, 4, 6, 8].forEach((dropM) => {
         const dy = cy + dropM * pxPerMil;
         if (dy > cy + radius * 0.72) return;
@@ -1992,19 +2106,16 @@
         }
       });
 
-      // Beleuchteter Mittelpunkt
       scopeCtx.fillStyle = state.isHoldingBreath ? '#38bdf8' : '#ef4444';
       scopeCtx.beginPath();
       scopeCtx.arc(cx, cy, 2.8, 0, Math.PI * 2);
       scopeCtx.fill();
 
-      // Digitaler Ballistik-Rechner im Okular
       const d = state.measuredRangeM;
       const tFlight = d / BULLET_SPEED;
       const dropM = 0.5 * GRAVITY * tFlight * tFlight - (d / ZERO_DIST_M) * (0.5 * GRAVITY * Math.pow(ZERO_DIST_M / BULLET_SPEED, 2));
       const dropMil = Math.max(0, (dropM / d) * 1000);
 
-      // Seitenwind relativ zur Kamerablickrichtung
       const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
       const crossWind = state.windMps * camRight.x;
       const windDriftM = 0.5 * WIND_ACCEL_FACTOR * crossWind * tFlight * tFlight;
@@ -2013,18 +2124,17 @@
 
       scopeCtx.font = '700 13px Consolas, monospace';
       scopeCtx.textAlign = 'center';
-      scopeCtx.fillStyle = 'rgba(13, 19, 27, 0.8)';
-      scopeCtx.fillRect(cx - 140, cy + radius - 48, 280, 26);
+      scopeCtx.fillStyle = 'rgba(13, 19, 27, 0.82)';
+      scopeCtx.fillRect(cx - 142, cy + radius - 48, 284, 26);
       scopeCtx.fillStyle = '#38bdf8';
-      scopeCtx.fillText(`${d}m | HOCH ↑${dropMil.toFixed(1)} MIL | WIND ${windArrow}${Math.abs(windMil).toFixed(1)}`, cx, cy + radius - 30);
+      scopeCtx.fillText(`${d}m | KORR ↑${dropMil.toFixed(1)} ${windArrow}${Math.abs(windMil).toFixed(1)} MIL`, cx, cy + radius - 30);
 
-      scopeCtx.fillStyle = 'rgba(13, 19, 27, 0.8)';
+      scopeCtx.fillStyle = 'rgba(13, 19, 27, 0.82)';
       scopeCtx.fillRect(cx - 42, cy - radius + 16, 84, 22);
       scopeCtx.fillStyle = '#e2e8f0';
       scopeCtx.fillText(SCOPE_LEVELS[state.scopeIdx].label, cx, cy - radius + 31);
       scopeCtx.restore();
 
-      // Metallring
       scopeCtx.save();
       scopeCtx.strokeStyle = '#1e293b';
       scopeCtx.lineWidth = 10;
@@ -2159,9 +2269,10 @@
       els.overlayPause.classList.toggle('hidden', state.phase !== 'PAUSED');
       const ended = state.phase === 'VICTORY' || state.phase === 'DEFEAT';
       els.overlayResult.classList.toggle('hidden', !ended);
-      els.xh.classList.toggle('hidden', state.phase !== 'PLAYING' || state.isScoped);
+      els.xh.classList.toggle('hidden', state.phase !== 'PLAYING' || state.isScoped || !!state.bulletCam);
+      glCanvas.classList.toggle('scoped', state.phase === 'PLAYING' && state.isScoped);
       els.btnScope.classList.toggle('active', state.phase === 'PLAYING' && state.isScoped);
-      rifleGroup.visible = state.phase !== 'PLAYING' || !state.isScoped;
+      rifleGroup.visible = state.phase !== 'PLAYING' || (!state.isScoped && !state.bulletCam);
 
       if (ended || state.phase === 'PAUSED' || state.phase === 'MENU') {
         if (document.pointerLockElement === glCanvas) document.exitPointerLock?.();
@@ -2181,6 +2292,7 @@
         const hasNext = state.phase === 'VICTORY' && !state.mission.endless && state.missionIndex < MISSIONS.length - 1;
         els.btnNext.classList.toggle('hidden', !hasNext);
       }
+      updateHud();
     }
 
     function togglePause() {
@@ -2189,7 +2301,6 @@
         state.wantBreathHold = false;
       } else if (state.phase === 'PAUSED') {
         state.phase = 'PLAYING';
-        try { glCanvas.requestPointerLock?.(); } catch (_) {}
       }
       syncOverlays();
     }
@@ -2242,62 +2353,58 @@
       }
     }
 
-    // === Eingabe (Pointer Lock + Drag Fallback + Tastatur) ===
-    let dragging = false;
-    let dragDist = 0;
-    let lastPX = 0;
-    let lastPY = 0;
+    // === Eingabe (Reibungsloses Maus-Zielen ohne Laufen & ohne Ziehen) ===
+    let lastClientX = window.innerWidth / 2;
+    let lastClientY = window.innerHeight / 2;
 
-    function applyAimDelta(dx, dy) {
-      const zoomDiv = state.isScoped ? SCOPE_LEVELS[state.scopeIdx].zoom : 1;
-      const sens = 0.0021 / zoomDiv;
-      state.yaw = Math.max(-0.55, Math.min(0.55, state.yaw - dx * sens));
-      state.pitch = Math.max(-0.35, Math.min(0.28, state.pitch - dy * sens));
+    function clampAim() {
+      state.yaw = Math.max(-0.55, Math.min(0.55, state.yaw));
+      state.pitch = Math.max(-0.32, Math.min(0.24, state.pitch));
     }
 
     glCanvas.addEventListener('pointerdown', (e) => {
       if (state.phase !== 'PLAYING') return;
       sound.getCtx();
-      if (document.pointerLockElement === glCanvas) {
-        if (e.button === 0) fire();
-        else if (e.button === 2) { toggleScope(); syncOverlays(); }
+      if (state.bulletCam) {
+        state.bulletCam.timer = 0;
         return;
       }
       if (e.button === 2) {
         e.preventDefault();
         toggleScope();
         syncOverlays();
-        return;
-      }
-      if (e.button === 0) {
-        dragging = true;
-        dragDist = 0;
-        lastPX = e.clientX;
-        lastPY = e.clientY;
+      } else if (e.button === 0) {
+        fire();
       }
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (state.phase !== 'PLAYING') return;
+      lastClientX = e.clientX;
+      lastClientY = e.clientY;
+      if (state.phase !== 'PLAYING' || state.bulletCam) return;
+
       if (document.pointerLockElement === glCanvas) {
-        applyAimDelta(e.movementX || 0, e.movementY || 0);
+        const zoomDiv = state.isScoped ? SCOPE_LEVELS[state.scopeIdx].zoom : 1;
+        const sens = 0.002 / zoomDiv;
+        state.yaw -= (e.movementX || 0) * sens;
+        state.pitch -= (e.movementY || 0) * sens;
+        clampAim();
         return;
       }
-      if (dragging) {
-        const dx = e.clientX - lastPX;
-        const dy = e.clientY - lastPY;
-        lastPX = e.clientX;
-        lastPY = e.clientY;
-        dragDist += Math.hypot(dx, dy);
-        applyAimDelta(-dx * 1.1, -dy * 1.1);
-      }
-    });
 
-    window.addEventListener('pointerup', (e) => {
-      if (!dragging) return;
-      dragging = false;
-      if (state.phase === 'PLAYING' && e.button === 0 && dragDist < 6) {
-        fire();
+      if (state.isScoped) {
+        // Im Scope feines Mikro-Zielen proportional zu 1 / zoom um den Einstiegspunkt
+        const zoomDiv = SCOPE_LEVELS[state.scopeIdx].zoom;
+        const sens = 0.0012 / (zoomDiv * 0.55);
+        state.yaw = state.scopeAnchorYaw - (e.clientX - state.scopeAnchorMouseX) * sens;
+        state.pitch = state.scopeAnchorPitch - (e.clientY - state.scopeAnchorMouseY) * sens;
+        clampAim();
+      } else {
+        // Unscoped: Mauszeiger schwenkt direkt & flüssig über das Tal (kein Klicken/Ziehen nötig)
+        const nx = (e.clientX / Math.max(1, window.innerWidth)) * 2 - 1;
+        const ny = (e.clientY / Math.max(1, window.innerHeight)) * 2 - 1;
+        state.freeTargetYaw = -nx * 0.48;
+        state.freeTargetPitch = -0.055 - ny * 0.21;
       }
     });
 
@@ -2310,7 +2417,6 @@
     }, { passive: false });
 
     window.addEventListener('keydown', (e) => {
-      keysDown.add(e.code);
       if (e.code === 'KeyM') {
         if (typeof ArcadeCore !== 'undefined') ArcadeCore.toggleMute();
         syncMuteBtn();
@@ -2322,6 +2428,12 @@
       }
       if (state.phase !== 'PLAYING') return;
 
+      if (state.bulletCam && e.code === 'Space') {
+        e.preventDefault();
+        state.bulletCam.timer = 0;
+        return;
+      }
+
       if (e.code === 'Space' || e.code === 'KeyQ' || e.code === 'KeyF') {
         e.preventDefault();
         toggleScope();
@@ -2330,6 +2442,9 @@
         state.wantBreathHold = true;
       } else if (e.code === 'KeyR') {
         startReload();
+      } else if (e.code === 'KeyL') {
+        if (document.pointerLockElement === glCanvas) document.exitPointerLock?.();
+        else glCanvas.requestPointerLock?.();
       } else if (e.code === 'Digit1') {
         setZoomIdx(0);
         syncOverlays();
@@ -2346,7 +2461,6 @@
     });
 
     window.addEventListener('keyup', (e) => {
-      keysDown.delete(e.code);
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyC') state.wantBreathHold = false;
     });
 
@@ -2354,7 +2468,11 @@
     els.btnScope.addEventListener('click', () => { toggleScope(); syncOverlays(); });
     els.btnZoom.addEventListener('click', () => { cycleZoom(state.scopeIdx === SCOPE_LEVELS.length - 1 ? -2 : 1); syncOverlays(); });
     els.btnReload.addEventListener('click', () => startReload());
-    els.btnLock.addEventListener('click', () => { if (state.phase === 'PLAYING') glCanvas.requestPointerLock?.(); });
+    els.btnLock.addEventListener('click', () => {
+      if (state.phase !== 'PLAYING') return;
+      if (document.pointerLockElement === glCanvas) document.exitPointerLock?.();
+      else glCanvas.requestPointerLock?.();
+    });
     els.btnPause.addEventListener('click', togglePause);
     els.btnResume.addEventListener('click', togglePause);
     els.btnRestart.addEventListener('click', () => startMission(state.missionIndex));
@@ -2374,11 +2492,14 @@
     function resize() {
       const w = window.innerWidth;
       const h = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      renderer.setPixelRatio(dpr);
       renderer.setSize(w, h);
-      scopeCanvas.width = w;
-      scopeCanvas.height = h;
+      scopeCanvas.width = Math.floor(w * dpr);
+      scopeCanvas.height = Math.floor(h * dpr);
+      scopeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     window.addEventListener('resize', resize);
     resize();
@@ -2397,8 +2518,8 @@
       lastTs = now;
 
       if (state.phase === 'MENU') {
-        // Sanfter Kameraschwenk über das 3D-Tal im Menü
         state.elapsedSec += dt;
+        camera.position.copy(PERCH_POS);
         camera.rotation.set(-0.06, Math.sin(state.elapsedSec * 0.2) * 0.14, 0, 'YXZ');
         windFlags.forEach((wf, idx) => {
           wf.pivot.rotation.y = Math.sin(state.elapsedSec * 2 + idx) * 0.15;
@@ -2409,20 +2530,64 @@
 
       if (state.phase === 'PLAYING') {
         state.elapsedSec += dt;
+
+        // Finale Treffer-Kamera in Slow-Mo
+        if (state.bulletCam) {
+          state.bulletCam.timer -= dt;
+          const focus = state.bulletCam.focus;
+          const camOffset = new THREE.Vector3(3.5, 2.2, 6.5);
+          const desired = focus.clone().add(camOffset);
+          camera.position.lerp(desired, Math.min(1, dt * 6));
+          camera.lookAt(focus);
+          camera.fov += (40 - camera.fov) * Math.min(1, dt * 8);
+          camera.updateProjectionMatrix();
+
+          const slowDt = dt * 0.28;
+          for (let i = dyingTargets3D.length - 1; i >= 0; i--) {
+            const d = dyingTargets3D[i];
+            d.life -= slowDt;
+            d.group.rotation.x -= slowDt * 4.5;
+            d.group.rotation.z += d.spin * slowDt;
+          }
+          for (let i = particles3D.length - 1; i >= 0; i--) {
+            const p = particles3D[i];
+            p.life -= slowDt;
+            if (!p.expandRadius) {
+              p.vel.y -= 18 * slowDt;
+              p.mesh.position.addScaledVector(p.vel, slowDt);
+            }
+          }
+          updateFloatMessages(slowDt);
+
+          if (state.bulletCam.timer <= 0) {
+            state.bulletCam = null;
+            camera.position.copy(PERCH_POS);
+            state.phase = 'VICTORY';
+            const timeBonus = Math.round(state.timeLeftSec * 15);
+            state.score += timeBonus;
+            state.endReason = `Alle ${state.mission.goal} Ziele neutralisiert! Zeitbonus: +${timeBonus} Pkt.`;
+            syncOverlays();
+          }
+          renderer.render(scene, camera);
+          drawScopeOverlay();
+          updateHud();
+          return;
+        }
+
         state.timeLeftSec = Math.max(0, state.timeLeftSec - dt);
         if (state.bannerTimer > 0) {
           state.bannerTimer = Math.max(0, state.bannerTimer - dt);
           if (state.bannerTimer === 0) state.bannerText = '';
         }
 
-        // Tastatur-Zielen (Pfeile / WASD)
-        const keySpeed = (state.isScoped ? 0.28 : 0.72) / (state.isScoped ? SCOPE_LEVELS[state.scopeIdx].zoom * 0.4 : 1);
-        if (keysDown.has('ArrowLeft') || keysDown.has('KeyA')) state.yaw = Math.min(0.55, state.yaw + keySpeed * dt);
-        if (keysDown.has('ArrowRight') || keysDown.has('KeyD')) state.yaw = Math.max(-0.55, state.yaw - keySpeed * dt);
-        if (keysDown.has('ArrowUp') || keysDown.has('KeyW')) state.pitch = Math.min(0.28, state.pitch + keySpeed * dt);
-        if (keysDown.has('ArrowDown') || keysDown.has('KeyS')) state.pitch = Math.max(-0.35, state.pitch - keySpeed * dt);
+        // Sanftes Free-Aim Tracking wenn unscoped & nicht pointer-locked
+        if (document.pointerLockElement !== glCanvas && !state.isScoped) {
+          state.yaw += (state.freeTargetYaw - state.yaw) * Math.min(1, dt * 14);
+          state.pitch += (state.freeTargetPitch - state.pitch) * Math.min(1, dt * 14);
+          clampAim();
+        }
 
-        // Windwechsel
+        // Windwechsel & 3D-Wind-Partikel
         state.windTimerSec -= dt;
         if (state.windTimerSec <= 0) {
           const maxW = state.mission.endless ? Math.min(8.5, state.mission.maxWindMps + state.kills * 0.08) : state.mission.maxWindMps;
@@ -2431,16 +2596,21 @@
         }
         state.windMps += (state.windTargetMps - state.windMps) * Math.min(1, dt * 0.75);
 
-        // 3D Windfahnen animieren
         windFlags.forEach((wf, idx) => {
           const dirAngle = state.windMps >= 0 ? 0 : Math.PI;
           const flutter = Math.sin(state.elapsedSec * (4 + Math.abs(state.windMps) * 1.8) + idx) * (0.08 + Math.abs(state.windMps) * 0.03);
           wf.pivot.rotation.y = dirAngle + flutter;
-          const droop = -Math.max(0, 1 - Math.abs(state.windMps) / 5.5) * 0.5;
-          wf.flag.rotation.z = droop;
+          wf.flag.rotation.z = -Math.max(0, 1 - Math.abs(state.windMps) / 5.5) * 0.5;
         });
 
-        // Nacht-Scheinwerfer schwenken
+        windMotes.forEach((wm) => {
+          wm.mesh.position.x += state.windMps * 1.4 * dt;
+          wm.mesh.position.y -= wm.fallRate * dt;
+          if (wm.mesh.position.x > 55) wm.mesh.position.x = -55;
+          if (wm.mesh.position.x < -55) wm.mesh.position.x = 55;
+          if (wm.mesh.position.y < 0.5) wm.mesh.position.y = 20;
+        });
+
         if (nightSpot.visible) {
           const sx = Math.sin(state.elapsedSec * 0.42) * 38;
           nightSpotTarget.position.set(sx, 0, -155);
@@ -2462,23 +2632,24 @@
           if (state.breathExhausted && state.breath >= 0.4) state.breathExhausted = false;
         }
 
-        const swayScale = state.breathExhausted ? 0.0055 : state.isHoldingBreath ? 0.0003 : state.isScoped ? 0.0024 : 0.0011;
+        const swayScale = state.breathExhausted ? 0.005 : state.isHoldingBreath ? 0.00025 : state.isScoped ? 0.0021 : 0.0009;
         const swayYaw = Math.sin(state.elapsedSec * 1.55) * swayScale + Math.sin(state.elapsedSec * 2.9) * swayScale * 0.3;
         const swayPitch = Math.cos(state.elapsedSec * 1.15) * swayScale * 0.9;
 
-        // Rückstoß abbauen
         state.recoilPitch *= Math.max(0, 1 - dt * 8);
         state.recoilYaw *= Math.max(0, 1 - dt * 8);
+        state.camShake = Math.max(0, state.camShake - dt * 1.6);
+        const shakeX = (Math.random() - 0.5) * state.camShake * 0.5;
+        const shakeY = (Math.random() - 0.5) * state.camShake * 0.5;
+        camera.position.set(PERCH_POS.x + shakeX, PERCH_POS.y + shakeY, PERCH_POS.z);
         camera.rotation.set(state.pitch + swayPitch + state.recoilPitch, state.yaw + swayYaw + state.recoilYaw, 0, 'YXZ');
 
-        // Smooth FOV Zoom
         const targetFov = state.isScoped ? SCOPE_LEVELS[state.scopeIdx].fov : UNSCOPED_FOV;
         if (Math.abs(camera.fov - targetFov) > 0.05) {
           camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 15);
           camera.updateProjectionMatrix();
         }
 
-        // 3D Gewehr Rückstoß & Kammerstängel
         state.rifleKickZ *= Math.max(0, 1 - dt * 11);
         rifleGroup.position.set(RIFLE_REST_POS.x, RIFLE_REST_POS.y - state.rifleKickZ * 0.08, RIFLE_REST_POS.z + state.rifleKickZ);
         if (state.boltAnim > 0) {
@@ -2491,7 +2662,6 @@
           boltPivot.position.z = -0.15;
         }
 
-        // Bolt & Reload Timer
         if (state.boltTimer > 0) {
           const prev = state.boltTimer;
           state.boltTimer = Math.max(0, state.boltTimer - dt);
@@ -2505,7 +2675,7 @@
           }
         }
 
-        // Ziele aktualisieren
+        // Lebende Ziele updaten
         for (let i = state.targets.length - 1; i >= 0; i--) {
           const t = state.targets[i];
           if (!t.alive) { state.targets.splice(i, 1); continue; }
@@ -2542,17 +2712,34 @@
           }
         }
 
-        // Spawner
+        // Fallende / abstürzende getroffene Ziele
+        for (let i = dyingTargets3D.length - 1; i >= 0; i--) {
+          const d = dyingTargets3D[i];
+          d.life -= dt;
+          if (d.life <= 0) {
+            targetGroup.remove(d.group);
+            dyingTargets3D.splice(i, 1);
+            continue;
+          }
+          if (d.type === 'drone') {
+            d.vy -= 14 * dt;
+            d.group.position.y += d.vy * dt;
+            d.group.rotation.z += d.spin * dt * 2.5;
+            d.group.rotation.x += dt * 3;
+          } else {
+            d.group.rotation.x = Math.max(-Math.PI / 2, d.group.rotation.x - dt * 5.2);
+          }
+        }
+
         state.spawnCooldown -= dt;
         if (state.spawnCooldown <= 0) {
-          spawnNextTarget();
+          spawnNextTarget(false);
           state.spawnCooldown = state.mission.endless ? Math.max(0.75, 1.6 - state.kills * 0.02) : 1.45;
         }
 
         stepShots3D(dt);
         updateRangefinder();
 
-        // 3D Partikel, Hülsen & Einschlagmarker
         for (let i = particles3D.length - 1; i >= 0; i--) {
           const p = particles3D[i];
           p.life -= dt;
@@ -2591,20 +2778,19 @@
 
         updateFloatMessages(dt);
 
-        // Missions-Ende prüfen
         if (state.strikes >= MAX_STRIKES) {
           state.phase = 'DEFEAT';
           state.isScoped = false;
           state.endReason = 'Zu viele Zivilisten gefährdet (3/3 Verstöße).';
           syncOverlays();
-        } else if (!state.mission.endless && state.kills >= state.mission.goal) {
+        } else if (!state.mission.endless && state.kills >= state.mission.goal && !state.bulletCam) {
           state.phase = 'VICTORY';
           state.isScoped = false;
           const timeBonus = Math.round(state.timeLeftSec * 15);
           state.score += timeBonus;
           state.endReason = `Alle ${state.mission.goal} Ziele neutralisiert! Zeitbonus: +${timeBonus} Pkt.`;
           syncOverlays();
-        } else if (state.timeLeftSec <= 0) {
+        } else if (state.timeLeftSec <= 0 && !state.bulletCam) {
           state.phase = state.mission.endless ? 'VICTORY' : 'DEFEAT';
           state.isScoped = false;
           state.endReason = state.mission.endless
