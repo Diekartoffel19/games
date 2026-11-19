@@ -66,7 +66,8 @@
       cursor: crosshair;
     }
 
-    canvas#gl.scoped {
+    /* Im Einsatz ersetzt das eigene Fadenkreuz den System-Cursor */
+    canvas#gl.aiming {
       cursor: none;
     }
 
@@ -299,27 +300,34 @@
       white-space: nowrap;
     }
 
+    /* Fadenkreuz mit offener Mitte + Punkt, damit das Ziel nicht verdeckt wird */
     #unscoped-crosshair {
       position: fixed;
       left: 50%;
       top: 50%;
-      width: 24px;
-      height: 24px;
-      margin: -12px 0 0 -12px;
+      width: 30px;
+      height: 30px;
+      margin: -15px 0 0 -15px;
       pointer-events: none;
       z-index: 7;
+      background: radial-gradient(circle, #ffffff 0 1.5px, rgba(0, 0, 0, 0.7) 1.6px 2.6px, transparent 2.7px);
     }
 
     #unscoped-crosshair::before,
     #unscoped-crosshair::after {
       content: '';
       position: absolute;
-      background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 0 2px #000;
+      filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000);
     }
 
-    #unscoped-crosshair::before { left: 11px; top: 0; width: 2px; height: 24px; }
-    #unscoped-crosshair::after { top: 11px; left: 0; width: 24px; height: 2px; }
+    #unscoped-crosshair::before {
+      left: 14px; top: 0; width: 2px; height: 30px;
+      background: linear-gradient(to bottom, rgba(255, 255, 255, 0.9) 0 10px, transparent 10px 20px, rgba(255, 255, 255, 0.9) 20px 30px);
+    }
+    #unscoped-crosshair::after {
+      top: 14px; left: 0; width: 30px; height: 2px;
+      background: linear-gradient(to right, rgba(255, 255, 255, 0.9) 0 10px, transparent 10px 20px, rgba(255, 255, 255, 0.9) 20px 30px);
+    }
 
     #hitmarker {
       position: fixed;
@@ -492,6 +500,18 @@
     }
 
     .controls-footer strong { color: var(--text); }
+
+    .aim-setting {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .aim-setting span { white-space: nowrap; }
+    .aim-setting input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); cursor: pointer; }
+    .aim-setting output { font-family: var(--mono); color: var(--text); min-width: 3.6em; text-align: right; }
     .stars-row { font-size: 28px; letter-spacing: 6px; margin: 12px 0; color: #fbbf24; }
     .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 14px 0 20px; }
     .stat-card {
@@ -613,13 +633,19 @@
       <div id="mission-list" class="mission-grid"></div>
 
       <div class="controls-footer">
-        <span><strong>Maus bewegen:</strong> Zielen (kein Laufen!)</span>
-        <span><strong>Linksklick:</strong> Schießen</span>
-        <span><strong>Rechtsklick / Space / Q:</strong> Zielfernrohr</span>
+        <span><strong>Maus:</strong> Fadenkreuz folgt dem Zeiger, Bildschirmrand schwenkt</span>
+        <span><strong>Linksklick:</strong> Schießen (genau aufs Fadenkreuz)</span>
+        <span><strong>Rechtsklick / Space / Q:</strong> Zielfernrohr (zoomt auf den Zeiger)</span>
         <span><strong>Mausrad / 1-3 / E:</strong> Zoom (4x / 8x / 12x)</span>
         <span><strong>Shift:</strong> Atem anhalten</span>
         <span><strong>R:</strong> Nachladen</span>
       </div>
+
+      <label class="aim-setting">
+        <span>Ziel-Empfindlichkeit</span>
+        <input class="sens-slider" type="range" min="0.4" max="2" step="0.05" value="1" aria-label="Ziel-Empfindlichkeit">
+        <output class="sens-value">1.00x</output>
+      </label>
     </div>
   </section>
 
@@ -628,6 +654,11 @@
     <div class="panel compact-panel">
       <h2>EINSATZ PAUSIERT</h2>
       <p class="subtitle">Sichere Stellung halten oder Einsatz neu starten.</p>
+      <label class="aim-setting">
+        <span>Ziel-Empfindlichkeit</span>
+        <input class="sens-slider" type="range" min="0.4" max="2" step="0.05" value="1" aria-label="Ziel-Empfindlichkeit">
+        <output class="sens-value">1.00x</output>
+      </label>
       <div class="btn-row">
         <button id="btn-resume" class="primary-btn" type="button">Fortsetzen</button>
         <button id="btn-restart" class="secondary-btn" type="button">Neu starten</button>
@@ -1570,13 +1601,16 @@
       boltAnim: 0,
       camShake: 0,
 
-      // Free-Aim State (ohne Pointer-Lock & ohne Laufen!)
-      freeTargetYaw: 0,
-      freeTargetPitch: -0.055,
-      scopeAnchorMouseX: 0,
-      scopeAnchorMouseY: 0,
-      scopeAnchorYaw: 0,
-      scopeAnchorPitch: -0.055,
+      // Zeiger-Zielen ohne Pointer-Lock: Zeiger = Fadenkreuz, Bildschirmrand schwenkt.
+      // glide* = abklingender Versatz, damit Rein-/Rauszoomen ohne Bildsprung gleitet.
+      glideYaw: 0,
+      glidePitch: 0,
+      swayAmp: 0.0009,
+      // edgeArm* = Randtiefe beim letzten Moduswechsel; erst tieferes Schieben schwenkt
+      edgeArmX: 0,
+      edgeArmY: 0,
+      edgePanX: 0,
+      edgePanY: 0,
 
       isScoped: false,
       scopeIdx: 0,
@@ -1634,7 +1668,20 @@
 
     let hitmarkerTimeout = null;
     const hitmarkerEl = document.getElementById('hitmarker');
-    function showHitmarker(critical) {
+    function showHitmarker(critical, worldPoint) {
+      // Marker dort zeigen, wo die Kugel wirklich eingeschlagen ist
+      let x = window.innerWidth / 2;
+      let y = window.innerHeight / 2;
+      if (worldPoint) {
+        camera.updateMatrixWorld();
+        const p = worldPoint.clone().project(camera);
+        if (p.z < 1 && Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1) {
+          x = ((p.x + 1) / 2) * window.innerWidth;
+          y = ((1 - p.y) / 2) * window.innerHeight;
+        }
+      }
+      hitmarkerEl.style.left = `${x}px`;
+      hitmarkerEl.style.top = `${y}px`;
       hitmarkerEl.classList.toggle('crit', !!critical);
       hitmarkerEl.classList.add('show');
       if (hitmarkerTimeout) clearTimeout(hitmarkerTimeout);
@@ -1683,8 +1730,13 @@
       state.rifleKickZ = 0;
       state.boltAnim = 0;
       state.camShake = 0;
-      state.freeTargetYaw = 0;
-      state.freeTargetPitch = -0.05;
+      state.glideYaw = 0;
+      state.glidePitch = 0;
+      state.swayAmp = 0.0009;
+      state.edgePanX = 0;
+      state.edgePanY = 0;
+      pointerDeltaValid = false;
+      armEdgePan();
 
       state.isScoped = false;
       state.scopeIdx = 0;
@@ -1722,38 +1774,50 @@
       syncOverlays();
     }
 
-    function resetScopeAnchor() {
-      state.scopeAnchorMouseX = lastClientX;
-      state.scopeAnchorMouseY = lastClientY;
-      state.scopeAnchorYaw = state.yaw;
-      state.scopeAnchorPitch = state.pitch;
+    // Kamera neu ausrichten, ohne dass das Bild springt: der Unterschied gleitet aus
+    function setAimWithGlide(yaw, pitch) {
+      const viewYaw = state.yaw + state.glideYaw;
+      const viewPitch = state.pitch + state.glidePitch;
+      state.yaw = yaw;
+      state.pitch = pitch;
+      clampAim();
+      state.glideYaw = viewYaw - state.yaw;
+      state.glidePitch = viewPitch - state.pitch;
     }
 
     function toggleScope(force) {
       if (state.phase !== 'PLAYING' || state.bulletCam) return;
       const next = typeof force === 'boolean' ? force : !state.isScoped;
       if (next === state.isScoped) return;
-      state.isScoped = next;
-      if (next) {
-        resetScopeAnchor();
-      } else {
-        state.freeTargetYaw = state.yaw;
-        state.freeTargetPitch = state.pitch;
+
+      if (pointerAimable()) {
+        const viewYaw = state.yaw + state.glideYaw;
+        const viewPitch = state.pitch + state.glidePitch;
+        if (next) {
+          // Reinzoomen: Zielfernrohr zentriert genau den Punkt unter dem Zeiger
+          const aim = yawPitchFromDir(screenRayDir(lastClientX, lastClientY, viewYaw, viewPitch, camera.fov));
+          setAimWithGlide(aim.yaw, aim.pitch);
+        } else {
+          // Rauszoomen: der anvisierte Punkt bleibt unter dem Zeiger liegen
+          const aim = solveAimForScreenPoint(lastClientX, lastClientY, viewYaw, viewPitch, UNSCOPED_FOV);
+          setAimWithGlide(aim.yaw, aim.pitch);
+        }
       }
+
+      state.isScoped = next;
+      armEdgePan();
     }
 
     function cycleZoom(delta) {
       if (state.phase !== 'PLAYING' || state.bulletCam) return;
       if (!state.isScoped) toggleScope(true);
       state.scopeIdx = Math.max(0, Math.min(SCOPE_LEVELS.length - 1, state.scopeIdx + delta));
-      resetScopeAnchor();
     }
 
     function setZoomIdx(idx) {
       if (state.phase !== 'PLAYING' || state.bulletCam) return;
       state.scopeIdx = Math.max(0, Math.min(SCOPE_LEVELS.length - 1, idx));
       if (!state.isScoped) toggleScope(true);
-      else resetScopeAnchor();
     }
 
     function startReload() {
@@ -1780,8 +1844,9 @@
       sound.shot();
       spawnShellCasing();
 
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-      const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+      // Schuss geht exakt durch das sichtbare Fadenkreuz (Zeiger oder Bildmitte)
+      const forward = getAimDirection();
+      const camRight = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
       const zeroQuat = new THREE.Quaternion().setFromAxisAngle(camRight, ZERO_PITCH_RAD);
       forward.applyQuaternion(zeroQuat).normalize();
 
@@ -1846,7 +1911,7 @@
         sendTargetKnockdown(target);
         sound.explosion();
         state.camShake = 0.35;
-        showHitmarker(true);
+        showHitmarker(true, hitPoint);
         const blastR = 14.5;
         let chainKills = 0;
         let chainCiv = 0;
@@ -1895,7 +1960,7 @@
           target.armorMesh = null;
         }
         state.score += 40;
-        showHitmarker(false);
+        showHitmarker(false, hitPoint);
         sound.armorClang();
         spawnParticles3D(hitPoint, 0x38bdf8, 16, 10, 0.42);
         addFloatMessage(hitPoint, 'PANZERUNG ZERSTÖRT!', '#38bdf8');
@@ -1916,7 +1981,7 @@
       state.combo = Math.min(8, state.combo + 1);
       if (state.mission.endless) state.timeLeftSec += critical ? 7 : 4;
 
-      showHitmarker(critical);
+      showHitmarker(critical, hitPoint);
       sound.hit(critical, state.combo);
       spawnParticles3D(hitPoint, critical ? 0xfacc15 : 0x4ade80, 16, 8.5, 0.5);
 
@@ -2015,11 +2080,38 @@
       }
       if (groundMesh) hitList.push(groundMesh);
 
-      const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-      raycaster.set(camera.position, dir);
+      // Entfernung dort messen, wohin auch geschossen wird
+      raycaster.set(camera.position, getAimDirection());
       raycaster.far = 360;
       const hits = raycaster.intersectObjects(hitList, false);
       state.measuredRangeM = hits.length > 0 ? Math.max(20, Math.round(hits[0].distance)) : 260;
+    }
+
+    // Pfeile am Bildschirmrand, solange der Rand-Schwenk aktiv ist
+    function drawEdgeHints(w, h) {
+      const hints = [];
+      if (state.edgePanX) hints.push({ x: state.edgePanX > 0 ? w - 22 : 22, y: h / 2, ang: state.edgePanX > 0 ? 0 : Math.PI, a: Math.abs(state.edgePanX) });
+      if (state.edgePanY) hints.push({ x: w / 2, y: state.edgePanY > 0 ? h - 22 : 22, ang: state.edgePanY > 0 ? Math.PI / 2 : -Math.PI / 2, a: Math.abs(state.edgePanY) });
+      hints.forEach((hint) => {
+        scopeCtx.save();
+        scopeCtx.translate(hint.x, hint.y);
+        scopeCtx.rotate(hint.ang);
+        scopeCtx.globalAlpha = 0.35 + 0.55 * hint.a;
+        scopeCtx.strokeStyle = '#38bdf8';
+        scopeCtx.lineWidth = 3;
+        scopeCtx.lineCap = 'round';
+        scopeCtx.lineJoin = 'round';
+        scopeCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        scopeCtx.shadowBlur = 4;
+        [-7, 3].forEach((off) => {
+          scopeCtx.beginPath();
+          scopeCtx.moveTo(off - 5, -9);
+          scopeCtx.lineTo(off + 4, 0);
+          scopeCtx.lineTo(off - 5, 9);
+          scopeCtx.stroke();
+        });
+        scopeCtx.restore();
+      });
     }
 
     // === HiDPI Scope 2D Overlay ===
@@ -2027,7 +2119,11 @@
       const w = window.innerWidth;
       const h = window.innerHeight;
       scopeCtx.clearRect(0, 0, w, h);
-      if (state.phase !== 'PLAYING' || !state.isScoped || state.bulletCam) return;
+      if (state.phase !== 'PLAYING' || state.bulletCam) return;
+      if (!state.isScoped) {
+        drawEdgeHints(w, h);
+        return;
+      }
 
       const cx = w / 2;
       const cy = h / 2;
@@ -2147,6 +2243,8 @@
       scopeCtx.arc(cx, cy, radius + 5, 0, Math.PI * 2);
       scopeCtx.stroke();
       scopeCtx.restore();
+
+      drawEdgeHints(w, h);
     }
 
     // === UI & DOM Bindings ===
@@ -2269,8 +2367,8 @@
       els.overlayPause.classList.toggle('hidden', state.phase !== 'PAUSED');
       const ended = state.phase === 'VICTORY' || state.phase === 'DEFEAT';
       els.overlayResult.classList.toggle('hidden', !ended);
-      els.xh.classList.toggle('hidden', state.phase !== 'PLAYING' || state.isScoped || !!state.bulletCam);
-      glCanvas.classList.toggle('scoped', state.phase === 'PLAYING' && state.isScoped);
+      updateCrosshair();
+      glCanvas.classList.toggle('aiming', state.phase === 'PLAYING');
       els.btnScope.classList.toggle('active', state.phase === 'PLAYING' && state.isScoped);
       rifleGroup.visible = state.phase !== 'PLAYING' || (!state.isScoped && !state.bulletCam);
 
@@ -2301,6 +2399,8 @@
         state.wantBreathHold = false;
       } else if (state.phase === 'PAUSED') {
         state.phase = 'PLAYING';
+        pointerDeltaValid = false;
+        armEdgePan();
       }
       syncOverlays();
     }
@@ -2353,18 +2453,182 @@
       }
     }
 
-    // === Eingabe (Reibungsloses Maus-Zielen ohne Laufen & ohne Ziehen) ===
+    // === Eingabe: Zeiger-Zielen ohne Pointer-Lock ===
+    // Ohne Scope ist der Mauszeiger das Fadenkreuz (Schuss geht genau dorthin), die Kamera
+    // schwenkt nur am Bildschirmrand. Im Scope wird relativ zur Mausbewegung fein gezielt,
+    // und der Rand-Schwenk verhindert, dass der Zeiger am Bildschirmrand "festhängt".
     let lastClientX = window.innerWidth / 2;
     let lastClientY = window.innerHeight / 2;
+    let pointerInside = false;
+    let pointerOverCanvas = false;
+    let pointerDeltaValid = false;
+
+    const AIM_SENS_KEY = 'scharfschuetze_aim_sens_v1';
+    const SCOPED_SCREEN_GAIN = 1.6; // Bildschirm-Pixel Schwenk pro Maus-Pixel im Scope
+    let aimSens = 1;
+    try {
+      const saved = parseFloat(localStorage.getItem(AIM_SENS_KEY));
+      if (saved >= 0.4 && saved <= 2) aimSens = saved;
+    } catch (_) {}
+
+    const sensSliders = document.querySelectorAll('.sens-slider');
+    const sensOutputs = document.querySelectorAll('.sens-value');
+    function syncSensUi() {
+      sensSliders.forEach((s) => { s.value = String(aimSens); });
+      sensOutputs.forEach((o) => { o.textContent = `${aimSens.toFixed(2)}x`; });
+    }
+    sensSliders.forEach((s) => s.addEventListener('input', () => {
+      aimSens = Math.max(0.4, Math.min(2, parseFloat(s.value) || 1));
+      syncSensUi();
+      try { localStorage.setItem(AIM_SENS_KEY, String(aimSens)); } catch (_) {}
+    }));
+    syncSensUi();
+
+    const isLocked = () => document.pointerLockElement === glCanvas;
+    // Zeiger liegt über der 3D-Ansicht (nicht über HUD-Knöpfen) und ist nicht gesperrt
+    const pointerAimable = () => !isLocked() && pointerInside && pointerOverCanvas;
+    // Unscoped & ohne Pointer-Lock zielt der Zeiger, sonst die Bildmitte
+    const cursorAimActive = () => state.phase === 'PLAYING' && !state.isScoped && !state.bulletCam && pointerAimable();
 
     function clampAim() {
       state.yaw = Math.max(-0.55, Math.min(0.55, state.yaw));
       state.pitch = Math.max(-0.32, Math.min(0.24, state.pitch));
     }
 
+    function yawPitchFromDir(dir) {
+      return { yaw: Math.atan2(-dir.x, -dir.z), pitch: Math.asin(Math.max(-1, Math.min(1, dir.y))) };
+    }
+
+    // Weltrichtung des Strahls durch Bildschirmpunkt (sx, sy) bei gegebener Ausrichtung & FOV
+    function screenRayDir(sx, sy, yaw, pitch, fovDeg) {
+      const w = Math.max(1, window.innerWidth);
+      const h = Math.max(1, window.innerHeight);
+      const tanV = Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2);
+      const nx = (sx / w) * 2 - 1;
+      const ny = 1 - (sy / h) * 2;
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+      return new THREE.Vector3(nx * tanV * (w / h), ny * tanV, -1).normalize().applyQuaternion(q);
+    }
+
+    // Ausrichtung finden, bei der Bildschirmpunkt (sx, sy) genau auf (targetYaw, targetPitch) zeigt
+    function solveAimForScreenPoint(sx, sy, targetYaw, targetPitch, fovDeg) {
+      let yaw = targetYaw;
+      let pitch = targetPitch;
+      for (let i = 0; i < 5; i++) {
+        const got = yawPitchFromDir(screenRayDir(sx, sy, yaw, pitch, fovDeg));
+        yaw += targetYaw - got.yaw;
+        pitch += targetPitch - got.pitch;
+      }
+      return { yaw, pitch };
+    }
+
+    // Schuss- und Messrichtung: exakt das, was das sichtbare Fadenkreuz abdeckt
+    function getAimDirection() {
+      camera.updateMatrixWorld();
+      if (cursorAimActive()) {
+        const w = Math.max(1, window.innerWidth);
+        const h = Math.max(1, window.innerHeight);
+        return new THREE.Vector3((lastClientX / w) * 2 - 1, 1 - (lastClientY / h) * 2, 0.5)
+          .unproject(camera)
+          .sub(camera.position)
+          .normalize();
+      }
+      return new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    }
+
+    function updateCrosshair() {
+      const show = state.phase === 'PLAYING' && !state.isScoped && !state.bulletCam
+        && (isLocked() || !pointerInside || pointerOverCanvas);
+      els.xh.classList.toggle('hidden', !show);
+      if (!show) return;
+      if (cursorAimActive()) {
+        els.xh.style.left = `${lastClientX}px`;
+        els.xh.style.top = `${lastClientY}px`;
+      } else {
+        els.xh.style.left = '50%';
+        els.xh.style.top = '50%';
+      }
+    }
+
+    // --- Rand-Schwenk ---
+    const edgeMarginX = () => Math.max(18, Math.min(70, window.innerWidth * 0.045));
+    const edgeMarginY = () => Math.max(14, Math.min(48, window.innerHeight * 0.035));
+
+    // -1..0..1: wie tief der Zeiger in der linken/rechten (bzw. oberen/unteren) Randzone steckt
+    function edgeDepth(pos, size, margin) {
+      if (pos < margin) return -Math.min(1, (margin - pos) / margin);
+      if (pos > size - margin) return Math.min(1, (pos - (size - margin)) / margin);
+      return 0;
+    }
+
+    function currentEdgeDepth() {
+      if (!pointerInside) return { x: 0, y: 0 };
+      return {
+        x: edgeDepth(lastClientX, window.innerWidth, edgeMarginX()),
+        y: edgeDepth(lastClientY, window.innerHeight, edgeMarginY()),
+      };
+    }
+
+    // Steht der Zeiger beim Zoomen schon am Rand, soll das Bild nicht sofort wegdriften
+    function armEdgePan() {
+      const d = currentEdgeDepth();
+      state.edgeArmX = d.x;
+      state.edgeArmY = d.y;
+    }
+
+    function relaxArm(d, arm) {
+      if (d === 0 || Math.sign(d) !== Math.sign(arm)) return 0;
+      return Math.abs(d) < Math.abs(arm) ? d : arm;
+    }
+
+    function armedDepth(d, arm) {
+      if (d === 0 || Math.sign(d) !== Math.sign(arm)) return d;
+      const a = Math.abs(arm);
+      if (a >= 0.999) return 0;
+      return Math.sign(d) * Math.max(0, (Math.abs(d) - a) / (1 - a));
+    }
+
+    function updateEdgePan(dt) {
+      state.edgePanX = 0;
+      state.edgePanY = 0;
+      if (!pointerAimable()) return;
+
+      const raw = currentEdgeDepth();
+      state.edgeArmX = relaxArm(raw.x, state.edgeArmX);
+      state.edgeArmY = relaxArm(raw.y, state.edgeArmY);
+      const px = armedDepth(raw.x, state.edgeArmX);
+      const py = armedDepth(raw.y, state.edgeArmY);
+      if (!px && !py) return;
+
+      // Tempo relativ zum Sichtfeld: im 12x-Scope genauso kontrollierbar wie ohne Scope
+      const fovRad = THREE.MathUtils.degToRad(state.isScoped ? SCOPE_LEVELS[state.scopeIdx].fov : UNSCOPED_FOV);
+      const rate = fovRad * (state.isScoped ? 1.0 : 0.75) * aimSens;
+      const yaw0 = state.yaw;
+      const pitch0 = state.pitch;
+      state.yaw -= px * Math.abs(px) * rate * dt;
+      state.pitch -= py * Math.abs(py) * rate * dt;
+      clampAim();
+      if (state.yaw !== yaw0) state.edgePanX = px;
+      if (state.pitch !== pitch0) state.edgePanY = py;
+    }
+
+    function scopedRadPerPx() {
+      const fovRad = THREE.MathUtils.degToRad(SCOPE_LEVELS[state.scopeIdx].fov);
+      return (fovRad / Math.max(1, window.innerHeight)) * SCOPED_SCREEN_GAIN * aimSens;
+    }
+
+    function notePointer(e) {
+      lastClientX = e.clientX;
+      lastClientY = e.clientY;
+      pointerInside = true;
+      pointerDeltaValid = true;
+      pointerOverCanvas = e.target === glCanvas;
+    }
+
     glCanvas.addEventListener('pointerdown', (e) => {
       if (state.phase !== 'PLAYING') return;
       sound.getCtx();
+      if (!isLocked()) notePointer(e);
       if (state.bulletCam) {
         state.bulletCam.timer = 0;
         return;
@@ -2379,33 +2643,47 @@
     });
 
     window.addEventListener('pointermove', (e) => {
-      lastClientX = e.clientX;
-      lastClientY = e.clientY;
-      if (state.phase !== 'PLAYING' || state.bulletCam) return;
-
-      if (document.pointerLockElement === glCanvas) {
+      if (isLocked()) {
+        if (state.phase !== 'PLAYING' || state.bulletCam) return;
         const zoomDiv = state.isScoped ? SCOPE_LEVELS[state.scopeIdx].zoom : 1;
-        const sens = 0.002 / zoomDiv;
+        const sens = (0.002 / zoomDiv) * aimSens;
         state.yaw -= (e.movementX || 0) * sens;
         state.pitch -= (e.movementY || 0) * sens;
         clampAim();
         return;
       }
 
+      const dx = pointerDeltaValid ? e.clientX - lastClientX : 0;
+      const dy = pointerDeltaValid ? e.clientY - lastClientY : 0;
+      notePointer(e);
+      if (state.phase !== 'PLAYING' || state.bulletCam) return;
+
       if (state.isScoped) {
-        // Im Scope feines Mikro-Zielen proportional zu 1 / zoom um den Einstiegspunkt
-        const zoomDiv = SCOPE_LEVELS[state.scopeIdx].zoom;
-        const sens = 0.0012 / (zoomDiv * 0.55);
-        state.yaw = state.scopeAnchorYaw - (e.clientX - state.scopeAnchorMouseX) * sens;
-        state.pitch = state.scopeAnchorPitch - (e.clientY - state.scopeAnchorMouseY) * sens;
+        // Im Scope: relatives Fein-Zielen, Tempo passend zur Vergrößerung
+        const sens = scopedRadPerPx();
+        state.yaw -= dx * sens;
+        state.pitch -= dy * sens;
         clampAim();
-      } else {
-        // Unscoped: Mauszeiger schwenkt direkt & flüssig über das Tal (kein Klicken/Ziehen nötig)
-        const nx = (e.clientX / Math.max(1, window.innerWidth)) * 2 - 1;
-        const ny = (e.clientY / Math.max(1, window.innerHeight)) * 2 - 1;
-        state.freeTargetYaw = -nx * 0.48;
-        state.freeTargetPitch = -0.055 - ny * 0.21;
       }
+      // Ohne Scope bleibt die Kamera ruhig — der Zeiger selbst ist das Fadenkreuz
+      updateCrosshair();
+    });
+
+    // Zeiger verlässt das Fenster: kein Rand-Schwenk, kein Sprung beim Wiedereintritt
+    window.addEventListener('pointerout', (e) => {
+      if (e.relatedTarget) return;
+      pointerInside = false;
+      pointerOverCanvas = false;
+      pointerDeltaValid = false;
+    });
+    window.addEventListener('blur', () => {
+      pointerInside = false;
+      pointerDeltaValid = false;
+    });
+    document.addEventListener('pointerlockchange', () => {
+      pointerDeltaValid = false;
+      armEdgePan();
+      updateCrosshair();
     });
 
     glCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -2580,12 +2858,11 @@
           if (state.bannerTimer === 0) state.bannerText = '';
         }
 
-        // Sanftes Free-Aim Tracking wenn unscoped & nicht pointer-locked
-        if (document.pointerLockElement !== glCanvas && !state.isScoped) {
-          state.yaw += (state.freeTargetYaw - state.yaw) * Math.min(1, dt * 14);
-          state.pitch += (state.freeTargetPitch - state.pitch) * Math.min(1, dt * 14);
-          clampAim();
-        }
+        // Rand-Schwenk & sanftes Ausgleiten nach Zoom-Wechseln
+        updateEdgePan(dt);
+        const glideDecay = Math.exp(-dt * 14);
+        state.glideYaw *= glideDecay;
+        state.glidePitch *= glideDecay;
 
         // Windwechsel & 3D-Wind-Partikel
         state.windTimerSec -= dt;
@@ -2632,7 +2909,10 @@
           if (state.breathExhausted && state.breath >= 0.4) state.breathExhausted = false;
         }
 
-        const swayScale = state.breathExhausted ? 0.005 : state.isHoldingBreath ? 0.00025 : state.isScoped ? 0.0021 : 0.0009;
+        // Schwanken weich überblenden: Atem anhalten / Scope ruckt das Bild nicht mehr
+        const swayTarget = state.breathExhausted ? 0.005 : state.isHoldingBreath ? 0.00025 : state.isScoped ? 0.0021 : 0.0009;
+        state.swayAmp += (swayTarget - state.swayAmp) * Math.min(1, dt * 5);
+        const swayScale = state.swayAmp;
         const swayYaw = Math.sin(state.elapsedSec * 1.55) * swayScale + Math.sin(state.elapsedSec * 2.9) * swayScale * 0.3;
         const swayPitch = Math.cos(state.elapsedSec * 1.15) * swayScale * 0.9;
 
@@ -2642,7 +2922,12 @@
         const shakeX = (Math.random() - 0.5) * state.camShake * 0.5;
         const shakeY = (Math.random() - 0.5) * state.camShake * 0.5;
         camera.position.set(PERCH_POS.x + shakeX, PERCH_POS.y + shakeY, PERCH_POS.z);
-        camera.rotation.set(state.pitch + swayPitch + state.recoilPitch, state.yaw + swayYaw + state.recoilYaw, 0, 'YXZ');
+        camera.rotation.set(
+          state.pitch + state.glidePitch + swayPitch + state.recoilPitch,
+          state.yaw + state.glideYaw + swayYaw + state.recoilYaw,
+          0,
+          'YXZ'
+        );
 
         const targetFov = state.isScoped ? SCOPE_LEVELS[state.scopeIdx].fov : UNSCOPED_FOV;
         if (Math.abs(camera.fov - targetFov) > 0.05) {
@@ -2802,6 +3087,7 @@
 
       renderer.render(scene, camera);
       drawScopeOverlay();
+      updateCrosshair();
       updateHud();
     }
 
