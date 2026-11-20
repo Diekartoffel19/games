@@ -4,7 +4,7 @@ Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
 ## 🧊 Bestehende 3D-Spiele (40 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (5 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
-4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 54 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
+4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 55 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
 ---
 
@@ -210,9 +210,9 @@ Diese 5 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von eine
 
 ---
 
-## 🚫 Warum 54 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
+## 🚫 Warum 55 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
 
-Die restlichen 54 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
+Die restlichen 55 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
 
 1. **Reine Gitter- & Zahlenspiele (Grid Classics & Terminal Roguelikes):**
    - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`), Bubble Fusion (`games/bubblefusion.html`)*  
@@ -238,3 +238,6 @@ Die restlichen 54 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 8. **Top-Down-Schleichspiele mit Licht & Schatten:**
    - *Omas WLAN (`games/omaswlan.html`)*  
    *Begründung:* Das Spiel lebt von der Draufsicht: Handy-Licht und Taschenlampen-Kegel werden per 2D-Raycasting als Sichtlinien-Polygone in eine Dunkelheitsebene geschnitten, Lärmringe breiten sich sichtbar durch Wände aus. In 3D würden Decken und Wände genau diese Übersicht über Geräusche, Licht und Sichtlinien verdecken.
+9. **2.5D-Pixel-Horden-Survival:**
+   - *Wellenbrecher (`games/wellenbrecher.html`)*  
+   *Begründung:* Das Spiel ist bewusst 2.5D statt echtem 3D: Pixel-Sprites werden nach Fußpunkt (Y) sortiert, Felsen und Ruinenmauern bestehen aus Deck- und Frontfläche, Gegner, Münzen und Projektile haben eine Höhe (z) mit Bodenschatten. So bleibt der knackige Pixel-Look erhalten, während Hunderte Gegner auf einer riesigen Insel flüssig laufen – eine echte 3D-Kamera würde die Übersicht über die Horden um den zentrierten Spieler zerstören.
