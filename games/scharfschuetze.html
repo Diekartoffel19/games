@@ -583,7 +583,6 @@
       <button id="btn-scope" class="icon-btn" type="button" title="Zielfernrohr (Rechtsklick / Space)">SCOPE</button>
       <button id="btn-zoom" class="icon-btn" type="button" title="Zoom wechseln (E / Mausrad)">ZOOM</button>
       <button id="btn-reload" class="icon-btn" type="button" title="Nachladen (R)">LADEN</button>
-      <button id="btn-lock" class="icon-btn" type="button" title="FPS-Maus-Sperre umschalten (L)">FPS-MAUS</button>
     </div>
 
     <div class="ammo-box">
@@ -638,6 +637,7 @@
         <span><strong>Rechtsklick / Space / Q:</strong> Zielfernrohr (zoomt auf den Zeiger)</span>
         <span><strong>Mausrad / 1-3 / E:</strong> Zoom (4x / 8x / 12x)</span>
         <span><strong>Shift:</strong> Atem anhalten</span>
+        <span><strong>Esc:</strong> Pause &amp; Maus freigeben (im Einsatz bleibt sie im Bild)</span>
         <span><strong>R:</strong> Nachladen</span>
       </div>
 
@@ -2274,7 +2274,6 @@
       btnScope: document.getElementById('btn-scope'),
       btnZoom: document.getElementById('btn-zoom'),
       btnReload: document.getElementById('btn-reload'),
-      btnLock: document.getElementById('btn-lock'),
       btnResume: document.getElementById('btn-resume'),
       btnRestart: document.getElementById('btn-restart'),
       btnToMenu: document.getElementById('btn-to-menu'),
@@ -2374,6 +2373,8 @@
 
       if (ended || state.phase === 'PAUSED' || state.phase === 'MENU') {
         if (document.pointerLockElement === glCanvas) document.exitPointerLock?.();
+      } else if (state.phase === 'PLAYING') {
+        lockPointer();
       }
 
       if (ended) {
@@ -2431,7 +2432,6 @@
       els.strikes.classList.toggle('danger', state.strikes >= 2);
       els.breathBar.style.width = `${Math.round(state.breath * 100)}%`;
       els.breathBar.classList.toggle('exhausted', state.breathExhausted);
-      els.btnLock.classList.toggle('active', document.pointerLockElement === glCanvas);
 
       if (els.ammoPips.children.length !== MAG_SIZE) {
         els.ammoPips.innerHTML = '';
@@ -2453,15 +2453,19 @@
       }
     }
 
-    // === Eingabe: Zeiger-Zielen ohne Pointer-Lock ===
+    // === Eingabe: Zeiger-Zielen ===
     // Ohne Scope ist der Mauszeiger das Fadenkreuz (Schuss geht genau dorthin), die Kamera
     // schwenkt nur am Bildschirmrand. Im Scope wird relativ zur Mausbewegung fein gezielt,
     // und der Rand-Schwenk verhindert, dass der Zeiger am Bildschirmrand "festhängt".
+    // Im Einsatz wird die Maus per Pointer-Lock gefangen: lastClientX/Y ist dann ein
+    // virtueller Zeiger, der am Fensterrand stehen bleibt, statt das Bild zu verlassen.
     let lastClientX = window.innerWidth / 2;
     let lastClientY = window.innerHeight / 2;
     let pointerInside = false;
     let pointerOverCanvas = false;
     let pointerDeltaValid = false;
+    let lastPointerType = 'mouse';
+    let lockPausedAt = -1e9;
 
     const AIM_SENS_KEY = 'scharfschuetze_aim_sens_v1';
     const SCOPED_SCREEN_GAIN = 1.6; // Bildschirm-Pixel Schwenk pro Maus-Pixel im Scope
@@ -2485,9 +2489,9 @@
     syncSensUi();
 
     const isLocked = () => document.pointerLockElement === glCanvas;
-    // Zeiger liegt über der 3D-Ansicht (nicht über HUD-Knöpfen) und ist nicht gesperrt
-    const pointerAimable = () => !isLocked() && pointerInside && pointerOverCanvas;
-    // Unscoped & ohne Pointer-Lock zielt der Zeiger, sonst die Bildmitte
+    // Zeiger (echt oder – bei Pointer-Lock – virtuell) liegt über der 3D-Ansicht
+    const pointerAimable = () => isLocked() || (pointerInside && pointerOverCanvas);
+    // Unscoped zielt der Zeiger, sonst die Bildmitte
     const cursorAimActive = () => state.phase === 'PLAYING' && !state.isScoped && !state.bulletCam && pointerAimable();
 
     function clampAim() {
@@ -2617,6 +2621,15 @@
       return (fovRad / Math.max(1, window.innerHeight)) * SCOPED_SCREEN_GAIN * aimSens;
     }
 
+    // Maus im Einsatz fangen, damit sie nie aus dem Bild rutscht (nicht bei Touch)
+    function lockPointer() {
+      if (isLocked() || lastPointerType === 'touch' || state.phase !== 'PLAYING' || !glCanvas.requestPointerLock) return;
+      try {
+        const p = glCanvas.requestPointerLock();
+        if (p && p.catch) p.catch(() => {});
+      } catch (_) {}
+    }
+
     function notePointer(e) {
       lastClientX = e.clientX;
       lastClientY = e.clientY;
@@ -2626,9 +2639,13 @@
     }
 
     glCanvas.addEventListener('pointerdown', (e) => {
+      lastPointerType = e.pointerType || 'mouse';
       if (state.phase !== 'PLAYING') return;
       sound.getCtx();
-      if (!isLocked()) notePointer(e);
+      if (!isLocked()) {
+        notePointer(e);
+        lockPointer();
+      }
       if (state.bulletCam) {
         state.bulletCam.timer = 0;
         return;
@@ -2644,14 +2661,24 @@
 
     window.addEventListener('pointermove', (e) => {
       if (isLocked()) {
+        // Virtueller Zeiger: bewegt sich mit der Maus, bleibt aber am Fensterrand stehen
+        const mdx = e.movementX || 0;
+        const mdy = e.movementY || 0;
+        lastClientX = Math.max(0, Math.min(window.innerWidth - 1, lastClientX + mdx));
+        lastClientY = Math.max(0, Math.min(window.innerHeight - 1, lastClientY + mdy));
+        pointerInside = true;
+        pointerOverCanvas = true;
         if (state.phase !== 'PLAYING' || state.bulletCam) return;
-        const zoomDiv = state.isScoped ? SCOPE_LEVELS[state.scopeIdx].zoom : 1;
-        const sens = (0.002 / zoomDiv) * aimSens;
-        state.yaw -= (e.movementX || 0) * sens;
-        state.pitch -= (e.movementY || 0) * sens;
-        clampAim();
+        if (state.isScoped) {
+          const sens = scopedRadPerPx();
+          state.yaw -= mdx * sens;
+          state.pitch -= mdy * sens;
+          clampAim();
+        }
+        updateCrosshair();
         return;
       }
+      lastPointerType = e.pointerType || 'mouse';
 
       const dx = pointerDeltaValid ? e.clientX - lastClientX : 0;
       const dy = pointerDeltaValid ? e.clientY - lastClientY : 0;
@@ -2682,6 +2709,15 @@
     });
     document.addEventListener('pointerlockchange', () => {
       pointerDeltaValid = false;
+      if (isLocked()) {
+        pointerInside = true;
+        pointerOverCanvas = true;
+      } else if (state.phase === 'PLAYING') {
+        // Maus freigegeben (Esc / Fensterwechsel): Einsatz pausieren
+        lockPausedAt = performance.now();
+        togglePause();
+        return;
+      }
       armEdgePan();
       updateCrosshair();
     });
@@ -2701,6 +2737,8 @@
         return;
       }
       if (e.code === 'Escape' || e.code === 'KeyP') {
+        // Esc, das gerade den Pointer-Lock beendet (und damit pausiert) hat, nicht gleich wieder fortsetzen lassen
+        if (e.code === 'Escape' && performance.now() - lockPausedAt < 500) return;
         if (state.phase === 'PLAYING' || state.phase === 'PAUSED') togglePause();
         return;
       }
@@ -2720,9 +2758,6 @@
         state.wantBreathHold = true;
       } else if (e.code === 'KeyR') {
         startReload();
-      } else if (e.code === 'KeyL') {
-        if (document.pointerLockElement === glCanvas) document.exitPointerLock?.();
-        else glCanvas.requestPointerLock?.();
       } else if (e.code === 'Digit1') {
         setZoomIdx(0);
         syncOverlays();
@@ -2746,11 +2781,6 @@
     els.btnScope.addEventListener('click', () => { toggleScope(); syncOverlays(); });
     els.btnZoom.addEventListener('click', () => { cycleZoom(state.scopeIdx === SCOPE_LEVELS.length - 1 ? -2 : 1); syncOverlays(); });
     els.btnReload.addEventListener('click', () => startReload());
-    els.btnLock.addEventListener('click', () => {
-      if (state.phase !== 'PLAYING') return;
-      if (document.pointerLockElement === glCanvas) document.exitPointerLock?.();
-      else glCanvas.requestPointerLock?.();
-    });
     els.btnPause.addEventListener('click', togglePause);
     els.btnResume.addEventListener('click', togglePause);
     els.btnRestart.addEventListener('click', () => startMission(state.missionIndex));
