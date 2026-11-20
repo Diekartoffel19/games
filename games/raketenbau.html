@@ -83,6 +83,11 @@
   .mis.locked { opacity:.5; border:1px dashed rgba(255,255,255,.12); }
   .mis .rw { margin-left:auto; color:#ffd36a; white-space:nowrap; text-align:right; font-size:11px; }
   .mis .rw i { display:block; font-style:normal; color:#7fe0ff; }
+  .mis.ctr { background:rgba(120,200,255,.07); border-left:3px solid #4fb3ff; }
+  .mis .who { display:block; font-size:10px; color:#8b97ad; }
+  .mis .x { margin-left:4px; align-self:flex-start; background:none; border:none; color:#8b97ad; font-size:13px; padding:0 2px; cursor:pointer; }
+  .mis .x:hover { color:#ff9a9a; }
+  .ctr-note { font-size:11px; color:#8b97ad; margin:4px 0; }
   .mis-cap { font-size:11px; font-weight:700; color:#8fb0ff; margin:8px 0 3px; display:flex; justify-content:space-between; }
   .tgtRow button.locked { opacity:.42; cursor:not-allowed; }
   #buildHint { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); font-size:12px; color:#a9b6cc; background:rgba(8,12,22,.7); padding:6px 12px; border-radius:20px; z-index:9; text-align:center; max-width:46vw; }
@@ -298,7 +303,9 @@
     <div id="warnBox"></div>
     <button id="btnLaunch" class="big">🚀 Starten</button>
     <div id="hint2">Neue Teile landen am <b>blauen Ring</b>. Teile an der Rakete einfach <b>hoch/runter ziehen</b>. Ein <b>Stufentrenner</b> teilt die Rakete in Stufen – die unterste brennt zuerst und wird mit der Leertaste abgeworfen.</div>
-    <h3 style="margin-top:14px">Missionen</h3>
+    <h3 style="margin-top:14px">📋 Auftragsbörse <span id="ctrCount" class="prog-pill"></span></h3>
+    <div id="contractList"></div>
+    <h3 style="margin-top:14px">Missionen <span id="misCount" class="prog-pill"></span></h3>
     <div id="missionList"></div>
   </aside>
   <div id="buildHint">Bauteil anklicken = einbauen · Teil an der Rakete ziehen = umsortieren · Hintergrund ziehen = Kamera · Mausrad = Zoom · Entf = löschen</div>
@@ -579,6 +586,7 @@ const MISSION_CHAPTERS = [
   { id: 2, title: 'Kapitel 2 · Erdorbit & Flucht',      reqM: 'space',  reqLabel: 'Ab Kapitel 1 („Ab ins All“)' },
   { id: 3, title: 'Kapitel 3 · Mond & Phobos',          reqM: 'orbit',  reqLabel: 'Ab „Umlaufbahn“' },
   { id: 4, title: 'Kapitel 4 · Planeten & Äußere Monde',reqM: 'escape', reqLabel: 'Ab „Fluchtgeschwindigkeit“' },
+  { id: 5, title: 'Kapitel 5 · Meisterprüfungen',       reqM: ['moon_land', 'mars_fly'], reqLabel: 'Ab Mondlandung oder Mars-Anflug' },
 ];
 
 const MISSIONS = [
@@ -599,7 +607,162 @@ const MISSIONS = [
   { id: 'venus_land', title: 'Durch die Säurewolken', ch: 4, desc: 'Lande sicher in der dichten Venus-Atmosphäre.',     reward: 65000, fp: 480, check: s => s.body === 'venus' && s.landedSafe },
   { id: 'jup_fly',    title: 'König der Riesen', ch: 4,      desc: 'Erreiche das System des Gasriesen Jupiter.',        reward: 60000, fp: 460, check: s => s.body === 'jupiter' || s.body === 'europa' || s.body === 'titan' },
   { id: 'outer_land', title: 'Eismond & Methansee', ch: 4,   desc: 'Lande sicher auf Europa oder Titan.',               reward: 100000,fp: 650, check: s => (s.body === 'europa' || s.body === 'titan') && s.landedSafe },
+  // --- Zusatzmissionen ---
+  { id: 'stratos',    title: 'Stratosphäre',    ch: 1,       desc: 'Erreiche 25 km Höhe.',                              reward: 4000,  fp: 55,  check: s => s.body === 'earth' && s.alt > 25000 },
+  { id: 'mach3',      title: 'Überschall-Pfeil', ch: 1,      desc: 'Schneller als 1.000 m/s unter 30 km Höhe.',         reward: 5000,  fp: 60,  check: s => s.body === 'earth' && s.speed > 1000 && s.alt < 30000 },
+  { id: 'first_ctr',  title: 'Erster Kunde',    ch: 1,       desc: 'Erfülle deinen ersten Auftrag aus der Auftragsbörse.', reward: 2000, fp: 30, check: s => s.contractsDone >= 1 },
+  { id: 'circ',       title: 'Kreisrund',       ch: 2,       desc: 'Erd-Orbit mit Exzentrizität unter 0,03.',           reward: 14000, fp: 150, check: s => s.body === 'earth' && s.ecc < 0.03 && s.pe > ATM },
+  { id: 'cheap_orbit',title: 'Sparfuchs-Orbit', ch: 2,       desc: 'Erd-Orbit mit einer Rakete für höchstens 7.500 💰.', reward: 16000, fp: 170, check: s => s.body === 'earth' && s.ecc < 1 && s.pe > ATM && s.cost <= 7500 },
+  { id: 'high_ap',    title: 'Hoher Bogen',     ch: 2,       desc: 'Erd-Orbit mit Apoapsis über 2.000 km.',             reward: 17000, fp: 180, check: s => s.body === 'earth' && s.ecc < 1 && s.pe > ATM && s.ap > 2000000 },
+  { id: 'ctr5',       title: 'Stammkunde',      ch: 2,       desc: 'Erfülle insgesamt 5 Aufträge.',                     reward: 10000, fp: 120, check: s => s.contractsDone >= 5 },
+  { id: 'moon_orbit', title: 'Mond-Umlaufbahn', ch: 3,       desc: 'Stabiler Orbit um den Mond (Periapsis > 5 km).',    reward: 32000, fp: 290, check: s => s.body === 'moon' && s.ecc < 1 && s.pe > 5000 },
+  { id: 'no_chute',   title: 'Ohne Schirm',     ch: 3,       desc: 'Nach über 5 km Höhe sicher auf der Erde landen – ohne Fallschirm (Bremsschub!).', reward: 30000, fp: 300, check: s => s.body === 'earth' && s.landedSafe && s.maxAlt > 5000 && !s.chuteUsed },
+  { id: 'moon_return',title: 'Heimkehr vom Mond', ch: 3,     desc: 'Fliege zum Mond und lande im selben Flug sicher auf der Erde.', reward: 60000, fp: 450, check: s => s.body === 'earth' && s.landedSafe && s.visited.has('moon') },
+  { id: 'venus_fly',  title: 'Morgenstern',     ch: 4,       desc: 'Erreiche das Schwerefeld der Venus.',               reward: 40000, fp: 320, check: s => s.body === 'venus' },
+  { id: 'mars_orbit', title: 'Mars-Satellit',   ch: 4,       desc: 'Stabiler Orbit um den Mars oberhalb der Atmosphäre.', reward: 55000, fp: 420, check: s => s.body === 'mars' && s.ecc < 1 && s.pe > BODIES.mars.atm },
+  { id: 'mars_return',title: 'Rückflugticket',  ch: 4,       desc: 'Fliege zum Mars und lande im selben Flug sicher auf der Erde.', reward: 120000, fp: 800, check: s => s.body === 'earth' && s.landedSafe && s.visited.has('mars') },
+  { id: 'grand_tour', title: 'Grand Tour',      ch: 5,       desc: 'Besuche in einem Flug 3 Himmelskörper außer der Erde.', reward: 90000, fp: 650, check: s => s.visited.size >= 4 },
+  { id: 'jup_orbit',  title: 'Im Bann des Riesen', ch: 5,    desc: 'Stabiler Orbit um Jupiter oberhalb der Atmosphäre.', reward: 85000, fp: 620, check: s => s.body === 'jupiter' && s.ecc < 1 && s.pe > BODIES.jupiter.atm },
+  { id: 'cheap_moon', title: 'Low-Budget-Mondlandung', ch: 5, desc: 'Lande auf dem Mond mit einer Rakete für höchstens 12.000 💰.', reward: 70000, fp: 520, check: s => s.body === 'moon' && s.landedSafe && s.cost <= 12000 },
+  { id: 'dive',       title: 'Sturzflug',       ch: 5,       desc: 'Erreiche relativ zu einem Himmelskörper über 6.500 m/s (Tipp: Jupiter).', reward: 60000, fp: 450, check: s => s.speed > 6500 },
+  { id: 'ctr15',      title: 'Raumfahrt-Konzern', ch: 5,     desc: 'Erfülle insgesamt 15 Aufträge.',                    reward: 80000, fp: 600, check: s => s.contractsDone >= 15 },
 ];
+
+// ======================= Auftragsbörse (wiederholbare Aufträge) =======================
+const CONTRACT_SLOTS = 3;
+const CONTRACT_BODIES = {
+  moon:    { fly: 16000, orbit: 24000, land: 34000 },
+  phobos:  { fly: 18000, orbit: 22000, land: 30000 },
+  venus:   { fly: 30000, orbit: 38000, land: 55000 },
+  mars:    { fly: 34000, orbit: 44000, land: 60000 },
+  jupiter: { fly: 45000, orbit: 60000 },
+  europa:  { fly: 55000, orbit: 62000, land: 80000 },
+  titan:   { fly: 55000, orbit: 62000, land: 80000 },
+};
+const CREW_PARTS = ['pod', 'pod2', 'lander'];
+const CLIENTS = ['Wetterdienst Nord', 'Uni Sternwarte', 'TeleSat AG', 'Kosmo-Reisen', 'Deutsches Raumlabor', 'Orbital Logistics', 'Planetar-Institut', 'Mondbasis e.V.', 'Junge Forscher', 'Funk & Netz GmbH'];
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const round100 = n => Math.round(n / 100) * 100;
+const kmTxt = m => (m / 1000).toLocaleString('de-DE', { maximumFractionDigits: m >= 10000 ? 0 : 1 }) + ' km';
+function contractFp(reward) { return Math.max(8, Math.round(reward / 140)); }
+// Jeder Generator liefert einen Auftrag passend zum Fortschritt oder null
+const CONTRACT_GEN = {
+  alt() {
+    const tiers = missionReqMet('space') ? [90, 150, 250, 400, 700] : missionReqMet('clouds') ? [10, 15, 20, 30, 45] : [1.5, 2.5, 4, 6];
+    const km = pick(tiers), a = km * 1000;
+    return { type: 'alt', key: 'alt' + km, lo: a * 0.88, hi: a * 1.12, title: 'Höhenmessung', ico: '📡',
+      desc: `Bringe Messgeräte auf ${kmTxt(a)} Höhe (±12 %) über der Erde.`, reward: round100(1200 + 700 * Math.sqrt(km)) };
+  },
+  speed() {
+    const tiers = missionReqMet('space') ? [600, 900, 1300] : missionReqMet('clouds') ? [400, 600] : [250, 330];
+    const v = pick(tiers), h = v < 400 ? 10000 : v < 800 ? 20000 : 35000;
+    return { type: 'speed', key: 'spd' + v, v, h, title: 'Windkanal-Test', ico: '💨',
+      desc: `Erreiche ${fmtMoney(v)} m/s unter ${kmTxt(h)} Höhe auf der Erde.`, reward: round100(1500 + v * 6) };
+  },
+  budget() {
+    const tiers = [[3000, 1500, 2500]];
+    if (missionReqMet('clouds')) tiers.push([15000, 3500, 5000]);
+    if (missionReqMet('space')) tiers.push([70000, 6000, 9000]);
+    const [alt, cost, reward] = pick(tiers);
+    return { type: 'budget', key: 'bud' + alt, alt, cost, title: 'Low-Cost-Flug', ico: '🪙',
+      desc: `Erreiche ${kmTxt(alt)} Höhe mit einer Rakete für höchstens ${fmtMoney(cost)} 💰.`, reward };
+  },
+  test() {
+    const parts = save.unlocked.filter(id => !STARTER_PARTS.includes(id) && !PARTS[id].dec);
+    if (!parts.length) return null;
+    const part = pick(parts), d = PARTS[part];
+    const km = pick(missionReqMet('space') ? [20, 40, 70, 100] : missionReqMet('clouds') ? [3, 6, 10] : [1.5, 3]);
+    return { type: 'test', key: 'test' + part, part, alt: km * 1000, title: 'Bauteil-Test', ico: '🔧',
+      desc: `Fliege mit ${d.ico} ${d.name} über ${kmTxt(km * 1000)} Höhe – das Teil muss dann noch an der Rakete sein.`,
+      reward: round100(1800 + km * 90 + d.cost * 0.6) };
+  },
+  land_earth() {
+    if (!isCareerUnlocked('chute')) return null;
+    const km = pick(missionReqMet('orbit') ? [40, 80, 150] : missionReqMet('clouds') ? [8, 15, 25] : [3, 5]);
+    return { type: 'land_earth', key: 'land' + km, alt: km * 1000, title: 'Probenbergung', ico: '📦',
+      desc: `Fliege über ${kmTxt(km * 1000)} hoch und lande sicher auf der Erde.`, reward: round100(3000 + km * 100) };
+  },
+  tourist() {
+    if (!missionReqMet('space') || !isCareerUnlocked('chute')) return null;
+    return { type: 'tourist', key: 'tour', title: 'Weltraumtourist', ico: '🧳',
+      desc: 'Fliege mit bemannter Kapsel über 70 km und lande sicher auf der Erde.', reward: 12000 };
+  },
+  orbit_band() {
+    if (!missionReqMet('orbit')) return null;
+    const km = pick([100, 150, 250, 400, 700, 1200]), a = km * 1000;
+    return { type: 'orbit_band', key: 'orb' + km, lo: a * 0.85, hi: a * 1.2, title: 'Satelliten-Bahn', ico: '🛰️',
+      desc: `Erd-Orbit mit Periapsis über ${kmTxt(a * 0.85)} und Apoapsis unter ${kmTxt(a * 1.2)}.`, reward: round100(9000 + km * 12) };
+  },
+  fly() {
+    const opts = Object.keys(CONTRACT_BODIES).filter(id => isTargetUnlocked(id));
+    if (!opts.length) return null;
+    const id = pick(opts), b = BODIES[id];
+    return { type: 'fly', key: 'fly' + id, body: id, title: 'Vorbeiflug', ico: '🔭',
+      desc: `Erreiche das Schwerefeld von ${b.ico} ${b.name}.`, reward: CONTRACT_BODIES[id].fly };
+  },
+  orbitB() {
+    const opts = Object.keys(CONTRACT_BODIES).filter(id => save.visited.includes(id));
+    if (!opts.length) return null;
+    const id = pick(opts), b = BODIES[id], pe = Math.max(b.atm, Math.round(b.R * 0.02));
+    return { type: 'orbitB', key: 'orbB' + id, body: id, pe, title: 'Kartierung aus dem Orbit', ico: '🗺️',
+      desc: `Stabiler Orbit um ${b.ico} ${b.name} (Periapsis über ${kmTxt(pe)}).`, reward: CONTRACT_BODIES[id].orbit };
+  },
+  landB() {
+    const opts = Object.keys(CONTRACT_BODIES).filter(id => save.visited.includes(id) && CONTRACT_BODIES[id].land);
+    if (!opts.length) return null;
+    const id = pick(opts), b = BODIES[id];
+    return { type: 'landB', key: 'landB' + id, body: id, title: 'Bodenprobe', ico: '⛏️',
+      desc: `Lande sicher auf ${b.ico} ${b.name}.`, reward: CONTRACT_BODIES[id].land };
+  },
+};
+function contractCheck(c, s) {
+  switch (c.type) {
+    case 'alt':        return s.body === 'earth' && s.alt >= c.lo && s.alt <= c.hi;
+    case 'speed':      return s.body === 'earth' && s.speed >= c.v && s.alt < c.h;
+    case 'budget':     return s.body === 'earth' && s.alt >= c.alt && s.cost <= c.cost;
+    case 'test':       return s.body === 'earth' && s.alt >= c.alt && s.hasPart(c.part);
+    case 'land_earth': return s.body === 'earth' && s.landedSafe && s.maxAlt >= c.alt;
+    case 'tourist':    return s.body === 'earth' && s.landedSafe && s.maxAlt > ATM && CREW_PARTS.some(s.hasPart);
+    case 'orbit_band': return s.body === 'earth' && s.ecc < 1 && s.pe >= c.lo && s.ap <= c.hi;
+    case 'fly':        return s.body === c.body;
+    case 'orbitB':     return s.body === c.body && s.ecc < 1 && s.pe > c.pe;
+    case 'landB':      return s.body === c.body && s.landedSafe;
+  }
+  return false;
+}
+function newContract(exclude) {
+  // Fernere Ziele etwas häufiger, sobald sie verfügbar sind
+  const weights = { alt: 3, speed: 2, budget: 2, test: 3, land_earth: 2, tourist: 1, orbit_band: 3, fly: 3, orbitB: 2, landB: 2 };
+  for (let tries = 0; tries < 30; tries++) {
+    const bag = [];
+    Object.keys(CONTRACT_GEN).forEach(k => { for (let i = 0; i < weights[k]; i++) bag.push(k); });
+    const c = CONTRACT_GEN[pick(bag)]();
+    if (!c || exclude.includes(c.key)) continue;
+    c.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    c.client = pick(CLIENTS);
+    c.fp = contractFp(c.reward);
+    return c;
+  }
+  return null;
+}
+function ensureContracts() {
+  if (!Array.isArray(save.contracts)) save.contracts = [];
+  save.contracts = save.contracts.filter(c => c && CONTRACT_GEN[c.type] && typeof c.reward === 'number');
+  let added = false;
+  while (save.contracts.length < CONTRACT_SLOTS) {
+    const c = newContract(save.contracts.map(x => x.key));
+    if (!c) break;
+    save.contracts.push(c); added = true;
+  }
+  if (added) persist();
+}
+function rejectContract(id) {
+  const keep = save.contracts.filter(c => c.id !== id);
+  const c = newContract(save.contracts.map(x => x.key));
+  save.contracts = keep;
+  if (c) save.contracts.push(c);
+  persist();
+}
 
 const EXAMPLES = [
   ['pod', 'tankS', 'funke'],
@@ -638,6 +801,8 @@ function defaultSave() {
     chuteAuto: false,
     autoStage: true,
     tod: 'day',
+    contracts: [],
+    contractsDone: 0,
   };
 }
 function loadSave() {
@@ -650,6 +815,8 @@ function loadSave() {
       o.science = Math.max(0, Number(o.science) || 0);
       o.bestAlt = Math.max(0, Number(o.bestAlt) || 0);
       o.done = (o.done || []).filter(id => MISSIONS.some(m => m.id === id));
+      o.contractsDone = Math.max(0, Math.floor(Number(o.contractsDone) || 0));
+      o.contracts = Array.isArray(o.contracts) ? o.contracts : [];
       const ul = new Set(STARTER_PARTS);
       (o.unlocked || []).forEach(id => { if (PARTS[id]) ul.add(id); });
       o.unlocked = [...ul];
@@ -2761,7 +2928,30 @@ function updateSel() {
   selMesh.scale.set(d.w / 2 + 0.25 + extraW, d.h + 0.1, d.w / 2 + 0.25 + extraW);
   selMesh.position.set(0, bRocket.group.position.y + n.top - d.h / 2, 0);
 }
+function renderContracts() {
+  const el = $('contractList'); el.innerHTML = '';
+  if (isFreeMode()) {
+    el.innerHTML = '<div class="ctr-note">♾️ Aufträge gibt es nur im Fortschritt-Modus.</div>';
+    $('ctrCount').textContent = '';
+    return;
+  }
+  ensureContracts();
+  $('ctrCount').textContent = `${save.contractsDone} erfüllt`;
+  save.contracts.forEach(c => {
+    const d = document.createElement('div'); d.className = 'mis ctr';
+    d.innerHTML = `<span>${c.ico}</span><span><b>${c.title}</b><i class="who">für ${c.client}</i>${c.desc}</span><span class="rw">+${fmtMoney(c.reward)} 💰<i>+${c.fp} 🔬</i></span>`;
+    const x = document.createElement('button'); x.className = 'x'; x.type = 'button'; x.textContent = '✖'; x.title = 'Auftrag ablehnen – ein neuer wird angeboten';
+    x.onclick = () => { rejectContract(c.id); sfx.click(); renderContracts(); };
+    d.appendChild(x);
+    el.appendChild(d);
+  });
+  const note = document.createElement('div'); note.className = 'ctr-note';
+  note.textContent = 'Aufträge sind wiederholbar: Erfüllte werden nach dem Flug durch neue ersetzt.';
+  el.appendChild(note);
+}
 function renderMissions() {
+  renderContracts();
+  $('misCount').textContent = `${save.done.length}/${MISSIONS.length}`;
   const el = $('missionList'); el.innerHTML = '';
   MISSION_CHAPTERS.forEach(ch => {
     const chOk = missionReqMet(ch.reqM);
@@ -2947,7 +3137,9 @@ function startFlight() {
     ended: null, endTimer: 0, warpIdx: 0, sas: 'stab', ap: 'off', apMsg: '', thrustNow: 0, massNow: 0, q: 0, onGround: true, landT: 0,
     earned: [], freeEarned: new Set(), cost: free ? 0 : a.cost, visitedBodies: new Set(['earth']), inRot: 0, shake: 0, el: null, dvPlan: a.dvTotal, guidePitch: null,
     body: BODIES.earth, target: availTgts[0] || null, heat: 20,
+    designCost: a.cost, chuteUsed: false,
   };
+  if (!free) ensureContracts();
   recomputeRocket();
   F.totalSegs = F.segs.length;
   F.y = R + F.H / 2;
@@ -3552,7 +3744,9 @@ function snapshot() {
   const r = Math.hypot(rx, ry), alt = r - b.R, speed = Math.hypot(rvx, rvy);
   const el = orbitEl(rx, ry, rvx, rvy, b);
   f.el = el;
-  return { body: b.id, alt, speed, ecc: el.e, pe: el.pe, ap: el.ap, E: el.E, maxAlt: f.maxAlt, landedSafe: f.landedSafe, orbited: f.orbited };
+  return { body: b.id, alt, speed, ecc: el.e, pe: el.pe, ap: el.ap, E: el.E, maxAlt: f.maxAlt, landedSafe: f.landedSafe, orbited: f.orbited,
+    visited: f.visitedBodies, cost: f.designCost, chuteUsed: f.chuteUsed, contractsDone: f.freeMode ? 0 : save.contractsDone,
+    hasPart: id => f.parts.some(p => p.id === id) };
 }
 function orbitEl(x, y, vx, vy, b = BODIES.earth) {
   const mu = b.mu, Rb = b.R;
@@ -3584,6 +3778,17 @@ function checkMissions(s) {
   }
   const beforeTgt = unlockedTargets();
   let changed = false;
+  // Aufträge zuerst, damit Auftrags-Missionen im selben Frame zählen
+  (save.contracts || []).slice().forEach(c => {
+    if (!contractCheck(c, s)) return;
+    save.contracts = save.contracts.filter(x => x.id !== c.id);
+    save.contractsDone++; s.contractsDone = save.contractsDone;
+    save.money += c.reward; save.science += c.fp;
+    F.earned.push({ title: c.title, reward: c.reward, fp: c.fp, ctr: true, client: c.client });
+    changed = true;
+    sfx.coin();
+    toast(`📋 Auftrag „${c.title}“ für ${c.client} erfüllt! +${fmtMoney(c.reward)} 💰 · +${c.fp} 🔬`, 'good');
+  });
   MISSIONS.forEach(m => {
     if (save.done.includes(m.id) || !m.check(s)) return;
     save.done.push(m.id); save.money += m.reward; save.science += m.fp; F.earned.push(m);
@@ -3712,6 +3917,7 @@ function flightFrame(dtReal) {
   const b = f.body, r = Math.hypot(f.x - b.x, f.y - b.y), alt = r - b.R, speed = Math.hypot(f.vx - b.vx, f.vy - b.vy);
   if (!f.destroyed && f.ignited) {
     f.visitedBodies.add(b.id);
+    if (f.chuteArmed) f.chuteUsed = true;
     if (b.id === 'earth') f.maxAlt = Math.max(f.maxAlt, alt);
     else f.maxAlt = Math.max(f.maxAlt, Math.hypot(f.x, f.y) - R);
     f.maxSpeed = Math.max(f.maxSpeed, speed);
@@ -3902,8 +4108,9 @@ function updateHud(alt, speed, warp) {
   const wb = $('warpBox');
   if (warp > 1) { wb.classList.remove('hidden'); setT('warpBox', `⏩ Zeitraffer ×${warp}`); } else wb.classList.add('hidden');
   // Missionen
-  const open = MISSIONS.filter(m => f.freeMode ? !f.freeEarned.has(m.id) : !save.done.includes(m.id)).slice(0, 3);
-  const html = open.length ? open.map(m => `<div class="mis"><span>🎯</span><span><b>${m.title}</b><br>${m.desc}</span><span class="rw">${f.freeMode ? '' : `+${fmtMoney(m.reward)} 💰<i>+${m.fp} 🔬</i>`}</span></div>`).join('') : '<div class="mis">🏅 Alle Missionen erfüllt!</div>';
+  const open = MISSIONS.filter(m => f.freeMode ? !f.freeEarned.has(m.id) : !save.done.includes(m.id)).sort((a, b) => a.ch - b.ch).slice(0, f.freeMode ? 3 : 2);
+  let html = open.length ? open.map(m => `<div class="mis"><span>🎯</span><span><b>${m.title}</b><br>${m.desc}</span><span class="rw">${f.freeMode ? '' : `+${fmtMoney(m.reward)} 💰<i>+${m.fp} 🔬</i>`}</span></div>`).join('') : '<div class="mis">🏅 Alle Missionen erfüllt!</div>';
+  if (!f.freeMode && save.contracts && save.contracts.length) html += save.contracts.map(c => `<div class="mis ctr"><span>${c.ico}</span><span><b>${c.title}</b><br>${c.desc}</span><span class="rw">+${fmtMoney(c.reward)} 💰</span></div>`).join('');
   if ($('hudMissions').dataset.h !== html) { $('hudMissions').innerHTML = html; $('hudMissions').dataset.h = html; }
   // Flugassistent
   const gd = guidance(alt, vs, cur, el);
@@ -4118,6 +4325,7 @@ function finishFlight() {
     newBodies.forEach(id => save.visited.push(id));
     bodySci = newBodies.length * 40;
     save.science += teleSci + recSci + landSci + bodySci;
+    ensureContracts();
     persist();
   }
   engineSound(0);
@@ -4134,7 +4342,7 @@ function finishFlight() {
     f.earned.forEach(m => { html += `<div class="stat"><span>🏆 ${m.title}</span><b style="color:#86efac">Erreicht (Freier Modus)</b></div>`; });
     html += `<p style="color:#9aa7c0;font-size:12px;margin:8px 0 0">♾️ Freier Modus: Fortschritt & Budget im Karriere-Modus unverändert.</p>`;
   } else {
-    f.earned.forEach(m => { html += `<div class="stat"><span>🏆 ${m.title}</span><b style="color:#ffd36a">+${fmtMoney(m.reward)} 💰 · <span style="color:#7fe0ff">+${m.fp} 🔬</span></b></div>`; });
+    f.earned.forEach(m => { html += `<div class="stat"><span>${m.ctr ? '📋' : '🏆'} ${m.title}</span><b style="color:#ffd36a">+${fmtMoney(m.reward)} 💰 · <span style="color:#7fe0ff">+${m.fp} 🔬</span></b></div>`; });
     if (teleSci) html += `<div class="stat"><span>📡 Flug-Telemetrie</span><b style="color:#7fe0ff">+${teleSci} 🔬</b></div>`;
     if (recSci) html += `<div class="stat"><span>📏 Neuer Höhenrekord</span><b style="color:#7fe0ff">+${recSci} 🔬</b></div>`;
     if (landSci) html += `<div class="stat"><span>📦 Probenbergung</span><b style="color:#7fe0ff">+${landSci} 🔬</b></div>`;

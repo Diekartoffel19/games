@@ -27,7 +27,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/propaganda.html`](games/propaganda.html) — *Wähl Mich! — Propaganda Simulator*
   * [`games/doener.html`](games/doener.html) — *Döner Tycoon*
   * [`games/boatsim.html`](games/boatsim.html) — *Boot- & Wellen-Simulator*
-  * [`games/raketenbau.html`](games/raketenbau.html) — *Raketenbau 3D (Rakete aus 37 Blender-Bauteilen mit SVG-Bauteil-Symbolen bauen, 5 Autopilot-Programme inkl. Orbit-Aufstieg, Hohmann-Transfer & Suicide-Burn-Landung, 3D-Weltraumbahnhof mit Polarlichtern, Tageszeiten & 3D-Kratern, Mehrkörper-Orbitalphysik zu Mond, Mars, Venus, Jupiter, Europa & Titan, 17 Missionen)*
+  * [`games/raketenbau.html`](games/raketenbau.html) — *Raketenbau 3D (Rakete aus 37 Blender-Bauteilen mit SVG-Bauteil-Symbolen bauen, 5 Autopilot-Programme inkl. Orbit-Aufstieg, Hohmann-Transfer & Suicide-Burn-Landung, 3D-Weltraumbahnhof mit Polarlichtern, Tageszeiten & 3D-Kratern, Mehrkörper-Orbitalphysik zu Mond, Mars, Venus, Jupiter, Europa & Titan, 35 Missionen in 5 Kapiteln & wiederholbare Auftragsbörse)*
   * [`games/tycoon.html`](games/tycoon.html) — *3D City Tycoon*
 * **Action & Roguelike:**
   * [`games/scharfschuetze.html`](games/scharfschuetze.html) — *Scharfschütze 3D: Ziel-Einsatz (Three.js 3D-Scharfschützen-Schießstand: 6 Zieltypen inkl. Gepanzerten mit Visier-Weakspot, 3D-Drohnen, Explosiv-Fässern & Zivilisten; FFP-MIL-DOT-Zielfernrohr 4x–12x, 3D-Wind & Kugel-Drop, 3D-Gewehr mit Repetier-Animation, 4 Missionen & Endlos-Modus)*
