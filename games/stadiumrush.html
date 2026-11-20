@@ -1959,13 +1959,14 @@ $('optImport').onclick=()=>{
 };
 
 /* ------------------------------------------------------------ LAN-Multiplayer (Time Attack) */
-// Stern-Topologie: Host <-> Gäste über WebRTC-DataChannels. Ohne STUN/TURN-Server gibt es nur
-// Host-Kandidaten, Verbindungen kommen also nur im lokalen Netz zustande. Signalisierung per
+// Stern-Topologie: Host <-> Gäste über WebRTC-DataChannels. Öffentliche STUN-Server liefern neben
+// den lokalen (mDNS-)Kandidaten die öffentliche Adresse; ohne TURN klappt es nicht hinter symmetrischem NAT. Signalisierung per
 // 4-stelligem Raum-Code über den öffentlichen PeerJS-Server (nur SDP-Austausch) oder offline per
 // Copy-&-Paste-Code (SDP, deflate-komprimiert). "ctl" = zuverlässig (Lobby, Zeiten),
 // "st" = unzuverlässig/ungeordnet (Autopositionen, 20 Hz). Jeder fährt seine eigene Physik;
 // fremde Autos werden mit ~110 ms Verzögerung zwischen Snapshots interpoliert (keine Kollision).
 const MP_PROTO=1, MP_MAX=8, MP_DELAY=110, MP_TICK=50, MP_TAG='SRLAN';
+const MP_ICE=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun.cloudflare.com:3478']}];
 const MP_COLORS=['#1f8bff','#ff4545','#36d46b','#ffcc33','#be4bdb','#ff922b','#20c997','#f06595'];
 const MP={role:null, view:'start', me:0, host:null, peers:new Map(), invites:new Map(), players:new Map(),
           sel:null, round:null, on:false, last:null, sendT:0, nextId:1,
@@ -2040,7 +2041,9 @@ function mpInviteLink(){ return location.protocol==='file:'?'':location.href.spl
 
 /* ---------- Peers ---------- */
 function mpNewPeer(){
-  const pc=new RTCPeerConnection({iceServers:[]});   // bewusst ohne STUN: nur LAN
+  // STUN nötig: Browser verstecken lokale IPs hinter mDNS-Namen (*.local), die viele Geräte/WLANs
+  // nicht auflösen. Die STUN-Adresse (öffentliche IP) ist der Ersatzweg, auch übers Internet.
+  const pc=new RTCPeerConnection({iceServers:MP_ICE});
   const p={pc, id:null, inv:'', code:'', status:'new', cstate:'new', dead:false,
            ctl:pc.createDataChannel('ctl',{negotiated:true,id:0}),
            st:pc.createDataChannel('st',{negotiated:true,id:1,ordered:false,maxRetransmits:0})};
