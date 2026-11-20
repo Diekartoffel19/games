@@ -770,7 +770,7 @@ const EXAMPLES = [
   ['les', 'chute', 'pod', 'dec', 'tankM', 'tankM', 'fins', 'falke'],
   ['chute', 'pod', 'shield', 'dec', 'solar', 'tankL', 'kolibri', 'dec', 'tankL', 'tankM', 'fins', 'falke'],
   ['chute', 'lander', 'shield', 'dec', 'solar', 'tankRad', 'legs', 'aerospike', 'dec', 'tankL', 'tankM', 'gridfins', 'falke'],
-  ['les', 'chute', 'pod2', 'shieldXL', 'dec', 'rtg', 'tankRad', 'legs', 'plasma', 'dec', 'adapt', 'tankXL', 'nuke', 'decXL', 'tankXXL', 'titan'],
+  ['les', 'chute', 'pod2', 'shieldXL', 'dec', 'rtg', 'tankRad', 'legs', 'plasma', 'dec', 'adapt', 'tankXL', 'mammut', 'decXL', 'tankXXL', 'titan'],
 ];
 
 const TARGET_REQ = {
@@ -3088,6 +3088,34 @@ function recomputeRocket() {
   F.cdBase = topAero ? 0.18 : (ids.length && (PARTS[ids[0]].wheel || PARTS[ids[0]].chute) ? 0.35 : 0.6);
 }
 function rocketMass() { let m = 0; for (const p of F.parts) m += PARTS[p.id].dry + p.fuel + p.solid; return m; }
+// Verbleibendes Vakuum-Δv aller noch angebauten Stufen (Stufe 0 = oberste)
+function flightDvLeft(f) {
+  let dv = 0, above = 0;
+  for (const seg of f.segs) {
+    let dry = 0, liq = 0, sol = 0, thr = 0, flow = 0;
+    for (const i of seg) { const p = f.parts[i], d = PARTS[p.id]; dry += d.dry; liq += p.fuel; sol += p.solid; }
+    for (const i of seg) {
+      const p = f.parts[i], d = PARTS[p.id];
+      if (!d.thrust || (d.solid ? p.solid <= 0 : liq <= 0)) continue;
+      thr += d.thrust; flow += d.thrust / d.ispV;
+    }
+    const m1 = above + dry, m0 = m1 + liq + sol;
+    if (thr > 0 && m1 > 0) dv += (thr / flow) * G0 * Math.log(m0 / m1);
+    above = m0;
+  }
+  return dv;
+}
+// Schwächstes Vakuum-Schub/Gewicht-Verhältnis der aktiven und aller oberen Stufen (für die Aufstiegskurve)
+function upperStageTwr(f) {
+  let minTwr = Infinity, above = 0;
+  f.segs.forEach(seg => {
+    let mass = 0, thr = 0;
+    for (const i of seg) { const p = f.parts[i], d = PARTS[p.id]; mass += d.dry + p.fuel + p.solid; if (d.thrust) thr += d.thrust; }
+    above += mass;
+    if (thr > 0) minTwr = Math.min(minTwr, thr / (above * G0));
+  });
+  return isFinite(minTwr) ? minTwr : 1;
+}
 function rebuildFlightMesh() {
   if (fRocket) world.remove(fRocket.group);
   fRocket = buildRocket(F.parts.map(p => p.id));
@@ -3308,8 +3336,11 @@ function updateAutopilot(f, dt) {
       setSas('pro');
       return proA;
     }
-    // Rakete fällt zurück, ohne die Atmosphäre zu verlassen: Aufstieg gescheitert → Landeprogramm statt Vollgas in den Boden
-    if (!f.onGround && vr < -15 && el.ap < (b.atm > 0 ? b.atm : targetOrb * 0.5)) {
+    // Rakete fällt zurück, ohne die Atmosphäre zu verlassen: Aufstieg gescheitert → Landeprogramm statt Vollgas in den Boden.
+    // Schubschwache Oberstufen dürfen in der dünnen oberen Atmosphäre aber weiter Fahrt aufbauen, solange das Δv reicht.
+    const dvToOrbit = Math.max(0, Math.sqrt(b.mu / r) - Math.abs(vt)) * 1.15 + Math.max(0, -vr) * 0.6;
+    const tooLow = alt < (b.atm > 0 ? b.atm * 0.55 : targetOrb * 0.25);
+    if (!f.onGround && vr < -15 && el.ap < (b.atm > 0 ? b.atm : targetOrb * 0.5) && (tooLow || flightDvLeft(f) < dvToOrbit)) {
       toast('⚠️ Autopilot: Orbit nicht erreichbar – wechsle auf Landeprogramm', 'bad');
       setAp('land', true);
       return retroA;
@@ -3318,13 +3349,16 @@ function updateAutopilot(f, dt) {
     if (el.ap < targetOrb) {
       f.warpIdx = 0;
       const clearAlt = b.atm > 0 ? 700 : 180;
-      const turnSpan = b.atm > 0 ? b.atm * 0.68 : 14000;
+      // Schubschwache Oberstufen brauchen eine steilere Bahn (später kippen), sonst fallen sie vor dem Orbit zurück
+      if (f.upTwrSegs !== f.segs.length) { f.upTwrSegs = f.segs.length; f.upTwr = upperStageTwr(f); }
+      const turnSpan = (b.atm > 0 ? b.atm * 0.68 : 14000) * (1 + clamp((1 - f.upTwr) / 0.6, 0, 1) * 0.6);
       let pitchDeg = 90;
       if (alt > clearAlt) pitchDeg = clamp(90 - 84 * Math.pow((alt - clearAlt) / turnSpan, 0.54), 5, 90);
       // Schubschwache Oberstufen: Steigrate halten, sonst stagniert die Apoapsis unter der Atmosphärengrenze
       if (alt > clearAlt && maxAcc > 0.05) {
         const gEff = Math.max(0, g - vt * vt / r), vrMin = clamp((targetOrb - alt) / 110, 0, 450);
-        if (vr < vrMin) pitchDeg = Math.max(pitchDeg, Math.asin(clamp((gEff + (vrMin - vr) * 0.05) / maxAcc, 0, 1)) * 180 / Math.PI);
+        // Höchstens ~58° aufrichten: senkrecht gestellt baut eine schwache Stufe keine Horizontalfahrt auf und fällt zurück
+        if (vr < vrMin) pitchDeg = Math.max(pitchDeg, Math.asin(clamp((gEff + (vrMin - vr) * 0.05) / maxAcc, 0, 0.85)) * 180 / Math.PI);
       }
       f.guidePitch = pitchDeg;
       const rad = pitchDeg * Math.PI / 180;
