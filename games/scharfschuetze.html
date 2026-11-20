@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Scharfschütze 3D: Ziel-Einsatz</title>
-  <meta name="description" content="3D-Scharfschützen-Schießstand mit Three.js: 6 verschiedene Zieltypen, FFP-MIL-DOT-Zielfernrohr (4x–12x), echte 3D-Ballistik mit Wind & Kugel-Drop, 3D-Trefferphysik, 4 Missionen & Endlos-Modus." />
+  <meta name="description" content="3D-Scharfschützen-Schießstand mit Three.js: 11 verschiedene Zieltypen (inkl. Gegen-Scharfschützen, Geiselnehmern & Zielpersonen), FFP-MIL-DOT-Zielfernrohr (4x–12x), echte 3D-Ballistik mit Wind & Kugel-Drop, 3D-Trefferphysik, 7 Missionen mit Bonuszielen & Endlos-Modus." />
   <meta name="theme-color" content="#0b0f14" />
   <link rel="icon" type="image/x-icon" href="../src/favicon.ico" />
   <script src="../src/arcade-core.js"></script>
@@ -440,6 +440,54 @@
     .swatch-drone { background: #c084fc; }
     .swatch-explosive { background: #ef4444; box-shadow: 0 0 8px #f59e0b; }
     .swatch-civilian { background: #38bdf8; border: 2px solid #ffffff; }
+    .swatch-sniper { background: #4d5d33; box-shadow: 0 0 0 2px #fef9c3, 0 0 10px #fde047; }
+    .swatch-officer { background: #365314; border: 2px solid #facc15; }
+    .swatch-hostage { background: linear-gradient(90deg, #f1f5f9 50%, #7f1d1d 50%); }
+    .swatch-peeker { background: linear-gradient(180deg, #65a30d 45%, #a18262 46%); }
+    .swatch-balloon { background: radial-gradient(circle at 35% 35%, #fef08a, #facc15 55%, #ca8a04); }
+
+    /* Bonusziele: HUD im Einsatz, Pause- und Ergebnis-Liste */
+    #objectives-hud {
+      position: fixed;
+      top: 58px;
+      left: 12px;
+      z-index: 20;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 6px 10px;
+      max-width: 280px;
+      background: rgba(13, 19, 27, 0.72);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    #objectives-hud .obj-head { font-size: 9.5px; letter-spacing: 0.1em; font-weight: 700; color: #fbbf24; }
+    #objectives-hud .obj.done { color: #4ade80; }
+    #objectives-hud .obj.failed { color: #f87171; text-decoration: line-through; }
+    @media (max-width: 760px), (max-height: 420px) {
+      #objectives-hud { display: none; }
+    }
+
+    .objective-list { display: flex; flex-direction: column; gap: 5px; margin: 0 0 6px; text-align: left; font-size: 12.5px; }
+    .objective-list .obj {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6px 10px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+    }
+    .objective-list .obj b { font-family: var(--mono); white-space: nowrap; }
+    .objective-list .obj.done { color: #bbf7d0; border-color: rgba(74, 222, 128, 0.4); }
+    .objective-list .obj.failed { color: #fecaca; border-color: rgba(248, 113, 113, 0.35); }
+    .objective-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #fbbf24; margin: 4px 0 6px; text-align: left; }
+    .mission-card .mission-obj { font-size: 11px; color: #fbbf24; margin-top: 6px; }
 
     .mission-grid {
       display: grid;
@@ -572,6 +620,7 @@
   </header>
 
   <div id="status-banner" class="hidden"></div>
+  <div id="objectives-hud" class="hidden"></div>
 
   <footer id="hud-bottom">
     <div class="meter-box">
@@ -599,7 +648,8 @@
       <h1>SCHARFSCHÜTZE 3D</h1>
       <p class="subtitle">
         Feste Stellung auf dem Hochstand — kein Laufen nötig. Zielen rein mit der Maus:
-        identifiziere 6 verschiedene Zieltypen und kompensiere 3D-Wind, Kugel-Drop und Deckung.
+        identifiziere 11 verschiedene Zieltypen und kompensiere 3D-Wind, Kugel-Drop und Deckung.
+        Jede Mission hat zwei Bonusziele (+400 Pkt pro erfülltem Ziel).
       </p>
 
       <div class="target-legend">
@@ -626,6 +676,26 @@
         <div class="legend-item">
           <span class="swatch swatch-civilian"></span>
           <div><strong>Zivilist (Sperrziel)</strong><small>NICHT schießen! Kostet Punkte &amp; Strike</small></div>
+        </div>
+        <div class="legend-item">
+          <span class="swatch swatch-sniper"></span>
+          <div><strong>Gegen-Scharfschütze</strong><small>Glitzern = er zielt auf dich! Zuerst schießen (sonst −10s)</small></div>
+        </div>
+        <div class="legend-item">
+          <span class="swatch swatch-officer"></span>
+          <div><strong>Zielperson (VIP)</strong><small>Goldene Mütze, hohe Prämie — flieht schnell</small></div>
+        </div>
+        <div class="legend-item">
+          <span class="swatch swatch-hostage"></span>
+          <div><strong>Geiselnehmer</strong><small>Versteckt sich hinter Geisel — nur den Täter treffen!</small></div>
+        </div>
+        <div class="legend-item">
+          <span class="swatch swatch-peeker"></span>
+          <div><strong>Deckungsschütze</strong><small>Taucht hinter Sandsäcken auf — Timing!</small></div>
+        </div>
+        <div class="legend-item">
+          <span class="swatch swatch-balloon"></span>
+          <div><strong>Bonus-Ballon</strong><small>Magazin voll + 5s Zeit, treibt mit dem Wind</small></div>
         </div>
       </div>
 
@@ -654,6 +724,8 @@
     <div class="panel compact-panel">
       <h2>EINSATZ PAUSIERT</h2>
       <p class="subtitle">Sichere Stellung halten oder Einsatz neu starten.</p>
+      <div class="objective-title">BONUSZIELE</div>
+      <div id="pause-objectives" class="objective-list"></div>
       <label class="aim-setting">
         <span>Ziel-Empfindlichkeit</span>
         <input class="sens-slider" type="range" min="0.4" max="2" step="0.05" value="1" aria-label="Ziel-Empfindlichkeit">
@@ -680,6 +752,8 @@
         <div class="stat-card"><span>Präzision / Kopf</span><strong id="stat-headshots">0</strong></div>
         <div class="stat-card"><span>Weiteste Distanz</span><strong id="stat-range">0 m</strong></div>
       </div>
+      <div id="result-objective-title" class="objective-title">BONUSZIELE</div>
+      <div id="result-objectives" class="objective-list"></div>
       <div class="btn-row">
         <button id="btn-next-mission" class="primary-btn" type="button">Nächste Mission</button>
         <button id="btn-retry" class="secondary-btn" type="button">Nochmal</button>
@@ -738,13 +812,26 @@
       drone: { label: 'Drohne', hostile: true, basePoints: 210, critPoints: 350, armor: 0, minLife: 8.5, maxLife: 11.5 },
       explosive: { label: 'Explosiv-Fass', hostile: false, isUtility: true, basePoints: 80, critPoints: 80, armor: 0, minLife: 15, maxLife: 24 },
       civilian: { label: 'Zivilist', hostile: false, isCivilian: true, basePoints: -300, critPoints: -300, armor: 0, minLife: 10, maxLife: 15 },
+      // Gegen-Scharfschütze: zielt zurück (Glitzern), feuert nach aimTime — Lebensdauer ergibt sich daraus
+      sniper: { label: 'Gegen-Scharfschütze', hostile: true, basePoints: 230, critPoints: 420, armor: 0, minLife: 30, maxLife: 30, maxAlive: 1 },
+      officer: { label: 'Zielperson', hostile: true, basePoints: 320, critPoints: 600, armor: 0, minLife: 10, maxLife: 13, maxAlive: 1 },
+      hostage: { label: 'Geiselnehmer', hostile: true, basePoints: 200, critPoints: 380, armor: 0, minLife: 15, maxLife: 20, maxAlive: 1 },
+      peeker: { label: 'Deckungsschütze', hostile: true, basePoints: 170, critPoints: 340, armor: 0, minLife: 15, maxLife: 21, maxAlive: 2 },
+      balloon: { label: 'Bonus-Ballon', hostile: false, isUtility: true, basePoints: 150, critPoints: 150, armor: 0, minLife: 11, maxLife: 14, maxAlive: 1 },
     };
+
+    const OBJECTIVE_BONUS = 400;
+    const SNIPER_TIME_PENALTY = 10;
+    const SNIPER_SCORE_PENALTY = 150;
 
     const THEMES = {
       day: { sky: 0x87b8db, fog: 0x9ac4e2, fogNear: 90, fogFar: 390, ground: 0x3b593a, hill: 0x2f4938, sunColor: 0xfff3d6, sunInt: 1.35, hemiTop: 0xdcf0ff, hemiBot: 0x3f5734, hemiInt: 0.75, coverColor: 0x6b7280, moteColor: 0xfef3c7, night: false },
       industrial: { sky: 0x6e544b, fog: 0x7c5f55, fogNear: 80, fogFar: 360, ground: 0x3a3a40, hill: 0x2c282b, sunColor: 0xffb884, sunInt: 1.25, hemiTop: 0xffccb0, hemiBot: 0x2c2c33, hemiInt: 0.7, coverColor: 0x475569, moteColor: 0xfdba74, night: false },
       mountain: { sky: 0x7aa4c4, fog: 0x99b9cf, fogNear: 85, fogFar: 360, ground: 0x71808e, hill: 0x485b6e, sunColor: 0xeef7ff, sunInt: 1.3, hemiTop: 0xdff2ff, hemiBot: 0x42505d, hemiInt: 0.85, coverColor: 0x57534e, moteColor: 0xffffff, night: false },
       night: { sky: 0x050b16, fog: 0x07101f, fogNear: 75, fogFar: 340, ground: 0x111a24, hill: 0x0a111a, sunColor: 0x6ea8ff, sunInt: 0.65, hemiTop: 0x24426b, hemiBot: 0x0b1017, hemiInt: 0.55, coverColor: 0x1f2937, moteColor: 0x7dd3fc, night: true },
+      dusk: { sky: 0xc77f5a, fog: 0xb8826a, fogNear: 85, fogFar: 370, ground: 0x4a4a2f, hill: 0x2d3b26, sunColor: 0xffb070, sunInt: 1.15, hemiTop: 0xffc9a0, hemiBot: 0x3a3226, hemiInt: 0.7, coverColor: 0x6b5b4b, moteColor: 0xfed7aa, night: false, props: 'houses' },
+      desert: { sky: 0xa9c8e0, fog: 0xd9c7a5, fogNear: 90, fogFar: 380, ground: 0xb08d57, hill: 0x8a6a42, sunColor: 0xfff1d0, sunInt: 1.45, hemiTop: 0xfff3dc, hemiBot: 0x7a5c36, hemiInt: 0.8, coverColor: 0x8b7355, moteColor: 0xf5deb3, night: false, props: 'rocks' },
+      snow: { sky: 0xa9b9cb, fog: 0xbac7d4, fogNear: 80, fogFar: 350, ground: 0xb9c5d0, hill: 0x24402f, sunColor: 0xeef4ff, sunInt: 0.95, hemiTop: 0xdfeaf7, hemiBot: 0x5d6a76, hemiInt: 0.7, coverColor: 0x5b6470, moteColor: 0xffffff, night: false },
     };
 
     const MISSIONS = [
@@ -760,8 +847,12 @@
         maxWindMps: 2.0,
         windChangeSec: 16,
         lanes: [0, 1],
-        weights: { standard: 48, runner: 42, explosive: 10 },
+        weights: { standard: 48, runner: 42, explosive: 10, balloon: 6 },
         civilianChance: 0,
+        objectives: [
+          { type: 'headshots', n: 3, text: 'Präzisionstreffer (Bullseye/Kopf)' },
+          { type: 'balloons', n: 1, text: 'Bonus-Ballon abschießen' },
+        ],
         covers: [
           { laneId: 0, x: -11, width: 5.5, height: 3.1, depth: 1.6 },
           { laneId: 1, x: 18, width: 8.0, height: 3.4, depth: 2.0 },
@@ -781,6 +872,10 @@
         lanes: [0, 1, 2],
         weights: { standard: 20, runner: 28, armored: 34, explosive: 18 },
         civilianChance: 0.22,
+        objectives: [
+          { type: 'chain', n: 2, text: 'Gegner per Explosion' },
+          { type: 'noStrikes', text: 'Keine Zivilisten treffen' },
+        ],
         covers: [
           { laneId: 0, x: -14, width: 6.2, height: 3.2, depth: 2.2 },
           { laneId: 1, x: 4, width: 9.0, height: 3.6, depth: 2.6 },
@@ -799,8 +894,12 @@
         maxWindMps: 5.8,
         windChangeSec: 10,
         lanes: [1, 2],
-        weights: { standard: 15, runner: 25, armored: 22, drone: 28, explosive: 10 },
+        weights: { standard: 15, runner: 25, armored: 22, drone: 28, explosive: 10, balloon: 5 },
         civilianChance: 0.2,
+        objectives: [
+          { type: 'longshots', n: 5, text: 'Treffer ab 220 m' },
+          { type: 'drones', n: 4, text: 'Drohnen abschießen' },
+        ],
         covers: [
           { laneId: 1, x: -18, width: 8.0, height: 3.4, depth: 2.6 },
           { laneId: 2, x: 22, width: 12.0, height: 4.2, depth: 3.2 },
@@ -820,6 +919,10 @@
         lanes: [0, 1, 2],
         weights: { runner: 24, armored: 33, drone: 28, explosive: 15 },
         civilianChance: 0.28,
+        objectives: [
+          { type: 'headshots', n: 6, text: 'Präzisionstreffer' },
+          { type: 'accuracy', n: 70, text: 'Trefferquote mind. 70 %' },
+        ],
         covers: [
           { laneId: 0, x: 10, width: 5.8, height: 3.1, depth: 1.8 },
           { laneId: 1, x: -16, width: 8.5, height: 3.5, depth: 2.4 },
@@ -827,10 +930,84 @@
         ],
       },
       {
+        id: 'hostage',
+        title: '5. Geiselbefreiung',
+        tag: 'GEISELN',
+        description: 'Dorf in der Abenddämmerung: Geiselnehmer verstecken sich hinter Geiseln, Deckungsschützen tauchen hinter Sandsäcken auf.',
+        theme: 'dusk',
+        goal: 15,
+        timeLimitSec: 130,
+        maxActiveHostiles: 5,
+        maxWindMps: 3.4,
+        windChangeSec: 12,
+        lanes: [0, 1, 2],
+        weights: { standard: 8, runner: 22, peeker: 26, hostage: 26, officer: 6, explosive: 6, balloon: 6 },
+        civilianChance: 0.22,
+        covers: [
+          { laneId: 0, x: 13, width: 6.0, height: 3.1, depth: 1.8 },
+          { laneId: 1, x: -20, width: 8.4, height: 3.5, depth: 2.4 },
+          { laneId: 2, x: 18, width: 10.0, height: 4.0, depth: 2.8 },
+        ],
+        objectives: [
+          { type: 'hostages', n: 3, text: 'Geiseln befreien' },
+          { type: 'noStrikes', text: 'Keine Zivilisten/Geiseln treffen' },
+        ],
+      },
+      {
+        id: 'countersniper',
+        title: '6. Sniper-Duell',
+        tag: 'DUELL',
+        description: 'Wüstenschlucht: Gegen-Scharfschützen verraten sich durch Zielfernrohr-Glitzern — schieß zuerst! Dazu Drohnen & Deckungsschützen.',
+        theme: 'desert',
+        goal: 16,
+        timeLimitSec: 135,
+        maxActiveHostiles: 5,
+        maxWindMps: 5.2,
+        windChangeSec: 10,
+        lanes: [0, 1, 2],
+        weights: { runner: 20, armored: 16, drone: 16, peeker: 18, sniper: 24, explosive: 8, balloon: 4 },
+        civilianChance: 0.16,
+        sniperAimSec: 7.2,
+        covers: [
+          { laneId: 0, x: -9, width: 5.6, height: 3.0, depth: 1.8 },
+          { laneId: 1, x: 21, width: 8.0, height: 3.6, depth: 2.6 },
+          { laneId: 2, x: -26, width: 12.0, height: 4.2, depth: 3.0 },
+        ],
+        objectives: [
+          { type: 'snipers', n: 3, text: 'Gegen-Scharfschützen ausschalten' },
+          { type: 'noSniperHits', text: 'Kein Treffer durch Gegen-Sniper' },
+        ],
+      },
+      {
+        id: 'vip',
+        title: '7. Operation Zielperson',
+        tag: 'FINALE',
+        description: 'Verschneites Grenzlager mit allen 11 Zieltypen: Zielpersonen fliehen schnell, Sniper geben Deckung, Geiseln in Gefahr.',
+        theme: 'snow',
+        goal: 20,
+        timeLimitSec: 145,
+        maxActiveHostiles: 6,
+        maxWindMps: 6.0,
+        windChangeSec: 9,
+        lanes: [0, 1, 2],
+        weights: { standard: 4, runner: 14, armored: 15, drone: 12, peeker: 14, sniper: 12, hostage: 12, officer: 14, explosive: 6, balloon: 4 },
+        civilianChance: 0.22,
+        sniperAimSec: 6.6,
+        covers: [
+          { laneId: 0, x: -15, width: 6.0, height: 3.1, depth: 1.8 },
+          { laneId: 1, x: 9, width: 8.6, height: 3.5, depth: 2.4 },
+          { laneId: 2, x: -20, width: 11.0, height: 4.0, depth: 3.0 },
+        ],
+        objectives: [
+          { type: 'vips', n: 2, text: 'Zielpersonen eliminieren' },
+          { type: 'longshots', n: 4, text: 'Treffer ab 220 m' },
+        ],
+      },
+      {
         id: 'endless',
         title: 'Endlos-Schießstand',
         tag: 'ARCADE',
-        description: 'Bonuszeit pro Treffer (+4s / +7s Crit). Alle 6 Zieltypen bei steigendem Wind.',
+        description: 'Bonuszeit pro Treffer (+4s / +7s Crit). Alle 11 Zieltypen bei steigendem Wind.',
         theme: 'day',
         endless: true,
         goal: 0,
@@ -839,8 +1016,13 @@
         maxWindMps: 6.8,
         windChangeSec: 11,
         lanes: [0, 1, 2],
-        weights: { standard: 22, runner: 25, armored: 22, drone: 21, explosive: 10 },
+        weights: { standard: 18, runner: 20, armored: 17, drone: 16, peeker: 12, sniper: 8, hostage: 8, officer: 7, explosive: 9, balloon: 6 },
         civilianChance: 0.2,
+        sniperAimSec: 7.5,
+        objectives: [
+          { type: 'kills', n: 30, text: 'Ziele eliminieren' },
+          { type: 'snipers', n: 2, text: 'Gegen-Scharfschützen ausschalten' },
+        ],
         covers: [
           { laneId: 0, x: -12, width: 6.0, height: 3.1, depth: 1.8 },
           { laneId: 1, x: 14, width: 8.2, height: 3.5, depth: 2.4 },
@@ -981,6 +1163,52 @@
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.68);
         src.connect(f).connect(g).connect(ctx.destination);
         src.start(now);
+      }
+      // Kurzer Warnton: Gegen-Scharfschütze zielt (urgent = höher & lauter)
+      sniperWarn(urgent) {
+        const ctx = this.getCtx();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const o = ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.setValueAtTime(urgent ? 1560 : 1080, now);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(urgent ? 0.07 : 0.045, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+        o.connect(g).connect(ctx.destination);
+        o.start(now);
+        o.stop(now + 0.08);
+      }
+      // Gegnerischer Schuss: Pfeifen + entfernter Knall
+      enemyShot() {
+        const ctx = this.getCtx();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(2600, now);
+        o.frequency.exponentialRampToValueAtTime(500, now + 0.22);
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(0.12, now);
+        og.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+        o.connect(og).connect(ctx.destination);
+        o.start(now);
+        o.stop(now + 0.25);
+        const src = ctx.createBufferSource();
+        src.buffer = this.noise(ctx, 0.5);
+        const f = ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.setValueAtTime(700, now + 0.12);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.setValueAtTime(0.38, now + 0.12);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        src.connect(f).connect(g).connect(ctx.destination);
+        src.start(now);
+      }
+      bonus() {
+        if (typeof ArcadeCore !== 'undefined' && ArcadeCore.sounds && ArcadeCore.sounds.powerup) ArcadeCore.sounds.powerup();
+        else this.hit(true, 3);
       }
       penalty() { if (typeof ArcadeCore !== 'undefined' && ArcadeCore.sounds) ArcadeCore.sounds.hit(); }
       coverThud() { if (typeof ArcadeCore !== 'undefined' && ArcadeCore.sounds) ArcadeCore.sounds.pop(0.55); }
@@ -1179,6 +1407,35 @@
           stack.position.set(px, py + 5, pz);
           stack.castShadow = true;
           envGroup.add(stack);
+        } else if (theme.props === 'rocks') {
+          const s = 2.2 + (i % 4) * 1.1;
+          const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), propMat);
+          rock.scale.set(1.3, 0.75 + (i % 3) * 0.25, 1.1);
+          rock.rotation.y = i * 1.3;
+          rock.position.set(px, py + s * 0.45, pz);
+          rock.castShadow = true;
+          envGroup.add(rock);
+        } else if (theme.props === 'houses' && i % 3 !== 0) {
+          const hw = 5 + (i % 3) * 1.5;
+          const hh = 3.6 + (i % 2) * 1.6;
+          const wall = new THREE.Mesh(
+            new THREE.BoxGeometry(hw, hh, hw * 0.8),
+            new THREE.MeshStandardMaterial({ color: i % 2 ? 0xb9a58a : 0x9c8a73, roughness: 0.9, flatShading: true })
+          );
+          wall.position.set(px, py + hh / 2, pz);
+          wall.castShadow = true;
+          const roof = new THREE.Mesh(
+            new THREE.ConeGeometry(hw * 0.78, 2.4, 4),
+            new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.8, flatShading: true })
+          );
+          roof.rotation.y = Math.PI / 4;
+          roof.position.set(px, py + hh + 1.2, pz);
+          roof.castShadow = true;
+          // Warm erleuchtetes Fenster in der Dämmerung
+          const win = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.9), new THREE.MeshBasicMaterial({ color: 0xfbbf24 }));
+          win.position.set(px - side * (hw / 2 + 0.02), py + hh * 0.55, pz);
+          win.rotation.y = -side * Math.PI / 2;
+          envGroup.add(wall, roof, win);
         } else {
           const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 3, 6), new THREE.MeshStandardMaterial({ color: 0x4b3621, flatShading: true }));
           trunk.position.set(px, py + 1.5, pz);
@@ -1186,6 +1443,11 @@
           crown.position.set(px, py + 6.5, pz);
           crown.castShadow = true;
           envGroup.add(trunk, crown);
+          if (themeName === 'snow') {
+            const cap = new THREE.Mesh(new THREE.ConeGeometry(1.5, 3.4, 7), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.95, flatShading: true }));
+            cap.position.set(px, py + 9.3, pz);
+            envGroup.add(cap);
+          }
         }
       }
 
@@ -1254,13 +1516,42 @@
 
     let nextTargetId = 1;
 
+    // Zielfernrohr-Glitzern des Gegen-Scharfschützen (Lichtpunkt mit Strahlenkreuz)
+    let glintTexture = null;
+    function getGlintTexture() {
+      if (glintTexture) return glintTexture;
+      const c = document.createElement('canvas');
+      c.width = 64;
+      c.height = 64;
+      const g = c.getContext('2d');
+      const rad = g.createRadialGradient(32, 32, 0, 32, 32, 30);
+      // Weißer Kern mit kräftigem Orange-Hof: sichtbar vor Himmel, Schnee und Nacht
+      rad.addColorStop(0, 'rgba(255,255,255,1)');
+      rad.addColorStop(0.16, 'rgba(255,248,200,1)');
+      rad.addColorStop(0.32, 'rgba(255,170,30,0.9)');
+      rad.addColorStop(0.6, 'rgba(255,120,20,0.3)');
+      rad.addColorStop(1, 'rgba(255,100,0,0)');
+      g.fillStyle = rad;
+      g.fillRect(0, 0, 64, 64);
+      g.strokeStyle = 'rgba(255,190,60,0.95)';
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.moveTo(2, 32); g.lineTo(62, 32);
+      g.moveTo(32, 2); g.lineTo(32, 62);
+      g.stroke();
+      glintTexture = new THREE.CanvasTexture(c);
+      return glintTexture;
+    }
+
     function createTarget3D(type, mission, existingTargets) {
       const cfg = TARGET_CONFIGS[type];
-      const laneChoices = mission.lanes || [0, 1, 2];
+      let laneChoices = mission.lanes || [0, 1, 2];
+      // Gegen-Scharfschützen liegen bevorzugt auf den weiten Bahnen
+      if (type === 'sniper' && laneChoices.some((l) => l >= 1)) laneChoices = laneChoices.filter((l) => l >= 1);
       const laneId = laneChoices[Math.floor(Math.random() * laneChoices.length)];
       const lane = LANES[laneId];
 
-      const z = type === 'drone' ? -(95 + Math.random() * 145) : lane.z;
+      const z =type === 'drone' ? -(95 + Math.random() * 145) : type === 'balloon' ? -(80 + Math.random() * 150) : lane.z;
       const distanceM = Math.round(-z);
       const spreadX = distanceM * 0.16 + 10;
 
@@ -1272,7 +1563,7 @@
       }
 
       const groundY = terrainHeightAt(x, z);
-      const baseY = type === 'drone' ? groundY + 8.5 + Math.random() * 7.5 : groundY;
+      const baseY = type === 'drone' ? groundY + 8.5 + Math.random() * 7.5 : type === 'balloon' ? groundY + 3 + Math.random() * 3 : groundY;
       const isNight = mission.theme === 'night';
 
       const group = new THREE.Group();
@@ -1311,15 +1602,61 @@
         leftLeg: null,
         rightLeg: null,
         rotorMeshes,
+        knockGroup: null, // Teil, der beim Treffer umfällt (Standard: ganze Gruppe)
+        bodyGroup: null,
+        captorGroup: null,
+        hostageGroup: null,
+        hostageLegs: null,
+        glint: null,
+        spinMesh: null,
+        aimTime: 0,
+        charge: 0,
+        warnTimer: 0,
+        warned: false,
+        peekUp: false,
+        peekTimer: 0,
+        peekFrac: 0,
+        peekSide: 1,
       };
 
-      const addHitMesh = (mesh, zone, critical) => {
+      const addHitMesh = (mesh, zone, critical, parent) => {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.userData = { targetRef: target, zone, critical: !!critical };
+        (parent || group).add(mesh);
+        hitMeshes.push(mesh);
+        return mesh;
+      };
+
+      // Deckung, die zum Ziel gehört (Sandsäcke): blockt Schüsse wie eine Mission-Deckung
+      const addCoverMesh = (mesh) => {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = { isCover: true };
         group.add(mesh);
         hitMeshes.push(mesh);
         return mesh;
+      };
+
+      const stdMat = (color, emissive) => new THREE.MeshStandardMaterial({ color, emissive: isNight ? (emissive || 0x1a1a1a) : 0x000000, flatShading: true });
+
+      // Einfache Figur (Beine, Torso = Körper-Zone, Kopf = Crit-Zone) für die neuen Zieltypen
+      const buildFigure = (parent, o) => {
+        const legMat = stdMat(o.leg);
+        const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.95, 0.34), legMat);
+        lLeg.position.set(-0.22, 0.48, 0);
+        const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.95, 0.34), legMat);
+        rLeg.position.set(0.22, 0.48, 0);
+        lLeg.castShadow = true;
+        rLeg.castShadow = true;
+        parent.add(lLeg, rLeg);
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(o.torsoW || 0.92, 1.12, 0.52), stdMat(o.torso, o.emissive));
+        torso.position.y = 1.48;
+        addHitMesh(torso, o.bodyZone || 'body', false, parent);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(o.headR || 0.33, 10, 10), stdMat(o.head));
+        head.position.y = 2.34;
+        addHitMesh(head, o.headZone || 'head', o.headCrit !== false, parent);
+        return { lLeg, rLeg, torso, head };
       };
 
       if (type === 'standard') {
@@ -1354,6 +1691,155 @@
         bull.rotation.x = Math.PI / 2;
         bull.position.set(0, 1.95, 0.06);
         addHitMesh(bull, 'bullseye', true);
+      } else if (type === 'sniper') {
+        // Kniender Gegen-Scharfschütze hinter Sandsäcken, Gewehr auf den Hochstand gerichtet
+        const bags = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.9, 0.7), stdMat(0x8b7355, 0x2a1f14));
+        bags.position.set(0, 0.45, 0.95);
+        addCoverMesh(bags);
+
+        const body = new THREE.Group();
+        group.add(body);
+        target.bodyGroup = body;
+        target.knockGroup = body;
+        const camo = stdMat(0x4d5d33, 0x1a2410);
+        const legs = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.9), camo);
+        legs.position.set(0, 0.25, -0.2);
+        body.add(legs);
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.9, 0.5), camo);
+        torso.position.set(0, 0.95, 0);
+        addHitMesh(torso, 'body', false, body);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.31, 10, 10), stdMat(0x3f4a2b, 0x1a2410));
+        head.position.set(0, 1.62, 0.02);
+        addHitMesh(head, 'head', true, body);
+
+        const rifleMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.6, roughness: 0.4, flatShading: true });
+        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.6), rifleMat);
+        barrel.position.set(0.22, 1.32, 0.75);
+        const scopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.45, 8), rifleMat);
+        scopeTube.rotation.x = Math.PI / 2;
+        scopeTube.position.set(0.22, 1.45, 0.45);
+        body.add(barrel, scopeTube);
+
+        const glint = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: getGlintTexture(),
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.4,
+          depthWrite: false,
+          fog: false,
+        }));
+        glint.position.set(0.22, 1.45, 0.72);
+        body.add(glint);
+        target.glint = glint;
+
+        const aimBase = mission.sniperAimSec || 7.5;
+        target.aimTime = aimBase * (0.9 + Math.random() * 0.25) + (distanceM / 260) * 0.8;
+        target.lifeSpan = target.aimTime + 30;
+      } else if (type === 'officer') {
+        // Zielperson: Uniform mit goldener Mütze, Schulterstücken & Schärpe, goldene Raute darüber
+        const parts = buildFigure(group, { leg: 0x1c1917, torso: 0x3f4f1f, head: 0xfdba74, emissive: 0x1f2a0d, torsoW: 0.96 });
+        target.leftLeg = parts.lLeg;
+        target.rightLeg = parts.rLeg;
+        const goldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.7, roughness: 0.3, emissive: isNight ? 0x5a4500 : 0x2a2000, flatShading: true });
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.36, 0.2, 12), stdMat(0x14532d));
+        cap.position.y = 2.66;
+        addHitMesh(cap, 'head', true);
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.405, 0.405, 0.07, 12), goldMat);
+        band.position.y = 2.6;
+        const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.04, 0.24), stdMat(0x111111));
+        capVisor.position.set(0, 2.57, 0.36);
+        group.add(band, capVisor);
+        [-0.5, 0.5].forEach((ex) => {
+          const ep = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.4), goldMat);
+          ep.position.set(ex, 2.05, 0);
+          group.add(ep);
+        });
+        const sash = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.18, 0.56), stdMat(0xb91c1c));
+        sash.rotation.z = 0.6;
+        sash.position.set(0, 1.5, 0.01);
+        group.add(sash);
+        const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+        marker.position.y = 3.35;
+        group.add(marker);
+        target.spinMesh = marker;
+        target.vx = (Math.random() < 0.5 ? -1 : 1) * (2.2 + Math.random() * 1.2);
+        target.patrolMinX = Math.max(-spreadX - 4, x - 14);
+        target.patrolMaxX = Math.min(spreadX + 4, x + 14);
+      } else if (type === 'hostage') {
+        // Geisel (vorne, weiß, Hände hoch) — Geiselnehmer (dunkelrot, Sturmhaube) wankt dahinter hin und her
+        const hostageFig = new THREE.Group();
+        hostageFig.position.z = 0.3;
+        group.add(hostageFig);
+        target.hostageGroup = hostageFig;
+        const hp = buildFigure(hostageFig, {
+          leg: 0x64748b, torso: 0xf1f5f9, head: 0xfde68a, emissive: 0x334155,
+          bodyZone: 'hostage', headZone: 'hostage', headCrit: false, torsoW: 0.86,
+        });
+        target.hostageLegs = [hp.lLeg, hp.rLeg];
+        const armMat = stdMat(0xf1f5f9, 0x334155);
+        [-0.55, 0.55].forEach((ax) => {
+          const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.85, 0.22), armMat);
+          arm.position.set(ax, 2.35, 0);
+          arm.rotation.z = ax > 0 ? -0.25 : 0.25;
+          addHitMesh(arm, 'hostage', false, hostageFig);
+        });
+        const blindfold = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.7), stdMat(0x111827));
+        blindfold.position.y = 2.4;
+        hostageFig.add(blindfold);
+
+        const captor = new THREE.Group();
+        captor.position.z = -0.5;
+        captor.scale.setScalar(1.08);
+        group.add(captor);
+        target.captorGroup = captor;
+        buildFigure(captor, { leg: 0x1f2937, torso: 0x7f1d1d, head: 0x1f2937, emissive: 0x3b0a0a, torsoW: 0.9 });
+        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.7), stdMat(0x111827));
+        gun.position.set(0.42, 2.05, 0.45);
+        const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.06), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+        eyes.position.set(0, 2.38, 0.31);
+        captor.add(gun, eyes);
+      } else if (type === 'peeker') {
+        // Deckungsschütze: taucht periodisch hinter einer Sandsackmauer auf
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.55, 0.6), stdMat(0xa18262, 0x2a1f14));
+        wall.position.set(0, 0.775, 0.95);
+        addCoverMesh(wall);
+        [-0.85, 0, 0.85].forEach((bx) => {
+          const bag = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.85, 8), stdMat(0xb3936f, 0x2a1f14));
+          bag.rotation.z = Math.PI / 2;
+          bag.position.set(bx, 1.6, 0.95);
+          addCoverMesh(bag);
+        });
+        const body = new THREE.Group();
+        group.add(body);
+        target.bodyGroup = body;
+        target.knockGroup = body;
+        buildFigure(body, { leg: 0x1a2e05, torso: 0x4d7c0f, head: 0xd6a77a, emissive: 0x1a2e05 });
+        const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.37, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), stdMat(0x3f6212, 0x1a2e05));
+        helmet.position.y = 2.38;
+        addHitMesh(helmet, 'head', true, body);
+        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.9), stdMat(0x111827));
+        gun.position.set(0.3, 1.75, 0.5);
+        body.add(gun);
+        body.position.y = -1.45;
+        target.peekTimer = 0.6 + Math.random() * 0.9;
+      } else if (type === 'balloon') {
+        // Bonus-Ballon: treibt mit dem Wind und steigt langsam
+        const colors = [0xfacc15, 0xf472b6, 0x34d399];
+        const env = new THREE.Mesh(
+          new THREE.SphereGeometry(1.15, 14, 12),
+          new THREE.MeshStandardMaterial({ color: colors[Math.floor(Math.random() * colors.length)], emissive: isNight ? 0x5a4500 : 0x221a00, roughness: 0.35, flatShading: true })
+        );
+        env.scale.set(1, 1.2, 1);
+        env.position.y = 2.6;
+        addHitMesh(env, 'core', true);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(1.17, 0.07, 6, 20), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 2.6;
+        const string = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.4, 4), new THREE.MeshBasicMaterial({ color: 0xe5e7eb }));
+        string.position.y = 0.55;
+        const crate = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.35, 0.45), stdMat(0x92400e));
+        crate.position.y = -0.3;
+        group.add(ring, string, crate);
       } else if (type === 'explosive') {
         const body = new THREE.Mesh(
           new THREE.CylinderGeometry(0.72, 0.72, 2.0, 14),
@@ -1534,13 +2020,23 @@
       hitMarkers3D.push({ mesh: marker, life: 2.2, maxLife: 2.2 });
     }
 
-    function sendTargetKnockdown(target) {
-      if (target.type === 'explosive') {
+    function sendTargetKnockdown(target, opts) {
+      if (target.type === 'explosive' || target.type === 'balloon') {
         targetGroup.remove(target.group);
         return;
       }
+      if (opts && opts.freed && target.captorGroup) {
+        // Geiselnehmer fällt, die befreite Geisel rennt seitlich davon
+        const dir = Math.random() < 0.5 ? -1 : 1;
+        dyingTargets3D.push({ group: target.captorGroup, root: null, type: 'captor', life: 0.65, vy: 0, spin: (Math.random() - 0.5) * 4 });
+        if (target.hostageGroup) target.hostageGroup.rotation.y = dir * Math.PI / 2;
+        dyingTargets3D.push({ group: target.group, root: target.group, type: 'freed', life: 1.5, vx: dir * 5.5, legs: target.hostageLegs, age: 0, vy: 0, spin: 0 });
+        return;
+      }
+      if (target.glint) target.glint.visible = false;
       dyingTargets3D.push({
-        group: target.group,
+        group: target.knockGroup || target.group,
+        root: target.group,
         type: target.type,
         life: target.type === 'drone' ? 0.95 : 0.65,
         vy: target.type === 'drone' ? -2 : 0,
@@ -1643,7 +2139,16 @@
       endReason: '',
 
       bulletCam: null, // Final-Kill Slow-Mo Kamera
+
+      // Zähler für Bonusziele
+      stats: newMissionStats(),
+      objNotified: [],
+      objBonusAwarded: 0,
     };
+
+    function newMissionStats() {
+      return { balloons: 0, hostages: 0, snipers: 0, vips: 0, drones: 0, longshots: 0, chain: 0, sniperHitsTaken: 0 };
+    }
 
     function clearWorldDynamics() {
       while (targetGroup.children.length > 0) targetGroup.remove(targetGroup.children[0]);
@@ -1699,16 +2204,37 @@
       }
       if (aliveHostiles >= state.mission.maxActiveHostiles) return;
 
-      const entries = Object.entries(state.mission.weights);
-      const total = entries.reduce((s, [, w]) => s + w, 0);
-      let roll = Math.random() * total;
-      let chosen = entries[0][0];
-      for (let i = 0; i < entries.length; i++) {
-        roll -= entries[i][1];
-        if (roll <= 0) { chosen = entries[i][0]; break; }
+      // Typen ausfiltern, die gerade nicht erscheinen dürfen (Obergrenzen, Start-Phase)
+      const aliveOf = (type) => state.targets.filter((t) => t.alive && t.type === type).length;
+      const entries = Object.entries(state.mission.weights).filter(([type]) => {
+        const cfg = TARGET_CONFIGS[type];
+        if (!cfg) return false;
+        if (forceHostile && (!cfg.hostile || type === 'sniper')) return false;
+        if (cfg.isUtility && aliveUtilities >= 2) return false;
+        if (cfg.maxAlive && aliveOf(type) >= cfg.maxAlive) return false;
+        if (type === 'sniper' && state.elapsedSec < 4) return false;
+        return true;
+      });
+      let chosen = 'runner';
+      if (entries.length > 0) {
+        const total = entries.reduce((s, [, w]) => s + w, 0);
+        let roll = Math.random() * total;
+        chosen = entries[0][0];
+        for (let i = 0; i < entries.length; i++) {
+          roll -= entries[i][1];
+          if (roll <= 0) { chosen = entries[i][0]; break; }
+        }
       }
-      if (chosen === 'explosive' && (forceHostile || aliveUtilities >= 2)) chosen = 'runner';
       state.targets.push(createTarget3D(chosen, state.mission, state.targets));
+
+      if (chosen === 'sniper') {
+        setBanner('GEGEN-SCHARFSCHÜTZE! ACHTE AUF DAS GLITZERN', true, 2.4);
+        sound.sniperWarn(false);
+      } else if (chosen === 'officer') {
+        setBanner('ZIELPERSON GESICHTET — SIE FLIEHT!', false, 2.2);
+      } else if (chosen === 'hostage' && !forceHostile) {
+        setBanner('GEISELNAHME! NUR DEN TÄTER TREFFEN', true, 2.2);
+      }
     }
 
     function startMission(index) {
@@ -1762,6 +2288,10 @@
       state.bestDistanceM = 0;
       state.spawnCooldown = 0.25;
       state.endReason = '';
+      state.stats = newMissionStats();
+      state.objNotified = [];
+      state.objBonusAwarded = 0;
+      objHudCache = '';
 
       buildEnvironment(state.mission.theme);
       state.coverMeshes = buildCovers(state.mission);
@@ -1873,6 +2403,14 @@
       if (state.ammo === 0) setBanner('MAGAZIN LEER — [R] NACHLADEN', true, 1.8);
     }
 
+    // Zähler für Bonusziele bei jedem ausgeschalteten Feind
+    function countKillStats(target) {
+      if (target.type === 'drone') state.stats.drones += 1;
+      else if (target.type === 'sniper') state.stats.snipers += 1;
+      else if (target.type === 'officer') state.stats.vips += 1;
+      else if (target.type === 'hostage') state.stats.hostages += 1;
+    }
+
     function resolveHit3D(target, hitMesh, hitPoint) {
       const cfg = TARGET_CONFIGS[target.type];
       let zone = hitMesh.userData.zone;
@@ -1903,8 +2441,39 @@
         return;
       }
 
+      if (target.type === 'hostage' && zone === 'hostage') {
+        // Geisel getroffen: zählt wie ein Zivilist, der Geiselnehmer verschwindet mit ihr
+        target.alive = false;
+        sendTargetKnockdown(target);
+        state.score = Math.max(0, state.score - 300);
+        state.strikes += 1;
+        state.combo = 1;
+        sound.penalty();
+        triggerFlash();
+        setBanner('GEISEL GETROFFEN! VERSTOSS', true, 2.2);
+        spawnParticles3D(hitPoint, 0xef4444, 14, 7, 0.55);
+        addFloatMessage(hitPoint, 'GEISEL GETROFFEN! -300', '#f87171');
+        return;
+      }
+
       state.shotsHit += 1;
       if (target.distanceM > state.bestDistanceM) state.bestDistanceM = target.distanceM;
+
+      if (target.type === 'balloon') {
+        // Bonus-Ballon: Magazin sofort voll + Zeitbonus, zählt nicht als Ziel
+        target.alive = false;
+        sendTargetKnockdown(target);
+        state.stats.balloons += 1;
+        state.score += cfg.basePoints;
+        state.ammo = MAG_SIZE;
+        state.reloadTimer = 0;
+        state.timeLeftSec += 5;
+        showHitmarker(true, hitPoint);
+        sound.bonus();
+        spawnParticles3D(hitPoint, 0xfacc15, 22, 9, 0.6);
+        addFloatMessage(hitPoint, `BONUS! +${cfg.basePoints} · MAGAZIN VOLL · +5s`, '#fde047');
+        return;
+      }
 
       if (target.type === 'explosive') {
         target.alive = false;
@@ -1926,17 +2495,20 @@
           if (other.group.position.distanceTo(target.group.position) <= blastR) {
             other.alive = false;
             sendTargetKnockdown(other);
-            if (other.isCivilian) {
+            if (other.isCivilian || other.type === 'hostage') {
+              // Die Druckwelle unterscheidet nicht zwischen Geisel und Geiselnehmer
               chainCiv += 1;
               pts -= 300;
             } else if (other.hostile) {
               chainKills += 1;
               pts += 180;
+              countKillStats(other);
             }
           }
         }
         state.score = Math.max(0, state.score + pts * Math.max(1, state.combo));
         state.kills += chainKills;
+        state.stats.chain += chainKills;
         state.strikes += chainCiv;
         if (chainCiv > 0) {
           state.combo = 1;
@@ -1968,15 +2540,21 @@
       }
 
       target.alive = false;
-      sendTargetKnockdown(target);
+      const freed = target.type === 'hostage';
+      sendTargetKnockdown(target, { freed });
       let base = cfg.basePoints;
       if (critical) base = cfg.critPoints;
       else if (zone === 'mid' && cfg.midPoints) base = cfg.midPoints;
 
       const movingBonus = Math.abs(target.vx) > 0.5 ? 45 : 0;
-      const total = (base + distBonus + movingBonus) * Math.max(1, state.combo);
+      // Gegen-Sniper früh erwischt = Bonus; Geisel befreit = Bonus
+      const sniperBonus = target.type === 'sniper' ? Math.round((1 - target.charge) * 150) : 0;
+      const rescueBonus = freed ? 150 : 0;
+      const total = (base + distBonus + movingBonus + sniperBonus + rescueBonus) * Math.max(1, state.combo);
       state.score += total;
       if (target.hostile) state.kills += 1;
+      countKillStats(target);
+      if (target.distanceM >= 220) state.stats.longshots += 1;
       if (critical) state.headshots += 1;
       state.combo = Math.min(8, state.combo + 1);
       if (state.mission.endless) state.timeLeftSec += critical ? 7 : 4;
@@ -1986,7 +2564,13 @@
       spawnParticles3D(hitPoint, critical ? 0xfacc15 : 0x4ade80, 16, 8.5, 0.5);
 
       let label = `+${total}`;
-      if (critical) {
+      if (target.type === 'sniper') {
+        label = `SNIPER AUSGESCHALTET! +${total}`;
+      } else if (target.type === 'officer') {
+        label = `ZIELPERSON ELIMINIERT! +${total}`;
+      } else if (freed) {
+        label = `GEISEL BEFREIT! +${total}`;
+      } else if (critical) {
         label =
           target.type === 'standard'
             ? `BULLSEYE! +${total}`
@@ -1998,7 +2582,9 @@
       } else if (distBonus >= 90) {
         label = `WEITSCHUSS +${total}`;
       }
-      addFloatMessage(hitPoint, label, critical ? '#facc15' : '#4ade80');
+      // Schussdistanz immer mit anzeigen
+      label += ` · ${target.distanceM} m`;
+      addFloatMessage(hitPoint, label, critical || cfg.critPoints >= 400 ? '#facc15' : '#4ade80');
 
       // Finale Kill-Cam Slow-Mo für den letzten benötigten Treffer einer Mission
       if (!state.mission.endless && state.kills >= state.mission.goal && state.strikes < MAX_STRIKES) {
@@ -2007,6 +2593,69 @@
           timer: 0.9,
         };
         state.isScoped = false;
+      }
+    }
+
+    // Gegen-Scharfschütze trifft den Spieler: Zeit- und Punktabzug, Combo weg
+    function sniperFires(t) {
+      state.stats.sniperHitsTaken += 1;
+      state.timeLeftSec = Math.max(0, state.timeLeftSec - SNIPER_TIME_PENALTY);
+      state.score = Math.max(0, state.score - SNIPER_SCORE_PENALTY);
+      state.combo = 1;
+      state.camShake = 0.6;
+      state.recoilPitch += 0.03;
+      sound.enemyShot();
+      triggerFlash();
+      setBanner(`VOM GEGEN-SNIPER GETROFFEN! −${SNIPER_TIME_PENALTY}s −${SNIPER_SCORE_PENALTY}`, true, 2.6);
+      const muzzle = new THREE.Vector3();
+      if (t.glint) t.glint.getWorldPosition(muzzle);
+      else muzzle.copy(t.group.position);
+      spawnParticles3D(muzzle, 0xfef3c7, 10, 4, 0.4);
+      addFloatMessage(muzzle.clone().add(new THREE.Vector3(0, 1.5, 0)), 'SNIPER HAT GESCHOSSEN', '#f87171');
+    }
+
+    function updateSniperGlint(t, dt) {
+      if (!t.glint) return;
+      const c = t.charge;
+      // Konstante Bildschirmgröße (Anteil an der Bildhöhe), egal ob 1x oder 12x
+      const dist = Math.max(10, camera.position.distanceTo(t.group.position));
+      const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+      const flicker = 0.75 + 0.25 * Math.sin(t.age * (10 + c * 16));
+      const frac = (0.04 + 0.055 * c) * flicker;
+      t.glint.scale.setScalar(viewH * frac);
+      t.glint.material.opacity = Math.min(1, 0.35 + 0.65 * c) * flicker;
+      t.glint.material.color.setHex(c > 0.75 ? 0xff8a7a : 0xffffff);
+
+      // Warntöne: einmal bei 65 % Ladung, dann schneller werdendes Piepen
+      if (c >= 0.65 && !t.warned) {
+        t.warned = true;
+        setBanner('SCHARFSCHÜTZE ZIELT AUF DICH!', true, 1.6);
+      }
+      if (c >= 0.65) {
+        t.warnTimer -= dt;
+        if (t.warnTimer <= 0) {
+          sound.sniperWarn(c > 0.85);
+          t.warnTimer = c > 0.85 ? 0.22 : 0.45;
+        }
+      }
+    }
+
+    // Deckungsschütze: abwechselnd geduckt (verdeckt) und aufgetaucht
+    function updatePeeker(t, dt) {
+      t.peekTimer -= dt;
+      if (t.peekTimer <= 0) {
+        t.peekUp = !t.peekUp;
+        if (t.peekUp) {
+          t.peekTimer = 1.3 + Math.random() * 0.8;
+          t.peekSide = Math.random() < 0.5 ? -1 : 1;
+        } else {
+          t.peekTimer = 1.5 + Math.random() * 1.1;
+        }
+      }
+      t.peekFrac += ((t.peekUp ? 1 : 0) - t.peekFrac) * Math.min(1, dt * 9);
+      if (t.bodyGroup) {
+        t.bodyGroup.position.y = -1.45 * (1 - t.peekFrac);
+        t.bodyGroup.position.x = t.peekSide * 0.35 * t.peekFrac;
       }
     }
 
@@ -2114,6 +2763,63 @@
       });
     }
 
+    // Rote Warnpfeile zu Gegen-Scharfschützen, die gerade außerhalb des Sichtfelds (bzw. Scope-Kreises) liegen
+    const threatVec = new THREE.Vector3();
+    function drawThreatIndicators(w, h, scoped) {
+      const cx = w / 2;
+      const cy = h / 2;
+      const radius = Math.min(w, h) * 0.42;
+      camera.updateMatrixWorld();
+      state.targets.forEach((t) => {
+        if (!t.alive || t.type !== 'sniper' || !t.glint) return;
+        t.glint.getWorldPosition(threatVec);
+        const p = threatVec.project(camera);
+        const behind = p.z > 1;
+        let sx = (p.x * 0.5 + 0.5) * w;
+        let sy = (-p.y * 0.5 + 0.5) * h;
+        if (behind) { sx = w - sx; sy = h - sy; }
+        let dx = sx - cx;
+        let dy = sy - cy;
+        const len = Math.hypot(dx, dy) || 1;
+        const visible = !behind && (scoped ? len < radius - 6 : sx > 8 && sx < w - 8 && sy > 8 && sy < h - 8);
+        if (visible) return;
+        dx /= len;
+        dy /= len;
+        let ax;
+        let ay;
+        if (scoped) {
+          ax = cx + dx * (radius - 26);
+          ay = cy + dy * (radius - 26);
+        } else {
+          const m = 42;
+          const k = Math.min((w / 2 - m) / Math.max(1e-3, Math.abs(dx)), (h / 2 - m) / Math.max(1e-3, Math.abs(dy)));
+          ax = cx + dx * k;
+          ay = cy + dy * k;
+        }
+        const pulse = 0.55 + 0.45 * Math.sin(performance.now() / (t.charge > 0.75 ? 70 : 160));
+        scopeCtx.save();
+        scopeCtx.translate(ax, ay);
+        scopeCtx.rotate(Math.atan2(dy, dx));
+        scopeCtx.globalAlpha = 0.5 + 0.5 * pulse;
+        scopeCtx.fillStyle = t.charge > 0.75 ? '#ef4444' : '#f59e0b';
+        scopeCtx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+        scopeCtx.shadowBlur = 5;
+        scopeCtx.beginPath();
+        scopeCtx.moveTo(14, 0);
+        scopeCtx.lineTo(-8, -10);
+        scopeCtx.lineTo(-8, 10);
+        scopeCtx.closePath();
+        scopeCtx.fill();
+        // Ladebalken des gegnerischen Schusses als Bogen
+        scopeCtx.strokeStyle = scopeCtx.fillStyle;
+        scopeCtx.lineWidth = 3;
+        scopeCtx.beginPath();
+        scopeCtx.arc(0, 0, 19, -Math.PI, -Math.PI + Math.PI * 2 * t.charge);
+        scopeCtx.stroke();
+        scopeCtx.restore();
+      });
+    }
+
     // === HiDPI Scope 2D Overlay ===
     function drawScopeOverlay() {
       const w = window.innerWidth;
@@ -2122,6 +2828,7 @@
       if (state.phase !== 'PLAYING' || state.bulletCam) return;
       if (!state.isScoped) {
         drawEdgeHints(w, h);
+        drawThreatIndicators(w, h, false);
         return;
       }
 
@@ -2245,6 +2952,7 @@
       scopeCtx.restore();
 
       drawEdgeHints(w, h);
+      drawThreatIndicators(w, h, true);
     }
 
     // === UI & DOM Bindings ===
@@ -2310,11 +3018,16 @@
       } catch (_) { return {}; }
     }
 
-    function saveRecord(missionId, score, stars) {
+    function saveRecord(missionId, score, stars, objectives) {
       try {
         const records = loadRecords();
         const prev = records[missionId] || { score: 0, stars: 0 };
-        records[missionId] = { score: Math.max(prev.score, score), stars: Math.max(prev.stars, stars) };
+        // obj = meiste erfüllte Bonusziele (neues Feld, ältere Einträge haben es nicht)
+        records[missionId] = {
+          score: Math.max(prev.score || 0, score),
+          stars: Math.max(prev.stars || 0, stars),
+          obj: Math.max(prev.obj || 0, objectives || 0),
+        };
         localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
       } catch (_) {}
 
@@ -2332,6 +3045,9 @@
         card.className = 'mission-card';
         const starStr = rec && rec.stars > 0 ? '★'.repeat(rec.stars) + '☆'.repeat(3 - rec.stars) : '☆☆☆';
         const bestStr = rec && rec.score > 0 ? `Best: ${rec.score}` : m.endless ? 'Endlos' : `${m.goal} Ziele`;
+        const objs = m.objectives || [];
+        const objLine = objs.length ? `<p class="mission-obj">◆ ${objs.map(objectiveLabel).join(' · ')}</p>` : '';
+        const objStr = objs.length ? ` · ◆ ${(rec && rec.obj) || 0}/${objs.length}` : '';
         card.innerHTML = `
           <div>
             <div class="mission-top">
@@ -2339,10 +3055,11 @@
               <span class="mission-tag">${m.tag}</span>
             </div>
             <p>${m.description}</p>
+            ${objLine}
           </div>
           <div class="mission-meta">
             <span>${bestStr}</span>
-            <span>${m.endless ? 'Highscore' : starStr}</span>
+            <span>${m.endless ? 'Highscore' : starStr}${objStr}</span>
           </div>
         `;
         card.addEventListener('click', () => startMission(index));
@@ -2361,6 +3078,108 @@
       return { score: state.score, accuracy, headshots: state.headshots, bestDistanceM: state.bestDistanceM, stars };
     }
 
+    // === Bonusziele (zwei pro Mission, je +OBJECTIVE_BONUS bei Erfolg) ===
+    // keep-Ziele (z.B. "keine Zivilisten") gelten bis zum Schluss, Zähl-Ziele sind erfüllt, sobald n erreicht ist.
+    function objectiveStatus(o) {
+      const s = state.stats;
+      const prog = (cur) => ({ keep: false, cur: Math.min(cur, o.n), n: o.n, done: cur >= o.n, failed: false });
+      switch (o.type) {
+        case 'headshots': return prog(state.headshots);
+        case 'kills': return prog(state.kills);
+        case 'balloons':
+        case 'hostages':
+        case 'snipers':
+        case 'vips':
+        case 'drones':
+        case 'longshots':
+        case 'chain':
+          return prog(s[o.type] || 0);
+        case 'noStrikes': return { keep: true, done: state.strikes === 0, failed: state.strikes > 0 };
+        case 'noSniperHits': return { keep: true, done: s.sniperHitsTaken === 0, failed: s.sniperHitsTaken > 0 };
+        case 'accuracy': {
+          const acc = state.shotsFired > 0 ? Math.round((state.shotsHit / state.shotsFired) * 100) : 0;
+          return { keep: true, accuracy: true, cur: acc, done: state.shotsFired > 0 && acc >= o.n, failed: false };
+        }
+        default: return { keep: true, done: false, failed: false };
+      }
+    }
+
+    function objectiveLabel(o) {
+      return o.n && o.type !== 'accuracy' ? `${o.n} ${o.text}` : o.text;
+    }
+
+    function objectiveProgressText(st) {
+      if (!st.keep) return `${st.cur}/${st.n}`;
+      if (st.accuracy) return `${st.cur} %`;
+      return st.failed ? '✗' : '✓';
+    }
+
+    let objHudCache = '';
+    const objHudEl = document.getElementById('objectives-hud');
+    function updateObjectivesHud() {
+      const objs = state.mission.objectives || [];
+      if (state.phase !== 'PLAYING' || state.bulletCam || objs.length === 0) {
+        objHudEl.classList.add('hidden');
+        return;
+      }
+      objHudEl.classList.remove('hidden');
+      const html = '<div class="obj-head">BONUSZIELE</div>' + objs.map((o) => {
+        const st = objectiveStatus(o);
+        const cls = st.failed ? 'failed' : st.done && !st.keep ? 'done' : '';
+        const mark = st.failed ? '✗' : st.done && !st.keep ? '✓' : '◆';
+        return `<div class="obj ${cls}">${mark} ${objectiveLabel(o)} <b>${objectiveProgressText(st)}</b></div>`;
+      }).join('');
+      if (html !== objHudCache) {
+        objHudEl.innerHTML = html;
+        objHudCache = html;
+      }
+    }
+
+    // mode: 'live' (Pause / Niederlage: Fortschritt) | 'victory' (Abrechnung mit Bonuspunkten)
+    function renderObjectiveList(el, mode) {
+      const objs = state.mission.objectives || [];
+      el.innerHTML = objs.map((o) => {
+        const st = objectiveStatus(o);
+        if (mode === 'victory') {
+          return `<div class="obj ${st.done ? 'done' : 'failed'}"><span>${st.done ? '✓' : '✗'} ${objectiveLabel(o)}</span><b>${st.done ? `+${OBJECTIVE_BONUS}` : '—'}</b></div>`;
+        }
+        const cls = st.failed ? 'failed' : st.done && !st.keep ? 'done' : '';
+        return `<div class="obj ${cls}"><span>◆ ${objectiveLabel(o)}</span><b>${objectiveProgressText(st)}</b></div>`;
+      }).join('');
+    }
+
+    function checkObjectiveProgress() {
+      (state.mission.objectives || []).forEach((o, i) => {
+        if (state.objNotified[i]) return;
+        const st = objectiveStatus(o);
+        if (!st.keep && st.done) {
+          state.objNotified[i] = true;
+          setBanner(`BONUSZIEL ERFÜLLT: ${objectiveLabel(o)}`, false, 2.2);
+          sound.bonus();
+        }
+      });
+    }
+
+    function finishVictory(reason, withTimeBonus) {
+      state.phase = 'VICTORY';
+      state.isScoped = false;
+      const parts = [reason];
+      if (withTimeBonus) {
+        const timeBonus = Math.round(state.timeLeftSec * 15);
+        state.score += timeBonus;
+        parts.push(`Zeitbonus: +${timeBonus} Pkt.`);
+      }
+      const objs = state.mission.objectives || [];
+      const done = objs.filter((o) => objectiveStatus(o).done).length;
+      state.objBonusAwarded = done;
+      if (done > 0) {
+        state.score += done * OBJECTIVE_BONUS;
+        parts.push(`Bonusziele ${done}/${objs.length}: +${done * OBJECTIVE_BONUS} Pkt.`);
+      }
+      state.endReason = parts.join(' ');
+      syncOverlays();
+    }
+
     function syncOverlays() {
       els.overlayMenu.classList.toggle('hidden', state.phase !== 'MENU');
       els.overlayPause.classList.toggle('hidden', state.phase !== 'PAUSED');
@@ -2377,9 +3196,14 @@
         lockPointer();
       }
 
+      if (state.phase === 'PAUSED') renderObjectiveList(document.getElementById('pause-objectives'), 'live');
+
       if (ended) {
         const stats = getSummaryStats();
-        if (state.phase === 'VICTORY') saveRecord(state.mission.id, stats.score, stats.stars);
+        if (state.phase === 'VICTORY') saveRecord(state.mission.id, stats.score, stats.stars, state.objBonusAwarded);
+        const hasObjs = (state.mission.objectives || []).length > 0;
+        document.getElementById('result-objective-title').classList.toggle('hidden', !hasObjs);
+        renderObjectiveList(document.getElementById('result-objectives'), state.phase === 'VICTORY' ? 'victory' : 'live');
         els.resultBadge.textContent = state.phase === 'VICTORY' ? 'ERFOLG' : 'ABGEBROCHEN';
         els.resultTitle.textContent = state.phase === 'VICTORY' ? 'MISSION ABGESCHLOSSEN' : 'MISSION GESCHEITERT';
         els.resultReason.textContent = state.endReason;
@@ -2443,6 +3267,7 @@
       }
       for (let i = 0; i < MAG_SIZE; i++) els.ammoPips.children[i].classList.toggle('spent', i >= state.ammo);
       els.ammoText.textContent = state.reloadTimer > 0 ? 'LÄDT...' : `${state.ammo} / ${MAG_SIZE}`;
+      updateObjectivesHud();
 
       if (state.bannerText && state.bannerTimer > 0) {
         els.banner.textContent = state.bannerText;
@@ -2854,6 +3679,10 @@
           for (let i = dyingTargets3D.length - 1; i >= 0; i--) {
             const d = dyingTargets3D[i];
             d.life -= slowDt;
+            if (d.type === 'freed') {
+              d.group.position.x += d.vx * slowDt;
+              continue;
+            }
             d.group.rotation.x -= slowDt * 4.5;
             d.group.rotation.z += d.spin * slowDt;
           }
@@ -2870,11 +3699,7 @@
           if (state.bulletCam.timer <= 0) {
             state.bulletCam = null;
             camera.position.copy(PERCH_POS);
-            state.phase = 'VICTORY';
-            const timeBonus = Math.round(state.timeLeftSec * 15);
-            state.score += timeBonus;
-            state.endReason = `Alle ${state.mission.goal} Ziele neutralisiert! Zeitbonus: +${timeBonus} Pkt.`;
-            syncOverlays();
+            finishVictory(`Alle ${state.mission.goal} Ziele neutralisiert!`, true);
           }
           renderer.render(scene, camera);
           drawScopeOverlay();
@@ -2996,29 +3821,67 @@
           if (!t.alive) { state.targets.splice(i, 1); continue; }
           t.age += dt;
           if (t.flinchTimer > 0) t.flinchTimer = Math.max(0, t.flinchTimer - dt);
+
+          // Gegen-Scharfschütze: zielt, Glitzern wird heller — bei voller Ladung feuert er
+          if (t.type === 'sniper') {
+            t.charge = Math.min(1, t.age / t.aimTime);
+            if (t.age >= t.aimTime) {
+              sniperFires(t);
+              t.alive = false;
+              targetGroup.remove(t.group);
+              state.targets.splice(i, 1);
+              continue;
+            }
+            updateSniperGlint(t, dt);
+          }
+
           if (t.age >= t.lifeSpan) {
             t.alive = false;
             targetGroup.remove(t.group);
+            const escPos = t.group.position.clone().add(new THREE.Vector3(0, 2.5, 0));
             if (t.type === 'drone') {
               state.combo = 1;
-              addFloatMessage(t.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)), 'DROHNE ENTKOMMEN', '#f59e0b');
+              addFloatMessage(escPos, 'DROHNE ENTKOMMEN', '#f59e0b');
+            } else if (t.type === 'officer') {
+              state.combo = 1;
+              addFloatMessage(escPos, 'ZIELPERSON ENTKOMMEN', '#f59e0b');
+              setBanner('ZIELPERSON ENTKOMMEN!', true, 1.8);
+            } else if (t.type === 'hostage') {
+              state.combo = 1;
+              state.score = Math.max(0, state.score - 100);
+              addFloatMessage(escPos, 'GEISEL VERSCHLEPPT -100', '#f87171');
             }
             state.targets.splice(i, 1);
             continue;
           }
 
           const spdMult = t.flinchTimer > 0 ? 1.55 : 1.0;
-          t.x += t.vx * spdMult * dt;
-          if (t.x <= t.patrolMinX) { t.x = t.patrolMinX; t.vx = Math.abs(t.vx); }
-          else if (t.x >= t.patrolMaxX) { t.x = t.patrolMaxX; t.vx = -Math.abs(t.vx); }
+          if (t.type === 'balloon') {
+            // treibt mit dem Wind (gut zum Wind-Ablesen) und steigt langsam
+            t.x += state.windMps * 0.6 * dt;
+          } else {
+            t.x += t.vx * spdMult * dt;
+            if (t.x <= t.patrolMinX) { t.x = t.patrolMinX; t.vx = Math.abs(t.vx); }
+            else if (t.x >= t.patrolMaxX) { t.x = t.patrolMaxX; t.vx = -Math.abs(t.vx); }
+          }
 
           if (t.type === 'drone') {
             t.y = t.baseY + Math.sin(t.age * 3.0 + t.bobPhase) * 2.2 + Math.cos(t.age * 1.6) * 0.9;
             t.rotorMeshes.forEach((rm, idx) => { rm.rotation.y += dt * (idx === 0 ? 28 : -28); });
+          } else if (t.type === 'balloon') {
+            t.y = t.baseY + t.age * 0.85 + Math.sin(t.age * 1.7 + t.bobPhase) * 0.3;
+            t.group.rotation.z = Math.sin(t.age * 1.3 + t.bobPhase) * 0.08 - state.windMps * 0.015;
           } else {
             t.y = terrainHeightAt(t.x, t.z);
           }
           t.group.position.set(t.x, t.y, t.z);
+
+          if (t.type === 'peeker') updatePeeker(t, dt);
+          if (t.captorGroup) t.captorGroup.position.x = Math.sin(t.age * 1.25 + t.bobPhase) * 0.62;
+          if (t.spinMesh) {
+            t.spinMesh.rotation.y += dt * 2.6;
+            t.spinMesh.position.y = 3.35 + Math.sin(t.age * 3) * 0.12;
+          }
 
           if (t.leftLeg && t.rightLeg && Math.abs(t.vx) > 0.2) {
             const stride = Math.sin(t.age * 10) * 0.45;
@@ -3032,11 +3895,21 @@
           const d = dyingTargets3D[i];
           d.life -= dt;
           if (d.life <= 0) {
-            targetGroup.remove(d.group);
+            if (d.root) targetGroup.remove(d.root);
+            else if (d.group.parent) d.group.parent.remove(d.group);
             dyingTargets3D.splice(i, 1);
             continue;
           }
-          if (d.type === 'drone') {
+          if (d.type === 'freed') {
+            d.age += dt;
+            d.group.position.x += d.vx * dt;
+            d.group.position.y = terrainHeightAt(d.group.position.x, d.group.position.z);
+            if (d.legs) {
+              const stride = Math.sin(d.age * 14) * 0.55;
+              d.legs[0].rotation.x = stride;
+              d.legs[1].rotation.x = -stride;
+            }
+          } else if (d.type === 'drone') {
             d.vy -= 14 * dt;
             d.group.position.y += d.vy * dt;
             d.group.rotation.z += d.spin * dt * 2.5;
@@ -3054,6 +3927,7 @@
 
         stepShots3D(dt);
         updateRangefinder();
+        checkObjectiveProgress();
 
         for (let i = particles3D.length - 1; i >= 0; i--) {
           const p = particles3D[i];
@@ -3096,22 +3970,21 @@
         if (state.strikes >= MAX_STRIKES) {
           state.phase = 'DEFEAT';
           state.isScoped = false;
-          state.endReason = 'Zu viele Zivilisten gefährdet (3/3 Verstöße).';
+          state.endReason = 'Zu viele Zivilisten/Geiseln gefährdet (3/3 Verstöße).';
           syncOverlays();
         } else if (!state.mission.endless && state.kills >= state.mission.goal && !state.bulletCam) {
-          state.phase = 'VICTORY';
-          state.isScoped = false;
-          const timeBonus = Math.round(state.timeLeftSec * 15);
-          state.score += timeBonus;
-          state.endReason = `Alle ${state.mission.goal} Ziele neutralisiert! Zeitbonus: +${timeBonus} Pkt.`;
-          syncOverlays();
+          finishVictory(`Alle ${state.mission.goal} Ziele neutralisiert!`, true);
         } else if (state.timeLeftSec <= 0 && !state.bulletCam) {
-          state.phase = state.mission.endless ? 'VICTORY' : 'DEFEAT';
-          state.isScoped = false;
-          state.endReason = state.mission.endless
-            ? `Zeit abgelaufen! ${state.kills} Ziele eliminiert.`
-            : `Zeit abgelaufen (${state.kills} / ${state.mission.goal} Ziele).`;
-          syncOverlays();
+          if (state.mission.endless) {
+            finishVictory(`Zeit abgelaufen! ${state.kills} Ziele eliminiert.`, false);
+          } else {
+            state.phase = 'DEFEAT';
+            state.isScoped = false;
+            state.endReason = state.stats.sniperHitsTaken > 0
+              ? `Zeit abgelaufen (${state.kills} / ${state.mission.goal} Ziele) — ${state.stats.sniperHitsTaken}x vom Gegen-Sniper getroffen.`
+              : `Zeit abgelaufen (${state.kills} / ${state.mission.goal} Ziele).`;
+            syncOverlays();
+          }
         }
       }
 
