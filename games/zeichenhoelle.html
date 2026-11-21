@@ -23,12 +23,12 @@ window.addEventListener('error', function(e) {
 });
 </script>
 <style>
-* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 :root { --fg:#ffcf6b; --dim:#8a6a2a; --hi:#fff3c8; --bad:#ff5a3c; }
 body.mono-green { --fg:#6dff8e; --dim:#2c7a3e; --hi:#d8ffe0; }
 body.mono-amber { --fg:#ffb02e; --dim:#80561a; --hi:#ffe2a8; }
 html,body { margin:0; height:100%; overflow:hidden; background:#000; color:var(--fg); font-family:"Courier New",Courier,monospace; }
-#screen { position:fixed; inset:0; width:100%; height:100%; display:block; background:#000; cursor:crosshair; }
+#screen { position:fixed; inset:0; width:100%; height:100%; display:block; background:#000; cursor:crosshair; touch-action:none; }
 #crt { position:fixed; inset:0; pointer-events:none; background:repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.18) 3px); mix-blend-mode:multiply; }
 #vign { position:fixed; inset:0; pointer-events:none; background:radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%); }
 .hidden { display:none !important; }
@@ -68,8 +68,9 @@ input[type=range] { flex:1; accent-color:var(--fg); }
 #over h1 { margin:4px 0 10px; font-size:clamp(22px,5vw,38px); color:var(--hi); letter-spacing:3px; }
 #over pre { font-family:inherit; text-align:left; display:inline-block; font-size:14px; color:var(--fg); margin:0 0 10px; }
 #over .btns { justify-content:center; }
-#touch { position:fixed; inset:0; pointer-events:none; }
-#touch .tb { position:absolute; pointer-events:auto; border:2px solid var(--dim); background:rgba(0,0,0,.35); color:var(--fg); font-family:inherit; font-weight:bold; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:13px; }
+#touch { position:fixed; inset:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); pointer-events:none; }
+#touch .tb { position:absolute; pointer-events:auto; touch-action:none; border:2px solid var(--dim); background:rgba(0,0,0,.35); color:var(--fg); font-family:inherit; font-weight:bold; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:13px; }
+@media (pointer:coarse) { button { min-height:44px; touch-action:manipulation; } #photoInfo { right:72px; } }
 #stick { position:absolute; left:20px; bottom:110px; width:120px; height:120px; border:2px dashed var(--dim); border-radius:50%; pointer-events:none; }
 #stickKnob { position:absolute; left:40px; top:40px; width:36px; height:36px; border-radius:50%; background:var(--dim); }
 #fallbackError { display:none; position:fixed; inset:0; background:#000; color:#ffcf6b; z-index:99999; padding:30px; text-align:center; font-family:monospace; }
@@ -118,7 +119,8 @@ input[type=range] { flex:1; accent-color:var(--fg); }
   <div class="tb" id="tUse" style="right:122px;bottom:150px;width:56px;height:56px">E</div>
   <div class="tb" id="tPhoto" style="right:40px;bottom:220px;width:56px;height:56px">FOTO</div>
   <div class="tb" id="tWep" style="right:122px;bottom:84px;width:48px;height:48px">⟳</div>
-  <div class="tb" id="tPause" style="right:14px;top:44px;width:42px;height:42px">II</div>
+  <div class="tb" id="tMap" style="right:116px;bottom:222px;width:52px;height:52px;font-size:11px">KARTE</div>
+  <div class="tb" id="tPause" style="right:14px;top:44px;width:48px;height:48px">II</div>
 </div>
 <script>
 'use strict';
@@ -789,7 +791,7 @@ function updatePlayer(dt) {
   let str = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
   fwd += -touch.my; str += touch.mx;
   let len = Math.hypot(fwd, str); if (len > 1) { fwd /= len; str /= len; len = 1; }
-  const sp = (k.ShiftLeft || k.ShiftRight ? 6 : 4.2) * (P.dead ? 0 : 1);
+  const sp = (k.ShiftLeft || k.ShiftRight || touch.run ? 6 : 4.2) * (P.dead ? 0 : 1);
   const c = Math.cos(P.a), s = Math.sin(P.a);
   const tx = (c * fwd - s * str) * sp, ty = (s * fwd + c * str) * sp;
   const acc = Math.min(1, dt * 11);
@@ -958,7 +960,7 @@ function beginLevel() {
   G.saved = { hp: P.hp, armor: P.armor, ammo: { ...P.ammo }, owned: [...P.owned], weapon: P.weapon, film: P.film };
   P.dead = false; P.overShown = false;
   setState('play');
-  msg(def.name + (S.mode === 'dark' ? ' – Drück F für ein Foto.' : ''));
+  msg(def.name + (S.mode === 'dark' ? (isTouch ? ' – Tippe FOTO für ein Foto.' : ' – Drück F für ein Foto.') : ''));
   if (S.mode === 'horde') msg('Halte durch!');
 }
 function restartLevel() {
@@ -1444,7 +1446,7 @@ function updateHud(dt) {
       const dm = Math.hypot(P.x - photo.x, P.y - photo.y);
       const arrow = Math.abs(da) < 6 ? '▲' : da > 0 ? '◄ ' + Math.round(Math.abs(da)) + '°' : Math.round(Math.abs(da)) + '° ►';
       pi = `FOTO vor ${photo.t.toFixed(1)} s\nBlick ${arrow}\nVersatz ${dm.toFixed(1)} m`;
-    } else pi = '[F] FOTO MACHEN';
+    } else pi = isTouch ? '[FOTO] FOTO MACHEN' : '[F] FOTO MACHEN';
   }
   $('photoInfo').textContent = pi;
 }
@@ -1461,7 +1463,7 @@ function setState(s) {
   if (s !== 'play') { $('top').textContent = ''; $('photoInfo').textContent = ''; }
   if (s === 'play' && !isTouch && document.pointerLockElement !== cv) { try { cv.requestPointerLock(); } catch (e) {} }
   if (s !== 'play' && document.pointerLockElement) document.exitPointerLock();
-  firing = false;
+  firing = false; touch.fire = false;
 }
 function showOver(title, text, btns) {
   $('overTitle').textContent = title; $('overText').textContent = text;
@@ -1514,14 +1516,22 @@ $('sens').oninput = e => { S.sens = +e.target.value; store('zh_sens', S.sens); }
 $('startBtn').onclick = () => startGame();
 
 /* ================= INPUT ================= */
-const isTouch = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
-const touch = { mx: 0, my: 0, turn: 0, fire: false, stickId: null, lookId: null, sx: 0, sy: 0, lx: 0 };
+let isTouch = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+const touch = { mx: 0, my: 0, turn: 0, fire: false, run: false, stickId: null, lookId: null, sx: 0, sy: 0, lx: 0 };
+function touchTexts() {
+  $('startBtn').textContent = "LOS GEHT'S";
+  document.querySelector('#menu .help').textContent = 'Linke Hälfte ziehen: laufen (weit ziehen = rennen) · Rechte Hälfte wischen: drehen · FEUER halten · E benutzen · FOTO · ⟳ Waffe · KARTE · II Pause';
+}
+if (isTouch) touchTexts();
+// Touchscreen ohne (pointer: coarse): beim ersten Tippen auf Touch-Steuerung umschalten
+window.addEventListener('touchstart', () => { if (!isTouch) { isTouch = true; touchTexts(); setState(state); } }, { passive: true, capture: true });
 window.addEventListener('keydown', e => {
   if (e.code === 'Tab') e.preventDefault();
   if (state === 'menu') { if (e.code === 'Enter') startGame(); return; }
   if (state === 'over' || state === 'pause') {
     if (e.code === 'Enter') { const b = $('overBtns').querySelector('button'); if (b) b.click(); }
     if (e.code === 'Escape' && state === 'pause') setState('play');
+    if (e.code === 'KeyR' && state === 'pause') restartFresh();
     return;
   }
   keys[e.code] = true;
@@ -1550,9 +1560,11 @@ function tbtn(id, down, up) {
   const el = $(id);
   el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); down(); }, { passive: false });
   el.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); if (up) up(); }, { passive: false });
+  if (up) el.addEventListener('touchcancel', up);
 }
 tbtn('tFire', () => touch.fire = true, () => touch.fire = false);
 tbtn('tUse', useAction); tbtn('tPhoto', takePhoto); tbtn('tWep', () => cycleWeapon(1)); tbtn('tPause', pauseGame);
+tbtn('tMap', () => showMap = !showMap);
 cv.addEventListener('touchstart', e => {
   if (state !== 'play') return; e.preventDefault();
   for (const t of e.changedTouches) {
@@ -1565,14 +1577,14 @@ cv.addEventListener('touchmove', e => {
   for (const t of e.changedTouches) {
     if (t.identifier === touch.stickId) {
       const dx = (t.clientX - touch.sx) / 50, dy = (t.clientY - touch.sy) / 50, l = Math.hypot(dx, dy), k = l > 1 ? 1 / l : 1;
-      touch.mx = dx * k; touch.my = dy * k;
+      touch.mx = dx * k; touch.my = dy * k; touch.run = l > 1.6;
       $('stickKnob').style.transform = `translate(${touch.mx * 40}px,${touch.my * 40}px)`;
     } else if (t.identifier === touch.lookId) { touch.turn += (t.clientX - touch.lx) * .008 * S.sens; touch.lx = t.clientX; }
   }
 }, { passive: false });
 function touchEnd(e) {
   for (const t of e.changedTouches) {
-    if (t.identifier === touch.stickId) { touch.stickId = null; touch.mx = touch.my = 0; $('stickKnob').style.transform = ''; }
+    if (t.identifier === touch.stickId) { touch.stickId = null; touch.mx = touch.my = 0; touch.run = false; $('stickKnob').style.transform = ''; }
     if (t.identifier === touch.lookId) touch.lookId = null;
   }
 }

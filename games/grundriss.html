@@ -14,10 +14,10 @@
   --gold:#d9a636; --red:#a8473f; --teal:#3e8a8c;
 }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-html,body { margin:0; height:100%; overflow:hidden; background:var(--wood); color:var(--paper); font-family:Georgia,"Times New Roman",serif; }
+html,body { margin:0; height:100%; overflow:hidden; background:var(--wood); color:var(--paper); font-family:Georgia,"Times New Roman",serif; touch-action:manipulation; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 .back { position:fixed; top:10px; left:12px; z-index:50; color:var(--paper); text-decoration:none; font-size:14px; font-weight:700; background:rgba(58,40,24,.9); border:1px solid rgba(217,166,54,.45); padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:4px; min-height:36px; font-family:system-ui,sans-serif; }
 .back:hover { background:rgba(217,166,54,.3); }
-#wrap { position:fixed; inset:0; display:flex; padding:54px 10px 10px; gap:10px; }
+#wrap { position:fixed; inset:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); display:flex; padding:54px 10px 10px; gap:10px; }
 #mapbox { position:relative; flex:1; min-width:0; min-height:0; background:radial-gradient(ellipse at center,#3a2818,#1a110a); border-radius:12px; box-shadow:inset 0 0 40px #000a; }
 #map { position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:pointer; }
 #title { position:fixed; top:12px; left:0; right:0; text-align:center; pointer-events:none; font-size:20px; letter-spacing:3px; color:var(--gold); font-variant:small-caps; }
@@ -74,6 +74,11 @@ button.gold:hover:not(:disabled) { background:#e8bb55; }
 .clue { padding:3px 0; border-bottom:1px dotted #0002; font-size:14px; }
 .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink); color:var(--paper); padding:8px 16px; border-radius:20px; font-size:14px; z-index:60; pointer-events:none; opacity:0; transition:opacity .2s; max-width:90vw; text-align:center; }
 .toast.on { opacity:1; }
+@media (pointer:coarse) {
+  button, .back { min-height:44px; }
+  .card .rot { min-width:44px; padding:6px 12px; font-size:18px; }
+  #notes td { width:44px; height:44px; }
+}
 @media (max-width:760px) {
   #wrap { flex-direction:column; padding-top:52px; }
   #mapbox { flex:none; height:56vh; }
@@ -122,7 +127,7 @@ button.gold:hover:not(:disabled) { background:#e8bb55; }
   <p class="small" id="draftInfo"></p>
   <div id="cards"></div>
   <div class="row" style="justify-content:space-between;align-items:center">
-    <span class="small">Click a blueprint to build it. ⟳ turns it. Keys 1–4 pick, Space rerolls.</span>
+    <span class="small">Click or tap a blueprint to build it. ⟳ turns it. Keys 1–4 pick, Shift+1–4 turn, Space rerolls.</span>
     <button id="btnReroll">🎲 Redraw (1 die)</button>
   </div>
 </div></div>
@@ -176,7 +181,7 @@ button.gold:hover:not(:disabled) { background:#e8bb55; }
   <p><b>Steps.</b> Entering any room costs 1 step. At 0 steps the day ends and the manor resets. Food and bedrooms give steps back.</p>
   <p><b>Keys & locks.</b> Doors higher in the manor are often locked. Each lock eats one key. <b>Dice</b> redraw the blueprints.</p>
   <p><b>The Cipher.</b> The Observatory dial needs three sigils. Studies, the Library and the Chapel hold clues. Clues and failed attempts stay in your journal between days, so every day brings you closer.</p>
-  <p><b>Controls.</b> Click an adjacent room or door, or use arrow keys / WASD. Click any built room to walk there by the shortest route. J opens the journal.</p>
+  <p><b>Controls.</b> Click or tap an adjacent room or door, or use arrow keys / WASD. Click or tap any built room to walk there by the shortest route. J opens the journal, H this help. At the dial, keys 1–6 enter sigils, Backspace removes one, Enter turns it.</p>
   <div class="row" style="justify-content:flex-end"><button class="gold" id="btnCloseHelp">Got it</button></div>
 </div></div>
 
@@ -506,6 +511,10 @@ function pickCard(i) {
   snd('powerup');
   stepInto(D.r, D.c);
 }
+function turnCard(i) {
+  const card = G.draft && G.draft.cards[i]; if (!card || card.rots.length < 2) return;
+  card.ri = (card.ri + 1) % card.rots.length; tone(600, .05, 'square', .05); renderDraft();
+}
 function reroll() {
   const D = G.draft; if (!D || G.dice < 1) return;
   G.dice--; D.cards = drawCards(D.r, D.c, D.back); snd('jump'); renderDraft(); updateUI();
@@ -542,7 +551,7 @@ function renderDraft() {
       '<div class="key">' + (i + 1) + '</div>';
     drawShape(el.querySelector('canvas'), card.rots[card.ri].doors, D.back, CAT[rm.cat].c);
     el.addEventListener('click', e => {
-      if (e.target.classList.contains('rot')) { card.ri = (card.ri + 1) % card.rots.length; tone(600, .05, 'square', .05); renderDraft(); return; }
+      if (e.target.classList.contains('rot')) { turnCard(i); return; }
       pickCard(i);
     });
     wrap.appendChild(el);
@@ -847,23 +856,27 @@ cv.addEventListener('click', e => {
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (G && G.draft) {
-    if (k >= '1' && k <= '5') { pickCard(+k - 1); e.preventDefault(); }
+    if (e.shiftKey && /^Digit[1-5]$/.test(e.code)) { turnCard(+e.code[5] - 1); e.preventDefault(); }
+    else if (k >= '1' && k <= '5') { pickCard(+k - 1); e.preventDefault(); }
     else if (k === ' ') { reroll(); e.preventDefault(); }
     return;
   }
   if (!ovCipher.classList.contains('hide')) {
     if (k === 'escape') ovCipher.classList.add('hide');
     else if (k === 'enter') submitDial();
+    else if (k.length === 1 && k >= '1' && k <= '6') { const b = $('sigBtns').children[+k - 1]; if (b && !b.disabled) b.click(); }
+    else if (k === 'backspace') { e.preventDefault(); dial.pop(); renderDial(); }
     return;
   }
   if (!ovJournal.classList.contains('hide') || !ovHelp.classList.contains('hide')) {
-    if (k === 'escape' || k === 'j') { ovJournal.classList.add('hide'); ovHelp.classList.add('hide'); }
+    if (k === 'escape' || k === 'j' || k === 'h') { ovJournal.classList.add('hide'); ovHelp.classList.add('hide'); }
     return;
   }
   if (!ovMenu.classList.contains('hide')) { if (k === 'enter') btnStart.click(); return; }
   const map = { arrowup:0, w:0, arrowright:1, d:1, arrowdown:2, s:2, arrowleft:3, a:3 };
   if (k in map) { tryDir(map[k]); e.preventDefault(); }
   else if (k === 'j') { renderJournal(); ovJournal.classList.remove('hide'); }
+  else if (k === 'h' || k === '?') ovHelp.classList.remove('hide');
 });
 
 btnReroll.onclick = reroll;

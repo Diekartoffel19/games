@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Gischtjagd 3D</title>
 <link rel="icon" href="../src/favicon.ico">
 <script src="../src/arcade-core.js"></script>
@@ -12,7 +12,7 @@
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; overflow:hidden; background:#0b1030; color:var(--foam);
     font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; font-style:italic; font-weight:800;
-    user-select:none; -webkit-user-select:none; touch-action:none; }
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:none; }
   canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; }
   .slab { background:rgba(11,16,48,.78); border-left:6px solid var(--sun); transform:skewX(-9deg);
     padding:8px 18px; box-shadow:6px 6px 0 rgba(0,0,0,.25); }
@@ -45,7 +45,7 @@
     background:radial-gradient(ellipse at center, transparent 45%, rgba(255,210,63,.28) 100%);
     box-shadow:inset 0 0 120px rgba(255,255,255,.35); }
   .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    background:linear-gradient(180deg, rgba(11,16,48,.25), rgba(11,16,48,.82)); padding:16px; overflow:auto; }
+    background:linear-gradient(180deg, rgba(11,16,48,.25), rgba(11,16,48,.82)); padding:16px; overflow:auto; justify-content:safe center; }
   h1 { font-size:clamp(44px,9vw,96px); margin:0; line-height:.9; color:var(--sun); text-shadow:6px 6px 0 var(--coral), 12px 12px 0 var(--ink);
     transform:skewX(-9deg) rotate(-2deg); letter-spacing:-1px; }
   .sub { margin:18px 0 22px; font-size:15px; letter-spacing:3px; }
@@ -71,10 +71,17 @@
   .btn { cursor:pointer; padding:12px 26px; margin:0 6px; background:var(--sun); color:var(--ink); border:0; font:inherit; font-size:18px;
     transform:skewX(-9deg); box-shadow:5px 5px 0 var(--coral); }
   .btn.alt { background:var(--foam); }
-  #touch { position:fixed; inset:0; pointer-events:none; display:none; }
+  #touch { position:fixed; inset:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); pointer-events:none; display:none; }
   .tb { position:absolute; bottom:22px; width:84px; height:84px; border-radius:50%; background:rgba(234,252,255,.2);
     border:3px solid rgba(234,252,255,.6); pointer-events:auto; display:flex; align-items:center; justify-content:center; font-size:26px; font-style:normal; }
   .tb.small { width:70px; height:70px; font-size:13px; }
+  .tb.top { top:118px; bottom:auto; width:54px; height:54px; font-size:20px; }
+  .tonly { display:none; }
+  body.touch .tonly { display:block; }
+  body.touch .konly { display:none; }
+  body.touch #speed { bottom:calc(200px + env(safe-area-inset-bottom)); }
+  @media (pointer:coarse) { .pill { min-height:44px; } #back { padding:12px 8px; } }
+  @media (max-height:700px) { h1 { font-size:clamp(36px,11vh,96px); } .sub { margin:10px 0 12px; } #diff, #help { margin-top:10px; } }
 </style>
 </head>
 <body>
@@ -102,6 +109,9 @@
   <div class="tb" id="tR" style="left:118px">▶</div>
   <div class="tb small" id="tD" style="right:112px">DRIFT</div>
   <div class="tb small" id="tN" style="right:22px;bottom:70px">NITRO</div>
+  <div class="tb small" id="tB" style="right:112px;bottom:112px">BREMSE</div>
+  <div class="tb top" id="tP" style="left:22px">❚❚</div>
+  <div class="tb top" id="tZ" style="left:86px">↺</div>
 </div>
 
 <div id="menu" class="screen">
@@ -117,6 +127,7 @@
     <kbd>W</kbd>/<kbd>↑</kbd> Gas · <kbd>S</kbd>/<kbd>↓</kbd> Bremse · <kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> Lenken ·
     <kbd>LEERTASTE</kbd> Drift (halten, loslassen = Turbo) · <kbd>SHIFT</kbd> Nitro<br>
     <kbd>R</kbd> Zurücksetzen · <kbd>P</kbd> Pause · <kbd>M</kbd> Ton — Kanister, Schanzen, Drifts und Windschatten füllen das Nitro.
+    <span class="tonly">Touch: Gas automatisch · ◀ ▶ Lenken · BREMSE · DRIFT halten · NITRO · ❚❚ Pause · ↺ Zurücksetzen</span>
   </div>
 </div>
 
@@ -128,8 +139,8 @@
 
 <div id="pause" class="screen" style="display:none">
   <h1 style="font-size:clamp(36px,7vw,72px)">PAUSE</h1>
-  <div class="sub">P ZUM WEITERFAHREN</div>
-  <div><button class="btn" id="resume">WEITER</button><button class="btn alt" id="quit">STRECKEN</button></div>
+  <div class="sub konly">P ZUM WEITERFAHREN</div>
+  <div><button class="btn" id="resume">WEITER</button><button class="btn alt" id="quit">STRECKEN</button><button class="btn alt" id="mute">TON AN/AUS</button></div>
 </div>
 
 <script>
@@ -504,7 +515,7 @@ function onRamp(x, z) { for (let i = 0; i < ramps.length; i++) { const r = ramps
 let state = 'menu', paused = false, raceT = 0, countT = 0, lastCount = 0, goAt = -1, rocketWin = 0, gasDownAt = -99, camTh = 0, shake = 0, wrongT = 0, doneT = 0;
 let diff = clamp(parseInt(localStorage.getItem('gischtjagd_diff') || '1', 10) || 0, 0, 2);
 const DIFF = [0.93, 1.0, 1.05];
-const keys = {}, touch = { l: false, r: false, d: false, n: false, on: false };
+const keys = {}, touch = { l: false, r: false, d: false, n: false, b: false, on: false };
 const order = boats.slice();
 
 function placeGrid() {
@@ -557,7 +568,7 @@ function aiDrive(b, dt) {
 }
 const plIn = { throttle: 0, steer: 0, drift: false, nitro: false };
 function playerInput() {
-  const up = keys.KeyW || keys.ArrowUp, dn = keys.KeyS || keys.ArrowDown;
+  const up = keys.KeyW || keys.ArrowUp, dn = keys.KeyS || keys.ArrowDown || touch.b;
   plIn.throttle = dn ? -1 : (up || touch.on) ? 1 : 0;
   plIn.steer = ((keys.KeyD || keys.ArrowRight || touch.r) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft || touch.l) ? 1 : 0);
   plIn.drift = !!(keys.Space || touch.d); plIn.nitro = !!(keys.ShiftLeft || keys.ShiftRight || keys.KeyE || touch.n);
@@ -814,11 +825,17 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
-addEventListener('touchstart', () => { touch.on = true; }, { passive: true });
-for (const [id, k] of [['tL', 'l'], ['tR', 'r'], ['tD', 'd'], ['tN', 'n']]) {
-  const el = $(id); const set = v => e => { e.preventDefault(); touch[k] = v; el.style.background = v ? 'rgba(255,210,63,.5)' : ''; };
-  el.addEventListener('touchstart', set(true), { passive: false }); el.addEventListener('touchend', set(false), { passive: false }); el.addEventListener('touchcancel', set(false), { passive: false });
+const setTouch = () => { touch.on = true; document.body.classList.add('touch'); };
+if (matchMedia('(pointer: coarse)').matches) setTouch();
+addEventListener('touchstart', setTouch, { passive: true });
+for (const [id, k] of [['tL', 'l'], ['tR', 'r'], ['tD', 'd'], ['tN', 'n'], ['tB', 'b']]) {
+  // held while any finger that started on this button is still down (multi-touch safe)
+  const el = $(id), set = e => { e.preventDefault(); const v = e.targetTouches.length > 0; touch[k] = v; el.style.background = v ? 'rgba(255,210,63,.5)' : ''; };
+  for (const t of ['touchstart', 'touchend', 'touchcancel']) el.addEventListener(t, set, { passive: false });
 }
+$('tP').addEventListener('pointerdown', e => { e.preventDefault(); setPause(!paused); });
+$('tZ').addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'race' && !paused) resetBoat(player); });
+$('mute').onclick = () => ArcadeCore.toggleMute();
 $('again').onclick = () => startRace(track.idx);
 $('toMenu').onclick = toMenu; $('quit').onclick = toMenu; $('resume').onclick = () => setPause(false);
 document.querySelectorAll('.pill').forEach(p => p.onclick = () => { diff = +p.dataset.d; localStorage.setItem('gischtjagd_diff', diff); refreshMenu(); });
