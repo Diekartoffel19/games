@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Zauberwürfel 3D</title>
 <link rel="icon" type="image/x-icon" href="../src/favicon.ico">
 <script src="../src/arcade-core.js"></script>
@@ -13,6 +13,7 @@
     :root { --bg: #18191b; --fg: #e8e8e8; --muted: #999; --panel: #232427; --border: #444; --accent: #6b9bff; }
   }
   * { box-sizing: border-box; }
+  html { touch-action: manipulation; }
   body { margin: 0; padding: 16px; font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); }
   main { max-width: 820px; margin: 0 auto; }
   .back { display: inline-block; margin-bottom: 8px; color: var(--fg); text-decoration: none; font-weight: 700; }
@@ -28,6 +29,7 @@
   #status { min-height: 1.4em; font-weight: 600; margin-bottom: 8px; }
   #status.win { color: #1a9a4a; }
 
+  #view, #pad { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #view { position: relative; width: 100%; height: min(62vh, 560px); min-height: 300px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   #view canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
   #view canvas:active { cursor: grabbing; }
@@ -41,6 +43,7 @@
   #help.open { display: block; }
   #help table { border-collapse: collapse; width: 100%; }
   #help td { padding: 3px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  @media (pointer: coarse) { button, select { min-height: 44px; } #pad button { min-width: 50px; } }
   kbd { font-family: ui-monospace, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--bg); }
 </style>
 </head>
@@ -91,6 +94,7 @@
       <tr><td><kbd>Enter</kbd></td><td>Auto-Modus: löst den Würfel automatisch</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Auto-Modus stoppen</td></tr>
       <tr><td><kbd>H</kbd></td><td>Diese Hilfe und die Seiten-Buchstaben ein/aus</td></tr>
+      <tr><td>Touch</td><td>Über eine Seite wischen = diese Ebene drehen · Neben dem Würfel ziehen = Ansicht · Zwei Finger = Zoom</td></tr>
     </table>
   </div>
 </main>
@@ -169,26 +173,72 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-// Orbit with mouse / touch
-let drag = null;
-renderer.domElement.addEventListener('pointerdown', e => {
-  drag = { x: e.clientX, y: e.clientY };
-  renderer.domElement.setPointerCapture(e.pointerId);
+// Orbit with mouse / touch. Touch only: swipe over the cube = turn that layer, two fingers = zoom
+let drag = null, pinch = null;
+const cv = renderer.domElement, pts = new Map(), ray = new THREE.Raycaster();
+const zoomTo = d => { camDist = Math.max(N * 1.6, Math.min(N * 6, d)); updateCamera(); };
+function hitCube(e) {
+  const r = cv.getBoundingClientRect();
+  scene.updateMatrixWorld();
+  ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -(e.clientY - r.top) / r.height * 2 + 1 }, camera);
+  return ray.intersectObject(cubeGroup, true)[0];
+}
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId);
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { span: Math.hypot(a.x - b.x, a.y - b.y) || 1, dist: camDist }; drag = null; return; }
+  if (pts.size > 2) return;
+  drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY };
+  // mouse keeps the old behaviour (drag = view only)
+  if (e.pointerType !== 'mouse' && !autoOn && hitCube(e)) { finishAnim(); drag.hit = hitCube(e); }
 });
-renderer.domElement.addEventListener('pointermove', e => {
+cv.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch) { const [a, b] = [...pts.values()]; zoomTo(pinch.dist * pinch.span / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))); return; }
   if (!drag) return;
+  if (drag.hit) {
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (Math.hypot(dx, dy) > 16) { swipeTurn(drag.hit, dx, dy); drag = null; }
+    return;
+  }
   camAz -= (e.clientX - drag.x) * 0.008;
   camEl += (e.clientY - drag.y) * 0.008;
-  drag = { x: e.clientX, y: e.clientY };
+  drag.x = e.clientX; drag.y = e.clientY;
   updateCamera();
 });
-renderer.domElement.addEventListener('pointerup', () => { drag = null; });
-renderer.domElement.addEventListener('pointercancel', () => { drag = null; });
-renderer.domElement.addEventListener('wheel', e => {
+const endPointer = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; drag = null; };
+for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) cv.addEventListener(t, endPointer);
+cv.addEventListener('wheel', e => {
   e.preventDefault();
-  camDist = Math.max(N * 1.6, Math.min(N * 6, camDist * (e.deltaY > 0 ? 1.1 : 0.9)));
-  updateCamera();
+  zoomTo(camDist * (e.deltaY > 0 ? 1.1 : 0.9));
 }, { passive: false });
+
+// Turn the layer under a swipe: drag direction picks the in-face axis, the third axis is the turn axis
+function swipeTurn(h, dx, dy) {
+  const e = ents.find(x => x.mesh === h.object); if (!e) return;
+  const n = e.vn || h.face.normal.toArray().map(Math.round);
+  const fa = n.findIndex(v => v !== 0);
+  const w = view.clientWidth / 2, hh = view.clientHeight / 2;
+  const scr = v => { v.project(camera); return [v.x * w, -v.y * hh]; };
+  const [px, py] = scr(h.point.clone());
+  let best = null;
+  for (let a = 0; a < 3; a++) {
+    if (a === fa) continue;
+    const q = h.point.clone(); q.setComponent(a, q.getComponent(a) + 0.5);
+    const [qx, qy] = scr(q), sx = qx - px, sy = qy - py;
+    const dot = (sx * dx + sy * dy) / (Math.hypot(sx, sy) || 1);
+    if (!best || Math.abs(dot) > Math.abs(best.dot)) best = { a, dot };
+  }
+  const ra = 3 - fa - best.a, r = [0, 0, 0]; r[ra] = 1;
+  // turning +1 around ra moves the face along cross(ra, n)
+  const c = [r[1] * n[2] - r[2] * n[1], r[2] * n[0] - r[0] * n[2], r[0] * n[1] - r[1] * n[0]];
+  const q = Math.sign(best.dot) * c[best.a];
+  const L = e.vp[ra], side = L < 0 ? -1 : 1;
+  const f = Object.keys(BASE).find(k => BASE[k][0] === ra && BASE[k][1] === side);
+  doMove(faceMove(f, (N - 1 - side * L) / 2 + 1, q !== BASE[f][2]));
+  depth = 1; render();
+}
 
 // ---------- Cube model ----------
 function init(n) {
@@ -319,6 +369,13 @@ function isSolved() {
 
 // ---------- Animation ----------
 function enqueue(mv, dur) { queue.push({ mv, dur }); }
+
+// Snap all running/queued turns to their end state (so a new swipe hits what the logic says)
+function finishAnim() {
+  if (anim) { for (const e of anim.sel) cubeGroup.attach(e.mesh); cubeGroup.remove(anim.pivot); anim = null; }
+  queue = [];
+  for (const e of ents) { e.vp = [...e.p]; e.vn = e.n && [...e.n]; place(e); }
+}
 
 function stepAnimation(dt) {
   if (!anim && queue.length) {
@@ -531,6 +588,8 @@ function loop(now) {
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
+
+if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Über Seite wischen = drehen · Daneben ziehen = Ansicht · 2 Finger = Zoom';
 
 resize();
 init(3);

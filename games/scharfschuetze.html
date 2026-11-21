@@ -45,6 +45,8 @@
       padding: 0;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     html, body {
@@ -92,9 +94,9 @@
 
     #hud-top {
       position: fixed;
-      top: 10px;
-      left: 12px;
-      right: 12px;
+      top: max(10px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -190,9 +192,9 @@
 
     #hud-bottom {
       position: fixed;
-      left: 14px;
-      right: 14px;
-      bottom: 12px;
+      left: max(14px, env(safe-area-inset-left));
+      right: max(14px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -585,6 +587,29 @@
     .primary-btn:hover { filter: brightness(1.12); }
     .secondary-btn { background: rgba(255, 255, 255, 0.08); color: var(--text); border-color: var(--border); }
     .secondary-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+    /* Touch: Ziehen auf dem Bild = Zielen, eigene Knöpfe für Schuss & Atem */
+    .touch-only { display: none !important; }
+    body.touch .touch-only { display: flex !important; }
+    body.touch .icon-btn { min-width: 44px; min-height: 44px; font-size: 12px; }
+    body.touch .primary-btn, body.touch .secondary-btn { min-height: 44px; }
+    .touch-btn {
+      position: fixed;
+      bottom: calc(max(12px, env(safe-area-inset-bottom)) + 74px);
+      z-index: 21;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: rgba(13, 19, 27, 0.6);
+      color: var(--text);
+      font-family: var(--mono);
+      font-weight: 800;
+      touch-action: none;
+    }
+    #touch-fire { right: max(18px, env(safe-area-inset-right)); width: 92px; height: 92px; font-size: 15px; border-color: rgba(239, 68, 68, 0.7); }
+    #touch-breath { left: max(18px, env(safe-area-inset-left)); width: 74px; height: 74px; font-size: 12px; }
+    .touch-btn.active { background: rgba(56, 189, 248, 0.35); border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -640,6 +665,9 @@
       <span id="ammo-text" class="hud-value">5 / 5</span>
     </div>
   </footer>
+
+  <button id="touch-breath" class="touch-btn touch-only" type="button">ATEM</button>
+  <button id="touch-fire" class="touch-btn touch-only" type="button">FEUER</button>
 
   <!-- Start / Missionsauswahl -->
   <section id="overlay-menu" class="overlay">
@@ -709,6 +737,8 @@
         <span><strong>Shift:</strong> Atem anhalten</span>
         <span><strong>Esc:</strong> Pause &amp; Maus freigeben (im Einsatz bleibt sie im Bild)</span>
         <span><strong>R:</strong> Nachladen</span>
+        <span><strong>Pfeile / WASD:</strong> Zielen &nbsp;<strong>Enter:</strong> Schießen</span>
+        <span class="touch-only"><strong>Touch:</strong> Ziehen = Zielen, FEUER = Schießen, ATEM halten, SCOPE / ZOOM / LADEN unten</span>
       </div>
 
       <label class="aim-setting">
@@ -2363,7 +2393,7 @@
       if (state.reloadTimer > 0 || state.boltTimer > 0) return;
       if (state.ammo <= 0) {
         sound.dryFire();
-        setBanner('MAGAZIN LEER — [R] NACHLADEN', true, 1.5);
+        setBanner(lastPointerType === 'touch' ? 'MAGAZIN LEER — LADEN TIPPEN' : 'MAGAZIN LEER — [R] NACHLADEN', true, 1.5);
         return;
       }
 
@@ -2400,7 +2430,7 @@
       state.recoilYaw += (Math.random() - 0.5) * 0.006;
       state.rifleKickZ = 0.16;
 
-      if (state.ammo === 0) setBanner('MAGAZIN LEER — [R] NACHLADEN', true, 1.8);
+      if (state.ammo === 0) setBanner(lastPointerType === 'touch' ? 'MAGAZIN LEER — LADEN TIPPEN' : 'MAGAZIN LEER — [R] NACHLADEN', true, 1.8);
     }
 
     // Zähler für Bonusziele bei jedem ausgeschalteten Feind
@@ -3216,6 +3246,14 @@
         els.btnNext.classList.toggle('hidden', !hasNext);
       }
       updateHud();
+      placeTopUi();
+    }
+
+    // Banner & Bonusziele unter die (auf Tablets mehrzeilige) obere HUD-Leiste schieben
+    function placeTopUi() {
+      const y = document.getElementById('hud-top').getBoundingClientRect().bottom;
+      els.banner.style.top = `${Math.max(62, y + 8)}px`;
+      objHudEl.style.top = `${Math.max(58, y + 6)}px`;
     }
 
     function togglePause() {
@@ -3289,8 +3327,17 @@
     let pointerInside = false;
     let pointerOverCanvas = false;
     let pointerDeltaValid = false;
-    let lastPointerType = 'mouse';
+    let lastPointerType = window.matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse';
     let lockPausedAt = -1e9;
+    // Touch-Zielen: ein Finger auf dem Bild schwenkt die Kamera (kein Pointer-Lock auf Tablets)
+    let touchLookId = null;
+    let touchLookX = 0;
+    let touchLookY = 0;
+    if (lastPointerType === 'touch') document.body.classList.add('touch');
+    window.addEventListener('pointerdown', (e) => {
+      lastPointerType = e.pointerType || 'mouse';
+      if (lastPointerType === 'touch') document.body.classList.add('touch');
+    }, true);
 
     const AIM_SENS_KEY = 'scharfschuetze_aim_sens_v1';
     const SCOPED_SCREEN_GAIN = 1.6; // Bildschirm-Pixel Schwenk pro Maus-Pixel im Scope
@@ -3467,6 +3514,15 @@
       lastPointerType = e.pointerType || 'mouse';
       if (state.phase !== 'PLAYING') return;
       sound.getCtx();
+      if (e.pointerType === 'touch') {
+        // Touch: Ziehen zielt (Fadenkreuz bleibt in der Bildmitte), geschossen wird mit FEUER
+        touchLookId = e.pointerId;
+        touchLookX = e.clientX;
+        touchLookY = e.clientY;
+        try { glCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+        if (state.bulletCam) state.bulletCam.timer = 0;
+        return;
+      }
       if (!isLocked()) {
         notePointer(e);
         lockPointer();
@@ -3503,6 +3559,21 @@
         updateCrosshair();
         return;
       }
+      if (e.pointerType === 'touch') {
+        if (e.pointerId !== touchLookId) return;
+        const tdx = e.clientX - touchLookX;
+        const tdy = e.clientY - touchLookY;
+        touchLookX = e.clientX;
+        touchLookY = e.clientY;
+        if (state.phase !== 'PLAYING' || state.bulletCam) return;
+        // 1:1 – das Bild folgt dem Finger, im Scope entsprechend feiner
+        const fovDeg = state.isScoped ? SCOPE_LEVELS[state.scopeIdx].fov : UNSCOPED_FOV;
+        const sens = (THREE.MathUtils.degToRad(fovDeg) / Math.max(1, window.innerHeight)) * aimSens;
+        state.yaw -= tdx * sens;
+        state.pitch -= tdy * sens;
+        clampAim();
+        return;
+      }
       lastPointerType = e.pointerType || 'mouse';
 
       const dx = pointerDeltaValid ? e.clientX - lastClientX : 0;
@@ -3531,7 +3602,12 @@
     window.addEventListener('blur', () => {
       pointerInside = false;
       pointerDeltaValid = false;
+      touchLookId = null;
+      keyLook.clear();
+      state.wantBreathHold = false;
     });
+    const endTouchLook = (e) => { if (e.pointerId === touchLookId) touchLookId = null; };
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => glCanvas.addEventListener(t, endTouchLook));
     document.addEventListener('pointerlockchange', () => {
       pointerDeltaValid = false;
       if (isLocked()) {
@@ -3555,7 +3631,31 @@
       syncOverlays();
     }, { passive: false });
 
+    // Tastatur-Zielen: Pfeile / WASD schwenken (Tempo wie der Rand-Schwenk)
+    const KEY_LOOK = { ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0], ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1] };
+    const keyLook = new Set();
+    function updateKeyLook(dt) {
+      let x = 0;
+      let y = 0;
+      keyLook.forEach((code) => { x += KEY_LOOK[code][0]; y += KEY_LOOK[code][1]; });
+      if (!x && !y) return;
+      const fovRad = THREE.MathUtils.degToRad(state.isScoped ? SCOPE_LEVELS[state.scopeIdx].fov : UNSCOPED_FOV);
+      const rate = fovRad * (state.isScoped ? 0.5 : 0.75) * aimSens;
+      state.yaw -= Math.sign(x) * rate * dt;
+      state.pitch -= Math.sign(y) * rate * dt;
+      clampAim();
+    }
+
     window.addEventListener('keydown', (e) => {
+      if (KEY_LOOK[e.code]) {
+        if (state.phase === 'PLAYING') e.preventDefault();
+        keyLook.add(e.code);
+      } else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && state.phase === 'PLAYING') {
+        // Enter = Schießen (verhindert zugleich, dass ein fokussierter HUD-Knopf ausgelöst wird)
+        e.preventDefault();
+        if (!e.repeat) fire();
+        return;
+      }
       if (e.code === 'KeyM') {
         if (typeof ArcadeCore !== 'undefined') ArcadeCore.toggleMute();
         syncMuteBtn();
@@ -3599,6 +3699,7 @@
     });
 
     window.addEventListener('keyup', (e) => {
+      keyLook.delete(e.code);
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyC') state.wantBreathHold = false;
     });
 
@@ -3606,6 +3707,24 @@
     els.btnScope.addEventListener('click', () => { toggleScope(); syncOverlays(); });
     els.btnZoom.addEventListener('click', () => { cycleZoom(state.scopeIdx === SCOPE_LEVELS.length - 1 ? -2 : 1); syncOverlays(); });
     els.btnReload.addEventListener('click', () => startReload());
+
+    // Touch-Knöpfe: pointerdown statt click, damit Schuss/Atem sofort und parallel zum Zielen greifen
+    const touchFire = document.getElementById('touch-fire');
+    const touchBreath = document.getElementById('touch-breath');
+    touchFire.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      sound.getCtx();
+      if (state.bulletCam) state.bulletCam.timer = 0;
+      else fire();
+    });
+    const setTouchBreath = (on) => { state.wantBreathHold = on; touchBreath.classList.toggle('active', on); };
+    touchBreath.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      try { touchBreath.setPointerCapture(e.pointerId); } catch (_) {}
+      setTouchBreath(true);
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => touchBreath.addEventListener(t, () => setTouchBreath(false)));
+    [touchFire, touchBreath].forEach((b) => b.addEventListener('contextmenu', (e) => e.preventDefault()));
     els.btnPause.addEventListener('click', togglePause);
     els.btnResume.addEventListener('click', togglePause);
     els.btnRestart.addEventListener('click', () => startMission(state.missionIndex));
@@ -3633,6 +3752,7 @@
       scopeCanvas.width = Math.floor(w * dpr);
       scopeCanvas.height = Math.floor(h * dpr);
       scopeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      placeTopUi();
     }
     window.addEventListener('resize', resize);
     resize();
@@ -3715,6 +3835,7 @@
 
         // Rand-Schwenk & sanftes Ausgleiten nach Zoom-Wechseln
         updateEdgePan(dt);
+        updateKeyLook(dt);
         const glideDecay = Math.exp(-dt * 14);
         state.glideYaw *= glideDecay;
         state.glidePitch *= glideDecay;

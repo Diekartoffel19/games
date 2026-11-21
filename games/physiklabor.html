@@ -15,7 +15,7 @@
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);}
   body{font-family:"Consolas","Lucida Console","Courier New",monospace;color:var(--ink);padding:0;text-align:left;
-       touch-action:none;-webkit-user-select:none;user-select:none;}
+       touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
   canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block;margin:0;border:0;border-radius:0;max-width:none;background:var(--bg);cursor:crosshair;touch-action:none;}
   .back{position:fixed;top:10px;left:10px;}
   #hud{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:5;pointer-events:none;
@@ -23,7 +23,7 @@
        max-width:calc(100vw - 230px);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #hud b{color:var(--acc);}
   #hud i{color:#ff9b9b;font-style:normal;}
-  #dock{position:fixed;left:8px;right:8px;bottom:8px;z-index:6;display:flex;overflow-x:auto;padding-bottom:2px;
+  #dock{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:6;display:flex;overflow-x:auto;padding-bottom:2px;
         -webkit-overflow-scrolling:touch;scrollbar-width:none;}
   #dock::-webkit-scrollbar{display:none;}
   #dockIn{display:flex;gap:5px;margin:0 auto;background:var(--panel);border:1.5px solid var(--line);border-radius:12px;padding:6px;}
@@ -57,6 +57,17 @@
   #toast{position:fixed;left:50%;top:56px;transform:translateX(-50%);background:var(--acc);color:#10222e;font-weight:bold;padding:6px 14px;border-radius:8px;
          z-index:9;opacity:0;transition:opacity .25s;pointer-events:none;font-size:13px;max-width:calc(100vw - 32px);text-align:center;box-sizing:border-box;}
   #toast.show{opacity:1;}
+  /* Touch: Motor-Lenkung (statt ← → / A D), nur sichtbar auf Touch mit Motor im Bild */
+  .mbtn{position:fixed;bottom:calc(98px + env(safe-area-inset-bottom));z-index:6;width:64px;height:64px;border-radius:50%;border:1.5px solid var(--line);
+        background:var(--panel);color:var(--ink);font-size:24px;touch-action:none;display:none;}
+  @media (pointer:coarse){
+    #hud{white-space:normal;}
+    #gear{width:48px;height:48px;}
+    #panel{top:66px;max-height:calc(100vh - 176px);}
+    .btn{min-height:44px;}
+    .row,.chk{min-height:40px;}
+    .chk input{width:22px;height:22px;}
+  }
   @media (max-width:700px){
     #hud{max-width:calc(100vw - 170px);font-size:11px;padding:5px 8px;top:58px;left:10px;transform:none;}
     #panel{width:min(240px,calc(100vw - 20px));}
@@ -74,7 +85,7 @@
 <canvas id="c"></canvas>
 <div id="hud"></div>
 <div id="toast"></div>
-<button id="gear" title="Settings">☰</button>
+<button id="gear" title="Settings (Esc)">☰</button>
 
 <div id="panel">
   <h4>Tool options</h4>
@@ -140,6 +151,8 @@
 </div>
 
 <div id="dock"><div id="dockIn"></div></div>
+<button class="mbtn" id="mL" style="left:calc(12px + env(safe-area-inset-left))">◀</button>
+<button class="mbtn" id="mR" style="left:calc(88px + env(safe-area-inset-left))">▶</button>
 
 <script>
 'use strict';
@@ -682,7 +695,8 @@ function splashSnd(v){
 
 /* ---------- Eingabe-Zustand ---------- */
 const TOOLS=[
-  {id:'grab', key:'1',ico:'✋',name:'Grab', hint:'Drag & throw bodies · move fixed parts (mouse wheel / Q E rotates) · right-click deletes'},
+  {id:'grab', key:'1',ico:'✋',name:'Grab', hint:'Drag & throw bodies · move fixed parts (mouse wheel / Q E rotates) · right-click deletes',
+   th:'Drag & throw bodies · move fixed parts (2nd finger twists) · 🧽 Eraser deletes'},
   {id:'ball', key:'2',ico:'⚽',name:'Ball', hint:'Click = drop · Drag = throw with trajectory preview'},
   {id:'box',  key:'3',ico:'📦',name:'Crate', hint:'Click = drop · Drag = throw with trajectory preview'},
   {id:'form', key:'4',ico:'🔺',name:'Shape', hint:'Triangle, pentagon, hexagon – or "Draw": paint any shape (menu ☰)'},
@@ -691,12 +705,14 @@ const TOOLS=[
   {id:'chain',key:'7',ico:'⛓', name:'Chain', hint:'Press the anchor point, drag to the chain end – heavy ball at the end'},
   {id:'link', key:'8',ico:'🔗',name:'Connect', hint:'Drag from body/point to body/point (rod, rope, spring, hinge, motor)'},
   {id:'pin',  key:'9',ico:'📌',name:'Nail', hint:'Click a body = nail it to the wall (2 overlapping = hinge)'},
-  {id:'wheel',key:'0',ico:'⚙', name:'Wheel', hint:'On a body = attach a motor wheel · in empty space = turntable · steer with ← → / A D'},
+  {id:'wheel',key:'0',ico:'⚙', name:'Wheel', hint:'On a body = attach a motor wheel · in empty space = turntable · steer with ← → / A D',
+   th:'On a body = attach a motor wheel · in empty space = turntable · steer with ◀ ▶'},
   {id:'bomb', key:'B',ico:'💣',name:'Bomb', hint:'Click = explosion – nearby connections snap'},
   {id:'erase',key:'X',ico:'🧽',name:'Eraser', hint:'Tap or swipe over a body or connection'}
 ];
 const CREATE_TOOLS=['ball','box','form','plank','pend','chain','wheel'];
-let tool='grab', linkMode='rod', P={down:false,x:-99,y:-99,sx:0,sy:0,anchor:null,path:null,over:false,erased:false};
+let tool='grab', linkMode='rod', P={down:false,x:-99,y:-99,sx:0,sy:0,anchor:null,path:null,over:false,erased:false,id:null,id2:null,x2:0,y2:0};
+let isTouch=!!(window.matchMedia&&matchMedia('(pointer: coarse)').matches);
 
 const dockIn=$('dockIn');
 TOOLS.forEach(t=>{
@@ -714,8 +730,9 @@ function setTool(id){
   updHud();
 }
 function updHud(){
-  const t=TOOLS.find(x=>x.id===tool);
-  $('hud').innerHTML=(paused?'<i>⏸ PAUSE</i> · ':'')+'<b>'+t.name+'</b> · '+t.hint+' · Bodies: '+(bodies.filter(b=>!b.bound).length);
+  const t=TOOLS.find(x=>x.id===tool), hint=isTouch?(t.th||t.hint.replace(/Click/g,'Tap')):t.hint;
+  $('hud').innerHTML=(paused?'<i>⏸ PAUSE</i> · ':'')+'<b>'+t.name+'</b> · '+hint+' · Bodies: '+(bodies.filter(b=>!b.bound).length);
+  $('mL').style.display=$('mR').style.display=isTouch&&joints.some(j=>j.motor)?'block':'none';
 }
 const matsEl=$('mats');
 Object.keys(MATS).forEach(k=>{
@@ -952,6 +969,10 @@ function placeKin(){
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('pointerdown',e=>{
   e.preventDefault(); initAudio(); try{cv.setPointerCapture(e.pointerId);}catch(_){}
+  if(e.pointerType==='touch'&&!isTouch){isTouch=true;updHud();}
+  // 2. Finger während einer Aktion: dreht ein gegriffenes festes Teil (wie Mausrad / Q E), sonst ignoriert
+  if(P.down&&e.pointerId!==P.id){if(mouse&&mouse.kin){P.id2=e.pointerId;P.x2=e.clientX;P.y2=e.clientY;}return;}
+  P.id=e.pointerId;P.id2=null;
   P.x=P.sx=e.clientX;P.y=P.sy=e.clientY;P.anchor=null;P.path=null;P.erased=false;P.over=true;
   if(!$('panel').classList.contains('hide')&&innerWidth<700)$('panel').classList.add('hide');
   if(e.button===2){eraseAt(P.x,P.y);return;}
@@ -975,6 +996,14 @@ cv.addEventListener('pointerdown',e=>{
   }
 });
 cv.addEventListener('pointermove',e=>{
+  if(e.pointerId===P.id2){
+    if(mouse&&mouse.kin){
+      const d=Math.atan2(e.clientY-P.y,e.clientX-P.x)-Math.atan2(P.y2-P.y,P.x2-P.x);
+      rotGrab(Math.atan2(Math.sin(d),Math.cos(d)));
+    }
+    P.x2=e.clientX;P.y2=e.clientY;return;
+  }
+  if(P.down&&e.pointerId!==P.id)return;
   P.x=e.clientX;P.y=e.clientY;P.over=true;
   if(!P.down)return;
   if(tool==='grab'&&mouse){mouse.tx=P.x;mouse.ty=P.y;if(mouse.kin&&paused)placeKin();}
@@ -989,7 +1018,8 @@ function throwVel(){
   return [clamp(dx*7,-2200,2200),clamp(dy*7,-2200,2200)];
 }
 function endPointer(e){
-  if(!P.down)return;
+  if(e.pointerId===P.id2){P.id2=null;return;}
+  if(!P.down||e.pointerId!==P.id)return;
   P.down=false; P.x=e.clientX;P.y=e.clientY;
   const dx=P.x-P.sx,dy=P.y-P.sy,dist=Math.hypot(dx,dy);
   switch(tool){
@@ -1046,7 +1076,18 @@ function endPointer(e){
   P.anchor=null; P.path=null; updHud();
 }
 cv.addEventListener('pointerup',endPointer);
-cv.addEventListener('pointercancel',()=>{P.down=false;mouse=null;P.anchor=null;P.path=null;});
+function cancelPointer(e){
+  if(e.pointerId===P.id2){P.id2=null;return;}
+  if(e.pointerId!==P.id||!P.down)return;
+  P.down=false;mouse=null;P.anchor=null;P.path=null;P.id2=null;
+}
+cv.addEventListener('pointercancel',cancelPointer);
+cv.addEventListener('lostpointercapture',cancelPointer);
+[['mL',-1],['mR',1]].forEach(([id,d])=>{
+  const b=$(id), off=()=>{if(motorKey===d)motorKey=0;};
+  b.addEventListener('pointerdown',e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId);}catch(_){}motorKey=d;});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,off));
+});
 
 function doPin(x,y){
   const hs=hitAll(x,y,true);
@@ -1073,6 +1114,7 @@ window.addEventListener('keydown',e=>{
     return;
   }
   if(e.code==='Space'){e.preventDefault();togglePause();return;}
+  if(e.key==='Escape'){$('panel').classList.toggle('hide');return;}
   if(e.key==='ArrowLeft'||k==='a'){e.preventDefault();motorKey=-1;return;}
   if(e.key==='ArrowRight'||k==='d'){e.preventDefault();motorKey=1;return;}
   if(k==='n'||k==='.'){singleStep();return;}

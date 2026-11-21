@@ -21,6 +21,7 @@
     margin: 0;
     padding: 0;
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
     overflow: hidden;
     background: radial-gradient(circle at 50% 0%, #171e32 0%, #06080d 100%);
@@ -28,7 +29,12 @@
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     display: flex;
     flex-direction: column;
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
   }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  input[type=text] { user-select: text; -webkit-user-select: text; }
 
   a.back {
     top: 7px !important;
@@ -122,6 +128,32 @@
   @media (max-width: 900px) {
     html, body { overflow-y: auto; height: auto; }
     .app-layout { grid-template-columns: 1fr; }
+  }
+  /* Tablet: narrower header wraps instead of overflowing */
+  @media (max-width: 1200px) {
+    .badge-sub { display: none; }
+    .top-header { height: auto; min-height: 42px; flex-wrap: wrap; padding-top: 4px; padding-bottom: 4px; }
+    .header-right { flex-wrap: wrap; justify-content: flex-end; }
+  }
+  /* Tablet portrait: canvas on top, palette below scrolls on its own */
+  @media (max-width: 900px) and (min-height: 700px) {
+    html, body { overflow: hidden; height: 100vh; height: 100dvh; }
+    .app-layout { grid-template-rows: auto minmax(0, 1fr); }
+    /* Keep grid aspect 260:175, capped at 40% of screen height */
+    .canvas-wrapper {
+      flex: none;
+      align-self: center;
+      aspect-ratio: 260 / 175;
+      width: min(100%, calc(40vh * 260 / 175));
+      width: min(100%, calc(40dvh * 260 / 175));
+    }
+  }
+  .touch-only { display: none !important; }
+  @media (pointer: coarse) {
+    .touch-only { display: inline-flex !important; }
+    .btn-tool, .cat-tab, .sub-tab, .el-btn, .preset-btn, .search-input { min-height: 44px; }
+    .search-input { font-size: 16px; }
+    .brush-slider-wrap input[type=range] { width: 110px; height: 44px; }
   }
 
   /* Left: Simulation Stage */
@@ -270,6 +302,7 @@
 
   .brush-slider-wrap {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 4px;
     font-size: 0.7rem;
@@ -553,7 +586,7 @@
         <div class="hud-pill">
           <span id="hudElement">💧 Water</span>
           <span>•</span>
-          <span id="hudInspect">Hover: Air (22°C)</span>
+          <span id="hudInspect">Sensor: Air (22°C)</span>
         </div>
         <div class="hud-pill">
           <span id="hudParticles">0 pixels</span>
@@ -568,7 +601,7 @@
     <div class="sim-toolbar">
       <div class="tool-group">
         <button class="btn-tool" id="pauseBtn" onclick="togglePause()" title="Spacebar">⏸️ Pause</button>
-        <button class="btn-tool" onclick="stepSim()">⏭️ Step</button>
+        <button class="btn-tool" onclick="stepSim()" title="N">⏭️ Step</button>
         <button class="btn-tool" id="speedBtn" onclick="cycleSpeed()">⏩ 1x</button>
         <button class="btn-tool" id="gravBtn" onclick="cycleGravity()">⬇️ Grav: Normal</button>
         <button class="btn-tool" id="borderBtn" onclick="toggleFloor()">🧱 Floor: Closed</button>
@@ -576,11 +609,12 @@
 
       <div class="brush-slider-wrap">
         <span>🖌️ <strong id="brushVal">4</strong></span>
-        <input type="range" id="brushSlider" min="1" max="15" value="4" oninput="updateBrush(this.value)">
+        <input type="range" id="brushSlider" min="1" max="15" value="4" oninput="updateBrush(this.value)" title="Brush size: mouse wheel or [ / ]">
         <button class="btn-tool" id="shapeBtn" onclick="toggleBrushShape()">⚪ Circle</button>
+        <button class="btn-tool touch-only" id="pickBtn" onclick="armPipette()" title="Pipette: tap a pixel to pick its material">💉 Pick</button>
         <button class="btn-tool" id="heatBrushBtn" onclick="toggleHeatBrush()" title="Brush mode: heat materials precisely with the mouse">🔥 Heat</button>
         <button class="btn-tool" id="coolBrushBtn" onclick="toggleCoolBrush()" title="Brush mode: cool materials precisely with the mouse">❄️ Cool</button>
-        <button class="btn-tool" id="toolModeBtn" onclick="cycleToolMode()">🎨 Paint</button>
+        <button class="btn-tool" id="toolModeBtn" onclick="cycleToolMode()" title="Cycle tool (T), Esc = back to Paint, E = Eraser, 1-9 = palette">🎨 Paint</button>
         <button class="btn-tool" id="attractBtn" onclick="setSpecificToolMode('attract')" title="Gravity pull: draws particles toward the mouse like a cosmic force field">🧲 Pull</button>
         <button class="btn-tool" id="repelBtn" onclick="setSpecificToolMode('repel')" title="Force field repulsion: blasts particles away with a strong shockwave">💨 Push</button>
         <button class="btn-tool" id="vortexBtn" onclick="setSpecificToolMode('vortex')" title="Vortex / whirlpool: sets particles spinning">🌪️ Vortex</button>
@@ -3660,12 +3694,20 @@ function getCanvasCoords(e) {
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
+// Touch pipette: armed via 💉 button, next canvas tap/click picks material
+let pickNext = false;
+function armPipette() {
+  pickNext = !pickNext;
+  document.getElementById('pickBtn').classList.toggle('active', pickNext);
+}
+
 canvas.addEventListener('mousedown', e => {
   initAudio();
   const pos = getCanvasCoords(e);
   // Middle click or Alt+Click = Pipette (Eyedropper)
-  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+  if (e.button === 1 || (e.button === 0 && (e.altKey || pickNext))) {
     e.preventDefault();
+    if (pickNext) armPipette();
     const picked = grid[pos.y * W + pos.x];
     if (picked !== E_EMPTY && EL_MAP[picked]) {
       selectElement(picked);
@@ -3744,16 +3786,46 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space') {
     e.preventDefault();
     togglePause();
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === '[' || k === ']' || k === '-' || k === '+' || k === '=') {
+    const next = Math.max(1, Math.min(15, brushSize + (k === '[' || k === '-' ? -1 : 1)));
+    document.getElementById('brushSlider').value = next;
+    updateBrush(next);
+  } else if (k === 'n') stepSim();
+  else if (k === 't') cycleToolMode();
+  else if (k === 'e') selectElement(E_EMPTY);
+  else if (k === 'escape') {
+    if (pickNext) armPipette();
+    if (toolMode !== 'paint') setSpecificToolMode(toolMode); // toggles back to paint
+  } else if (/^[1-9]$/.test(k)) {
+    const btn = document.querySelectorAll('#elementsGrid .el-btn')[k - 1];
+    if (btn) btn.click();
   }
 });
+
+// Release stuck drawing when the window loses focus
+window.addEventListener('blur', () => { isDrawing = false; lineStartX = -1; });
 
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   initAudio();
   const pos = getCanvasCoords(e);
   const touchedCellEl = grid[pos.y * W + pos.x];
+  if (pickNext) {
+    armPipette();
+    if (touchedCellEl !== E_EMPTY && EL_MAP[touchedCellEl]) selectElement(touchedCellEl);
+    return;
+  }
   if (touchedCellEl === E_SWITCH || touchedCellEl === E_BUTTON) {
     toggleSwitchCluster(pos.x, pos.y);
+    return;
+  }
+  // Tap on EMP fires shockwave (same as mouse)
+  if (touchedCellEl === E_EMP && toolMode !== 'paint' && toolMode !== 'line') {
+    triggerEMP(pos.x, pos.y);
     return;
   }
   isDrawing = true;
@@ -3783,6 +3855,8 @@ canvas.addEventListener('touchend', () => {
   }
   isDrawing = false;
 });
+
+canvas.addEventListener('touchcancel', () => { isDrawing = false; lineStartX = -1; });
 
 function getTempColor(t) {
   if (t <= 0) return '#67e8f9'; // Ice cyan
