@@ -121,6 +121,29 @@
     background: linear-gradient(135deg, #fde047, #f59e0b); color: #2a1702;
   }
   .primary:hover { filter: brightness(1.08); }
+  .ghost {
+    width: 100%; min-height: 44px; margin-top: 10px; border-radius: 14px; cursor: pointer; font-size: 0.95rem; font-weight: 800;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 200, 61, 0.5); color: #ffe8a8;
+  }
+  .ghost:hover { background: rgba(183, 121, 31, 0.5); }
+  .ghost.danger { border-color: rgba(248, 113, 113, 0.6); color: #fca5a5; font-size: 0.82rem; min-height: 40px; }
+  #mUpg { font-size: 0.82rem; color: #c9a86a; }
+  #shop { z-index: 70; }
+  .upg {
+    display: flex; gap: 10px; align-items: center; text-align: left; margin-bottom: 8px; padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px;
+  }
+  .upg > div { flex: 1; min-width: 0; }
+  .upg h3 { margin: 0; font-size: 0.98rem; color: #ffc83d; }
+  .upg h3 span { font-size: 0.75rem; color: #fff8e6; font-weight: 700; margin-left: 4px; }
+  .upg small { display: block; color: #c9a86a; font-size: 0.78rem; }
+  .upg .val { font-size: 0.8rem; color: #f3d9a4; }
+  .upg .val b { color: #86efac; }
+  .upg button {
+    min-width: 76px; min-height: 44px; border: none; border-radius: 12px; cursor: pointer; font-weight: 900; font-size: 0.9rem;
+    background: linear-gradient(135deg, #fde047, #f59e0b); color: #2a1702;
+  }
+  .upg button:disabled { background: rgba(255, 255, 255, 0.1); color: #9c8458; cursor: default; }
 
   #dSeq { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
   #dSeq span {
@@ -213,7 +236,19 @@
     <h1 id="mTitle">🐝 Pollenflug 3D</h1>
     <p id="mText"></p>
     <div class="stats" id="mStats"></div>
+    <p id="mUpg"></p>
     <button class="primary" id="mBtn">Losfliegen</button>
+    <button class="ghost" id="shopBtn">🛒 Bienenstock-Shop</button>
+  </div>
+</div>
+
+<div class="modal" id="shop">
+  <div class="card">
+    <h1>🛒 Bienenstock-Shop</h1>
+    <p>🍯 <b id="sCoins">0</b> Honiggläser · pro Tag gibt es 1 Glas je 8 Honig.</p>
+    <div id="sList"></div>
+    <button class="primary" id="sClose">Zurück</button>
+    <button class="ghost danger" id="sReset">Fortschritt zurücksetzen</button>
   </div>
 </div>
 
@@ -249,6 +284,35 @@ const H = (x, z) => {
   const k = clamp((Math.hypot(x, z) - 8) / 10, 0, 1);
   return k * (1.2 * Math.sin(x * 0.045 + 1) * Math.cos(z * 0.05) + 0.6 * Math.sin((x - z) * 0.08));
 };
+
+// ============ Upgrades (Bienenstock-Shop) ============
+const SAVE_KEY = KEY + '_save', COIN_PER = 8; // 1 Honigglas je 8 Honig
+let save = { coins: 0, levels: {} };
+try {
+  const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+  if (s && typeof s === 'object') save = { coins: Number.isFinite(+s.coins) ? Math.max(0, Math.floor(+s.coins)) : 0, levels: s.levels && typeof s.levels === 'object' && !Array.isArray(s.levels) ? s.levels : {} };
+} catch (e) {}
+const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
+// Effektwerte je Stufe; L(id) liefert die Stufe. Untergrenzen halten Wespe/Netz/Regen gefährlich.
+const calcU = L => ({
+  maxs: MAXS + 0.5 * L('speed'), cap: CAP + L('cap'), loadK: 1 - 0.1 * L('legs'), collect: COLLECT * (1 - 0.12 * L('collect')),
+  detect: 28 - 3 * L('wasp'), stun: 1 - 0.2 * L('wasp'), web: 2.6 - 0.3 * L('web'), mash: 0.3 + 0.05 * L('web'),
+  rainK: 1 + 0.1 * L('rain'), rainPush: 1 - 0.15 * L('rain'), day: DAY + 15 * L('day'),
+});
+const fmtT = s => Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
+const UPG = [
+  { id: 'speed', e: '💨', n: 'Flügelkraft', d: 'Höheres Flugtempo', max: 5, base: 25, t: u => u.maxs.toFixed(1) + ' m/s' },
+  { id: 'cap', e: '🧺', n: 'Pollenkörbchen', d: '+1 Pollen Tragekraft', max: 3, base: 60, t: u => u.cap + ' Pollen' },
+  { id: 'legs', e: '💪', n: 'Kräftige Beine', d: 'Ladung bremst & drückt weniger', max: 4, base: 30, t: u => Math.round(u.loadK * 100) + ' % Ladungslast' },
+  { id: 'collect', e: '⚡', n: 'Schnellsammler', d: 'Kürzere Sammelzeit auf Blüten', max: 4, base: 35, t: u => u.collect.toFixed(2) + ' s/Pollen' },
+  { id: 'wasp', e: '👀', n: 'Wachsamkeit', d: 'Wespe entdeckt später, Stich betäubt kürzer', max: 3, base: 35, t: u => `Sicht ${u.detect} m · Stich ${u.stun.toFixed(1)} s` },
+  { id: 'web', e: '✂️', n: 'Spinnenschere', d: 'Schneller aus Spinnennetzen', max: 3, base: 25, t: u => `Netz ${u.web.toFixed(1)} s · −${u.mash.toFixed(2)} s/Tipp` },
+  { id: 'rain', e: '☔', n: 'Regenhaube', d: 'Tropfen treffen seltener & schwächer', max: 3, base: 30, t: u => `Wucht ${Math.round(u.rainPush * 100)} % · Abstand ${Math.round(u.rainK * 100)} %` },
+  { id: 'day', e: '☀️', n: 'Langer Tag', d: 'Mehr Zeit bis Sonnenuntergang', max: 3, base: 70, t: u => fmtT(u.day) + ' min' },
+];
+const lvl = id => clamp(Math.floor(Number(save.levels[id])) || 0, 0, UPG.find(u => u.id === id).max);
+const price = u => Math.round(u.base * 1.6 ** lvl(u.id));
+let U = calcU(lvl); // aktive Werte, bei jedem neuen Tag neu berechnet
 
 // ============ Renderer ============
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -505,7 +569,7 @@ const keys = {};
 let mouseDX = 0, mouseDY = 0, stickX = 0, stickY = 0, touchFast = false, touchSlow = false, isTouch = false;
 let msgTimer = 0, flashT = 0, hintCD = 0, duskTold = false;
 const loadTotal = () => load[0] + load[1] + load[2] + load[3];
-const difficulty = () => Math.min(1, elapsed / DAY);
+const difficulty = () => Math.min(1, elapsed / U.day);
 
 function showMsg(html, t = 1.8) { $('msg').innerHTML = html; $('msg').classList.add('show'); msgTimer = t; }
 
@@ -517,7 +581,8 @@ function newOrder() {
 }
 
 function resetGame() {
-  honey = 0; delivered = 0; ordersDone = 0; timeLeft = DAY; elapsed = 0; dances = 0; load = [0, 0, 0, 0];
+  U = calcU(lvl);
+  honey = 0; delivered = 0; ordersDone = 0; timeLeft = U.day; elapsed = 0; dances = 0; load = [0, 0, 0, 0];
   highlight = null; highlightT = 0; beacon.visible = false; flashT = 0; msgTimer = 0; duskTold = false;
   $('flash').style.opacity = 0; $('msg').classList.remove('show'); $('dance').style.display = 'none';
   bee.pos.set(0, 2.5, -6); bee.yaw = 0; bee.speed = 0; bee.vy = 0; bee.pitchIn = 0; bee.stun = 0; bee.invuln = 0;
@@ -531,7 +596,7 @@ function resetGame() {
 
 // ============ Biene ============
 // Hämmern befreit schneller aus dem Netz (nie unter 0, sonst greift die Befreiung nicht)
-const mash = () => { bee.webT = Math.max(0.01, bee.webT - 0.3); };
+const mash = () => { bee.webT = Math.max(0.01, bee.webT - U.mash); };
 function takeoffWanted() { return keys.KeyW || keys.Space || keys.ArrowUp || touchFast || stickY < -0.4; }
 
 function dropPollen(n) {
@@ -544,7 +609,7 @@ function dropPollen(n) {
 
 function updateBee(dt) {
   bee.stun = Math.max(0, bee.stun - dt); bee.invuln = Math.max(0, bee.invuln - dt); bee.relandT = Math.max(0, bee.relandT - dt);
-  const lt = loadTotal(), cap = MAXS * (1 - 0.07 * lt), prevYaw = bee.yaw;
+  const lt = loadTotal(), cap = U.maxs * (1 - 0.07 * U.loadK * lt), prevYaw = bee.yaw;
   const f = bee.landed;
   if (bee.webT > 0) {
     bee.webT -= dt; bee.speed = 0; bee.vy = 0;
@@ -552,14 +617,14 @@ function updateBee(dt) {
   } else if (f) {
     bee.speed = 0; bee.vy = 0;
     bee.pos.copy(f.head).y += 0.18 * f.s;
-    if (bee.collectT < COLLECT) {
+    if (bee.collectT < U.collect) {
       bee.collectT += dt;
-      if (bee.collectT >= COLLECT) {
-        if (lt < CAP && f.pollen > 0) {
+      if (bee.collectT >= U.collect) {
+        if (lt < U.cap && f.pollen > 0) {
           f.pollen--; load[f.c]++; lastColor = f.c; snd('coin');
           if (f.pollen <= 0) f.life = Math.min(f.life, f.t + 4);
-          showMsg(`${COLORS[f.c].e} Pollen gesammelt!<small>${loadTotal() >= CAP ? 'Voll beladen – ab zum Korb!' : f.pollen > 0 ? 'Bleib sitzen für mehr' : 'Blüte leer'}</small>`, 1.1);
-          if (f.pollen > 0 && loadTotal() < CAP) bee.collectT = 0; // weitersammeln
+          showMsg(`${COLORS[f.c].e} Pollen gesammelt!<small>${loadTotal() >= U.cap ? 'Voll beladen – ab zum Korb!' : f.pollen > 0 ? 'Bleib sitzen für mehr' : 'Blüte leer'}</small>`, 1.1);
+          if (f.pollen > 0 && loadTotal() < U.cap) bee.collectT = 0; // weitersammeln
         }
       }
     }
@@ -569,12 +634,12 @@ function updateBee(dt) {
     else {
       const kx = (keys.KeyA || keys.ArrowLeft ? 1 : 0) - (keys.KeyD || keys.ArrowRight ? 1 : 0);
       bee.yaw += kx * 2.2 * dt - stickX * 2.3 * dt - mouseDX * 0.0026;
-      if (keys.KeyW || keys.ArrowUp || touchFast) bee.speed += 7 * dt;
+      if ((keys.KeyW || keys.ArrowUp || touchFast) && bee.speed < cap) bee.speed = Math.min(cap, bee.speed + 7 * dt); // nie über die Höchstgeschwindigkeit beschleunigen
       if (keys.KeyS || keys.ArrowDown || touchSlow) bee.speed -= 10 * dt;
       bee.speed = bee.speed > cap ? Math.max(cap, bee.speed - 6 * dt) : Math.max(0, bee.speed);
       bee.pitchIn = clamp(bee.pitchIn - mouseDY * 0.004, -1, 1) * Math.exp(-1.5 * dt);
       const up = (keys.Space ? 1 : 0) - (keys.ShiftLeft || keys.ShiftRight ? 1 : 0) - stickY;
-      const vyT = clamp(up, -1, 1) * 4.5 + bee.pitchIn * Math.max(3, bee.speed) * 0.8 - 0.3 * lt;
+      const vyT = clamp(up, -1, 1) * 4.5 + bee.pitchIn * Math.max(3, bee.speed) * 0.8 - 0.3 * U.loadK * lt;
       bee.vy += (vyT - bee.vy) * (1 - Math.exp(-4 * dt));
     }
     bee.pos.x += -Math.sin(bee.yaw) * bee.speed * dt; bee.pos.z += -Math.cos(bee.yaw) * bee.speed * dt; bee.pos.y += bee.vy * dt;
@@ -584,7 +649,7 @@ function updateBee(dt) {
   // Boden, Decke (Ladung drückt), Rand, Korb
   const g = H(bee.pos.x, bee.pos.z) + 0.3;
   if (bee.pos.y < g) { bee.pos.y = g; bee.vy = Math.max(0, bee.vy); }
-  const top = 24 - 2 * lt;
+  const top = 24 - 2 * U.loadK * lt;
   if (bee.pos.y > top) { bee.pos.y += (top - bee.pos.y) * Math.min(1, 3 * dt); bee.vy = Math.min(0, bee.vy); }
   const r = Math.hypot(bee.pos.x, bee.pos.z);
   if (r > WORLD_R) { bee.pos.x *= WORLD_R / r; bee.pos.z *= WORLD_R / r; if (hintCD <= 0) { showMsg('🌲 Zu weit weg!<small>Der Korb ist in der Mitte</small>', 1.2); hintCD = 3; } }
@@ -603,7 +668,7 @@ function updateBee(dt) {
       if (fl.state !== 'open' || fl.pollen <= 0) continue;
       const dx = bee.pos.x - fl.head.x, dz = bee.pos.z - fl.head.z, dy = bee.pos.y - fl.head.y;
       if (dx * dx + dz * dz > (0.55 * fl.s) ** 2 || dy < -0.4 || dy > 1.1) continue;
-      if (loadTotal() >= CAP) { if (hintCD <= 0) { showMsg('🎒 Voll beladen!<small>Erst zum Korb fliegen</small>', 1.2); hintCD = 2.5; } break; }
+      if (loadTotal() >= U.cap) { if (hintCD <= 0) { showMsg('🎒 Voll beladen!<small>Erst zum Korb fliegen</small>', 1.2); hintCD = 2.5; } break; }
       if (bee.speed > LAND_SPEED) { if (hintCD <= 0) { showMsg('🛑 Zu schnell!<small>Bremsen (S), um zu landen</small>', 1.1); hintCD = 2.5; } break; }
       bee.landed = fl; bee.collectT = 0; tone(660, 0.08, { type: 'triangle', gain: 0.06 });
       break;
@@ -616,7 +681,7 @@ function updateBee(dt) {
       if (!w.g.visible) continue;
       _v.copy(bee.pos).sub(w.g.position).applyAxisAngle(UP, -w.yaw);
       if (Math.abs(_v.z) < 0.3 && Math.hypot(_v.x, _v.y) < w.R) {
-        bee.webT = 2.6; bee.web = w; bee.landed = null; snd('hit');
+        bee.webT = U.web; bee.web = w; bee.landed = null; snd('hit');
         showMsg('🕸️ Im Spinnennetz!<small>Tasten hämmern / tippen zum Befreien</small>', 1.8);
         break;
       }
@@ -629,7 +694,7 @@ function updateBee(dt) {
   const wob = bee.webT > 0 ? Math.sin(elapsed * 30) * 0.2 : bee.stun > 0 ? Math.sin(elapsed * 20) * 0.5 : 0;
   b.position.copy(bee.pos); b.rotation.set(clamp(bee.vy * 0.07, -0.5, 0.5) - bee.speed * 0.02, bee.yaw, bee.roll + wob);
   bee.flap += dt * (bee.landed ? 6 : bee.webT > 0 ? 18 : 45);
-  const w = bee.landed && bee.collectT >= COLLECT ? 0.9 : Math.sin(bee.flap) * 0.7;
+  const w = bee.landed && bee.collectT >= U.collect ? 0.9 : Math.sin(bee.flap) * 0.7;
   bee.parts.wingL.rotation.z = w; bee.parts.wingR.rotation.z = -w;
   b.visible = bee.invuln <= 0 || bee.webT > 0 || Math.floor(bee.invuln * 8) % 2 === 0;
   const bs = lt ? 0.035 + 0.012 * lt : 0.001;
@@ -715,7 +780,7 @@ function updateWasp(dt) {
   let speed = 4, goal = wasp.target;
   if (wasp.state === 'patrol') {
     if (wasp.pos.distanceTo(wasp.target) < 2) { const a = rnd(0, 6.3), d = rnd(25, 85); wasp.target.set(Math.cos(a) * d, rnd(3, 9), Math.sin(a) * d); }
-    if (loadTotal() > 0 && dist < 28 && beeHive > 10) {
+    if (loadTotal() > 0 && dist < U.detect && beeHive > 10) {
       wasp.state = 'hunt'; wasp.timer = 14; tone(240, 0.4, { type: 'sawtooth', gain: 0.07, slide: 320 });
       showMsg('⚠️ Die Wespe hat dich entdeckt!<small>Ab zum Korb oder ausweichen</small>', 1.6);
     }
@@ -727,7 +792,7 @@ function updateWasp(dt) {
     }
     else if (dist < 0.85 && bee.invuln <= 0 && bee.webT <= 0) {
       const lost = dropPollen(2);
-      bee.stun = 1.0; bee.invuln = 2.5; bee.landed = null; bee.vy = -3; flashT = 1; snd('hit');
+      bee.stun = U.stun; bee.invuln = 2.5; bee.landed = null; bee.vy = -3; flashT = 1; snd('hit');
       showMsg(`🐝💥 Von der Wespe gestochen!<small>${lost ? lost + ' Pollen verloren' : 'Autsch'}</small>`, 1.8);
       wasp.state = 'retreat'; wasp.timer = 8;
     }
@@ -779,8 +844,8 @@ function updateRain(dt) {
     if (inRain && !sheltered(bee.pos) && bee.webT <= 0) {
       rain.hitT -= dt;
       if (rain.hitT <= 0) {
-        rain.hitT = rnd(0.35, 0.9);
-        bee.vy = -7; bee.stun = Math.max(bee.stun, 0.3); bee.landed = null; bee.relandT = 0.6;
+        rain.hitT = rnd(0.35, 0.9) * U.rainK;
+        bee.vy = -7 * U.rainPush; bee.stun = Math.max(bee.stun, 0.3); bee.landed = null; bee.relandT = 0.6;
         tone(900, 0.06, { type: 'triangle', gain: 0.06, slide: 300 });
         if (!rain.told) { rain.told = true; showMsg('💧 Vom Regentropfen getroffen!<small>Unter ein großes Blatt flüchten</small>', 1.8); }
       }
@@ -790,7 +855,7 @@ function updateRain(dt) {
 
 // ============ Himmel & Tageszeit ============
 function updateSky() {
-  const t = 1 - timeLeft / DAY, dusk = clamp((t - 0.72) / 0.28, 0, 1);
+  const t = 1 - timeLeft / U.day, dusk = clamp((t - 0.72) / 0.28, 0, 1);
   const a = Math.PI * (0.22 + 0.74 * t);
   sun.position.set(Math.cos(a) * 50, Math.sin(a) * 60 + 3, -30);
   sun.color.setHex(0xffffff).lerp(_c.setHex(0xff8a40), dusk);
@@ -810,15 +875,15 @@ function updateHud() {
   $('hTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   $('timePill').classList.toggle('warn', timeLeft < 30);
   $('hLoad').innerHTML = COLORS.map((c, i) => `<span class="dot" style="background:${c.css}"></span>${load[i]}`).join('') + ' ·';
-  $('hLoadN').textContent = loadTotal() + '/' + CAP;
-  $('loadPill').classList.toggle('full', loadTotal() >= CAP);
+  $('hLoadN').textContent = loadTotal() + '/' + U.cap;
+  $('loadPill').classList.toggle('full', loadTotal() >= U.cap);
   $('hOrder').innerHTML = order.map(o => `<span class="${o.got >= o.n ? 'done' : ''}">${COLORS[o.c].e} ${o.got}/${o.n}</span>`).join(' · ');
   const dx = -bee.pos.x, dz = -bee.pos.z, ang = Math.atan2(dx, -dz) + bee.yaw; // 0 = geradeaus
   $('cArrow').style.transform = `rotate(${ang}rad)`;
   $('cDist').textContent = Math.round(Math.hypot(dx, dz)) + ' m';
-  const showCol = bee.landed && bee.collectT < COLLECT;
+  const showCol = bee.landed && bee.collectT < U.collect;
   $('collect').style.display = showCol ? 'block' : 'none';
-  if (showCol) $('collectFill').style.width = (bee.collectT / COLLECT * 100) + '%';
+  if (showCol) $('collectFill').style.width = (bee.collectT / U.collect * 100) + '%';
   drawMinimap();
 }
 function drawMinimap() {
@@ -852,13 +917,53 @@ function gameOver() {
   snd('gameOver');
   const record = honey > best;
   if (record) { best = honey; if (AC) AC.saveScore(KEY, best); }
-  openModal(record ? '🏆 Neuer Rekord!' : '🌇 Sonnenuntergang', 'Der Tag ist vorbei – das Volk zählt den Honig.' + (loadTotal() ? ` (${loadTotal()} Pollen nicht abgeliefert)` : ''), 'Neuer Tag',
+  const earned = Math.floor(honey / COIN_PER);
+  save.coins += earned; persist();
+  openModal(record ? '🏆 Neuer Rekord!' : '🌇 Sonnenuntergang', 'Der Tag ist vorbei – das Volk zählt den Honig.' + (loadTotal() ? ` (${loadTotal()} Pollen nicht abgeliefert)` : '') +
+    `<br><b style="color:#ffc83d">+${earned} Honiggläser</b> für den Bienenstock-Shop`, 'Neuer Tag',
     [['Honig', honey], ['Pollen abgeliefert', delivered], ['Aufträge', ordersDone], ['Rekord', best]]);
 }
 function openModal(title, text, btn, stats) {
   $('mTitle').textContent = title; $('mText').innerHTML = text; $('mBtn').textContent = btn;
   $('mStats').innerHTML = (stats || []).map(([k, v]) => `<div class="stat"><div>${k}</div><div>${v}</div></div>`).join('');
+  $('shopBtn').hidden = $('mUpg').hidden = state === 'pause'; // Shop nur zwischen den Tagen
+  renderUpgInfo();
   $('modal').style.display = 'flex';
+}
+
+// ============ Shop ============
+function renderUpgInfo() {
+  const u = calcU(lvl), on = UPG.filter(x => lvl(x.id) > 0);
+  $('mUpg').innerHTML = `🍯 <b>${save.coins}</b> Honiggläser` + (on.length ? '<br>Aktiv: ' + on.map(x => `${x.e} ${x.t(u)}`).join(' · ') : '');
+}
+function renderShop() {
+  $('sCoins').textContent = save.coins;
+  $('sList').innerHTML = UPG.map(x => {
+    const l = lvl(x.id), maxed = l >= x.max, p = price(x);
+    const now = x.t(calcU(lvl)), next = maxed ? '' : ` → <b>${x.t(calcU(id => id === x.id ? l + 1 : lvl(id)))}</b>`;
+    return `<div class="upg"><div><h3>${x.e} ${x.n}<span>Stufe ${l}/${x.max}</span></h3><small>${x.d}</small><div class="val">${now}${next}</div></div>` +
+      `<button data-id="${x.id}"${maxed || save.coins < p ? ' disabled' : ''}>${maxed ? 'MAX' : '🍯 ' + p}</button></div>`;
+  }).join('');
+}
+const shopOpen = () => $('shop').style.display === 'flex';
+function openShop() {
+  if (state !== 'menu' && state !== 'over') return;
+  clearInput();
+  if (document.pointerLockElement) document.exitPointerLock();
+  renderShop(); $('shop').style.display = 'flex'; $('sClose').focus();
+}
+function closeShop() {
+  $('shop').style.display = 'none';
+  if (document.activeElement) document.activeElement.blur(); // sonst löst Leertaste im Flug versteckte Knöpfe aus
+  renderUpgInfo();
+}
+function buy(id) {
+  const x = UPG.find(u => u.id === id), l = lvl(id), p = price(x);
+  if (l >= x.max || save.coins < p) return;
+  save.coins -= p; save.levels[id] = l + 1; persist(); snd('powerup');
+  renderShop();
+  const b = $('sList').querySelector(`[data-id="${id}"]`);
+  (b && !b.disabled ? b : $('sClose')).focus();
 }
 function start() {
   if (state === 'play' || state === 'dance') return;
@@ -897,6 +1002,8 @@ canvas.addEventListener('pointerdown', e => {
 
 const DANCE_KEYS = { ArrowUp: 0, KeyW: 0, ArrowRight: 1, KeyD: 1, ArrowDown: 2, KeyS: 2, ArrowLeft: 3, KeyA: 3 };
 addEventListener('keydown', e => {
+  if (shopOpen()) { if (e.code === 'Escape') closeShop(); return; } // Enter/Leer bedienen die Shop-Knöpfe
+  if (document.activeElement === $('shopBtn') && (e.code === 'Enter' || e.code === 'Space')) return; // Shop-Knopf per Tastatur öffnen statt Tag starten
   if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (state === 'dance') { if (!e.repeat && e.code in DANCE_KEYS) danceInput(DANCE_KEYS[e.code]); return; }
   keys[e.code] = true;
@@ -937,6 +1044,13 @@ holdBtn($('btnSlow'), v => { touchSlow = v; });
 document.querySelectorAll('#dPad button').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); danceInput(Number(b.dataset.d)); }));
 
 $('mBtn').addEventListener('click', start);
+$('shopBtn').addEventListener('click', openShop);
+$('sClose').addEventListener('click', closeShop);
+$('sList').addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) buy(b.dataset.id); });
+$('sReset').addEventListener('click', () => {
+  if (!confirm('Fortschritt wirklich zurücksetzen? Alle Honiggläser und Upgrades gehen verloren (der Rekord bleibt).')) return;
+  save = { coins: 0, levels: {} }; persist(); renderShop();
+});
 $('pauseBtn').addEventListener('click', () => { if (state === 'play') pause(); else if (state === 'pause') start(); });
 const soundLabel = () => { $('soundBtn').textContent = AC && AC.isMuted() ? '🔇' : '🔊'; };
 $('soundBtn').addEventListener('click', () => { if (AC) AC.toggleMute(); soundLabel(); });
