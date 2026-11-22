@@ -123,6 +123,28 @@
     background: linear-gradient(135deg, #facc15, #b7860b); color: #1a1200;
   }
   .primary:hover { filter: brightness(1.1); }
+  .secondary {
+    width: 100%; min-height: 46px; margin-top: 10px; border-radius: 14px; cursor: pointer; font-size: 1rem; font-weight: 800;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(212, 160, 23, 0.6); color: #f3e2b0;
+  }
+  .secondary:hover { background: rgba(138, 100, 16, 0.5); }
+  .secondary:disabled { opacity: 0.4; cursor: default; }
+  #mBonus { font-size: 0.82rem; color: #b9ae92; margin: 0 0 12px; }
+  #mBonus:empty { display: none; }
+  #shop { z-index: 61; }
+  #shop .card { max-width: 620px; }
+  #shopCoins { font-size: 1.2rem; font-weight: 900; color: #ffd257; margin-bottom: 12px; }
+  #upgList { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; text-align: left; }
+  .upg { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .upg h3 { margin: 0; font-size: 1rem; color: #fff6dc; }
+  .upg h3 span { float: right; font-size: 0.75rem; color: #a99d80; font-weight: 700; }
+  .upg p { margin: 0; font-size: 0.8rem; line-height: 1.35; }
+  .upg .nxt { color: #ffd257; font-weight: 700; }
+  .upg .secondary { margin-top: auto; min-height: 44px; font-size: 0.9rem; }
+  .shopRow { display: flex; gap: 10px; }
+  .shopRow button { flex: 1; }
+  #laserPill, #smokePill { display: none; }
+  body.touch #smokeKey { display: none; }
 
   #touch { display: none; }
   body.touch #touch { display: block; }
@@ -143,6 +165,7 @@
   #btnUse { bottom: calc(24px + env(safe-area-inset-bottom)); width: 76px; height: 76px; }
   #btnCrouch { bottom: calc(112px + env(safe-area-inset-bottom)); }
   #btnRun { bottom: calc(188px + env(safe-area-inset-bottom)); }
+  #btnSmoke { bottom: calc(264px + env(safe-area-inset-bottom)); display: none; }
   #btnBack { bottom: calc(112px + env(safe-area-inset-bottom)); right: calc(96px + env(safe-area-inset-right)); display: none; }
   body.cracking #btnBack { display: block; }
   body.cracking #hint { display: none; }
@@ -167,6 +190,8 @@
   <div class="pill">🔐 <b id="hSafes">0/3</b></div>
   <div class="pill" id="clockPill">🕒 <b id="hClock">01:00</b> <span id="hLeft"></span></div>
   <div class="pill">🏆 <b id="hBest">0 €</b></div>
+  <div class="pill" id="laserPill">🥽 <b id="hLaser"></b></div>
+  <div class="pill" id="smokePill">💨 <b id="hSmoke">0</b> <span id="smokeKey">[F]</span></div>
 </div>
 
 <div id="cross"></div>
@@ -183,11 +208,12 @@
 
 <div id="hint">
   <kbd>WASD</kbd> gehen · <kbd>Maus</kbd> umsehen · <kbd>Shift</kbd> rennen (laut) · <kbd>C</kbd>/<kbd>Strg</kbd> ducken ·
-  <kbd>E</kbd> Tresor · <kbd>P</kbd> Pause
+  <kbd>E</kbd> Tresor · <kbd>F</kbd> Rauchbombe · <kbd>P</kbd> Pause
 </div>
 
 <div id="touch">
   <div id="stick"><span class="tlabel">Gehen</span><div id="knob"></div></div>
+  <button class="tbtn" id="btnSmoke">💨</button>
   <button class="tbtn" id="btnRun">🏃</button>
   <button class="tbtn" id="btnCrouch">🧎</button>
   <button class="tbtn" id="btnUse">✋</button>
@@ -200,7 +226,21 @@
     <h1 id="mTitle">🔐 Tresorknacker 3D</h1>
     <p id="mText"></p>
     <div class="stats" id="mStats"></div>
+    <p id="mBonus"></p>
     <button class="primary" id="mBtn">Einbrechen</button>
+    <button class="secondary" id="shopBtn">🛒 Werkstatt</button>
+  </div>
+</div>
+
+<div class="modal" id="shop">
+  <div class="card">
+    <h1>🛒 Werkstatt</h1>
+    <div id="shopCoins"></div>
+    <div id="upgList"></div>
+    <div class="shopRow">
+      <button class="secondary" id="shopReset">Fortschritt zurücksetzen</button>
+      <button class="secondary" id="shopClose">Zurück (Esc)</button>
+    </div>
   </div>
 </div>
 
@@ -213,6 +253,23 @@ const AC = window.ArcadeCore || null;
 const snd = (name, ...a) => { try { if (AC && AC[name]) AC[name](...a); } catch (e) {} };
 const KEY = 'tresorknacker';
 
+// ============ Upgrades (Werkstatt) ============
+const SAVE_KEY = 'tresorknacker_save';
+const UPG = [
+  { id: 'steth', icon: '🩺', name: 'Stethoskop', max: 4, base: 20, desc: 'Richtige Zahl klickt lauter & höher – ab Stufe 3 klicken auch Nachbarzahlen warm.', val: l => l ? `+${l * 20} % Klick · +${l * 4} % Ton${l >= 3 ? ' · warm' : ''}` : 'normal' },
+  { id: 'soles', icon: '🤫', name: 'Leise Sohlen', max: 4, base: 25, desc: 'Kleinerer Lärmradius beim Schleichen, Gehen & Rennen.', val: l => `−${l * 10} % Lärm` },
+  { id: 'shoes', icon: '👟', name: 'Schnelle Schuhe', max: 4, base: 25, desc: 'Schneller in jeder Gangart – der Lärm bleibt gleich.', val: l => `+${l * 6} % Tempo` },
+  { id: 'start', icon: '🌒', name: 'Früher Start', max: 4, base: 30, desc: 'Früher einsteigen: mehr Zeit bis zur Dämmerung.', val: l => `+${l * 20} s` },
+  { id: 'goggles', icon: '🥽', name: 'Laser-Brille', max: 3, base: 30, desc: 'Laser-Countdown im HUD, längeres Vorwarn-Blinken.', val: l => l ? `Countdown · ${(0.45 + l * 0.3).toFixed(2).replace('.', ',')} s Vorwarnung` : '0,45 s Vorwarnung' },
+  { id: 'sack', icon: '💰', name: 'Großer Sack', max: 5, base: 40, desc: 'Mehr Beute aus jedem Tresor (zählt auch für die Kasse).', val: l => `+${l * 10} % Tresorbeute` },
+  { id: 'smoke', icon: '💨', name: 'Rauchbombe', max: 3, base: 15, stock: true, desc: 'Verbrauchsgut: [F]/💨 blendet Wachen im Umkreis von 7 m für 4 s.', val: l => `${l} Stück` },
+];
+const cost = (u, l) => u.stock ? u.base : Math.round(u.base * Math.pow(1.6, l));
+let save = { coins: 0, levels: {} };
+try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && typeof d === 'object') save = { coins: Math.max(0, Math.floor(Number(d.coins)) || 0), levels: Object.assign({}, d.levels) }; } catch (e) {}
+const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
+const lv = id => clamp(Math.floor(Number(save.levels[id])) || 0, 0, UPG.find(u => u.id === id).max);
+
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -221,7 +278,7 @@ const euro = n => Math.round(n).toLocaleString('de-DE') + ' €';
 const V3 = THREE.Vector3, UP = new V3(0, 1, 0);
 
 const DATA = window.TRESORKNACKER_MODELS;
-if (!DATA) { $('mText').textContent = 'Modelle (models/tresorknacker_models.js) konnten nicht geladen werden.'; $('modal').style.display = 'flex'; $('mBtn').hidden = true; return; }
+if (!DATA) { $('mText').textContent = 'Modelle (models/tresorknacker_models.js) konnten nicht geladen werden.'; $('modal').style.display = 'flex'; $('mBtn').hidden = $('shopBtn').hidden = true; return; }
 
 // ============ Tuning ============
 const CELL = 2, WALL_H = 3.2, PR = 0.3;
@@ -462,7 +519,7 @@ const guards = GUARD_DEF.map(d => {
   return { parts, path: d.path, spot, cone, mark, wi: 0, x: 0, z: 0, yaw: 0, state: 'patrol', timer: 0, seen: 0, phase: 0, step: 0, goal: { x: 0, z: 0 }, home: { x: 0, z: 0 } };
 });
 function resetGuard(g, i) {
-  g.wi = 1; g.x = g.path[0][0]; g.z = g.path[0][1]; g.state = 'patrol'; g.timer = 0; g.seen = 0; g.phase = i;
+  g.wi = 1; g.x = g.path[0][0]; g.z = g.path[0][1]; g.state = 'patrol'; g.timer = 0; g.seen = 0; g.blind = 0; g.phase = i;
   g.yaw = Math.atan2(g.path[1][0] - g.x, g.path[1][1] - g.z);
 }
 
@@ -498,12 +555,13 @@ function dialClick(s, n) {
   const target = s.combo[s.step], d = Math.min(Math.abs(n - target), DIAL_N - Math.abs(n - target));
   const pan = Math.sin(n / DIAL_N * Math.PI * 2) * 0.85;
   const base = 1500 + (n * 37) % 320;
+  const st = lv('steth'), warm = st >= 3 ? Math.max(s.warm, 1) : s.warm; // Stethoskop
   let gain = 0.045, f = base;
-  if (d === 0) { gain *= s.gain; f *= s.hi; }
-  else if (d <= s.warm) gain *= 1 + (s.warm + 1 - d) * 0.35;
+  if (d === 0) { gain *= s.gain * (1 + st * 0.2); f *= s.hi * (1 + st * 0.04); }
+  else if (d <= warm) gain *= 1 + (warm + 1 - d) * 0.35;
   tone(f, 0.018, { type: 'square', gain, pan });
   tone(f * 0.5, 0.03, { type: 'triangle', gain: gain * 0.6, pan });
-  if (d === 0 && s.warm > 0) tone(180, 0.06, { type: 'triangle', gain: 0.08, pan, delay: 0.02 });
+  if (d === 0 && warm > 0) tone(180, 0.06, { type: 'triangle', gain: 0.08, pan, delay: 0.02 });
   return d === 0;
 }
 function siren() { for (let i = 0; i < 4; i++) { tone(620, 0.35, { type: 'sawtooth', slide: 1100, gain: 0.07, delay: i * 0.4 }); } }
@@ -514,12 +572,12 @@ let best = Number(AC ? AC.getScore(KEY) : 0) || 0;
 const player = { x: 20, z: 31.5, yaw: 0, pitch: 0, crouch: false, eye: EYE.stand, noise: 0, stepAcc: 0, mode: 'walk' };
 const keys = {};
 let mouseDX = 0, mouseDY = 0, stickX = 0, stickY = 0, touchRun = false, isTouch = false, dialAcc = 0;
-let msgTimer = 0, noVanMsg = 0;
+let msgTimer = 0, noVanMsg = 0, smokeT = 0;
 
 function showMsg(html, t = 1.8) { $('msg').innerHTML = html; $('msg').classList.add('show'); msgTimer = t; }
 
 function resetGame() {
-  loot = 0; timeLeft = DAWN; elapsed = 0; safesOpen = 0; cracking = null; crackK = 0; msgTimer = 0; noVanMsg = 0;
+  loot = 0; timeLeft = DAWN + lv('start') * 20; elapsed = 0; smokeT = 0; smokeMesh.visible = false; safesOpen = 0; cracking = null; crackK = 0; msgTimer = 0; noVanMsg = 0;
   $('msg').classList.remove('show'); $('crack').classList.remove('on'); document.body.classList.remove('cracking');
   Object.assign(player, { x: 20, z: 31.5, yaw: 0, pitch: 0, crouch: false, eye: EYE.stand, noise: 0, stepAcc: 0 });
   SAFES.forEach(s => { s.combo = newCombo(); s.step = 0; s.num = 0; s.shown = 0; s.open = false; s.parts.door.rotation.y = 0; s.parts.dial.rotation.z = 0; s.kick = 0; });
@@ -549,7 +607,7 @@ function updatePlayer(dt) {
   player.mode = player.crouch ? 'crouch' : running ? 'run' : 'walk';
   const moving = len > 0.1;
   if (moving) {
-    const a = Math.atan2(kx, kz), sp = SPEED[player.mode] * len;
+    const a = Math.atan2(kx, kz), sp = SPEED[player.mode] * len * (1 + lv('shoes') * 0.06);
     const s = Math.sin(player.yaw + a), c = Math.cos(player.yaw + a);
     // yaw 0 = Blick nach -Z; "zurück" (kz>0) ist +Z
     player.x += s * sp * dt; player.z += c * sp * dt;
@@ -561,7 +619,7 @@ function updatePlayer(dt) {
       tone(rnd(60, 80), 0.08, { type: 'triangle', gain: player.mode === 'run' ? 0.14 : player.mode === 'walk' ? 0.06 : 0.02 });
     }
   }
-  const target = moving ? NOISE[player.mode] * Math.max(0.5, len) : 0;
+  const target = moving ? NOISE[player.mode] * Math.max(0.5, len) * (1 - lv('soles') * 0.1) : 0;
   player.noise += (target - player.noise) * Math.min(1, dt * 6);
   player.eye += ((player.crouch ? EYE.crouch : EYE.stand) - player.eye) * Math.min(1, dt * 10);
   camera.position.set(player.x, player.eye, player.z);
@@ -616,7 +674,7 @@ function openSafe(s) {
   s.open = true; safesOpen++;
   stopCrack();
   snd('powerup'); tone(90, 0.4, { type: 'triangle', gain: 0.18 });
-  addPickup(s.lootModel, s.x + 0.15, s.z + 1.05, 0, s.loot, s.name);
+  addPickup(s.lootModel, s.x + 0.15, s.z + 1.05, 0, Math.round(s.loot * (1 + lv('sack') * 0.1)), s.name);
   showMsg(`💥 KLACK – OFFEN!<small>${s.name}: schnapp dir die Beute</small>`, 2.2);
 }
 function updateCrack(dt) {
@@ -660,7 +718,9 @@ function updateGuards(dt, detect) {
   let maxSeen = 0;
   guards.forEach(g => {
     let tx = null, tz = null, speed = 1.5;
-    if (g.state === 'patrol') { tx = g.path[g.wi][0]; tz = g.path[g.wi][1]; }
+    const blind = (g.blind = Math.max(0, (g.blind || 0) - dt)) > 0; // Rauchbombe: Wache steht hustend still
+    if (blind) { g.yaw += Math.sin(elapsed * 2.1 + g.phase) * dt * 1.5; g.seen = 0; }
+    else if (g.state === 'patrol') { tx = g.path[g.wi][0]; tz = g.path[g.wi][1]; }
     else if (g.state === 'wait' || g.state === 'search') {
       g.timer -= dt; g.yaw += Math.sin(elapsed * 1.3 + g.phase) * dt * 0.9;
       if (g.timer <= 0) { if (g.state === 'wait') { g.wi = (g.wi + 1) % g.path.length; g.state = 'patrol'; } else g.state = 'return'; }
@@ -701,7 +761,7 @@ function updateGuards(dt, detect) {
     g.cone.scale.setScalar(clamp(reach / SEE_RANGE + 0.06, 0.1, 1));
 
     // Entdeckung
-    if (detect) {
+    if (detect && !blind) {
       const dx = player.x - g.x, dz = player.z - g.z, d = Math.hypot(dx, dz);
       const range = player.crouch ? SEE_RANGE_CROUCH : SEE_RANGE;
       const inCone = d < range && Math.abs(wrapAngle(Math.atan2(dx, dz) - g.yaw)) < SEE_ANGLE;
@@ -714,6 +774,7 @@ function updateGuards(dt, detect) {
       if (g.seen >= SEEN_LIMIT) { lose('seen'); }
       maxSeen = Math.max(maxSeen, g.seen);
     }
+    g.cone.visible = !blind; g.spot.intensity = blind ? 0 : 2.4;
     const alertish = g.state === 'alert' || g.state === 'investigate' || g.state === 'search';
     g.mark.visible = g.seen > 0.05 || alertish;
     g.mark.material.map = g.seen > 0.3 ? TEX_EX : TEX_Q;
@@ -730,7 +791,7 @@ function turnTo(g, want, dt, rate) {
 // ============ Laser ============
 function updateLasers(detect) {
   LASERS.forEach(L => {
-    const t = (elapsed + L.phase) % LASER_CYCLE, on = t < LASER_ON, warn = !on && t > LASER_CYCLE - 0.45;
+    const t = (elapsed + L.phase) % LASER_CYCLE, on = t < LASER_ON, warn = !on && t > LASER_CYCLE - (0.45 + lv('goggles') * 0.3);
     if (on && !L.on) spatial(new V3(28, 1, L.z), 880, 0.06, { type: 'square', gain: 0.05 }, 14);
     L.on = on;
     L.g.visible = on || (warn && Math.floor(elapsed * 16) % 2 === 0);
@@ -738,6 +799,26 @@ function updateLasers(detect) {
     L.light.intensity = on ? 1.2 : 0;
     if (detect && on && Math.abs(player.z - L.z) < PR + 0.05 && player.x > 26 && player.x < 30) lose('laser');
   });
+}
+
+// ============ Rauchbombe ============
+const smokeMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0x9aa0a8, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+smokeMesh.visible = false; scene.add(smokeMesh);
+function useSmoke() {
+  if (state !== 'play' || lv('smoke') <= 0) return;
+  save.levels.smoke = lv('smoke') - 1; persist();
+  let n = 0;
+  guards.forEach(g => { if (Math.hypot(g.x - player.x, g.z - player.z) < 7) { g.blind = 4; g.seen = 0; n++; } });
+  smokeT = 4; smokeMesh.position.set(player.x, 1, player.z); smokeMesh.visible = true;
+  tone(240, 0.7, { type: 'sawtooth', slide: 60, gain: 0.07 }); tone(90, 0.5, { type: 'triangle', gain: 0.1 });
+  showMsg(`💨 Rauchbombe!<small>${n ? n + ' Wache' + (n > 1 ? 'n' : '') + ' geblendet' : 'Keine Wache in 7 m'}</small>`, 1.4);
+}
+function updateSmoke(dt) {
+  if (smokeT <= 0) return;
+  smokeT = Math.max(0, smokeT - dt);
+  const k = 1 - smokeT / 4;
+  smokeMesh.scale.setScalar(1 + k * 5); smokeMesh.material.opacity = 0.45 * (1 - k);
+  smokeMesh.visible = smokeT > 0;
 }
 
 // ============ Beute & Flucht ============
@@ -771,20 +852,23 @@ function lose(kind) {
     laser: ['🚨 ZAP!', 'Laser-Gitter berührt – der Tresorgang ist abgeriegelt.'],
     dawn: ['🌅 Zu spät!', 'Die Sonne geht auf und die Frühschicht schließt die Tür auf. Flucht verpasst.'],
   }[kind];
-  openModal(t[0], t[1], 'Neuer Versuch', [['Beute (verloren)', euro(loot)], ['Tresore', safesOpen + '/3'], ['Uhrzeit', clockText()], ['Rekord', euro(best)]]);
+  const coins = grantCoins(Math.round(loot / 4800) + safesOpen * 2 + 1); // Fehlschlag: ein Viertel des Sieg-Satzes
+  openModal(t[0], t[1], 'Neuer Versuch', [['Beute (verloren)', euro(loot)], ['Tresore', safesOpen + '/3'], ['Uhrzeit', clockText()], ['Rekord', euro(best)], ['Beute-Kasse', `+${coins} 🪙`]]);
 }
 function win() {
   endState(); snd('powerup'); tone(90, 0.5, { type: 'triangle', gain: 0.15, delay: 0.3 });
   const timeBonus = Math.round(timeLeft) * 100, perfect = safesOpen === 3 ? 25000 : 0, total = loot + timeBonus + perfect;
   const record = total > best;
   if (record) { best = total; if (AC) AC.saveScore(KEY, best); }
+  const coins = grantCoins(Math.round(total / 1200));
   openModal(record ? '🏆 Neuer Rekord!' : '🚐 Flucht gelungen!',
     safesOpen === 3 ? 'Perfekter Coup: alle drei Tresore leer, keiner hat etwas gesehen.' : `Beute im Sack – aber ${3 - safesOpen} Tresor${safesOpen === 2 ? '' : 'e'} blieb${safesOpen === 2 ? '' : 'en'} zu.`,
-    'Nächster Bruch', [['Beute', euro(loot)], ['Zeitbonus', euro(timeBonus)], ['Perfekt-Bonus', euro(perfect)], ['Gesamt', euro(total)], ['Tresore', safesOpen + '/3'], ['Rekord', euro(best)]]);
+    'Nächster Bruch', [['Beute', euro(loot)], ['Zeitbonus', euro(timeBonus)], ['Perfekt-Bonus', euro(perfect)], ['Gesamt', euro(total)], ['Tresore', safesOpen + '/3'], ['Rekord', euro(best)], ['Beute-Kasse', `+${coins} 🪙`]]);
 }
+function grantCoins(n) { save.coins += n; persist(); return n; }
 
 function clockText() {
-  const mins = 60 + (DAWN - timeLeft) / DAWN * 300; // 01:00 -> 06:00
+  const mins = (360 - timeLeft / DAWN * 300 + 1440) % 1440; // 01:00 -> 06:00, mit Früher Start schon vor 01:00
   return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(Math.floor(mins % 60)).padStart(2, '0');
 }
 function updateHud() {
@@ -807,11 +891,43 @@ function updateHud() {
   $('prompt').innerHTML = p;
   $('btnUse').textContent = cracking ? '🔓' : '✋';
   $('btnCrouch').classList.toggle('on', player.crouch);
+  const smokes = lv('smoke');
+  $('smokePill').style.display = smokes ? 'block' : 'none'; $('hSmoke').textContent = smokes;
+  $('btnSmoke').style.display = smokes ? 'block' : 'none';
+  // Laser-Brille: Restzeit des nächsten Gitters, solange man im Tresorgang ist
+  const showLaser = lv('goggles') > 0 && player.x > 24 && player.z > 8 && player.z < 19;
+  $('laserPill').style.display = showLaser ? 'block' : 'none';
+  if (showLaser) {
+    const L = LASERS.reduce((a, b) => Math.abs(b.z - player.z) < Math.abs(a.z - player.z) ? b : a);
+    const t = (elapsed + L.phase) % LASER_CYCLE, on = t < LASER_ON;
+    $('hLaser').textContent = (on ? 'AN ' : 'AUS ') + (on ? LASER_ON - t : LASER_CYCLE - t).toFixed(1).replace('.', ',') + ' s';
+  }
 }
+function bonusText() {
+  const act = UPG.filter(u => !u.stock && lv(u.id) > 0).map(u => `${u.icon} ${u.val(lv(u.id))}`);
+  return `🪙 Beute-Kasse: <b>${save.coins}</b>` + (lv('smoke') ? ` · 💨 ${lv('smoke')}` : '') + (act.length ? '<br>' + act.join(' · ') : '');
+}
+function renderShop() {
+  $('shopCoins').textContent = `🪙 ${save.coins} Beute-Kasse`;
+  $('upgList').innerHTML = UPG.map(u => {
+    const l = lv(u.id), maxed = l >= u.max, c = cost(u, l);
+    return `<div class="upg"><h3>${u.icon} ${u.name}<span>${u.stock ? 'Vorrat' : 'Stufe'} ${l}/${u.max}</span></h3><p>${u.desc}</p>` +
+      `<p>Jetzt: ${u.val(l)}</p><p class="nxt">${maxed ? (u.stock ? 'Vorrat voll' : 'Maximal') : 'Nächste: ' + u.val(l + 1)}</p>` +
+      `<button class="secondary" data-buy="${u.id}" ${maxed || save.coins < c ? 'disabled' : ''}>${maxed ? '✔' : (u.stock ? 'Kaufen' : 'Ausbauen') + ` · ${c} 🪙`}</button></div>`;
+  }).join('');
+}
+function openShop() {
+  if (document.pointerLockElement) document.exitPointerLock();
+  renderShop(); $('shop').style.display = 'flex';
+}
+function closeShop() { $('shop').style.display = 'none'; $('mBonus').innerHTML = bonusText(); updateHud(); }
+const shopOpen = () => $('shop').style.display === 'flex';
 
 function openModal(title, text, btn, stats) {
   $('mTitle').textContent = title; $('mText').innerHTML = text; $('mBtn').textContent = btn;
   $('mStats').innerHTML = (stats || []).map(([k, v]) => `<div class="stat"><div>${k}</div><div>${v}</div></div>`).join('');
+  $('shopBtn').hidden = state === 'pause'; // Upgrades nur zwischen den Läufen
+  $('mBonus').innerHTML = state === 'pause' ? '' : bonusText();
   $('modal').style.display = 'flex';
 }
 function start() {
@@ -872,6 +988,8 @@ const lookEnd = e => { if (e.pointerId === lookId) lookId = null; };
 addEventListener('pointerup', lookEnd); addEventListener('pointercancel', lookEnd);
 
 addEventListener('keydown', e => {
+  if (shopOpen()) { if (e.code === 'Escape') closeShop(); return; }
+  if (document.activeElement === $('shopBtn') && (e.code === 'Enter' || e.code === 'Space')) return; // Button nativ auslösen
   if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   if (state === 'play' && cracking && ['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) turnDial(e.code === 'ArrowRight' || e.code === 'KeyD' ? 1 : -1);
@@ -879,6 +997,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyE') { if (cracking) stopCrack(); else useAction(); }
   if (e.code === 'Space' && cracking) lockIn();
   if ((e.code === 'KeyQ' || e.code === 'Backspace') && cracking) stopCrack();
+  if (e.code === 'KeyF') useSmoke();
   if (e.code === 'KeyC' || e.code === 'ControlLeft' || e.code === 'ControlRight') toggleCrouch();
   if (e.code === 'Escape' && state === 'play') pause();
   if (e.code === 'KeyP') { if (state === 'play') pause(); else if (state === 'pause') start(); }
@@ -909,12 +1028,26 @@ const tap = (el, fn) => el.addEventListener('pointerdown', e => { e.preventDefau
 tap($('btnUse'), useAction);
 tap($('btnCrouch'), toggleCrouch);
 tap($('btnBack'), stopCrack);
+tap($('btnSmoke'), useSmoke);
 const run = $('btnRun');
 run.addEventListener('pointerdown', e => { e.preventDefault(); setTouch(); run.setPointerCapture(e.pointerId); touchRun = true; run.classList.add('on'); });
 const runOff = () => { touchRun = false; run.classList.remove('on'); };
 run.addEventListener('pointerup', runOff); run.addEventListener('pointercancel', runOff);
 
 $('mBtn').addEventListener('click', start);
+$('shopBtn').addEventListener('click', openShop);
+$('shopClose').addEventListener('click', closeShop);
+$('shop').addEventListener('click', e => { if (e.target === $('shop')) closeShop(); });
+$('upgList').addEventListener('click', e => {
+  const id = e.target.dataset && e.target.dataset.buy; if (!id) return;
+  const u = UPG.find(x => x.id === id), l = lv(id), c = cost(u, l);
+  if (l >= u.max || save.coins < c) return;
+  save.coins -= c; save.levels[id] = l + 1; persist(); snd('coin'); renderShop();
+});
+$('shopReset').addEventListener('click', () => {
+  if (!confirm('Gesamten Werkstatt-Fortschritt (Beute-Kasse & Upgrades) löschen? Der Rekord bleibt.')) return;
+  save = { coins: 0, levels: {} }; persist(); renderShop();
+});
 $('pauseBtn').addEventListener('click', () => { if (state === 'play') pause(); else if (state === 'pause') start(); });
 const soundLabel = () => { $('soundBtn').textContent = AC && AC.isMuted() ? '🔇' : '🔊'; };
 $('soundBtn').addEventListener('click', () => { if (AC) AC.toggleMute(); soundLabel(); });
@@ -928,7 +1061,7 @@ function frame(now) {
   if (state === 'play') {
     elapsed += dt; timeLeft -= dt;
     if (cracking) updateCrack(dt); else updatePlayer(dt);
-    updateSafes(dt); updateGuards(dt, true); updateLasers(true); updatePickups(dt); checkExit(dt);
+    updateSafes(dt); updateGuards(dt, true); updateLasers(true); updatePickups(dt); updateSmoke(dt); checkExit(dt);
     if (state === 'play' && timeLeft <= 0) { timeLeft = 0; lose('dawn'); }
     if (msgTimer > 0 && (msgTimer -= dt) <= 0) $('msg').classList.remove('show');
     updateHud();
