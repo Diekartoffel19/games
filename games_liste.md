@@ -2,7 +2,7 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (42 Spiele)
+## 🧊 Bestehende 3D-Spiele (43 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (5 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 55 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (42 Spiele)
+## 🧊 Bestehende 3D-Spiele (43 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -193,6 +193,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 40 | 🎯 **Scharfschütze 3D** | [`games/scharfschuetze.html`](games/scharfschuetze.html) | `action` | Three.js | 3D-Scharfschützen-Tal vom Hochstand (75m–260m+): 11 Zieltypen (3D-Zielscheibe mit Ringen, artikulierter Läufer hinter 3D-Deckung, Gepanzert mit zerstörbarer Brustplatte & leuchtendem Visier-Weakspot, 3D-Drohne mit Rotoren, Explosiv-Fass mit 3D-Druckwelle, Zivilisten-Sperrziel, Gegen-Scharfschütze mit Zielfernrohr-Glitzern & Warnpfeilen, Geiselnehmer hinter Geisel, fliehende Zielperson, Deckungsschütze hinter Sandsäcken, Bonus-Ballon mit Magazin-Refill), 3D-Gewehr-Viewmodel mit Rückstoß, Kammerstängel-Animation & Hülsenauswurf, FFP-MIL-DOT-Zielfernrohr (4×–12×) mit Laser-Entfernungsmesser & Windage-Baum, 3D-Windfahnen, Atem-Schwanken, 7 Themen-Missionen (Tag, Industrie, Gebirge, Nacht mit Scheinwerfer, Dämmerungs-Dorf, Wüstenschlucht, Schneelager) mit je 2 Bonuszielen, Treffer-Distanz-Popups & Endlos-Schießstand |
 | 41 | 🏗️ **Kranführer 3D** | [`games/kranfuehrer.html`](games/kranfuehrer.html) | `sim` | Three.js | Turmdrehkran mit selbstgerechneter 2-Achsen-Pendelphysik (Verlet + Seil-Constraint), Torsion langer Stahlträger um die Seilachse, Windböen ab Level 3 mit Windsack & HUD-Pfeil, AABB-Absetzen mit Einrast-Ghost, Schaden bei hartem Aufprall, laufende Bauarbeiter, 5 Level mit Containern, Trägern, Betonplatten & Dachkranz, Kabinenansicht, Touch-Doppelstick |
 | 42 | 🦇 **Echolot 3D: Blinde Fledermaus** | [`games/echolot.html`](games/echolot.html) | `action` | Three.js | Komplett schwarze Höhle (418 m Rundkurs mit 3 Hallen, Engstellen, Tropfsteinen & Säulen, in Blender modelliert und in 16 Stücke geteilt): ShaderMaterial mit 4 gleichzeitigen Ping-Slots lässt Flächen & Quad-Kanten nur dort aufleuchten, wo die Schallwelle vorbeizieht, und nach 1,5 s verblassen; Halten = lauter Ping (mehr Reichweite, scheucht Motten auf, aber größerer Hörradius der Eule), Atem-Leiste, Echo-Ton mit Verzögerung & Tonhöhe nach Wandabstand, Eulen-KI (kreisen/lauschen/jagen/abziehen) entlang der Höhlen-Mittellinie mit Stereo-Flügelschlägen & glühenden Augen, 6-Strahl-Kollision + Sweep mit Betäubung, Motten-Kombos, Touch-Joystick |
+| 43 | 🎣 **Eisangler 3D** | [`games/eisangler.html`](games/eisangler.html) | `sim` | Three.js | Zugefrorener See im Morgengrauen bis zur Dämmerung (Tageslauf mit Himmels-Shader, wanderndem Sonnenstand & Schattenwurf, Schneefall): Third-Person-Angler (in Blender modelliert wie Eisbohrer, Rute, Ofenhütte, Kiefern & 4 Fischarten) läuft per WASD übers Eis; versteckte Eisdicke-Karte mit dünnen Stellen, die nur als klares, dunkles Eis zu erkennen sind – wer dort stillsteht, hört es knacken, sieht Risse wachsen und bricht ein; Leertaste halten bohrt ein Loch (Eisspäne, Dicke-Anzeige), Sonar (Q) zeigt wandernde Schwärme als Silhouetten; Biss mit tauchender Pose, Anschlag-Fenster, Drill mit Spannungsbalken (zu locker = Fisch weg, zu straff = Schnur reißt) und eigenen Kampfmustern je Art (Barsch-Stöße, Hecht-Fluchten, Zander-Dauerzug, unberechenbarer Gold-Saibling); Kälte-Leiste, Aufwärmen am Ofen, Fangliste & Gesamtgewicht als Highscore, Touch-Steuerung |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
