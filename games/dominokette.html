@@ -135,6 +135,19 @@
   }
   .primary:hover, .secondary:hover { filter: brightness(1.12); }
   .primary[hidden], .secondary[hidden] { display: none; }
+  .shopbtn { flex-basis: 100% !important; }
+  .coins { font-size: 1.1rem; font-weight: 900; color: #ffc46b; margin: 0 0 10px; }
+  .shop-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 0 0 12px; text-align: left; }
+  @media (max-width: 460px) { .shop-grid { grid-template-columns: 1fr; } }
+  .up {
+    border-radius: 14px; border: 1px solid rgba(255, 196, 120, 0.4); background: rgba(255, 255, 255, 0.06);
+    padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: #f1dcc2;
+  }
+  .up b { color: #ffc46b; font-size: 0.95rem; }
+  .up .lvl { color: #fbbf24; font-weight: 800; }
+  .up button { margin-top: auto; min-height: 40px; font-size: 0.9rem; }
+  .up button[disabled] { opacity: 0.45; cursor: not-allowed; filter: none; }
+  .danger { min-height: 44px; font-size: 0.85rem; border-color: rgba(248, 113, 113, 0.6); color: #fca5a5; }
 </style>
 </head>
 <body>
@@ -152,6 +165,8 @@
   <div class="pill" id="domPill">Steine: <b id="hDom">0</b> übrig <span id="hSpare"></span></div>
   <div class="pill" id="timePill">⏱ <b id="hTime">0:00</b></div>
   <div class="pill">⭐ <b id="hStars">0</b></div>
+  <div class="pill">🪙 <b id="hCoins">0</b></div>
+  <div class="pill" id="reachPill" hidden></div>
   <div class="pill" id="taskPill"></div>
 </div>
 
@@ -160,6 +175,7 @@
 <div id="bar">
   <button class="bbtn" id="undoBtn" title="Letzten Stein entfernen (Z)">↶ Zurück</button>
   <button class="bbtn" id="clearBtn" title="Alle Steine entfernen">🗑 Leeren</button>
+  <button class="bbtn" id="rulerBtn" title="Lineal: gezogene Linien rasten ein (R)" hidden>📏 Lineal</button>
   <button class="bbtn go" id="startBtn" title="Finger schubst den ersten Stein (Leertaste)">▶ Start</button>
   <button class="bbtn" id="fastBtn" title="Zeitraffer (F)" hidden>⏩ Schneller</button>
   <button class="bbtn" id="stopBtn" title="Abbrechen und weiterbauen" hidden>⏹ Weiterbauen</button>
@@ -181,6 +197,20 @@
     <div class="row">
       <button class="secondary" id="mBtn2" hidden></button>
       <button class="primary" id="mBtn" hidden></button>
+      <button class="secondary shopbtn" id="mShop" hidden>🛒 Bastelladen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="shop">
+  <div class="card">
+    <h1>🛒 Bastelladen</h1>
+    <div class="coins">🪙 <span id="sCoins">0</span> Münzen</div>
+    <p>Münzen gibt es für neue Sterne und – etwas weniger bei jeder Wiederholung – für gelöste Level.</p>
+    <div class="shop-grid" id="sList"></div>
+    <div class="row">
+      <button class="secondary danger" id="sReset">Fortschritt zurücksetzen</button>
+      <button class="primary" id="sClose">Fertig (Esc)</button>
     </div>
   </div>
 </div>
@@ -252,6 +282,36 @@ function saveProgress() {
   if (AC) AC.saveScore(KEY, totalStars());
 }
 
+// ============ Bastelladen (Münzen + Upgrades) ============
+const SKEY = 'dominokette_save';
+// cost[i] = Preis für Stufe i+1; Skins sind Einmalkäufe (max 1)
+const UPS = [
+  { id: 'extra', name: '🛋 Sofaritze-Vorrat', text: 'Mehr Steine im Vorrat. Der Stern „Steine übrig“ zählt weiter gegen den Grundvorrat.', cost: [90, 120, 150], val: n => `+${2 * n} Steine` },
+  { id: 'time', name: '⏳ Trödel-Lizenz', text: 'Längere Bauzeit in jedem Level.', cost: [90, 100, 110, 120], val: n => `+${15 * n} s` },
+  { id: 'eye', name: '👓 Omas Lesebrille', text: 'Vorschau vor dem Start: unerreichte Steine leuchten rot, Stufe 2 zeigt Ziele in Reichweite.', cost: [100, 140], val: n => ['aus', 'Lücken rot', '+ Ziel-Check'][n] },
+  { id: 'ruler', name: '📏 Streber-Lineal', text: 'Gezogene Linien rasten ein (Knopf „Lineal“ oder R).', cost: [90, 110], val: n => ['aus', '45°-Raster', '15°-Raster'][n] },
+  { id: 'turbo', name: '⏩ Turbo-Geklacker', text: 'Schnellerer Zeitraffer beim Ablauf.', cost: [90, 100], val: n => [2.5, 3.5, 4.5][n] + '×' },
+  { id: 'piggy', name: '🐷 Klimper-Schwein', text: 'Mehr Münzen pro gelöstem Level.', cost: [90, 120, 150], val: n => `+${25 * n} %` },
+  { id: 'skin_wood', name: '🌰 Walnuss-Steine', text: 'Skin: edles Walnussholz.', cost: [90], skin: 'wood' },
+  { id: 'skin_neon', name: '💡 Neon-Steine', text: 'Skin: knalliger Neon-Glow.', cost: [110], skin: 'neon' },
+  { id: 'skin_gold', name: '👑 Gold-Steine', text: 'Skin: pures Protz-Gold.', cost: [140], skin: 'gold' },
+];
+const freshSave = () => ({ coins: 0, levels: {}, skin: 'classic', wins: [] });
+let save = freshSave();
+try {
+  const p = JSON.parse(localStorage.getItem(SKEY) || 'null');
+  if (p && typeof p === 'object') {
+    const int = v => Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : 0;
+    save.coins = int(p.coins);
+    UPS.forEach(u => { save.levels[u.id] = clamp(int(p.levels && p.levels[u.id]), 0, u.cost.length); });
+    if (Array.isArray(p.wins)) save.wins = p.wins.map(int);
+    if (typeof p.skin === 'string') save.skin = p.skin;
+  }
+} catch (e) {}
+const lv = id => save.levels[id] || 0;
+function persist() { try { localStorage.setItem(SKEY, JSON.stringify(save)); } catch (e) {} }
+const extraDom = () => 2 * lv('extra');
+
 // ============ Renderer ============
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
@@ -291,6 +351,10 @@ Object.keys(DATA.objects).forEach(n => {
 });
 const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.05, side: THREE.DoubleSide });
 const START_MAT = MAT.clone(); START_MAT.color.set(0x8fd6ff); START_MAT.emissive.set(0x0a2a40); // hebt sich vom roten Teppich ab
+const skinMat = (c, e, rough, metal) => { const m = MAT.clone(); m.color.set(c); m.emissive.set(e); m.roughness = rough; m.metalness = metal; return m; };
+const SKINS = { classic: MAT, wood: skinMat(0xb07850, 0x000000, 0.8, 0), neon: skinMat(0x7dffe9, 0x00a08a, 0.4, 0), gold: skinMat(0xffd466, 0x5a3c00, 0.3, 0.6) };
+const WARN_MAT = skinMat(0xff5a5a, 0x400000, 0.7, 0.05);
+const domMat = () => Object.prototype.hasOwnProperty.call(SKINS, save.skin) ? SKINS[save.skin] : MAT;
 function model(name, x = 0, y = 0, z = 0, ry = 0, mat = MAT) {
   const m = new THREE.Mesh(GEO[name], mat);
   m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true;
@@ -494,11 +558,12 @@ function fit(x, z, a, ignore) {
   if (Math.abs(startRec.y - y) < 1 && segDist(S[0], S[1], S[2], S[3], fx, fz, fx, fz) < 0.35) return null;
   return y;
 }
-const left = () => L.budget - placed.length;
+const left = () => L.budget + extraDom() - placed.length;
+const spareNeed = () => L.spare + extraDom(); // Extra-Steine machen den Spar-Stern nicht geschenkt
 function addDomino(x, z, a) {
   if (left() <= 0) { showMsg('Keine Steine mehr!', 1); return null; }
   const y = fit(x, z, a); if (y === null) return null;
-  const rec = { x, z, y, a, mesh: model('domino') };
+  const rec = { x, z, y, a, mesh: model('domino', 0, 0, 0, 0, domMat()) };
   levelGroup.add(rec.mesh); poseDomino(rec); placed.push(rec);
   clickTone(placed.length, 0.035);
   updateHud(); return rec;
@@ -568,7 +633,7 @@ const ding = () => { tone(1870, 1.4, { gain: 0.14 }); tone(2810, 1.0, { gain: 0.
 // ============ Ablauf ============
 function enterBuild(fresh) {
   state = 'build';
-  if (fresh || buildTime <= 0) buildTime = L.time;
+  if (fresh || buildTime <= 0) buildTime = L.time + 15 * lv('time');
   $('modal').style.display = 'none';
   resetVisuals();
   setBar();
@@ -579,6 +644,7 @@ function setBar() {
   const b = state === 'build', r = state === 'run';
   ['undoBtn', 'clearBtn', 'startBtn'].forEach(id => { $(id).hidden = !b; });
   ['fastBtn', 'stopBtn'].forEach(id => { $(id).hidden = !r; });
+  $('rulerBtn').hidden = !b || !lv('ruler'); $('rulerBtn').classList.toggle('on', rulerOn);
   $('fastBtn').classList.toggle('on', fast);
   $('bar').style.display = b || r ? 'flex' : 'none';
 }
@@ -644,9 +710,9 @@ function updateRun(dt) {
     if (Math.hypot(wave.x - p.x, wave.z - p.z) < 2.8 && Math.abs(wave.y - p.y) < 2) slow = true;
     if (t.type === 'car' && t.launched) slow = true;
   }
-  const want = fast ? 2.5 : slow ? 0.35 : 1;
+  const want = fast ? [2.5, 3.5, 4.5][lv('turbo')] : slow ? 0.35 : 1;
   timeScale += (want - timeScale) * Math.min(1, dt * 4);
-  acc = Math.min(acc + dt * timeScale, STEP * 8);
+  acc = Math.min(acc + dt * timeScale, STEP * 16);
   while (acc >= STEP) { stepPhysics(); acc -= STEP; }
 
   // Sync + Wellenfront + Klick-Ton
@@ -685,20 +751,27 @@ function finishRun() {
   const all = targets.every(t => t.hit);
   const rest = left();
   const allFallen = runBodies.every(r => upY(r.body) < UP_FALLEN);
-  const s = all ? 1 + (rest >= L.spare ? 1 : 0) + (allFallen ? 1 : 0) : 0;
+  const s = all ? 1 + (rest >= spareNeed() ? 1 : 0) + (allFallen ? 1 : 0) : 0;
   const prev = progress.s[lvlIdx];
   if (s > prev) { progress.s[lvlIdx] = s; saveProgress(); }
+  // Münzen: viel für neue Sterne, für Wiederholungen abnehmend (0.9^Siege, mind. 3) – kein schnelles Farmen
+  let earned = 0;
+  if (all) {
+    const w = save.wins[lvlIdx] || 0;
+    earned = Math.round((Math.max(0, s - prev) * 15 + Math.max(3, (6 + 3 * s) * 0.9 ** w)) * (1 + 0.25 * lv('piggy')));
+    save.wins[lvlIdx] = w + 1; save.coins += earned; persist();
+  }
   updateHud();
   if (all) snd(s === 3 ? 'powerup' : 'coin'); else snd('gameOver');
   const ck = (ok, txt) => `<div>${ok ? '✅' : '❌'} ${txt}</div>`;
   const tNames = { bell: 'Klingel geläutet', cup: 'Tasse runtergestoßen', car: 'Auto im Ziel' };
   $('mChecks').innerHTML = targets.map(t => ck(t.hit, tNames[t.type])).join('') +
-    ck(all && rest >= L.spare, `Mindestens ${L.spare} Steine übrig (${rest})`) +
+    ck(all && rest >= spareNeed(), `Mindestens ${spareNeed()} Steine übrig (${rest})`) +
     ck(all && allFallen, `Alle Steine umgefallen (${runBodies.filter(r => upY(r.body) < UP_FALLEN).length}/${runBodies.length})`);
   $('mStars').hidden = false; $('mStars').textContent = '★'.repeat(s) + '☆'.repeat(3 - s);
   $('mLevels').innerHTML = '';
   const next = lvlIdx + 1 < LEVELS.length && unlocked(lvlIdx + 1);
-  openModal(all ? (s === 3 ? '🏆 Perfekt!' : '🎉 Geschafft!') : '😅 Nicht ganz…', all ? pick(WIN) : pick(FAIL),
+  openModal(all ? (s === 3 ? '🏆 Perfekt!' : '🎉 Geschafft!') : '😅 Nicht ganz…', (all ? pick(WIN) : pick(FAIL)) + (earned ? `<br><b>+${earned} 🪙 Münzen</b> (jetzt <span id="mCoins">${save.coins}</span>)` : ''),
     ['🔧 Weiterbauen', () => enterBuild(true)],
     all ? (next ? ['Nächstes Level ▶', () => loadLevel(lvlIdx + 1)] : ['🏠 Levelauswahl', showMenu]) : ['🔁 Nochmal starten', () => { enterBuild(true); startRun(); }]);
 }
@@ -707,8 +780,30 @@ function openModal(title, text, b2, b1) {
   $('mTitle').textContent = title; $('mText').innerHTML = text;
   const set = (el, b) => { el.hidden = !b; if (b) { el.textContent = b[0]; el.onclick = () => { el.blur(); b[1](); }; } };
   set($('mBtn2'), b2); set($('mBtn'), b1);
+  $('mShop').hidden = false;
   $('modal').style.display = 'flex';
 }
+const shopOpen = () => $('shop').style.display === 'flex';
+function renderShop(focusI) {
+  $('sCoins').textContent = save.coins;
+  $('sList').innerHTML = UPS.map((u, i) => {
+    const n = lv(u.id), max = u.cost.length, done = n >= max, c = u.cost[n];
+    const btn = u.skin && done
+      ? `<button class="secondary" data-i="${i}" data-act="${save.skin === u.skin ? 'off' : 'wear'}">${save.skin === u.skin ? '✔ Angelegt' : 'Anlegen'}</button>`
+      : `<button class="primary" data-i="${i}" data-act="buy" ${done || save.coins < c ? 'disabled' : ''}>${done ? 'Maximal' : `Kaufen · ${c} 🪙`}</button>`;
+    const info = u.skin ? (done ? 'Gekauft' : 'Einmalkauf') : `Stufe ${n}/${max} · ${u.val(n)}${done ? '' : ` → ${u.val(n + 1)}`}`;
+    return `<div class="up"><b>${u.name}</b><span>${u.text}</span><span class="lvl">${info}</span>${btn}</div>`;
+  }).join('');
+  const f = focusI !== undefined && $('sList').querySelector(`[data-i="${focusI}"]`);
+  if (focusI !== undefined) (f && !f.disabled ? f : $('sClose')).focus();
+}
+function openShop() { $('modal').style.display = 'none'; $('shop').style.display = 'flex'; renderShop(); $('sClose').focus(); }
+function closeShop() {
+  $('shop').style.display = 'none'; $('modal').style.display = 'flex';
+  pointers.clear(); mode = null; downPos = null; tapRec = null; endStroke(); // kein hängender Zieh-/Orbit-Zustand
+  updateHud();
+}
+
 function showMenu(first) {
   if (state === 'run') { world = null; }
   const prevState = state; state = 'menu'; ghost.visible = false; endStroke(); setBar();
@@ -726,11 +821,28 @@ function showMenu(first) {
     canResume ? [first === true ? `▶ Level ${lvlIdx + 1} spielen` : 'Zurück zum Level', () => enterBuild(false)] : null, null);
 }
 
+// Lesebrille: Kette ab dem Startstein verfolgen (grobe Heuristik: Abstand < Steinhöhe, in Fallrichtung)
+function chainCheck() {
+  const on = state === 'build' && lv('eye') > 0, reached = new Set([startRec]);
+  const ahead = (a, x, z, y, r) => Math.hypot(x - a.x, z - a.z) < r && Math.abs(y - a.y) < 0.8 && (x - a.x) * Math.sin(a.a) + (z - a.z) * Math.cos(a.a) > 0.05;
+  if (on) for (const q = [startRec]; q.length;) { const a = q.pop(); for (const b of placed) if (!reached.has(b) && ahead(a, b.x, b.z, b.y, 0.95)) { reached.add(b); q.push(b); } }
+  placed.forEach(r => { r.mesh.material = on && !reached.has(r) ? WARN_MAT : domMat(); });
+  const tgt = on && lv('eye') > 1;
+  $('reachPill').hidden = !tgt;
+  if (tgt) {
+    const n = targets.filter(t => [...reached].some(r => ahead(r, t.x, t.z, t.y, t.r + 0.95))).length;
+    $('reachPill').className = 'pill' + (n === targets.length ? ' good' : ' warn');
+    $('reachPill').innerHTML = `🔗 Ziele in Reichweite: <b>${n}/${targets.length}</b>`;
+  }
+}
 function updateHud() {
+  $('hCoins').textContent = save.coins;
+  if ($('mCoins')) $('mCoins').textContent = save.coins;
+  chainCheck();
   $('hLvl').textContent = (lvlIdx + 1) + '/' + LEVELS.length;
   $('hDom').textContent = left();
-  $('hSpare').textContent = `(⭐ ab ${L.spare})`;
-  $('domPill').className = 'pill' + (left() <= 0 ? ' warn' : left() >= L.spare ? ' good' : '');
+  $('hSpare').textContent = `(⭐ ab ${spareNeed()})`;
+  $('domPill').className = 'pill' + (left() <= 0 ? ' warn' : left() >= spareNeed() ? ' good' : '');
   const t = Math.max(0, Math.ceil(buildTime));
   $('hTime').textContent = Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
   $('timePill').className = 'pill' + (state === 'build' && t <= 10 ? ' warn' : '');
@@ -771,7 +883,16 @@ function beginStroke(p) {
   stroke = near ? { anchor: { x: near.x, z: near.z }, last: { x: near.x, z: near.z }, any: true } : { anchor: p, last: p, any: false };
   stroke.click = p; stroke.n0 = placed.length;
 }
+let rulerOn = true;
+// Lineal: Richtung ab dem Ankerpunkt auf 45° bzw. 15° einrasten
+function snapLine(A, p) {
+  const step = lv('ruler') > 1 ? Math.PI / 12 : Math.PI / 4, dx = p.x - A.x, dz = p.z - A.z, l = Math.hypot(dx, dz);
+  if (l < 1e-6) return p;
+  const ang = Math.round(Math.atan2(dx, dz) / step) * step;
+  return { x: A.x + Math.sin(ang) * l, z: A.z + Math.cos(ang) * l };
+}
 function strokeTo(p) {
+  if (stroke && rulerOn && lv('ruler')) p = snapLine(stroke.anchor, p);
   let guard = 0;
   while (stroke && guard++ < 50) {
     const dx = p.x - stroke.last.x, dz = p.z - stroke.last.z, l = Math.hypot(dx, dz);
@@ -860,6 +981,7 @@ function setTouch() { if (!isTouch) { isTouch = true; document.body.classList.ad
 addEventListener('touchstart', setTouch, { passive: true, once: true });
 
 addEventListener('keydown', e => {
+  if (shopOpen()) { if (e.code === 'Escape') closeShop(); return; }
   if (e.code === 'Space') e.preventDefault();
   if (e.repeat) return;
   if (e.code === 'Escape') { if (state === 'menu') enterBuild(false); else showMenu(); }
@@ -868,12 +990,14 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyZ' || e.code === 'Backspace') undo();
     if (e.code === 'KeyQ') rotateLast(Math.PI / 12);
     if (e.code === 'KeyE') rotateLast(-Math.PI / 12);
+    if (e.code === 'KeyR' && lv('ruler')) toggleRuler();
   } else if (state === 'run') {
     if (e.code === 'KeyF' || e.code === 'Space') toggleFast();
   }
 });
 function undo() { const r = placed[placed.length - 1]; if (r) removeDomino(r); }
 function toggleFast() { fast = !fast; setBar(); }
+function toggleRuler() { rulerOn = !rulerOn; setBar(); showMsg(rulerOn ? '📏 Lineal an' : '📏 Lineal aus', 0.8); }
 document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => b.blur()));
 $('undoBtn').addEventListener('click', undo);
 $('clearBtn').addEventListener('click', () => { placed.slice().forEach(r => levelGroup.remove(r.mesh)); placed = []; snd('pop'); updateHud(); });
@@ -881,6 +1005,25 @@ $('startBtn').addEventListener('click', startRun);
 $('fastBtn').addEventListener('click', toggleFast);
 $('stopBtn').addEventListener('click', stopRun);
 $('menuBtn').addEventListener('click', showMenu);
+$('rulerBtn').addEventListener('click', toggleRuler);
+$('mShop').addEventListener('click', () => { snd('pop'); openShop(); });
+$('sClose').addEventListener('click', closeShop);
+$('shop').addEventListener('pointerdown', e => { if (e.target === $('shop')) closeShop(); });
+$('sReset').addEventListener('click', () => {
+  if (!confirm('Bastelladen zurücksetzen? Münzen, Upgrades und Skins gehen verloren – deine Level-Sterne bleiben.')) return;
+  save = freshSave(); persist();
+  while (left() < 0) removeDomino(placed[placed.length - 1]); // Extra-Steine sind weg: Überzählige abbauen
+  renderShop(); updateHud();
+});
+$('sList').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  const i = +b.dataset.i, u = UPS[i], act = b.dataset.act;
+  if (act === 'buy') {
+    const c = u.cost[lv(u.id)]; if (c === undefined || save.coins < c) return;
+    save.coins -= c; save.levels[u.id] = lv(u.id) + 1; if (u.skin) save.skin = u.skin; snd('coin');
+  } else save.skin = act === 'wear' ? u.skin : 'classic';
+  persist(); renderShop(i); updateHud();
+});
 const soundLabel = () => { $('soundBtn').textContent = AC && AC.isMuted() ? '🔇' : '🔊'; };
 $('soundBtn').addEventListener('click', () => { if (AC) AC.toggleMute(); soundLabel(); });
 soundLabel();
@@ -903,7 +1046,8 @@ function frame(now) {
 
 // Testzugang für automatisierte Lösungs-Checks (nur mit ?debug)
 if (/[?&]debug\b/.test(location.search)) window.DOMINOKETTE_DEBUG = { loadLevel, startRun,
-  stroke: pts => { beginStroke(pts[0]); pts.slice(1).forEach(p => strokeTo(p)); endStroke(); }, setFast: v => { fast = v; }, state: () => state, placed: () => placed, targets: () => targets };
+  stroke: pts => { beginStroke(pts[0]); pts.slice(1).forEach(p => strokeTo(p)); endStroke(); }, setFast: v => { fast = v; }, state: () => state, placed: () => placed, targets: () => targets,
+  save: () => save, left, buildTime: () => buildTime, openShop, closeShop };
 const firstOpen = progress.s.findIndex(s => s === 0);
 loadLevel(firstOpen < 0 ? 0 : firstOpen);
 showMenu(true);
