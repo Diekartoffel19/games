@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Dominokette 3D: Wohnzimmer-Kettenreaktion</title>
+<meta name="description" content="Stell im gemütlichen Wohnzimmer Dominosteine auf, zeichne Kurven, kletter Treppen hoch und lass einen Finger den ersten Stein anschubsen: Klingel läuten, Tasse vom Tisch stoßen, Spielzeugauto die Rampe runter.">
+<meta name="keywords" content="Domino Spiel, Dominokette, Kettenreaktion, Physik Puzzle, 3D Browser Spiel, Three.js, cannon.js">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#2a1c14">
+<link rel="canonical" href="https://rwpxe.com/games/dominokette.html">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Dominokette 3D: Wohnzimmer-Kettenreaktion">
+<meta property="og:description" content="Ein Schubs, hundert Klacks: baue Dominoketten durchs Wohnzimmer und triff Klingel, Tasse und Spielzeugauto.">
+<meta property="og:locale" content="de_DE">
+
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<!-- Geometrie aus Blender (models/dominokette.blend): Domino, Klingel, Tasse, Auto, Rampe, Bücher, Treppe, Möbel, Finger -->
+<script src="models/dominokette_models.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #2a1c14; color: #fff4e3;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+  #view { position: fixed; inset: 0; z-index: 1; }
+  #view canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+
+  .back-btn {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 50;
+    color: #ffe7c2; text-decoration: none; font-weight: 700; font-size: 0.9rem;
+    background: rgba(42, 28, 20, 0.85); border: 1px solid rgba(255, 196, 120, 0.5);
+    padding: 0 16px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px;
+  }
+  .back-btn:hover { background: #b45309; color: #fff; }
+  .top-actions {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 50;
+    display: flex; gap: 8px;
+  }
+  .action-btn {
+    background: rgba(42, 28, 20, 0.85); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff4e3;
+    padding: 0 14px; min-height: 44px; min-width: 44px; border-radius: 999px; cursor: pointer; font-size: 0.85rem; font-weight: 700;
+  }
+  .action-btn:hover { background: rgba(180, 83, 9, 0.7); }
+
+  #hud {
+    position: fixed; top: calc(64px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 20;
+    display: flex; flex-wrap: wrap; gap: 6px; max-width: min(620px, 80vw); pointer-events: none;
+  }
+  .pill {
+    background: rgba(42, 28, 20, 0.78); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 999px;
+    padding: 4px 12px; font-size: 0.82rem; font-weight: 800; color: #d9bfa0; white-space: nowrap;
+  }
+  .pill b { color: #ffc46b; }
+  .pill.warn { border-color: #f87171; } .pill.warn b { color: #fca5a5; }
+  .pill.good b { color: #86efac; }
+  #taskPill { white-space: normal; max-width: 100%; }
+
+  #bar {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(36px + env(safe-area-inset-bottom)); z-index: 30;
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px);
+  }
+  .bbtn {
+    min-height: 48px; padding: 0 18px; border-radius: 14px; border: 1px solid rgba(255, 196, 120, 0.45); cursor: pointer;
+    background: rgba(42, 28, 20, 0.88); color: #ffe7c2; font-size: 0.95rem; font-weight: 800;
+  }
+  .bbtn:hover { background: rgba(120, 60, 20, 0.9); }
+  .bbtn.go { background: linear-gradient(135deg, #f59e0b, #c2410c); color: #1c0f05; border-color: #fbbf24; font-size: 1.05rem; }
+  .bbtn.on { background: #b45309; color: #fff; }
+  .bbtn[hidden] { display: none; }
+
+  #msg {
+    position: fixed; top: 28%; left: 50%; transform: translate(-50%, -50%); z-index: 30; pointer-events: none;
+    text-align: center; opacity: 0; transition: opacity 0.25s; font-size: clamp(1.4rem, 4.5vw, 2.2rem); font-weight: 950;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7); max-width: calc(100vw - 32px);
+  }
+  #msg.show { opacity: 1; }
+  #msg small { display: block; font-size: 0.5em; font-weight: 800; color: #f5d9b8; }
+
+  #hint {
+    position: fixed; bottom: calc(8px + env(safe-area-inset-bottom)); left: 0; right: 0; z-index: 20; text-align: center;
+    pointer-events: none; color: rgba(255, 236, 210, 0.85); font-size: 0.76rem; font-weight: 600; padding: 0 12px;
+  }
+  #hint > span { background: rgba(42, 28, 20, 0.7); border-radius: 8px; padding: 2px 8px; }
+  kbd {
+    background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px;
+    padding: 0 5px; font-family: inherit; font-weight: 800; color: #fff;
+  }
+  #hint .tonly { display: none; }
+  body.touch #hint .tonly { display: inline; }
+  body.touch #hint .monly { display: none; }
+  #hint .ronly, body.running #hint .monly, body.running #hint .tonly { display: none; }
+  body.running #hint .ronly { display: inline; }
+
+  .modal {
+    position: fixed; inset: 0; z-index: 60; background: rgba(20, 12, 8, 0.72); display: none; align-items: center; justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .card {
+    background: linear-gradient(165deg, #4a2f1f, #24160e); border: 2px solid #f59e0b; border-radius: 22px; max-width: 560px; width: 100%;
+    max-height: 100%; overflow-y: auto; padding: clamp(18px, 5vw, 28px); text-align: center; box-shadow: 0 0 60px rgba(245, 158, 11, 0.25);
+  }
+  .card h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 5vw, 2.1rem); font-weight: 950; color: #ffc46b; }
+  .card p { color: #f1dcc2; font-size: 0.93rem; line-height: 1.5; margin: 0 0 14px; }
+  .levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 4px; }
+  @media (max-width: 460px) { .levels { grid-template-columns: repeat(2, 1fr); } }
+  .lv {
+    min-height: 72px; border-radius: 14px; border: 1px solid rgba(255, 196, 120, 0.4); background: rgba(255, 255, 255, 0.06);
+    color: #fff4e3; cursor: pointer; font-weight: 800; font-size: 0.8rem; padding: 6px 4px; line-height: 1.25;
+  }
+  .lv b { display: block; font-size: 1.3rem; color: #ffc46b; }
+  .lv .st { color: #fbbf24; letter-spacing: 1px; }
+  .lv:hover:not([disabled]) { background: rgba(245, 158, 11, 0.25); }
+  .lv[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .stars { font-size: 2.6rem; letter-spacing: 6px; color: #fbbf24; margin: 4px 0 8px; text-shadow: 0 0 16px rgba(251, 191, 36, 0.5); }
+  .checks { text-align: left; margin: 0 auto 14px; max-width: 360px; font-size: 0.92rem; color: #f1dcc2; }
+  .checks div { padding: 3px 0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row button { flex: 1 1 140px; }
+  .primary {
+    min-height: 52px; border: none; border-radius: 14px; cursor: pointer; font-size: 1.05rem; font-weight: 900;
+    background: linear-gradient(135deg, #fbbf24, #c2410c); color: #1c0f05;
+  }
+  .secondary {
+    min-height: 52px; border-radius: 14px; cursor: pointer; font-size: 1rem; font-weight: 800;
+    background: rgba(255, 255, 255, 0.08); color: #ffe7c2; border: 1px solid rgba(255, 196, 120, 0.45);
+  }
+  .primary:hover, .secondary:hover { filter: brightness(1.12); }
+  .primary[hidden], .secondary[hidden] { display: none; }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back-btn">← Arcade</a>
+<div class="top-actions">
+  <button class="action-btn" id="menuBtn" title="Levelauswahl (Esc)">☰</button>
+  <button class="action-btn" id="soundBtn" title="Sound an/aus">🔊</button>
+</div>
+
+<div id="view"></div>
+
+<div id="hud">
+  <div class="pill">🏠 Level <b id="hLvl">1</b></div>
+  <div class="pill" id="domPill">Steine: <b id="hDom">0</b> übrig <span id="hSpare"></span></div>
+  <div class="pill" id="timePill">⏱ <b id="hTime">0:00</b></div>
+  <div class="pill">⭐ <b id="hStars">0</b></div>
+  <div class="pill" id="taskPill"></div>
+</div>
+
+<div id="msg"></div>
+
+<div id="bar">
+  <button class="bbtn" id="undoBtn" title="Letzten Stein entfernen (Z)">↶ Zurück</button>
+  <button class="bbtn" id="clearBtn" title="Alle Steine entfernen">🗑 Leeren</button>
+  <button class="bbtn go" id="startBtn" title="Finger schubst den ersten Stein (Leertaste)">▶ Start</button>
+  <button class="bbtn" id="fastBtn" title="Zeitraffer (F)" hidden>⏩ Schneller</button>
+  <button class="bbtn" id="stopBtn" title="Abbrechen und weiterbauen" hidden>⏹ Weiterbauen</button>
+</div>
+
+<div id="hint">
+  <span class="monly"><kbd>Klick</kbd>/<kbd>Ziehen</kbd> Steine stellen · <kbd>Rechtsklick</kbd> entfernen · <kbd>rechts ziehen</kbd> Kamera · <kbd>Rad</kbd> Zoom · <kbd>Q</kbd>/<kbd>E</kbd> letzten Stein drehen · <kbd>Leer</kbd> Start</span>
+  <span class="ronly">Kamera folgt der Welle · <kbd>F</kbd>/<kbd>Leer</kbd> Zeitraffer · Ziehen dreht die Kamera</span>
+  <span class="tonly">Tippen/Ziehen: Steine stellen · Stein antippen: entfernen · 2 Finger: Kamera drehen &amp; zoomen</span>
+</div>
+
+<div class="modal" id="modal">
+  <div class="card">
+    <h1 id="mTitle">🎲 Dominokette 3D</h1>
+    <div class="stars" id="mStars" hidden></div>
+    <p id="mText"></p>
+    <div class="checks" id="mChecks"></div>
+    <div class="levels" id="mLevels"></div>
+    <div class="row">
+      <button class="secondary" id="mBtn2" hidden></button>
+      <button class="primary" id="mBtn" hidden></button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ============ ArcadeCore ============
+const AC = window.ArcadeCore || null;
+const snd = (name, ...a) => { try { if (AC && AC[name]) AC[name](...a); } catch (e) {} };
+const KEY = 'dominokette', PKEY = 'dominokette_progress';
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const DATA = window.DOMINOKETTE_MODELS;
+if (!DATA || !window.THREE || !window.CANNON) {
+  $('mText').textContent = 'Modelle oder Bibliotheken (Three.js / cannon.js) konnten nicht geladen werden.';
+  $('modal').style.display = 'flex'; return;
+}
+const V3 = THREE.Vector3;
+
+// ============ Tuning ============
+// 1 Einheit = Dominohöhe. Physik-Erkenntnisse (cannon 0.6.2): Reibung skaliert mit m·g statt Normalkraft,
+// daher Domino↔Domino reibungsfrei (sonst kleben die Steine aneinander), SAP-Broadphase ist hier sehr langsam,
+// und Schlafen ist aus, weil schlafende Steine den Stoß wie eine Wand schlucken.
+const DW = 0.5, DH = 1, DT = 0.16, SP = 0.6, GRAV = 30, STEP = 1 / 120;
+const TABLE = { x: 4, z: -3.5 };          // Couchtisch 7 × 3.5, Platte auf Höhe 2
+const BOUNDS = { x0: -20, x1: 20, z0: -7.5, z1: 13 };
+const UP_FALLEN = 0.9;                    // Neigung > ~25° zählt als umgefallen (lehnt evtl. an Klingel/Stufe)
+
+// ============ Level ============
+// props: [typ, x, z, (n), rotY]; targets: bell/cup [typ, x, z], car [typ, x, z, rotY, goalX, goalZ]
+const STAIRS = ['stairs', -3.1, -3.5, 0];
+const RAMP = ['ramp', 5.5, -1.75, -Math.PI / 2];
+const CAR = ['car', 5.5, -1.85, -Math.PI / 2, 5.5, 7];
+const LEVELS = [
+  { name: 'Aller Anfang klackert', text: 'Baue eine gerade Kette bis zur Tischklingel und bring sie zum Läuten.',
+    budget: 18, spare: 3, time: 90, start: [-5, 2, 1, 0], props: [], targets: [['bell', 4, 2]] },
+  { name: 'Literarischer Umweg', text: 'Zieh die Steine in einer Kurve um den Bücherstapel herum bis zur Klingel.',
+    budget: 24, spare: 3, time: 100, start: [-8, 5, 1, 0], props: [['books', -4, 5, 3, 0], ['books', -1.6, 6.4, 2, 0.4]], targets: [['bell', 0.5, 5]] },
+  { name: 'Hoch die Tasse!', text: 'Führe die Kette die Treppe hinauf auf den Couchtisch und stoß die Tasse vom Tisch.',
+    budget: 28, spare: 2, time: 120, start: [-8, -3.5, 1, 0], props: [STAIRS], targets: [['cup', 7.1, -3.5]] },
+  { name: 'Anschubhilfe Deluxe', text: 'Leg auf dem Tisch eine Spur zum Aufziehauto – es saust die Rampe hinunter ins Ziel.',
+    budget: 12, spare: 2, time: 90, start: [1.2, -4.6, 1, 0], props: [RAMP], targets: [CAR] },
+  { name: 'Kraxeln über Klassiker', text: 'Klettere mit der Kette den Bücherberg hinauf, wieder hinunter und triff dahinter die Klingel.',
+    budget: 30, spare: 3, time: 120, start: [-8, 1, 1, 0],
+    props: [['books', -4, 1, 1, 0], ['books', -2, 1, 2, 0], ['books', 0, 1, 3, 0], ['books', 2, 1, 2, 0], ['books', 4, 1, 1, 0]],
+    targets: [['bell', 7.5, 1]] },
+  { name: 'Teile und klackere', text: 'Gabele die Kette – zwei Steine nebeneinander teilen die Welle: links läutet die Klingel, oben auf dem Tisch fällt die Tasse.',
+    budget: 40, spare: 3, time: 150, start: [-6, 3, 0, -1], props: [STAIRS], targets: [['bell', -11, -2], ['cup', 3.5, -2.05]] },
+  { name: 'Bimmeln mit Vollgas', text: 'Die Treppe hinauf, auf dem Tisch die Klingel läuten und das Auto die Rampe hinunterschicken.',
+    budget: 36, spare: 3, time: 150, start: [-8, -3.5, 1, 0], props: [STAIRS, RAMP], targets: [['bell', 3, -4.7], CAR] },
+  { name: 'Finale auf Sparflamme', text: 'Das volle Programm mit knappem Vorrat: Klingel läuten, Tasse stoßen und Auto anschieben.',
+    budget: 50, spare: 3, time: 180, start: [-7.5, -1, 1, 0],
+    props: [STAIRS, RAMP, ['books', -1.5, 1.5, 2, 0.2]], targets: [['bell', 2.5, 2.5], ['cup', 7.1, -4.7], CAR] },
+];
+const WIN = ['Klack, klack, Treffer – was für eine Kettenreaktion!', 'Wie am Schnürchen gefallen und punktgenau gelandet!', 'Meisterhaft gesteckt – vom ersten Schubs bis ins Ziel!'];
+const FAIL = ['Knapp daneben geklackert – beim nächsten Versuch klappt es!', 'Da stockte die Kette kurz – feinjustieren und nochmal starten!', 'Kein Grund zum Ärgern – ein paar Steine versetzen und neu anstoßen!'];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
+// ============ Fortschritt ============
+let progress = { s: LEVELS.map(() => 0) };
+try { const p = JSON.parse(localStorage.getItem(PKEY) || 'null'); if (p && Array.isArray(p.s)) LEVELS.forEach((_, i) => { progress.s[i] = clamp(Number(p.s[i]) || 0, 0, 3); }); } catch (e) {}
+const totalStars = () => progress.s.reduce((a, b) => a + b, 0);
+const unlocked = i => i === 0 || progress.s[i - 1] > 0;
+function saveProgress() {
+  try { localStorage.setItem(PKEY, JSON.stringify(progress)); } catch (e) {}
+  if (AC) AC.saveScore(KEY, totalStars());
+}
+
+// ============ Renderer ============
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x2a1c14);
+$('view').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x2a1c14, 60, 110);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+function fitCamera() {
+  camera.aspect = innerWidth / innerHeight; camera.fov = camera.aspect < 1 ? 70 : 50;
+  camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
+}
+fitCamera(); addEventListener('resize', fitCamera);
+
+scene.add(new THREE.HemisphereLight(0xfff1dc, 0x5a4030, 0.65));
+const sun = new THREE.DirectionalLight(0xffe2b8, 0.85);
+sun.position.set(-12, 26, 14); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 20, bottom: -20, near: 1, far: 80 });
+sun.shadow.bias = -0.0008;
+scene.add(sun);
+const lampLight = new THREE.PointLight(0xffc77a, 0.6, 34);
+lampLight.position.set(12, 9.6, -11); scene.add(lampLight);
+
+// ============ Modelle aus Blender ============
+const GEO = {};
+Object.keys(DATA.objects).forEach(n => {
+  const o = DATA.objects[n], g = new THREE.BufferGeometry();
+  const pal = o.m.map(h => new THREE.Color('#' + h)), col = new Float32Array(o.c.length * 3);
+  o.c.forEach((ci, i) => { col[i * 3] = pal[ci].r; col[i * 3 + 1] = pal[ci].g; col[i * 3 + 2] = pal[ci].b; });
+  g.setAttribute('position', new THREE.Float32BufferAttribute(o.v, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(o.f); g.computeVertexNormals(); g.computeBoundingSphere();
+  GEO[n] = g;
+});
+const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.05, side: THREE.DoubleSide });
+const START_MAT = MAT.clone(); START_MAT.color.set(0x8fd6ff); START_MAT.emissive.set(0x0a2a40); // hebt sich vom roten Teppich ab
+function model(name, x = 0, y = 0, z = 0, ry = 0, mat = MAT) {
+  const m = new THREE.Mesh(GEO[name], mat);
+  m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+
+// ============ Raum ============
+function canvasTex(w, h, draw, rx, ry) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 4;
+  return t;
+}
+const floorTex = canvasTex(512, 512, (g, w, h) => {
+  const tones = ['#8a5a36', '#94633c', '#7f5131', '#9b6a41', '#87573a'];
+  for (let r = 0; r < 8; r++) {
+    let x = (r % 2) * -128;
+    while (x < w) { const L = 160 + ((r * 37 + x) % 3) * 48; g.fillStyle = tones[(r * 3 + Math.abs(x)) % 5]; g.fillRect(x, r * 64, L, 64);
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x, r * 64, 2, 64); x += L; }
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, r * 64, w, 2);
+  }
+}, 6, 5);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 32), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.8 }));
+floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, 3); floor.receiveShadow = true; scene.add(floor);
+const wallTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#e9dcc0'; g.fillRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 32) { g.fillStyle = 'rgba(150,120,80,0.16)'; g.fillRect(x, 0, 12, h); }
+  g.fillStyle = 'rgba(190,90,60,0.25)'; for (let y = 16; y < h; y += 64) for (let x = 22; x < w; x += 64) { g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill(); }
+}, 10, 4);
+const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.95 });
+function wall(w, x, z, ry) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 18), wallMat); m.position.set(x, 9, z); m.rotation.y = ry; m.receiveShadow = true; scene.add(m);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.8, 0.2), new THREE.MeshStandardMaterial({ color: 0xf5efe2 }));
+  b.position.set(x, 0.4, z); b.rotation.y = ry; b.translateZ(0.1); scene.add(b);
+}
+wall(44, 0, -13, 0); wall(32, -22, 3, Math.PI / 2); wall(32, 22, 3, -Math.PI / 2);
+// Fenster mit Abendhimmel
+const win = new THREE.Mesh(new THREE.PlaneGeometry(9, 6.5), new THREE.MeshBasicMaterial({ color: 0xffd29a }));
+win.position.set(8, 9.5, -12.95); scene.add(win);
+[[0, 3.25, 9.6, 0.35], [0, -3.25, 9.6, 0.35], [-4.6, 0, 0.35, 6.9], [4.6, 0, 0.35, 6.9], [0, 0, 0.25, 6.5], [0, 0, 9, 0.25]].forEach(([x, y, w, h]) => {
+  const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.3), new THREE.MeshStandardMaterial({ color: 0xf5efe2 }));
+  f.position.set(8 + x, 9.5 + y, -12.85); scene.add(f);
+});
+scene.add(model('rug', 0, 0, 1.5));
+scene.add(model('sofa', 0, 0, -10.2));
+scene.add(model('table', TABLE.x, 0, TABLE.z));
+scene.add(model('shelf', -15, 0, -11.9));
+const lamp = model('lamp', 12, 0, -11); lamp.castShadow = false; scene.add(lamp);
+scene.add(model('plant', -19.5, 0, 7));
+scene.add(model('plant', 18.5, 0, -10));
+
+// ============ Statische Kollisionsboxen (Physik + Raycast für das Platzieren) ============
+const qFrom = (ry, rz) => new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, rz || 0, 'YXZ'));
+function boxDesc(lx, ly, lz, sx, sy, sz, ox, oz, ry, rz) {
+  const p = new V3(lx, ly, lz).applyAxisAngle(new V3(0, 1, 0), ry).add(new V3(ox, 0, oz));
+  return { p, q: qFrom(ry, rz), s: [sx, sy, sz] };
+}
+const WORLD_BOXES = [
+  boxDesc(0, 1.875, 0, 7, 0.25, 3.5, TABLE.x, TABLE.z, 0),
+  ...[-3.2, 3.2].flatMap(x => [-1.45, 1.45].map(z => boxDesc(x, 0.875, z, 0.3, 1.75, 0.3, TABLE.x, TABLE.z, 0))),
+  boxDesc(0, 0.5, 0, 6.4, 0.08, 2.9, TABLE.x, TABLE.z, 0),
+  boxDesc(0, 5, 0, 1, 10, 40, -22.5, 3, 0), boxDesc(0, 5, 0, 1, 10, 40, 22.5, 3, 0),
+  boxDesc(0, 5, 0, 46, 10, 1, 0, -13.5, 0), boxDesc(0, 5, 0, 46, 10, 1, 0, 19.5, 0),
+  boxDesc(0, 1.5, 0, 16.5, 3, 5, 0, -10.2, 0), // Sofa (falls ein Auto dorthin fliegt)
+];
+const RA = Math.atan2(2, 5), RL = Math.hypot(5, 2);
+function propBoxes(p) {
+  const [type, x, z] = p;
+  if (type === 'books') { const n = p[3]; return [boxDesc(0, 0.2 * n, 0, 2, 0.4 * n, 1.4, x, z, p[4])]; }
+  if (type === 'stairs') return Array.from({ length: 6 }, (_, i) => { const h = (i + 1) / 3; return boxDesc(0.3 + 0.6 * i, h / 2, 0, 0.6, h, 2, x, z, p[3]); });
+  if (type === 'ramp') {
+    const nx = Math.sin(RA), ny = Math.cos(RA);
+    return [boxDesc(2.5 - 0.1 * nx, 1 - 0.1 * ny, 0, RL, 0.2, 1.6, x, z, p[3], -RA),
+      ...[0.74, -0.74].map(rz => boxDesc(2.5 + 0.09 * nx, 1 + 0.09 * ny, rz, RL, 0.18, 0.12, x, z, p[3], -RA))];
+  }
+  return [];
+}
+function propVisual(p, group) {
+  const [type, x, z] = p;
+  if (type === 'books') for (let i = 0; i < p[3]; i++) group.add(model('book_' + ((i + Math.round(x * 3 + z)) & 3), x, i * 0.4, z, p[4] + ((i * 7) % 3 - 1) * 0.03));
+  if (type === 'stairs') group.add(model('stairs', x, 0, z, p[3]));
+  if (type === 'ramp') group.add(model('ramp', x, 0, z, p[3]));
+}
+
+// Raycast-Flächen: unsichtbare Boxen + Boden
+const surfMat = new THREE.MeshBasicMaterial({ visible: false });
+const floorHit = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), surfMat); floorHit.rotation.x = -Math.PI / 2; floorHit.updateMatrixWorld();
+let surfaces = [floorHit];
+function hitMesh(d) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(d.s[0], d.s[1], d.s[2]), surfMat);
+  m.position.copy(d.p); m.quaternion.copy(d.q); m.updateMatrixWorld(); return m;
+}
+const worldHitMeshes = WORLD_BOXES.map(hitMesh);
+
+const ray = new THREE.Raycaster(), _n = new V3(), DOWN = new V3(0, -1, 0);
+// Höhe der begehbaren Fläche unter (x, z) – null, wenn dort eine Schräge/Kante ist
+function topAt(x, z) {
+  ray.set(new V3(x, 40, z), DOWN); ray.far = 60;
+  const h = ray.intersectObjects(surfaces, false)[0];
+  if (!h) return null;
+  _n.copy(h.face.normal).transformDirection(h.object.matrixWorld);
+  return _n.y > 0.98 ? Math.round(h.point.y * 1000) / 1000 : null;
+}
+
+// ============ Spielzustand ============
+let state = 'menu', lvlIdx = 0, L = LEVELS[0];
+let placed = [];            // {x, z, y, a, mesh}
+let startRec = null;        // Startstein
+let targets = [];           // {type, x, z, y, r, mesh, ...}
+let buildTime = 0, msgTimer = 0;
+const levelGroup = new THREE.Group(); scene.add(levelGroup);
+const finger = model('finger'); finger.scale.setScalar(0.8); scene.add(finger);
+const goalMat = new THREE.MeshBasicMaterial({ map: canvasTex(128, 128, (g) => {
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { g.fillStyle = (i + j) % 2 ? '#1b1b1b' : '#f5f5f5'; g.fillRect(i * 16, j * 16, 16, 16); }
+}, 2, 2), transparent: true, opacity: 0.85 });
+
+const GOAL_GEO = new THREE.CircleGeometry(2, 32);
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0x6ee7b7, transparent: true, opacity: 0.45, depthWrite: false });
+const ghost = new THREE.Mesh(GEO.domino, ghostMat); ghost.visible = false; scene.add(ghost);
+
+function showMsg(html, t = 1.6) { $('msg').innerHTML = html; $('msg').classList.add('show'); msgTimer = t; }
+
+function loadLevel(i) {
+  lvlIdx = i; L = LEVELS[i];
+  while (levelGroup.children.length) levelGroup.remove(levelGroup.children[0]);
+  surfaces = [floorHit, ...worldHitMeshes, ...L.props.flatMap(propBoxes).map(hitMesh)];
+  L.props.forEach(p => propVisual(p, levelGroup));
+  const [sx, sz, dx, dz] = L.start;
+  startRec = { x: sx, z: sz, y: topAt(sx, sz) || 0, a: Math.atan2(dx, dz), start: true };
+  startRec.mesh = model('domino', 0, 0, 0, 0, START_MAT); levelGroup.add(startRec.mesh);
+  targets = L.targets.map(t => {
+    const o = { type: t[0], x: t[1], z: t[2], y: topAt(t[1], t[2]) || 0, hit: false };
+    if (o.type === 'bell') { o.r = 0.5; o.h = 0.7; o.mesh = model('bell'); }
+    if (o.type === 'cup') { o.r = 0.3; o.h = 0.55; o.mesh = model('cup'); }
+    if (o.type === 'car') {
+      o.r = 0.6; o.h = 0.47; o.ry = t[3]; o.gx = t[4]; o.gz = t[5]; o.mesh = model('car');
+      const goal = new THREE.Mesh(GOAL_GEO, goalMat);
+      goal.rotation.x = -Math.PI / 2; goal.position.set(o.gx, 0.035, o.gz); levelGroup.add(goal);
+    }
+    levelGroup.add(o.mesh); return o;
+  });
+  placed = [];
+  resetVisuals();
+  // Kamera auf Start + Ziele
+  const pts = [startRec, ...targets];
+  camTarget.set(pts.reduce((a, p) => a + p.x, 0) / pts.length, 0.8, pts.reduce((a, p) => a + p.z, 0) / pts.length);
+  const span = Math.max(...pts.map(p => Math.hypot(p.x - camTarget.x, p.z - camTarget.z)));
+  orbit.dist = clamp(span * 1.9 + 7, 12, 34); orbit.theta = 0.25; orbit.phi = 0.92;
+  enterBuild(true);
+}
+
+function poseDomino(rec) { rec.mesh.position.set(rec.x, rec.y + DH / 2 + 0.002, rec.z); rec.mesh.quaternion.setFromAxisAngle(new V3(0, 1, 0), rec.a); }
+function resetVisuals() {
+  poseDomino(startRec); placed.forEach(poseDomino);
+  targets.forEach(t => {
+    t.hit = false; t.launched = false; t.ringT = 0;
+    t.mesh.scale.setScalar(1);
+    if (t.type === 'bell') t.mesh.position.set(t.x, t.y, t.z);
+    else t.mesh.position.set(t.x, t.y + t.h / 2 + 0.002, t.z);
+    t.mesh.quaternion.setFromAxisAngle(new V3(0, 1, 0), t.ry || 0);
+  });
+  finger.visible = true;
+  placeFinger(1.1);
+}
+const startDir = () => ({ x: Math.sin(startRec.a), z: Math.cos(startRec.a) });
+function placeFinger(back) {
+  const d = startDir();
+  finger.position.set(startRec.x - d.x * (DT / 2 + back), startRec.y + 0.88, startRec.z - d.z * (DT / 2 + back));
+  finger.rotation.set(0, Math.atan2(-d.z, d.x), -0.25);
+}
+
+// ============ Platzieren ============
+function segDist(ax, az, bx, bz, cx, cz, dx, dz) {
+  const cr = (ox, oz, px, pz, qx, qz) => (px - ox) * (qz - oz) - (pz - oz) * (qx - ox);
+  const d1 = cr(ax, az, bx, bz, cx, cz), d2 = cr(ax, az, bx, bz, dx, dz), d3 = cr(cx, cz, dx, dz, ax, az), d4 = cr(cx, cz, dx, dz, bx, bz);
+  if (d1 * d2 < 0 && d3 * d4 < 0) return 0;
+  const ps = (px, pz, sx, sz, ex, ez) => { const vx = ex - sx, vz = ez - sz, l = vx * vx + vz * vz; const t = l ? clamp(((px - sx) * vx + (pz - sz) * vz) / l, 0, 1) : 0; return Math.hypot(px - sx - vx * t, pz - sz - vz * t); };
+  return Math.min(ps(ax, az, cx, cz, dx, dz), ps(bx, bz, cx, cz, dx, dz), ps(cx, cz, ax, az, bx, bz), ps(dx, dz, ax, az, bx, bz));
+}
+const segOf = (x, z, a) => { const c = Math.cos(a) * DW / 2, s = Math.sin(a) * DW / 2; return [x - c, z + s, x + c, z - s]; };
+// Passt ein Stein bei (x, z) mit Drehung a? Liefert die Standhöhe oder null.
+function fit(x, z, a, ignore) {
+  if (x < BOUNDS.x0 || x > BOUNDS.x1 || z < BOUNDS.z0 || z > BOUNDS.z1) return null;
+  const c = Math.cos(a), s = Math.sin(a);
+  let y = null;
+  for (const [u, v] of [[0, 0], [0.22, 0.07], [-0.22, 0.07], [0.22, -0.07], [-0.22, -0.07]]) {
+    const h = topAt(x + u * c + v * s, z - u * s + v * c);
+    if (h === null || (y !== null && Math.abs(h - y) > 0.02)) return null;
+    if (y === null) y = h;
+  }
+  // direkt vor einer Stufe würde der Stein an der Kante hängen bleiben statt den nächsten anzustoßen
+  for (const f of [0.15, 0.28]) { const h = topAt(x + s * f, z + c * f); if (h !== null && h > y + 0.05) return null; }
+  const S = segOf(x, z, a);
+  for (const o of [startRec, ...placed]) {
+    if (o === ignore || Math.abs(o.y - y) > 0.9) continue;
+    const T = segOf(o.x, o.z, o.a);
+    if (segDist(S[0], S[1], S[2], S[3], T[0], T[1], T[2], T[3]) < DT + 0.05) return null;
+  }
+  for (const t of targets) if (Math.abs(t.y - y) < 1 && segDist(S[0], S[1], S[2], S[3], t.x, t.z, t.x, t.z) < t.r + 0.06) return null;
+  // Platz hinter dem Startstein bleibt für den Finger frei
+  const d = startDir(), fx = startRec.x - d.x * 0.5, fz = startRec.z - d.z * 0.5;
+  if (Math.abs(startRec.y - y) < 1 && segDist(S[0], S[1], S[2], S[3], fx, fz, fx, fz) < 0.35) return null;
+  return y;
+}
+const left = () => L.budget - placed.length;
+function addDomino(x, z, a) {
+  if (left() <= 0) { showMsg('Keine Steine mehr!', 1); return null; }
+  const y = fit(x, z, a); if (y === null) return null;
+  const rec = { x, z, y, a, mesh: model('domino') };
+  levelGroup.add(rec.mesh); poseDomino(rec); placed.push(rec);
+  clickTone(placed.length, 0.035);
+  updateHud(); return rec;
+}
+// leicht entlang der Laufrichtung verschieben, falls der Stein genau auf einer Stufenkante landen würde
+function placeNear(x, z, ux, uz) {
+  const a = Math.atan2(ux, uz);
+  for (const off of [0, 0.08, -0.08, 0.16, -0.16, -0.24, 0.24]) { const r = addDomino(x + ux * off, z + uz * off, a); if (r) return r; }
+  return null;
+}
+function removeDomino(rec) {
+  const i = placed.indexOf(rec); if (i < 0) return;
+  placed.splice(i, 1); levelGroup.remove(rec.mesh); tone(300, 0.06, { type: 'triangle', gain: 0.05, slide: 180 }); updateHud();
+}
+// Ausrichtung eines einzeln gesetzten Steins: weg vom nächsten Nachbarn, sonst Blickrichtung der Kamera
+function autoDir(x, z) {
+  let best = null, bd = 1.7;
+  for (const o of [startRec, ...placed]) { const d = Math.hypot(o.x - x, o.z - z); if (d < bd && d > 0.15) { bd = d; best = o; } }
+  if (best) { const dx = x - best.x, dz = z - best.z, l = Math.hypot(dx, dz); return [dx / l, dz / l]; }
+  const f = new V3(); camera.getWorldDirection(f); f.y = 0; f.normalize(); return [f.x, f.z];
+}
+
+// ============ Physik ============
+let world = null, M = null, simTime = 0, acc = 0, timeScale = 1, fast = false, lastActivity = 0, runBodies = [];
+let wave = new V3(), lastTick = 0, tickRate = 0, fallenCount = 0, pushT = 0, pushed = false;
+function makeWorld() {
+  const w = new CANNON.World(); w.gravity.set(0, -GRAV, 0); w.solver.iterations = 10; w.allowSleep = false;
+  M = { st: new CANNON.Material('st'), dom: new CANNON.Material('dom'), car: new CANNON.Material('car'), cup: new CANNON.Material('cup') };
+  const cm = (a, b, f) => w.addContactMaterial(new CANNON.ContactMaterial(M[a], M[b], { friction: f, restitution: 0 }));
+  cm('dom', 'st', 0.5); cm('dom', 'dom', 0); cm('dom', 'car', 0); cm('dom', 'cup', 0); cm('car', 'st', 0); cm('cup', 'st', 0.3); cm('car', 'cup', 0.1);
+  const ground = new CANNON.Body({ mass: 0, material: M.st }); ground.addShape(new CANNON.Plane());
+  ground.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); w.addBody(ground);
+  [...WORLD_BOXES, ...L.props.flatMap(propBoxes)].forEach(d => {
+    const b = new CANNON.Body({ mass: 0, material: M.st }); b.addShape(new CANNON.Box(new CANNON.Vec3(d.s[0] / 2, d.s[1] / 2, d.s[2] / 2)));
+    b.position.set(d.p.x, d.p.y, d.p.z); b.quaternion.set(d.q.x, d.q.y, d.q.z, d.q.w); w.addBody(b);
+  });
+  return w;
+}
+function dynBody(mass, mat, hx, hy, hz, x, y, z, ry, damp) {
+  const b = new CANNON.Body({ mass, material: mat, linearDamping: damp || 0.01, angularDamping: 0.05 });
+  b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(x, y, z);
+  b.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), ry); world.addBody(b); return b;
+}
+const upY = b => 1 - 2 * (b.quaternion.x * b.quaternion.x + b.quaternion.z * b.quaternion.z);
+
+// ============ Audio ============
+function tone(freq, dur, o = {}) {
+  if (!AC || AC.isMuted()) return;
+  const ctx = AC.getAudioContext(); if (!ctx) return;
+  try {
+    const t0 = ctx.currentTime + (o.delay || 0), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(freq, t0);
+    if (o.slide) osc.frequency.exponentialRampToValueAtTime(o.slide, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(o.gain || 0.1, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(ctx.destination); osc.start(t0); osc.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+// Holz-Klack: Tonhöhe steigt mit dem Tempo der Kette
+function clickTone(rate, gain = 0.06) {
+  const f = clamp(380 + rate * 55, 380, 2400);
+  tone(f, 0.045, { type: 'triangle', gain, slide: f * 0.6 });
+  tone(f * 2.7, 0.02, { type: 'square', gain: gain * 0.25 });
+}
+const ding = () => { tone(1870, 1.4, { gain: 0.14 }); tone(2810, 1.0, { gain: 0.06 }); tone(4600, 0.5, { gain: 0.03 }); };
+
+// ============ Ablauf ============
+function enterBuild(fresh) {
+  state = 'build';
+  if (fresh || buildTime <= 0) buildTime = L.time;
+  $('modal').style.display = 'none';
+  resetVisuals();
+  setBar();
+  updateHud();
+}
+function setBar() {
+  document.body.classList.toggle('running', state === 'run');
+  const b = state === 'build', r = state === 'run';
+  ['undoBtn', 'clearBtn', 'startBtn'].forEach(id => { $(id).hidden = !b; });
+  ['fastBtn', 'stopBtn'].forEach(id => { $(id).hidden = !r; });
+  $('fastBtn').classList.toggle('on', fast);
+  $('bar').style.display = b || r ? 'flex' : 'none';
+}
+function startRun() {
+  if (state !== 'build') return;
+  state = 'run'; ghost.visible = false; endStroke();
+  world = makeWorld(); simTime = 0; acc = 0; timeScale = 1; lastActivity = 0; fallenCount = 0; tickRate = 0; lastTick = -1;
+  pushT = 0; pushed = false;
+  runBodies = [startRec, ...placed].map(rec => {
+    rec.body = dynBody(1, M.dom, DW / 2, DH / 2, DT / 2, rec.x, rec.y + DH / 2 + 0.002, rec.z, rec.a); rec.tilted = false; return rec;
+  });
+  targets.forEach(t => {
+    if (t.type === 'bell') { t.body = new CANNON.Body({ mass: 0, material: M.st }); t.body.addShape(new CANNON.Box(new CANNON.Vec3(0.45, 0.35, 0.45))); t.body.position.set(t.x, t.y + 0.35, t.z); world.addBody(t.body); }
+    if (t.type === 'cup') { t.body = dynBody(0.3, M.cup, 0.225, 0.275, 0.225, t.x, t.y + 0.277, t.z, 0); t.y0 = t.body.position.y; }
+    if (t.type === 'car') t.body = dynBody(0.5, M.car, 0.5, 0.235, 0.27, t.x, t.y + 0.237, t.z, t.ry, 0.8);
+  });
+  wave.set(startRec.x, startRec.y + 0.5, startRec.z);
+  setBar(); updateHud();
+}
+function stopRun() { if (state === 'run') { world = null; enterBuild(false); } }
+
+function stepPhysics() {
+  world.step(STEP); simTime += STEP;
+  // Kontakte: Klingel getroffen? Auto angestoßen?
+  const cs = world.contacts;
+  for (let i = 0; i < cs.length; i++) {
+    const a = cs[i].bi, b = cs[i].bj;
+    for (const t of targets) {
+      if (!t.body || (a !== t.body && b !== t.body)) continue;
+      const o = a === t.body ? b : a;
+      if (t.type === 'bell' && !t.hit && o.mass > 0) { t.hit = true; t.ringT = 1; ding(); showMsg('🔔 Kling!', 1.2); }
+      if (t.type === 'car' && !t.launched && o.material === M.dom) {
+        // Aufziehauto: ein Stups löst die Feder aus
+        t.launched = true; const f = new CANNON.Vec3(1, 0, 0); t.body.quaternion.vmult(f, f);
+        t.body.velocity.x += f.x * 3.5; t.body.velocity.z += f.z * 3.5;
+        tone(220, 0.35, { type: 'sawtooth', gain: 0.05, slide: 660 }); showMsg('🚗 Brumm!', 1);
+      }
+    }
+  }
+}
+function updateRun(dt) {
+  // Finger schubst den Startstein
+  pushT += dt;
+  if (!pushed) {
+    placeFinger(1.1 * (1 - clamp(pushT / 0.55, 0, 1)) + 0.02);
+    if (pushT >= 0.55) {
+      pushed = true; const d = startDir(), b = startRec.body;
+      b.applyImpulse(new CANNON.Vec3(d.x * 1.3, 0, d.z * 1.3), new CANNON.Vec3(b.position.x, b.position.y + 0.42, b.position.z));
+      tone(160, 0.08, { type: 'triangle', gain: 0.08 });
+    }
+  } else {
+    const k = clamp((pushT - 0.55) / 0.8, 0, 1);
+    placeFinger(-0.15 + k * 2.5); finger.position.y += k * 1.2;
+    if (k >= 1) finger.visible = false;
+  }
+  if (!pushed) return;
+
+  // Zeitlupe, wenn die Welle einem offenen Ziel nahe kommt
+  let slow = false;
+  for (const t of targets) {
+    if (t.hit || !t.body) continue;
+    const p = t.body.position;
+    if (Math.hypot(wave.x - p.x, wave.z - p.z) < 2.8 && Math.abs(wave.y - p.y) < 2) slow = true;
+    if (t.type === 'car' && t.launched) slow = true;
+  }
+  const want = fast ? 2.5 : slow ? 0.35 : 1;
+  timeScale += (want - timeScale) * Math.min(1, dt * 4);
+  acc = Math.min(acc + dt * timeScale, STEP * 8);
+  while (acc >= STEP) { stepPhysics(); acc -= STEP; }
+
+  // Sync + Wellenfront + Klick-Ton
+  let active = false;
+  for (const rec of runBodies) {
+    const b = rec.body; rec.mesh.position.copy(b.position); rec.mesh.quaternion.copy(b.quaternion);
+    if (!rec.tilted && upY(b) < 0.97) {
+      rec.tilted = true; fallenCount++;
+      const iv = lastTick < 0 ? 0.3 : Math.max(0.02, simTime - lastTick); lastTick = simTime;
+      tickRate = tickRate * 0.6 + (0.3 / iv) * 0.4 * 10;
+      clickTone(tickRate, 0.07);
+      wave.set(b.position.x, b.position.y, b.position.z);
+    }
+    if (b.velocity.norm2() > 0.09 || b.angularVelocity.norm2() > 0.25) active = true;
+  }
+  for (const t of targets) {
+    if (!t.body) continue;
+    const b = t.body;
+    if (t.type !== 'bell') { t.mesh.position.copy(b.position); t.mesh.quaternion.copy(b.quaternion); if (b.velocity.norm2() > 0.09) active = true; }
+    if (t.type === 'cup' && !t.hit && b.position.y < t.y0 - 0.9) { t.hit = true; snd('hit'); showMsg('☕ Platsch!', 1.2); }
+    if (t.type === 'car') {
+      if (t.launched) wave.set(b.position.x, b.position.y, b.position.z);
+      if (!t.hit && Math.hypot(b.position.x - t.gx, b.position.z - t.gz) < 2) { t.hit = true; snd('powerup'); showMsg('🏁 Im Ziel!', 1.2); }
+    }
+    if (t.type === 'bell' && t.ringT > 0) { t.ringT = Math.max(0, t.ringT - dt * 1.5); t.mesh.scale.setScalar(1 + Math.sin(t.ringT * 40) * 0.06 * t.ringT); }
+  }
+  if (active) lastActivity = simTime;
+  if ((simTime > 1.5 && simTime - lastActivity > 1.6) || simTime > 45) finishRun();
+}
+
+function finishRun() {
+  state = 'result'; fast = false; setBar();
+  const all = targets.every(t => t.hit);
+  const rest = left();
+  const allFallen = runBodies.every(r => upY(r.body) < UP_FALLEN);
+  const s = all ? 1 + (rest >= L.spare ? 1 : 0) + (allFallen ? 1 : 0) : 0;
+  const prev = progress.s[lvlIdx];
+  if (s > prev) { progress.s[lvlIdx] = s; saveProgress(); }
+  updateHud();
+  if (all) snd(s === 3 ? 'powerup' : 'coin'); else snd('gameOver');
+  const ck = (ok, txt) => `<div>${ok ? '✅' : '❌'} ${txt}</div>`;
+  const tNames = { bell: 'Klingel geläutet', cup: 'Tasse runtergestoßen', car: 'Auto im Ziel' };
+  $('mChecks').innerHTML = targets.map(t => ck(t.hit, tNames[t.type])).join('') +
+    ck(all && rest >= L.spare, `Mindestens ${L.spare} Steine übrig (${rest})`) +
+    ck(all && allFallen, `Alle Steine umgefallen (${runBodies.filter(r => upY(r.body) < UP_FALLEN).length}/${runBodies.length})`);
+  $('mStars').hidden = false; $('mStars').textContent = '★'.repeat(s) + '☆'.repeat(3 - s);
+  $('mLevels').innerHTML = '';
+  const next = lvlIdx + 1 < LEVELS.length && unlocked(lvlIdx + 1);
+  openModal(all ? (s === 3 ? '🏆 Perfekt!' : '🎉 Geschafft!') : '😅 Nicht ganz…', all ? pick(WIN) : pick(FAIL),
+    ['🔧 Weiterbauen', () => enterBuild(true)],
+    all ? (next ? ['Nächstes Level ▶', () => loadLevel(lvlIdx + 1)] : ['🏠 Levelauswahl', showMenu]) : ['🔁 Nochmal starten', () => { enterBuild(true); startRun(); }]);
+}
+
+function openModal(title, text, b2, b1) {
+  $('mTitle').textContent = title; $('mText').innerHTML = text;
+  const set = (el, b) => { el.hidden = !b; if (b) { el.textContent = b[0]; el.onclick = () => { el.blur(); b[1](); }; } };
+  set($('mBtn2'), b2); set($('mBtn'), b1);
+  $('modal').style.display = 'flex';
+}
+function showMenu(first) {
+  if (state === 'run') { world = null; }
+  const prevState = state; state = 'menu'; ghost.visible = false; endStroke(); setBar();
+  $('mStars').hidden = true; $('mChecks').innerHTML = '';
+  $('mLevels').innerHTML = LEVELS.map((l, i) =>
+    `<button class="lv" data-i="${i}" ${unlocked(i) ? '' : 'disabled'}><b>${unlocked(i) ? i + 1 : '🔒'}</b>${l.name}<br><span class="st">${'★'.repeat(progress.s[i])}${'☆'.repeat(3 - progress.s[i])}</span></button>`).join('');
+  $('mLevels').querySelectorAll('.lv').forEach(b => b.addEventListener('click', () => { snd('pop'); loadLevel(+b.dataset.i); }));
+  const canResume = prevState === 'build' || prevState === 'run' || prevState === 'result';
+  openModal('🎲 Dominokette 3D',
+    'Stell im gemütlichen Wohnzimmer eine Dominokette auf – <b>Start</b> lässt den Finger den ersten (blauen) Stein anschubsen. ' +
+    '<b>Klick oder Ziehen</b> auf Boden, Tisch, Bücher oder Treppe stellt Steine (Ziehen zeichnet eine Kurve mit passendem Abstand), ' +
+    '<b>Rechtsklick</b> entfernt sie, <b>rechts ziehen</b> dreht die Kamera, das <b>Mausrad</b> zoomt. ' +
+    'Per Touch: <b>tippen/ziehen</b> baut, <b>zwei Finger</b> drehen die Kamera.<br><br>' +
+    '⭐ Ziel getroffen · ⭐ genug Steine übrig · ⭐ alle Steine umgefallen',
+    canResume ? [first === true ? `▶ Level ${lvlIdx + 1} spielen` : 'Zurück zum Level', () => enterBuild(false)] : null, null);
+}
+
+function updateHud() {
+  $('hLvl').textContent = (lvlIdx + 1) + '/' + LEVELS.length;
+  $('hDom').textContent = left();
+  $('hSpare').textContent = `(⭐ ab ${L.spare})`;
+  $('domPill').className = 'pill' + (left() <= 0 ? ' warn' : left() >= L.spare ? ' good' : '');
+  const t = Math.max(0, Math.ceil(buildTime));
+  $('hTime').textContent = Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+  $('timePill').className = 'pill' + (state === 'build' && t <= 10 ? ' warn' : '');
+  $('hStars').textContent = totalStars() + '/' + LEVELS.length * 3;
+  $('taskPill').textContent = '🎯 ' + L.name + ' – ' + L.text;
+}
+
+// ============ Kamera ============
+const camTarget = new V3(0, 0.8, 0), focus = new V3(0, 0.8, 0);
+const orbit = { theta: 0.25, phi: 0.92, dist: 20 };
+function updateCamera(dt) {
+  const want = state === 'run' && pushed ? wave : camTarget;
+  focus.lerp(want, 1 - Math.exp(-(state === 'run' ? 2.5 : 6) * dt));
+  const d = state === 'run' && pushed ? Math.min(orbit.dist, 13) : orbit.dist;
+  camera.position.set(focus.x + d * Math.sin(orbit.phi) * Math.sin(orbit.theta), focus.y + d * Math.cos(orbit.phi), focus.z + d * Math.sin(orbit.phi) * Math.cos(orbit.theta));
+  camera.lookAt(focus);
+}
+
+// ============ Eingabe ============
+const canvas = renderer.domElement;
+const ndc = new THREE.Vector2();
+function pick3(e, list) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera); ray.far = 200;
+  return ray.intersectObjects(list, false)[0] || null;
+}
+function surfacePoint(e) { const h = pick3(e, surfaces); return h ? { x: h.point.x, z: h.point.z } : null; }
+const domUnder = e => { const h = pick3(e, placed.map(p => p.mesh)); return h ? placed.find(p => p.mesh === h.object) : null; };
+
+const pointers = new Map();
+let mode = null, downPos = null, moved = false, stroke = null, tapRec = null, pinch = null;
+function endStroke() { stroke = null; }
+// Ziehen, das an einem Stein beginnt, setzt die Kette dort fort (so entstehen auch Gabelungen)
+function beginStroke(p) {
+  let near = null, bd = 0.45; const y = topAt(p.x, p.z);
+  for (const o of [startRec, ...placed]) { const d = Math.hypot(o.x - p.x, o.z - p.z); if (d < bd && y !== null && Math.abs(o.y - y) < 0.5) { bd = d; near = o; } }
+  stroke = near ? { anchor: { x: near.x, z: near.z }, last: { x: near.x, z: near.z }, any: true } : { anchor: p, last: p, any: false };
+  stroke.click = p; stroke.n0 = placed.length;
+}
+function strokeTo(p) {
+  let guard = 0;
+  while (stroke && guard++ < 50) {
+    const dx = p.x - stroke.last.x, dz = p.z - stroke.last.z, l = Math.hypot(dx, dz);
+    if (l < SP) break;
+    const ux = dx / l, uz = dz / l;
+    if (!stroke.any) { stroke.any = true; placeNear(stroke.last.x, stroke.last.z, ux, uz); }
+    const nx = stroke.last.x + ux * SP, nz = stroke.last.z + uz * SP;
+    const r = placeNear(nx, nz, ux, uz);
+    stroke.last = r ? { x: r.x, z: r.z } : { x: nx, z: nz };
+    if (left() <= 0) { endStroke(); break; }
+  }
+}
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'mouse') setTouch();
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) {
+    // zwei Finger: Kamera statt Bauen
+    endStroke(); mode = 'pinch'; const [a, b] = [...pointers.values()];
+    pinch = { mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) }; return;
+  }
+  if (pointers.size > 2) return;
+  downPos = { x: e.clientX, y: e.clientY }; moved = false; tapRec = null;
+  if (e.button === 2 || e.button === 1) { mode = 'orbit'; tapRec = e.button === 2 && state === 'build' ? domUnder(e) : null; return; }
+  if (state !== 'build') { mode = 'orbit'; return; }
+  const rec = domUnder(e);
+  if (rec) { mode = 'tapdom'; tapRec = rec; return; }
+  const p = surfacePoint(e);
+  if (p && p.x > BOUNDS.x0 && p.x < BOUNDS.x1 && p.z > BOUNDS.z0 && p.z < BOUNDS.z1 && topAt(p.x, p.z) !== null) { mode = 'stroke'; beginStroke(p); ghost.visible = false; return; }
+  mode = 'orbit';
+});
+canvas.addEventListener('pointermove', e => {
+  const prev = pointers.get(e.pointerId);
+  if (prev) { prev.px = prev.x; prev.py = prev.y; prev.x = e.clientX; prev.y = e.clientY; }
+  if (mode === 'pinch' && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, d = Math.hypot(a.x - b.x, a.y - b.y);
+    orbit.theta -= (mx - pinch.mx) * 0.008; orbit.phi = clamp(orbit.phi - (my - pinch.my) * 0.006, 0.25, 1.45);
+    if (pinch.d > 10 && d > 10) orbit.dist = clamp(orbit.dist * pinch.d / d, 6, 40);
+    pinch = { mx, my, d }; return;
+  }
+  if (downPos && Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 6) moved = true;
+  if (mode === 'orbit' && prev && prev.px !== undefined) {
+    orbit.theta -= (e.clientX - prev.px) * 0.006; orbit.phi = clamp(orbit.phi - (e.clientY - prev.py) * 0.005, 0.25, 1.45);
+    return;
+  }
+  if (mode === 'tapdom' && moved && state === 'build') { mode = 'stroke'; beginStroke({ x: tapRec.x, z: tapRec.z }); tapRec = null; }
+  if (mode === 'stroke' && stroke) { const p = surfacePoint(e); if (p) strokeTo(p); return; }
+  if (!mode && e.pointerType === 'mouse') hover(e);
+});
+function pointerEnd(e) {
+  pointers.delete(e.pointerId);
+  if (mode === 'pinch') { if (pointers.size === 0) mode = null; return; }
+  // Klick ohne gezogene Steine: einzelnen Stein an der Klickstelle setzen
+  if (state === 'build' && mode === 'stroke' && stroke && placed.length === stroke.n0) {
+    const [ux, uz] = autoDir(stroke.click.x, stroke.click.z);
+    if (!placeNear(stroke.click.x, stroke.click.z, ux, uz) && left() > 0) tone(140, 0.12, { type: 'square', gain: 0.03 });
+  }
+  if (state === 'build' && (mode === 'tapdom' || mode === 'orbit') && tapRec && !moved) removeDomino(tapRec);
+  endStroke(); mode = null; downPos = null; tapRec = null;
+}
+canvas.addEventListener('pointerup', pointerEnd);
+canvas.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); endStroke(); mode = null; downPos = null; tapRec = null; });
+canvas.addEventListener('pointerleave', () => { ghost.visible = false; });
+canvas.addEventListener('wheel', e => { e.preventDefault(); orbit.dist = clamp(orbit.dist * Math.exp(e.deltaY * 0.001), 6, 40); }, { passive: false });
+
+function hover(e) {
+  ghost.visible = false;
+  if (state !== 'build' || left() <= 0 || domUnder(e)) return;
+  const p = surfacePoint(e); if (!p) return;
+  const [ux, uz] = autoDir(p.x, p.z), a = Math.atan2(ux, uz), y = fit(p.x, p.z, a);
+  ghost.visible = true; ghostMat.color.set(y === null ? 0xf87171 : 0x6ee7b7);
+  ghost.position.set(p.x, (y === null ? (topAt(p.x, p.z) || 0) : y) + DH / 2 + 0.002, p.z);
+  ghost.quaternion.setFromAxisAngle(new V3(0, 1, 0), a);
+}
+function rotateLast(delta) {
+  const r = placed[placed.length - 1]; if (!r || state !== 'build') return;
+  const a = r.a + delta, y = fit(r.x, r.z, a, r);
+  if (y !== null) { r.a = a; r.y = y; poseDomino(r); clickTone(4, 0.03); }
+}
+
+let isTouch = false;
+function setTouch() { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); } }
+addEventListener('touchstart', setTouch, { passive: true, once: true });
+
+addEventListener('keydown', e => {
+  if (e.code === 'Space') e.preventDefault();
+  if (e.repeat) return;
+  if (e.code === 'Escape') { if (state === 'menu') enterBuild(false); else showMenu(); }
+  if (state === 'build') {
+    if (e.code === 'Space' || e.code === 'Enter') startRun();
+    if (e.code === 'KeyZ' || e.code === 'Backspace') undo();
+    if (e.code === 'KeyQ') rotateLast(Math.PI / 12);
+    if (e.code === 'KeyE') rotateLast(-Math.PI / 12);
+  } else if (state === 'run') {
+    if (e.code === 'KeyF' || e.code === 'Space') toggleFast();
+  }
+});
+function undo() { const r = placed[placed.length - 1]; if (r) removeDomino(r); }
+function toggleFast() { fast = !fast; setBar(); }
+document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => b.blur()));
+$('undoBtn').addEventListener('click', undo);
+$('clearBtn').addEventListener('click', () => { placed.slice().forEach(r => levelGroup.remove(r.mesh)); placed = []; snd('pop'); updateHud(); });
+$('startBtn').addEventListener('click', startRun);
+$('fastBtn').addEventListener('click', toggleFast);
+$('stopBtn').addEventListener('click', stopRun);
+$('menuBtn').addEventListener('click', showMenu);
+const soundLabel = () => { $('soundBtn').textContent = AC && AC.isMuted() ? '🔇' : '🔊'; };
+$('soundBtn').addEventListener('click', () => { if (AC) AC.toggleMute(); soundLabel(); });
+soundLabel();
+
+// ============ Loop ============
+let last = performance.now(), hudT = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (state === 'build') {
+    buildTime -= dt;
+    finger.visible = true; placeFinger(1.1 + Math.sin(now / 300) * 0.12);
+    if (buildTime <= 0) { buildTime = 0; showMsg('⏱ Zeit um!<small>Los geht’s</small>', 1.4); startRun(); }
+  } else if (state === 'run') updateRun(dt);
+  if (msgTimer > 0 && (msgTimer -= dt) <= 0) $('msg').classList.remove('show');
+  if ((hudT -= dt) <= 0) { hudT = 0.2; updateHud(); }
+  updateCamera(dt);
+  renderer.render(scene, camera);
+}
+
+// Testzugang für automatisierte Lösungs-Checks (nur mit ?debug)
+if (/[?&]debug\b/.test(location.search)) window.DOMINOKETTE_DEBUG = { loadLevel, startRun,
+  stroke: pts => { beginStroke(pts[0]); pts.slice(1).forEach(p => strokeTo(p)); endStroke(); }, setFast: v => { fast = v; }, state: () => state, placed: () => placed, targets: () => targets };
+const firstOpen = progress.s.findIndex(s => s === 0);
+loadLevel(firstOpen < 0 ? 0 : firstOpen);
+showMenu(true);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

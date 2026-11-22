@@ -287,6 +287,7 @@ const ArcadeCore = (() => {
     'kranfuehrer': 'kranfuehrer_best',
     'echolot': 'echolot_best',
     'pollenflug': 'pollenflug_best'
+    'dominokette': 'dominokette_stars'
   };
 
   function getScore(gameKey) {
