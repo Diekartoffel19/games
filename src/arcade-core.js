@@ -285,7 +285,8 @@ const ArcadeCore = (() => {
     'heapbreach': 'heapbreach_best',
     'omaswlan': 'omaswlan_best',
     'kranfuehrer': 'kranfuehrer_best',
-    'echolot': 'echolot_best'
+    'echolot': 'echolot_best',
+    'dominokette': 'dominokette_stars'
   };
 
   function getScore(gameKey) {

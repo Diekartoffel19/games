@@ -51,6 +51,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/skytower.html`](games/skytower.html) — *Sky Tower 3D Stack Master*
   * [`games/kranfuehrer.html`](games/kranfuehrer.html) — *Kranführer 3D (Turmdrehkran: Pendeln abfangen, Bauteile präzise absetzen, Wind & Bauarbeiter, 5 Level)*
 * **Klassiker & Puzzles:**
+  * [`games/dominokette.html`](games/dominokette.html) — *Dominokette 3D (Wohnzimmer-Physikpuzzle mit cannon.js: Steine setzen oder als Kurve ziehen, Treppe & Bücher hoch, Finger-Schubs, Zeitlupen-Kamera an der Wellenfront; Klingel, Tasse & Aufziehauto als Ziele, 8 Level mit Sternen, Blender-Modelle)*
   * [`games/zauberwuerfel.html`](games/zauberwuerfel.html) — *Zauberwürfel 3D (Three.js, 2×2 bis 7×7, animierte Drehungen, Tastatursteuerung mit Ebenenwahl, Tastenhilfe, Timer & Auto-Lösen)*
   * [`games/bubblefusion.html`](games/bubblefusion.html) — *Bubble Fusion (Squishy 2048 im gezeichneten Sobosuba-Stil: verformbare Gelee-Blobs mit leichter Anziehungskraft aus der oberen Reihe in den Behälter schießen und gleiche Zahlen verschmelzen)*
   * Tetris, Snake, 2048, Suika Game, Flappy Bird, Doodle Jump, Breakout, Globle Earth u.v.m.
