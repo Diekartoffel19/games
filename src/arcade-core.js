@@ -286,8 +286,11 @@ const ArcadeCore = (() => {
     'omaswlan': 'omaswlan_best',
     'kranfuehrer': 'kranfuehrer_best',
     'echolot': 'echolot_best',
-    'pollenflug': 'pollenflug_best'
-    'dominokette': 'dominokette_stars'
+    'pollenflug': 'pollenflug_best',
+    'dominokette': 'dominokette_stars',
+    'tresorknacker': 'tresorknacker_best',
+    'seiltaenzer': 'seiltaenzer_best',
+    'eisangler': 'eisangler_best'
   };
 
   function getScore(gameKey) {
