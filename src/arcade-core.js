@@ -291,7 +291,8 @@ const ArcadeCore = (() => {
     'tresorknacker': 'tresorknacker_best',
     'seiltaenzer': 'seiltaenzer_best',
     'eisangler': 'eisangler_best',
-    'tiefenrausch': 'tiefenrausch_best'
+    'tiefenrausch': 'tiefenrausch_best',
+    'wettermacher': 'wettermacher_best'
   };
 
   function getScore(gameKey) {
