@@ -284,7 +284,8 @@ const ArcadeCore = (() => {
     'zauberwuerfel': 'zauberwuerfel_best_3',
     'heapbreach': 'heapbreach_best',
     'omaswlan': 'omaswlan_best',
-    'kranfuehrer': 'kranfuehrer_best'
+    'kranfuehrer': 'kranfuehrer_best',
+    'echolot': 'echolot_best'
   };
 
   function getScore(gameKey) {

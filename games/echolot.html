@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Echolot 3D: Blinde Fledermaus</title>
+<meta name="description" content="Die Welt ist schwarz. Flieg als Fledermaus durch eine Höhle und sieh nur, was dein Echolot-Ping zeigt. Fang Motten – aber jeder Ping verrät dich an die Eule.">
+<meta name="keywords" content="Fledermaus Spiel, Echolot, Sonar, 3D Höhle, Browser Spiel, Three.js">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#000000">
+<link rel="canonical" href="https://rwpxe.com/games/echolot.html">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Echolot 3D: Blinde Fledermaus">
+<meta property="og:description" content="Sehen heißt gehört werden: Ping, um die Höhle zu sehen – und die Eule zu wecken.">
+<meta property="og:locale" content="de_DE">
+
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- Geometrie aus Blender (models/echolot.blend): Fledermaus, Motte, Eule, Höhle in 16 Stücken + Mittellinie -->
+<script src="models/echolot_models.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; color: #e6f7ff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+  #view { position: fixed; inset: 0; z-index: 1; }
+  #view canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+
+  .back-btn {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 50;
+    color: #cdeeff; text-decoration: none; font-weight: 700; font-size: 0.9rem;
+    background: rgba(4, 12, 20, 0.8); border: 1px solid rgba(94, 231, 255, 0.45);
+    padding: 0 16px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px;
+  }
+  .back-btn:hover { background: #0e7490; color: #fff; }
+  .top-actions {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 50;
+    display: flex; gap: 8px;
+  }
+  .action-btn {
+    background: rgba(4, 12, 20, 0.8); border: 1px solid rgba(255, 255, 255, 0.2); color: #e6f7ff;
+    padding: 0 14px; min-height: 44px; min-width: 44px; border-radius: 999px; cursor: pointer; font-size: 0.85rem; font-weight: 700;
+  }
+  .action-btn:hover { background: rgba(14, 116, 144, 0.6); }
+
+  #hud {
+    position: fixed; top: calc(64px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 20;
+    display: flex; flex-wrap: wrap; gap: 6px; max-width: min(560px, 70vw); pointer-events: none;
+  }
+  .pill {
+    background: rgba(4, 12, 20, 0.72); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 999px;
+    padding: 4px 12px; font-size: 0.82rem; font-weight: 800; color: #8fb3c4; white-space: nowrap;
+  }
+  .pill b { color: #5ee7ff; }
+  #owlPill.hunt { border-color: #f59e0b; } #owlPill.hunt b { color: #fbbf24; }
+  #owlPill.chase { border-color: #ef4444; background: rgba(60, 6, 6, 0.8); } #owlPill.chase b { color: #f87171; }
+
+  #breath {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(44px + env(safe-area-inset-bottom)); z-index: 20;
+    width: min(340px, 70vw); height: 16px; border-radius: 999px; background: rgba(4, 12, 20, 0.8);
+    border: 1px solid rgba(94, 231, 255, 0.4); overflow: hidden; pointer-events: none;
+  }
+  #breathFill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: linear-gradient(90deg, #0e7490, #5ee7ff); }
+  #breathCost { position: absolute; top: 0; bottom: 0; right: 0; width: 0; background: rgba(248, 113, 113, 0.85); }
+  #breath span {
+    position: absolute; inset: 0; text-align: center; font-size: 0.68rem; line-height: 14px; font-weight: 900;
+    color: #fff; text-shadow: 0 1px 3px #000; letter-spacing: 1px;
+  }
+  #breath.low { border-color: #f87171; }
+
+  #charge {
+    position: fixed; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; z-index: 15;
+    border: 2px solid rgba(94, 231, 255, 0.85); border-radius: 50%; pointer-events: none; opacity: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #charge span { font-size: 11px; font-weight: 900; color: #5ee7ff; text-shadow: 0 0 6px #000; }
+
+  #msg {
+    position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%); z-index: 30; pointer-events: none;
+    text-align: center; opacity: 0; transition: opacity 0.25s; font-size: clamp(1.4rem, 4.5vw, 2.2rem); font-weight: 950;
+    text-shadow: 0 0 18px rgba(94, 231, 255, 0.5); max-width: calc(100vw - 32px);
+  }
+  #msg.show { opacity: 1; }
+  #msg small { display: block; font-size: 0.5em; font-weight: 800; color: #a5c9d6; }
+  #flash { position: fixed; inset: 0; z-index: 12; pointer-events: none; background: radial-gradient(circle, transparent 30%, rgba(220, 20, 20, 0.7)); opacity: 0; }
+
+  #hint {
+    position: fixed; bottom: calc(14px + env(safe-area-inset-bottom)); left: 0; right: 0; z-index: 20; text-align: center;
+    pointer-events: none; color: rgba(205, 238, 255, 0.6); font-size: 0.78rem; font-weight: 600; padding: 0 12px;
+  }
+  kbd {
+    background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px;
+    padding: 0 5px; font-family: inherit; font-weight: 800; color: #fff;
+  }
+
+  .modal {
+    position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.78); display: none; align-items: center; justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .card {
+    background: linear-gradient(165deg, #06121c, #000); border: 2px solid #5ee7ff; border-radius: 22px; max-width: 520px; width: 100%;
+    max-height: 100%; overflow-y: auto; padding: clamp(20px, 5vw, 30px); text-align: center; box-shadow: 0 0 60px rgba(94, 231, 255, 0.2);
+  }
+  .card h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 5vw, 2.2rem); font-weight: 950; color: #5ee7ff; text-shadow: 0 0 20px rgba(94, 231, 255, 0.5); }
+  .card p { color: #a5c9d6; font-size: 0.93rem; line-height: 1.5; margin: 0 0 14px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; text-align: left; }
+  .stats:empty { display: none; }
+  .stat { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 8px 12px; }
+  .stat div:first-child { font-size: 0.7rem; color: #7f9fae; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat div:last-child { font-size: 1.3rem; font-weight: 900; color: #f0fbff; }
+  .primary {
+    width: 100%; min-height: 52px; border: none; border-radius: 14px; cursor: pointer; font-size: 1.1rem; font-weight: 900;
+    background: linear-gradient(135deg, #22d3ee, #0e7490); color: #001018;
+  }
+  .primary:hover { filter: brightness(1.1); }
+
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  body.touch #hint { display: none; }
+  body.touch #breath { bottom: auto; top: calc(140px + env(safe-area-inset-top)); } /* unten liegt der Joystick */
+  @media (max-height: 460px) { body.touch #breath { top: calc(104px + env(safe-area-inset-top)); width: min(260px, 40vw); } }
+  #stick {
+    position: fixed; left: calc(20px + env(safe-area-inset-left)); bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 40;
+    width: 150px; height: 150px; border-radius: 50%; touch-action: none;
+    background: rgba(4, 12, 20, 0.5); border: 2px solid rgba(94, 231, 255, 0.35);
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%;
+    background: rgba(94, 231, 255, 0.7); pointer-events: none;
+  }
+  .tlabel { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font-size: 0.72rem; font-weight: 800; color: rgba(255, 255, 255, 0.7); white-space: nowrap; pointer-events: none; }
+  .tbtn {
+    position: fixed; z-index: 40; right: calc(18px + env(safe-area-inset-right)); width: 64px; height: 64px; border-radius: 50%;
+    border: 2px solid rgba(94, 231, 255, 0.5); background: rgba(4, 12, 20, 0.65); color: #cdeeff; font-size: 1.3rem; touch-action: none;
+  }
+  #btnFast { bottom: calc(176px + env(safe-area-inset-bottom)); }
+  #btnSlow { bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .tbtn.on { background: #0e7490; }
+  #pingZone { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(252px + env(safe-area-inset-bottom)); z-index: 5; max-width: 130px; text-align: right; font-size: 0.75rem; font-weight: 800; color: rgba(205, 238, 255, 0.5); pointer-events: none; }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back-btn">← Arcade</a>
+<div class="top-actions">
+  <button class="action-btn" id="pauseBtn" title="Pause (P)">⏸</button>
+  <button class="action-btn" id="soundBtn" title="Sound an/aus">🔊</button>
+</div>
+
+<div id="view"></div>
+<div id="flash"></div>
+
+<div id="hud">
+  <div class="pill">⭐ <b id="hScore">0</b></div>
+  <div class="pill">🦋 <b id="hMoths">0</b> <span id="hCombo"></span></div>
+  <div class="pill">❤️ <b id="hLives">3</b></div>
+  <div class="pill">🏆 <b id="hBest">0</b></div>
+  <div class="pill" id="owlPill">🦉 <b id="hOwl">schläft</b></div>
+</div>
+
+<div id="charge"><span id="chargeTxt"></span></div>
+<div id="msg"></div>
+<div id="breath"><div id="breathFill"></div><div id="breathCost"></div><span>ATEM</span></div>
+<div id="hint">
+  <kbd>Klick</kbd> Ping · <kbd>halten</kbd> lauter · <kbd>Maus</kbd>/<kbd>Pfeile</kbd> lenken · <kbd>W</kbd>/<kbd>S</kbd> schneller/langsamer ·
+  <kbd>A</kbd>/<kbd>D</kbd> seitwärts · <kbd>Leer</kbd>/<kbd>Shift</kbd> hoch/runter · <kbd>E</kbd> Ping · <kbd>P</kbd> Pause
+</div>
+
+<div id="touch">
+  <div id="stick"><span class="tlabel">Lenken</span><div id="knob"></div></div>
+  <button class="tbtn" id="btnFast">⏩</button>
+  <button class="tbtn" id="btnSlow">🐢</button>
+  <div id="pingZone">Rechts tippen = Ping<br>halten = laut</div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="card">
+    <h1 id="mTitle">🦇 Echolot 3D</h1>
+    <p id="mText"></p>
+    <div class="stats" id="mStats"></div>
+    <button class="primary" id="mBtn">Losfliegen</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ============ ArcadeCore ============
+const AC = window.ArcadeCore || null;
+const snd = (name, ...a) => { try { if (AC && AC[name]) AC[name](...a); } catch (e) {} };
+const KEY = 'echolot';
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+const V3 = THREE.Vector3, UP = new V3(0, 1, 0);
+
+const DATA = window.ECHOLOT_MODELS;
+if (!DATA) { $('mText').textContent = 'Modelle (models/echolot_models.js) konnten nicht geladen werden.'; $('modal').style.display = 'flex'; $('mBtn').hidden = true; return; }
+
+// ============ Tuning ============
+const WAVE_SPEED = 28, FADE = 1.5, CHARGE_TIME = 0.9;
+const pingRadius = loud => 9 + 36 * loud;
+const pingCost = loud => 8 + 27 * loud;
+const hearRadius = loud => 8 + 44 * loud;   // leiser Ping hört die Eule kaum weiter als man selbst sieht
+const affordableLoud = () => Math.max(0, (breath - pingCost(0)) / 27);
+const BAT_R = 0.35, CRUISE = 3.8, BOOST = 7.8, BRAKE = 1.0, SIDE = 3;
+const MOTHS = 14, LIVES = 3, COMBO_T = 8;
+
+// ============ Höhlen-Mittellinie ============
+const PATH = DATA.path.map(p => new V3(p[0], p[1], p[2]));
+const PR = DATA.path.map(p => p[3]);
+const N = PATH.length;
+const wrapI = i => ((Math.round(i) % N) + N) % N;
+const idxDiff = (a, b) => { let d = (b - a) % N; if (d > N / 2) d -= N; if (d < -N / 2) d += N; return d; };
+const FR = PATH.map((p, i) => {
+  const t = PATH[wrapI(i + 1)].clone().sub(PATH[wrapI(i - 1)]).normalize();
+  const side = new V3().crossVectors(t, UP).normalize();
+  return { t, side, up: new V3().crossVectors(side, t).normalize() };
+});
+function nearestIdx(pos, hint, range) {
+  let best = hint, bd = Infinity;
+  for (let k = -range; k <= range; k++) { const i = wrapI(hint + k), d = PATH[i].distanceToSquared(pos); if (d < bd) { bd = d; best = i; } }
+  return best;
+}
+// a, b in [-1, 1] relativ zum Höhlenquerschnitt (Ellipse 1.25r × 0.9r wie in Blender)
+const cavePoint = (i, a, b) => PATH[i].clone().addScaledVector(FR[i].side, a * PR[i] * 1.25).addScaledVector(FR[i].up, b * PR[i] * 0.9);
+
+// ============ Renderer ============
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x000000);
+$('view').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 200);
+function fitCamera() {
+  camera.aspect = innerWidth / innerHeight; camera.fov = camera.aspect < 1 ? 95 : 72; // Hochformat: sonst sieht man seitlich kaum etwas
+  camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
+}
+fitCamera(); addEventListener('resize', fitCamera);
+
+// ============ Sonar-Shader ============
+// 4 gleichzeitige Pings: Ursprung, Alter, Maximalradius (0 = Slot frei). Die Wellenfront leuchtet hell,
+// danach glimmt die Fläche FADE Sekunden nach.
+const SHARED = {
+  uPO: { value: [new V3(), new V3(), new V3(), new V3()] },
+  uPT: { value: [0, 0, 0, 0] },
+  uPM: { value: [0, 0, 0, 0] },
+  uCam: { value: new V3() },
+};
+const VERT = `varying vec3 vW;
+void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+const FRAG = `uniform vec3 uPO[4]; uniform float uPT[4]; uniform float uPM[4]; uniform vec3 uCam;
+uniform vec3 uColor; uniform float uFill; uniform float uVis;
+varying vec3 vW;
+void main() {
+  float lit = 0.0, front = 0.0;
+  for (int i = 0; i < 4; i++) {
+    if (uPM[i] <= 0.0) continue;
+    float d = distance(vW, uPO[i]);
+    if (d > uPM[i]) continue;
+    float since = uPT[i] - d / ${WAVE_SPEED.toFixed(1)};
+    if (since < -0.04) continue;
+    float f = exp(-since * since * 220.0);
+    float trail = smoothstep(0.0, 1.0, 1.0 - since / ${FADE.toFixed(1)});
+    float att = 1.0 - smoothstep(uPM[i] * 0.55, uPM[i], d);
+    lit = max(lit, (f * 1.3 + trail * 0.95) * att);
+    front = max(front, f * att);
+  }
+  float fog = 1.0 / (1.0 + distance(vW, uCam) * 0.035);
+  vec3 col = mix(uColor, vec3(1.0), front * 0.6);
+  gl_FragColor = vec4(col * lit * uFill * uVis * fog, 1.0);
+}`;
+function sonarMat(color, fill, vis, isFace) {
+  const m = new THREE.ShaderMaterial({
+    uniforms: Object.assign({}, SHARED, { uColor: { value: new THREE.Color(color) }, uFill: { value: fill }, uVis: vis || { value: 1 } }),
+    vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide,
+  });
+  if (isFace) { m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1; }
+  return m;
+}
+
+// ============ Modelle aus Blender ============
+const MODEL = {};
+DATA.objects.forEach(o => {
+  const pos = new THREE.Float32BufferAttribute(o.v, 3);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', pos); geo.setIndex(o.f); geo.computeBoundingSphere();
+  const lines = new THREE.BufferGeometry(); lines.setAttribute('position', pos); lines.setIndex(o.e); lines.computeBoundingSphere();
+  MODEL[o.n] = { geo, lines, parent: o.p, t: o.t, hasFaces: o.f.length > 0 };
+});
+function makeCreature(prefix, face, edge, eyes) {
+  const parts = {};
+  Object.keys(MODEL).filter(n => n.startsWith(prefix + '_')).forEach(n => {
+    const m = MODEL[n], g = new THREE.Group(), key = n.slice(prefix.length + 1);
+    g.position.fromArray(m.t);
+    if (key === 'eyes') g.add(new THREE.Mesh(m.geo, eyes));
+    else { if (m.hasFaces) g.add(new THREE.Mesh(m.geo, face)); g.add(new THREE.LineSegments(m.lines, edge)); }
+    parts[key] = g;
+  });
+  Object.keys(parts).forEach(k => { const p = MODEL[prefix + '_' + k].parent; if (p) parts[p.slice(prefix.length + 1)].add(parts[k]); });
+  parts.body.rotation.order = 'YXZ';
+  return parts;
+}
+
+// Höhle
+const caveFace = sonarMat(0x4fc3f7, 0.2, null, true), caveEdge = sonarMat(0x7fe3ff, 1.0);
+const CHUNKS = [];
+Object.keys(MODEL).filter(n => n.startsWith('cave_')).forEach(n => {
+  const m = MODEL[n], mesh = new THREE.Mesh(m.geo, caveFace);
+  scene.add(mesh, new THREE.LineSegments(m.lines, caveEdge));
+  CHUNKS.push(mesh);
+});
+
+// Fledermaus: immer schwach sichtbar, damit man Lage & Richtung kennt
+const bat = { pos: new V3(), vel: new V3(), yaw: 0, pitch: 0, roll: 0, idx: 0, stun: 0, invuln: 0, flap: 0 };
+bat.parts = makeCreature('bat', new THREE.MeshBasicMaterial({ color: 0x1c1630, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
+  new THREE.LineBasicMaterial({ color: 0x8b7cc8 }));
+scene.add(bat.parts.body);
+
+// Eule: nur im Ping sichtbar, Augen glühen wenn sie jagt
+const owlEyes = new THREE.MeshBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0, depthWrite: false });
+const owl = { pos: new V3(), vel: new V3(), idx: 0, state: 'patrol', timer: 0, dir: 1, huntPos: new V3(), huntIdx: 0, flap: 0, beat: 0, hoot: 8 };
+owl.parts = makeCreature('owl', sonarMat(0xffc58a, 0.3, null, true), sonarMat(0xffd9b0, 1.2), owlEyes);
+scene.add(owl.parts.body);
+
+// Motten: eigene Sichtbarkeit (uVis) – nur wer flattert, taucht im Ping auf
+const moths = [];
+for (let i = 0; i < MOTHS; i++) {
+  const vis = { value: 0 };
+  const m = { vis, home: new V3(), pos: new V3(), flutter: false, timer: 0, clock: rnd(0, 50), ph: rnd(0, 6), tick: 0, idx: 0 };
+  m.parts = makeCreature('moth', sonarMat(0xffe27a, 0.6, vis, true), sonarMat(0xfff1b0, 1.4, vis));
+  m.parts.body.scale.setScalar(2.2); // gut sichtbar & fangbar
+  scene.add(m.parts.body);
+  moths.push(m);
+}
+
+// ============ Audio ============
+function tone(freq, dur, o = {}) {
+  if (!AC || AC.isMuted()) return;
+  const ctx = AC.getAudioContext(); if (!ctx) return;
+  try {
+    const t0 = ctx.currentTime + (o.delay || 0);
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if (o.slide) osc.frequency.exponentialRampToValueAtTime(o.slide, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(o.gain || 0.1, t0 + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g);
+    if (ctx.createStereoPanner && o.pan) { const p = ctx.createStereoPanner(); p.pan.value = clamp(o.pan, -1, 1); g.connect(p); p.connect(ctx.destination); }
+    else g.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+const _rt = new V3(), _d = new V3();
+// Lautstärke & Stereo-Position relativ zur Kamera
+function spatial(pos, freq, dur, o, range) {
+  _d.copy(pos).sub(camera.position); const dist = _d.length();
+  if (dist > range) return;
+  _rt.set(1, 0, 0).applyQuaternion(camera.quaternion);
+  tone(freq, dur, Object.assign({}, o, { gain: (o.gain || 0.1) * (1 - dist / range), pan: dist > 0.01 ? _d.dot(_rt) / dist : 0 }));
+}
+const hoot = (pos, range) => { spatial(pos, 390, 0.32, { slide: 340, gain: 0.16 }, range); spatial(pos, 360, 0.45, { slide: 300, gain: 0.14, delay: 0.42 }, range); };
+
+// ============ Kollision ============
+const ray = new THREE.Raycaster();
+let nearChunks = [];
+function updateNearChunks() {
+  nearChunks = CHUNKS.filter(c => c.geometry.boundingSphere.center.distanceTo(bat.pos) < c.geometry.boundingSphere.radius + 4);
+}
+function castRay(origin, dir, far, list) {
+  ray.set(origin, dir); ray.far = far;
+  const h = ray.intersectObjects(list || nearChunks, false);
+  return h.length ? h[0] : null;
+}
+
+// ============ Spielzustand ============
+let state = 'menu', score = 0, caught = 0, combo = 1, lastCatch = -99, lives = LIVES, elapsed = 0;
+let breath = 100, breathDelay = 0, charging = false, chargeT = 0;
+let best = Number(AC ? AC.getScore(KEY) : 0) || 0;
+let pingSlot = 0;
+const keys = {};
+let mouseDX = 0, mouseDY = 0, stickX = 0, stickY = 0, touchFast = false, touchSlow = false, isTouch = false;
+let msgTimer = 0, flashT = 0, shake = 0;
+
+function showMsg(html, t = 1.8) { $('msg').innerHTML = html; $('msg').classList.add('show'); msgTimer = t; }
+const difficulty = () => Math.min(1, elapsed / 240);
+
+function spawnMoth(m) {
+  let i = 0;
+  for (let tries = 0; tries < 30; tries++) { i = Math.floor(Math.random() * N); if (Math.abs(idxDiff(bat.idx, i)) > 25) break; }
+  m.idx = i;
+  m.home.copy(cavePoint(i, rnd(-0.35, 0.35), rnd(-0.25, 0.3)));
+  m.pos.copy(m.home); m.parts.body.position.copy(m.home); m.parts.body.visible = false;
+  m.flutter = false; m.timer = rnd(0.5, 4); m.vis.value = 0;
+}
+
+function placeBatAt(i) {
+  bat.pos.copy(PATH[i]); bat.idx = i; bat.vel.set(0, 0, 0);
+  const t = FR[i].t; bat.yaw = Math.atan2(-t.x, -t.z); bat.pitch = Math.asin(clamp(t.y, -1, 1));
+}
+
+function resetGame() {
+  score = 0; caught = 0; combo = 1; lastCatch = -99; lives = LIVES; elapsed = 0; breath = 100; breathDelay = 0; charging = false;
+  flashT = 0; shake = 0; msgTimer = 0; $('flash').style.opacity = 0; $('msg').classList.remove('show');
+  placeBatAt(0); bat.stun = 0; bat.invuln = 2; bat.roll = 0; clearInput();
+  owl.pos.copy(PATH[Math.floor(N / 2)]); owl.idx = Math.floor(N / 2); owl.vel.set(0, 0, 0); setOwl('patrol');
+  for (let s = 0; s < 4; s++) SHARED.uPM.value[s] = 0;
+  updateNearChunks();
+  moths.forEach(spawnMoth);
+  camera.position.copy(bat.pos);
+  spawnPing(bat.pos, 0.6, true); // Gratis-Ping zum Start, weckt niemanden
+  updateHud();
+}
+
+function setOwl(s) {
+  owl.state = s;
+  if (s === 'chase') owl.timer = 5;
+  // Rückzug entgegen der Flugrichtung der Fledermaus (beim Fang ist owl.idx meist == bat.idx)
+  if (s === 'retreat') { owl.timer = 10; owl.dir = bat.vel.dot(FR[bat.idx].t) >= 0 ? -1 : 1; }
+  const pill = $('owlPill');
+  pill.className = 'pill' + (s === 'hunt' ? ' hunt' : s === 'chase' ? ' chase' : '');
+  $('hOwl').textContent = { patrol: 'kreist', hunt: 'hat dich gehört', chase: 'JAGT DICH', retreat: 'zieht ab' }[s];
+}
+
+function owlHears(pos, r) {
+  if (owl.state === 'retreat' || owl.pos.distanceTo(pos) > r) return;
+  if (owl.state === 'chase') { owl.timer = 5; return; }
+  owl.huntPos.copy(pos); owl.huntIdx = nearestIdx(pos, bat.idx, 4);
+  if (owl.state !== 'hunt') hoot(owl.pos, 90);
+  setOwl('hunt');
+}
+
+// ============ Ping ============
+function spawnPing(origin, loud, free) {
+  const s = pingSlot; pingSlot = (pingSlot + 1) % 4;
+  SHARED.uPO.value[s].copy(origin); SHARED.uPT.value[s] = 0; SHARED.uPM.value[s] = pingRadius(loud);
+  if (free) return;
+  // Laute Pings schrecken Motten auf -> sie flattern und werden sichtbar
+  if (loud > 0.3) moths.forEach(m => { if (m.pos.distanceTo(origin) < pingRadius(loud) * 0.8) { m.flutter = true; m.timer = rnd(2, 3); } });
+  owlHears(origin, hearRadius(loud));
+  // Ping + Echo: Verzögerung und Tonhöhe verraten den Wandabstand voraus
+  const hit = castRay(bat.pos, forward(), 60, CHUNKS);
+  const D = hit ? hit.distance : 60;
+  tone(2600, 0.07, { slide: 1700, gain: 0.07 + 0.12 * loud });
+  tone(500 + 2200 / (1 + D * 0.12), 0.09, { delay: 0.08 + D * 0.012, gain: (0.05 + 0.08 * loud) / (1 + D * 0.05), type: 'triangle' });
+}
+function startCharge() {
+  if (state !== 'play' || charging) return false;
+  if (breath < pingCost(0)) { tone(140, 0.25, { type: 'sawtooth', gain: 0.05, slide: 90 }); showMsg('💨 Keine Luft!<small>Kurz blind weiterfliegen…</small>', 1.2); return false; }
+  charging = true; chargeT = 0; return true;
+}
+function releaseCharge() {
+  if (!charging) return; charging = false;
+  if (state !== 'play') return;
+  let loud = clamp(chargeT / CHARGE_TIME, 0, 1);
+  if (loud < 0.08) loud = 0;
+  loud = Math.min(loud, affordableLoud());
+  breath -= pingCost(loud); breathDelay = 0.35;
+  spawnPing(bat.pos, loud, false);
+}
+function forward(out = new V3()) {
+  const cp = Math.cos(bat.pitch);
+  return out.set(-Math.sin(bat.yaw) * cp, Math.sin(bat.pitch), -Math.cos(bat.yaw) * cp);
+}
+
+// ============ Update ============
+const _f = new V3(), _r = new V3(), _want = new V3(), _tmp = new V3(), _cam = new V3();
+const DIRS = [new V3(), new V3(), new V3(), new V3(), UP, new V3(0, -1, 0)];
+
+function updateBat(dt) {
+  bat.stun = Math.max(0, bat.stun - dt); bat.invuln = Math.max(0, bat.invuln - dt);
+  const stunned = bat.stun > 0;
+  const prevYaw = bat.yaw;
+  if (!stunned) {
+    const kx = (keys.ArrowLeft ? 1 : 0) - (keys.ArrowRight ? 1 : 0), ky = (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0);
+    bat.yaw += kx * 1.9 * dt - mouseDX * 0.0022 - stickX * 2.0 * dt;
+    bat.pitch = clamp(bat.pitch + ky * 1.5 * dt - mouseDY * 0.0022 - stickY * 1.6 * dt, -1.25, 1.25);
+  }
+  mouseDX = mouseDY = 0;
+  forward(_f); _r.set(Math.cos(bat.yaw), 0, -Math.sin(bat.yaw));
+  if (stunned) _want.set(0, -1.5, 0);
+  else {
+    const fast = keys.KeyW || touchFast, slow = keys.KeyS || touchSlow;
+    const spd = fast && !slow ? BOOST : slow && !fast ? BRAKE : CRUISE;
+    _want.copy(_f).multiplyScalar(spd)
+      .addScaledVector(_r, ((keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0)) * SIDE)
+      .addScaledVector(UP, ((keys.Space ? 1 : 0) - (keys.ShiftLeft || keys.ShiftRight ? 1 : 0)) * SIDE);
+  }
+  bat.vel.lerp(_want, 1 - Math.exp(-3.5 * dt));
+  updateNearChunks();
+  // Sweep entlang der Bewegung, damit man bei Boost nicht durch dünne Wände tunnelt
+  const move = bat.vel.length() * dt;
+  if (move > 1e-5) {
+    _tmp.copy(bat.vel).divideScalar(move / dt);
+    const sh = castRay(bat.pos, _tmp, move + BAT_R);
+    // nur bis knapp vor die Wand: Abprallen, Gleiten & Betäubung erledigen danach die 6 Strahlen
+    bat.pos.addScaledVector(_tmp, sh ? Math.max(0, Math.min(move, sh.distance - 0.05)) : move);
+  }
+
+  // 6 Strahlen: vorne/hinten/links/rechts (Blickrichtung) + oben/unten
+  DIRS[0].copy(_f); DIRS[1].copy(_f).negate(); DIRS[2].copy(_r); DIRS[3].copy(_r).negate();
+  for (const dir of DIRS) {
+    const h = castRay(bat.pos, dir, BAT_R + 0.3);
+    if (!h || h.distance >= BAT_R) continue;
+    bat.pos.addScaledVector(dir, h.distance - BAT_R);
+    const impact = bat.vel.dot(dir);
+    if (impact <= 0) continue;
+    bat.vel.addScaledVector(dir, -impact * 1.4);
+    if (impact > 2.2 && bat.stun <= 0) {
+      bat.stun = 0.9; shake = 0.35;
+      snd('hit'); showMsg('💫 Gegen die Wand!', 1.1);
+      owlHears(bat.pos, 18); // der Aufprall ist auch ein Geräusch
+    }
+  }
+  // Notfall: aus der Höhle gerutscht -> zurück auf die Mittellinie
+  bat.idx = nearestIdx(bat.pos, bat.idx, 8);
+  if (bat.pos.distanceTo(PATH[bat.idx]) > PR[bat.idx] * 1.6 + 2) { bat.pos.copy(PATH[bat.idx]); bat.vel.set(0, 0, 0); }
+
+  // Modell
+  const yawRate = (bat.yaw - prevYaw) / Math.max(dt, 1e-4);
+  if (stunned) bat.roll += 12 * dt;
+  else { bat.roll = wrapAngle(bat.roll); bat.roll += (clamp(yawRate * 0.25, -0.8, 0.8) - bat.roll) * Math.min(1, 6 * dt); }
+  const b = bat.parts.body;
+  b.position.copy(bat.pos); b.rotation.set(bat.pitch, bat.yaw, bat.roll);
+  bat.flap += dt * (stunned ? 4 : 9 + bat.vel.length());
+  const w = Math.sin(bat.flap) * 0.75;
+  bat.parts.wingL.rotation.z = w; bat.parts.wingR.rotation.z = -w;
+  b.visible = bat.invuln <= 0 || Math.floor(bat.invuln * 8) % 2 === 0;
+
+  // Verfolgerkamera, an Wänden nach vorn gezogen
+  _cam.copy(bat.pos).addScaledVector(_f, -1.9).addScaledVector(UP, 0.5);
+  _tmp.copy(_cam).sub(bat.pos); const len = _tmp.length(); _tmp.divideScalar(len);
+  const ch = castRay(bat.pos, _tmp, len);
+  if (ch) _cam.copy(bat.pos).addScaledVector(_tmp, Math.max(0.25, ch.distance - 0.2));
+  camera.position.lerp(_cam, 1 - Math.exp(-10 * dt));
+  if (shake > 0) { shake -= dt; camera.position.x += rnd(-1, 1) * shake * 0.3; camera.position.y += rnd(-1, 1) * shake * 0.3; }
+  camera.lookAt(_tmp.copy(bat.pos).addScaledVector(_f, 2));
+  SHARED.uCam.value.copy(camera.position);
+}
+
+function updateOwl(dt) {
+  owl.idx = nearestIdx(owl.pos, owl.idx, 6);
+  const diff = difficulty(), distBat = owl.pos.distanceTo(bat.pos);
+  let speed = 3, target = null, tIdx = owl.idx + owl.dir * 20;
+  if (owl.state === 'patrol') {
+    if (Math.random() < dt * 0.02) owl.dir *= -1;
+    owl.hoot -= dt; if (owl.hoot <= 0) { owl.hoot = rnd(8, 14); hoot(owl.pos, 70); }
+  } else if (owl.state === 'hunt') {
+    speed = 6 + 2 * diff; target = owl.huntPos; tIdx = owl.huntIdx;
+    if (owl.pos.distanceTo(owl.huntPos) < 2) setOwl(distBat < 10 ? 'chase' : 'patrol');
+  } else if (owl.state === 'chase') {
+    speed = 4.6 + 2.2 * diff; target = bat.pos; tIdx = bat.idx; // bleibt unter BOOST: Abhauen geht immer
+    owl.timer -= dt; if (owl.timer <= 0) setOwl('patrol');
+  } else {
+    speed = 9; owl.timer -= dt; if (owl.timer <= 0) setOwl('patrol');
+  }
+  // Eulen hören Flügelschläge aus nächster Nähe
+  if (distBat < 4 && owl.state !== 'retreat' && bat.invuln <= 0) { if (owl.state !== 'chase') setOwl('chase'); owl.timer = 5; }
+
+  const d = idxDiff(owl.idx, wrapI(tIdx));
+  const goal = target && Math.abs(d) <= 4 ? target : PATH[wrapI(owl.idx + (d >= 0 ? 4 : -4))];
+  _want.copy(goal).sub(owl.pos);
+  if (_want.lengthSq() > 1e-4) _want.setLength(speed);
+  owl.vel.lerp(_want, 1 - Math.exp(-2.5 * dt));
+  owl.pos.addScaledVector(owl.vel, dt);
+
+  const b = owl.parts.body;
+  b.position.copy(owl.pos);
+  if (owl.vel.lengthSq() > 0.01) {
+    const yaw = Math.atan2(-owl.vel.x, -owl.vel.z), pitch = Math.asin(clamp(owl.vel.y / owl.vel.length(), -1, 1));
+    b.rotation.set(pitch * 0.6, yaw, 0);
+  }
+  owl.flap += dt * (3 + speed * 0.6);
+  const w = Math.sin(owl.flap) * 0.55;
+  owl.parts.wingL.rotation.z = w; owl.parts.wingR.rotation.z = -w;
+
+  const hunting = owl.state === 'hunt' || owl.state === 'chase';
+  // jagend: helle Augen; kreisend & nah: schwaches Glimmen als Warnung
+  owlEyes.opacity = hunting ? clamp(1 - distBat / 22, 0, 1) : owl.state === 'patrol' ? clamp(0.4 - distBat / 30, 0, 0.4) : 0;
+  b.visible = owlEyes.opacity > 0.01 || inPing(owl.pos);
+  if (hunting) {
+    owl.beat -= dt;
+    if (owl.beat <= 0) { owl.beat = 0.5; spatial(owl.pos, 85, 0.14, { type: 'triangle', gain: 0.22 }, 26); }
+  }
+  if (distBat < 0.95 && bat.invuln <= 0 && owl.state !== 'retreat') onCaught();
+}
+
+function updateMoths(dt) {
+  moths.forEach(m => {
+    m.timer -= dt;
+    if (m.timer <= 0) { m.flutter = !m.flutter; m.timer = m.flutter ? rnd(1.5, 3.5) : rnd(1.5, 4.5); }
+    if (m.flutter) m.clock += dt;
+    m.vis.value += ((m.flutter ? 1 : 0) - m.vis.value) * Math.min(1, dt * 5);
+    const c = m.clock;
+    m.pos.copy(m.home).add(_tmp.set(Math.sin(c * 1.3 + m.ph) * 1.1, Math.sin(c * 1.9 + m.ph * 2) * 0.5, Math.cos(c * 1.1 + m.ph) * 1.1));
+    const b = m.parts.body;
+    b.visible = m.vis.value > 0.01 && inPing(m.pos);
+    b.position.copy(m.pos); b.rotation.y = -c * 1.2 + m.ph;
+    const w = m.flutter ? Math.sin(c * 40) * 0.8 : 1.2; // in Ruhe: Flügel hochgeklappt
+    m.parts.wingL.rotation.z = w; m.parts.wingR.rotation.z = -w;
+    if (m.flutter) {
+      m.tick -= dt;
+      if (m.tick <= 0) { m.tick = 0.3; spatial(m.pos, 5200, 0.018, { type: 'square', gain: 0.025 }, 8); }
+    }
+    if (m.pos.distanceTo(bat.pos) < 1.0) {
+      combo = elapsed - lastCatch < COMBO_T ? Math.min(5, combo + 1) : 1; lastCatch = elapsed;
+      score += 10 * combo; caught++; breath = Math.min(100, breath + 10);
+      snd('coin');
+      if (combo > 1) showMsg(`🦋 Kombo ×${combo}`, 0.9);
+      spawnMoth(m);
+    }
+  });
+}
+
+// Kann ein Ping diesen Punkt gerade beleuchten? (sonst Objekt gar nicht erst zeichnen)
+function inPing(p) {
+  for (let s = 0; s < 4; s++) if (SHARED.uPM.value[s] > 0 && SHARED.uPO.value[s].distanceTo(p) < SHARED.uPM.value[s] + 2) return true;
+  return false;
+}
+function updatePings(dt) {
+  for (let s = 0; s < 4; s++) {
+    if (SHARED.uPM.value[s] <= 0) continue;
+    SHARED.uPT.value[s] += dt;
+    if (SHARED.uPT.value[s] > SHARED.uPM.value[s] / WAVE_SPEED + FADE + 0.1) SHARED.uPM.value[s] = 0;
+  }
+}
+
+function onCaught() {
+  lives--; flashT = 1; shake = 0.5;
+  tone(1500, 0.35, { type: 'sawtooth', slide: 500, gain: 0.12 }); snd('hit');
+  if (lives <= 0) { gameOver(); return; }
+  bat.invuln = 3; setOwl('retreat');
+  showMsg(`🦉 Erwischt!<small>Noch ${lives} Leben – die Eule zieht kurz ab</small>`, 2.2);
+}
+
+function updateHud() {
+  $('hScore').textContent = score; $('hMoths').textContent = caught; $('hLives').textContent = lives;
+  $('hCombo').textContent = combo > 1 && elapsed - lastCatch < COMBO_T ? '×' + combo : '';
+  $('hBest').textContent = Math.max(best, score);
+  $('breathFill').style.width = breath + '%';
+  const loud = charging ? Math.min(clamp(chargeT / CHARGE_TIME, 0, 1), affordableLoud()) : 0;
+  $('breathCost').style.width = charging ? Math.min(breath, pingCost(loud)) + '%' : '0';
+  $('breathCost').style.right = charging ? Math.max(0, 100 - breath) + '%' : '0';
+  $('breath').classList.toggle('low', breath < pingCost(0));
+  const ch = $('charge');
+  ch.style.opacity = charging ? 1 : 0;
+  ch.style.transform = `scale(${1 + loud * 2.2})`;
+  $('chargeTxt').textContent = loud < 0.08 ? 'leise' : loud > 0.95 ? 'LAUT' : loud >= affordableLoud() - 0.01 ? 'max' : '';
+}
+
+function gameOver() {
+  state = 'over'; clearInput();
+  if (document.pointerLockElement) document.exitPointerLock();
+  snd('gameOver');
+  const record = score > best;
+  if (record) { best = score; if (AC) AC.saveScore(KEY, best); }
+  openModal(record ? '🏆 Neuer Rekord!' : '🦉 Gefressen', 'Die Eule hat dich dreimal erwischt.', 'Nochmal fliegen',
+    [['Punkte', score], ['Motten', caught], ['Überlebt', Math.round(elapsed) + ' s'], ['Rekord', best]]);
+}
+
+function openModal(title, text, btn, stats) {
+  $('mTitle').textContent = title; $('mText').innerHTML = text; $('mBtn').textContent = btn;
+  $('mStats').innerHTML = (stats || []).map(([k, v]) => `<div class="stat"><div>${k}</div><div>${v}</div></div>`).join('');
+  $('modal').style.display = 'flex';
+}
+
+function start() {
+  if (state === 'play') return;
+  $('modal').style.display = 'none';
+  if (state !== 'pause') resetGame();
+  state = 'play';
+  if (!isTouch) lockPointer();
+}
+function clearInput() {
+  for (const k in keys) keys[k] = false;
+  charging = false; chargePointer = null; mouseDX = mouseDY = 0;
+  touchFast = touchSlow = false; stickX = stickY = 0; stickId = null; knob.style.transform = '';
+  document.querySelectorAll('.tbtn.on').forEach(el => el.classList.remove('on'));
+}
+function pause() {
+  if (state !== 'play') return;
+  state = 'pause'; clearInput(); bat.parts.body.visible = true;
+  if (document.pointerLockElement) document.exitPointerLock(); // sonst ist das Pause-Menü nicht klickbar
+  openModal('⏸ Pause', 'Die Höhle wartet. Die Eule auch.', 'Weiter');
+}
+
+// ============ Eingabe ============
+const canvas = renderer.domElement;
+let pointerLocked = false;
+function lockPointer() { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+document.addEventListener('pointerlockchange', () => {
+  const now = document.pointerLockElement === canvas;
+  if (pointerLocked && !now && state === 'play') pause();
+  pointerLocked = now;
+});
+document.addEventListener('mousemove', e => { if (pointerLocked && state === 'play') { mouseDX += e.movementX; mouseDY += e.movementY; } });
+
+let chargePointer = null;
+canvas.addEventListener('pointerdown', e => {
+  if (state !== 'play' || charging) return;
+  if (e.pointerType === 'mouse') { if (e.button !== 0) return; if (!pointerLocked) lockPointer(); }
+  else { setTouch(); if (e.clientX < innerWidth * 0.4) return; }
+  if (startCharge()) chargePointer = e.pointerId;
+});
+addEventListener('pointerup', e => { if (e.pointerId === chargePointer) { chargePointer = null; releaseCharge(); } });
+addEventListener('pointercancel', e => { if (e.pointerId === chargePointer) { chargePointer = null; releaseCharge(); } });
+
+addEventListener('keydown', e => {
+  if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  if (e.repeat) return;
+  if (e.code === 'KeyE' && chargePointer === null) startCharge();
+  // Esc beendet den Pointer-Lock selbst (-> Pause); nur P schaltet hin und her
+  if (e.code === 'Escape' && state === 'play') pause();
+  if (e.code === 'KeyP') { if (state === 'play') pause(); else if (state === 'pause') start(); }
+  if (e.code === 'Enter' && state !== 'play') start();
+});
+addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'KeyE' && chargePointer === null) releaseCharge(); });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; pause(); });
+// Buttons nach Klick entfokussieren, sonst lösen Leertaste/Enter sie erneut aus
+document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => b.blur()));
+document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+function setTouch() { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); } }
+addEventListener('touchstart', setTouch, { passive: true, once: true });
+
+// Joystick
+const stick = $('stick'), knob = $('knob');
+let stickId = null;
+function stickMove(e) {
+  const r = stick.getBoundingClientRect(), R = r.width / 2;
+  let x = (e.clientX - r.left - R) / R, y = (e.clientY - r.top - R) / R;
+  const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
+  stickX = Math.abs(x) < 0.12 ? 0 : x; stickY = Math.abs(y) < 0.12 ? 0 : y;
+  knob.style.transform = `translate(${x * R * 0.6}px, ${y * R * 0.6}px)`;
+}
+stick.addEventListener('pointerdown', e => { stickId = e.pointerId; stick.setPointerCapture(e.pointerId); stickMove(e); });
+stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) stickMove(e); });
+const stickEnd = e => { if (e.pointerId !== stickId) return; stickId = null; stickX = stickY = 0; knob.style.transform = ''; };
+stick.addEventListener('pointerup', stickEnd); stick.addEventListener('pointercancel', stickEnd);
+function holdBtn(el, set) {
+  el.addEventListener('pointerdown', e => { e.preventDefault(); el.setPointerCapture(e.pointerId); set(true); el.classList.add('on'); });
+  const off = () => { set(false); el.classList.remove('on'); };
+  el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
+}
+holdBtn($('btnFast'), v => { touchFast = v; });
+holdBtn($('btnSlow'), v => { touchSlow = v; });
+
+$('mBtn').addEventListener('click', start);
+$('pauseBtn').addEventListener('click', () => { if (state === 'play') pause(); else if (state === 'pause') start(); });
+const soundLabel = () => { $('soundBtn').textContent = AC && AC.isMuted() ? '🔇' : '🔊'; };
+$('soundBtn').addEventListener('click', () => { if (AC) AC.toggleMute(); soundLabel(); });
+soundLabel();
+
+// ============ Loop ============
+let last = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (state === 'play') {
+    elapsed += dt;
+    if (charging) chargeT += dt;
+    if (breathDelay > 0) breathDelay -= dt; else if (!charging) breath = Math.min(100, breath + 18 * dt);
+    updateBat(dt); updateOwl(dt); updateMoths(dt); updatePings(dt);
+    if (msgTimer > 0 && (msgTimer -= dt) <= 0) $('msg').classList.remove('show');
+    if (flashT > 0) { flashT = Math.max(0, flashT - dt * 1.5); $('flash').style.opacity = flashT; }
+    updateHud();
+  }
+  renderer.render(scene, camera);
+}
+
+// Menü: Höhle mit einem Demo-Ping im Hintergrund
+placeBatAt(0); updateNearChunks();
+owl.pos.copy(PATH[Math.floor(N / 2)]); owl.idx = Math.floor(N / 2); owl.parts.body.position.copy(owl.pos); owl.parts.body.visible = false;
+moths.forEach(spawnMoth);
+camera.position.copy(bat.pos).addScaledVector(forward(), -1.9).addScaledVector(UP, 0.5);
+camera.lookAt(_tmp.copy(bat.pos).addScaledVector(forward(), 2));
+SHARED.uCam.value.copy(camera.position);
+bat.parts.body.position.copy(bat.pos); bat.parts.body.rotation.set(bat.pitch, bat.yaw, 0);
+setInterval(() => { if (state === 'menu') spawnPing(bat.pos, 0.7, true); }, 2200);
+setInterval(() => { if (state === 'menu') updatePings(0.05); }, 50);
+$('hBest').textContent = best;
+openModal('🦇 Echolot 3D', 'Die Höhle ist stockdunkel. <b>Klick</b> sendet einen Ping – nur wo die Schallwelle auftrifft, siehst du die Wände für ~1,5 s. ' +
+  '<b>Halten</b> macht ihn lauter: du siehst mehr, aber die <b>Eule</b> hört dich weiter. Jeder Ping kostet <b>Atem</b>.<br><br>' +
+  'Fang <b>Motten</b> 🦋 – sie erscheinen nur im Ping, wenn sie flattern. Laute Pings scheuchen sie auf. ' +
+  'Glühende Augen = die Eule jagt. Still sein und abhauen!', 'Losfliegen');
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
