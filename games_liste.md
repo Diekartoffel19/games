@@ -2,7 +2,7 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (41 Spiele)
+## 🧊 Bestehende 3D-Spiele (42 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (5 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 55 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (41 Spiele)
+## 🧊 Bestehende 3D-Spiele (42 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -192,6 +192,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 39 | 🚀 **Raketenbau 3D** | [`games/raketenbau.html`](games/raketenbau.html) | `sim` | Three.js | Raketen-Werkstatt mit 37 Blender-modellierten Bauteilen und maßgeschneiderten SVG-Symbolen (Kapseln, Mondfähre, Kosmos-Sonde, Rettungsturm, Aerospitze, Hitzeschilde 1,25/2,5m, Tanks S–XXL inkl. Kryo-Kugeltank & 1,25→2,5m-Adapter, 11 Triebwerke inkl. Kolibri, Falke-Zwilling, Aerospike, Nuklear, Ionen, Vasimr-Plasma & Titan-V 5×-Cluster, 3 Feststoffbooster, Stufentrenner 1,25/2,5m, Leitwerk, Gitterflossen, Landebeine, Solar-/RCS-Modul, RTG-Isotopenbatterie, Fallschirm) inkl. Δv-/TWR-Analyse pro Stufe; Flug mit Mehrkörper-Orbitalmechanik zu 8 Himmelskörpern (Erde, Mond, Phobos, Venus, Mars, Jupiter mit Ringen, Europa, Titan), SOI-Wechsel, 5 Flugcomputer-Autopiloten (Orbit-Aufstieg mit Gravity-Turn & Max-Q, Zirkularisierung, Hohmann-Transfer, Suicide-Burn-Landung, Hover) + Auto-Staging, 3D-Weltraumbahnhof (Wasserturm, Kontrollturm, rotierendes Radar, Windsack, Flutlichter, Gebirge, Vogelschwarm, Polarlichter, 3D-Krater & Eistürme), Tageszeiten-Wahl, Zeitraffer bis ×2000, Sonnensystem-Kartenansicht mit Kegelschnitt-Bahn & Ap/Pe, 35 Missionen in 5 Kapiteln (inkl. Meisterprüfungen wie Grand Tour, Mond-/Mars-Rückkehr, Landung ohne Fallschirm) + Auftragsbörse mit 3 wiederholbaren, zufällig generierten Kundenaufträgen (Höhenmessung, Windkanal, Bauteil-Test, Low-Cost-Flug, Probenbergung, Weltraumtourist, Satelliten-Bahn, Vorbeiflug, Orbit-Kartierung, Bodenprobe) mit Geld & Forschungspunkten |
 | 40 | 🎯 **Scharfschütze 3D** | [`games/scharfschuetze.html`](games/scharfschuetze.html) | `action` | Three.js | 3D-Scharfschützen-Tal vom Hochstand (75m–260m+): 11 Zieltypen (3D-Zielscheibe mit Ringen, artikulierter Läufer hinter 3D-Deckung, Gepanzert mit zerstörbarer Brustplatte & leuchtendem Visier-Weakspot, 3D-Drohne mit Rotoren, Explosiv-Fass mit 3D-Druckwelle, Zivilisten-Sperrziel, Gegen-Scharfschütze mit Zielfernrohr-Glitzern & Warnpfeilen, Geiselnehmer hinter Geisel, fliehende Zielperson, Deckungsschütze hinter Sandsäcken, Bonus-Ballon mit Magazin-Refill), 3D-Gewehr-Viewmodel mit Rückstoß, Kammerstängel-Animation & Hülsenauswurf, FFP-MIL-DOT-Zielfernrohr (4×–12×) mit Laser-Entfernungsmesser & Windage-Baum, 3D-Windfahnen, Atem-Schwanken, 7 Themen-Missionen (Tag, Industrie, Gebirge, Nacht mit Scheinwerfer, Dämmerungs-Dorf, Wüstenschlucht, Schneelager) mit je 2 Bonuszielen, Treffer-Distanz-Popups & Endlos-Schießstand |
 | 41 | 🏗️ **Kranführer 3D** | [`games/kranfuehrer.html`](games/kranfuehrer.html) | `sim` | Three.js | Turmdrehkran mit selbstgerechneter 2-Achsen-Pendelphysik (Verlet + Seil-Constraint), Torsion langer Stahlträger um die Seilachse, Windböen ab Level 3 mit Windsack & HUD-Pfeil, AABB-Absetzen mit Einrast-Ghost, Schaden bei hartem Aufprall, laufende Bauarbeiter, 5 Level mit Containern, Trägern, Betonplatten & Dachkranz, Kabinenansicht, Touch-Doppelstick |
+| 42 | 🦇 **Echolot 3D: Blinde Fledermaus** | [`games/echolot.html`](games/echolot.html) | `action` | Three.js | Komplett schwarze Höhle (418 m Rundkurs mit 3 Hallen, Engstellen, Tropfsteinen & Säulen, in Blender modelliert und in 16 Stücke geteilt): ShaderMaterial mit 4 gleichzeitigen Ping-Slots lässt Flächen & Quad-Kanten nur dort aufleuchten, wo die Schallwelle vorbeizieht, und nach 1,5 s verblassen; Halten = lauter Ping (mehr Reichweite, scheucht Motten auf, aber größerer Hörradius der Eule), Atem-Leiste, Echo-Ton mit Verzögerung & Tonhöhe nach Wandabstand, Eulen-KI (kreisen/lauschen/jagen/abziehen) entlang der Höhlen-Mittellinie mit Stereo-Flügelschlägen & glühenden Augen, 6-Strahl-Kollision + Sweep mit Betäubung, Motten-Kombos, Touch-Joystick |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
