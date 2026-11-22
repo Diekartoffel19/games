@@ -588,7 +588,7 @@ function startRun() {
   world = makeWorld(); simTime = 0; acc = 0; timeScale = 1; lastActivity = 0; fallenCount = 0; tickRate = 0; lastTick = -1;
   pushT = 0; pushed = false;
   runBodies = [startRec, ...placed].map(rec => {
-    rec.body = dynBody(1, M.dom, DW / 2, DH / 2, DT / 2, rec.x, rec.y + DH / 2 + 0.002, rec.z, rec.a); rec.tilted = false; return rec;
+    rec.body = dynBody(1, M.dom, DW / 2, DH / 2, DT / 2, rec.x, rec.y + DH / 2 + 0.002, rec.z, rec.a); rec.tilted = false; rec.damped = false; return rec;
   });
   targets.forEach(t => {
     if (t.type === 'bell') { t.body = new CANNON.Body({ mass: 0, material: M.st }); t.body.addShape(new CANNON.Box(new CANNON.Vec3(0.45, 0.35, 0.45))); t.body.position.set(t.x, t.y + 0.35, t.z); world.addBody(t.body); }
@@ -660,7 +660,9 @@ function updateRun(dt) {
       clickTone(tickRate, 0.07);
       wave.set(b.position.x, b.position.y, b.position.z);
     }
-    if (b.velocity.norm2() > 0.09 || b.angularVelocity.norm2() > 0.25) active = true;
+    // liegende Steine ohne Reibung zittern sonst endlos aufeinander (Startbereich wackelt, Lauf endet nie)
+    if (rec.tilted && !rec.damped && upY(b) < 0.5) { rec.damped = true; b.angularDamping = 0.7; b.linearDamping = 0.3; }
+    if (b.velocity.norm2() > 0.09 || (b.angularVelocity.norm2() > 0.25 && upY(b) > 0.5)) active = true;
   }
   for (const t of targets) {
     if (!t.body) continue;
@@ -674,7 +676,8 @@ function updateRun(dt) {
     if (t.type === 'bell' && t.ringT > 0) { t.ringT = Math.max(0, t.ringT - dt * 1.5); t.mesh.scale.setScalar(1 + Math.sin(t.ringT * 40) * 0.06 * t.ringT); }
   }
   if (active) lastActivity = simTime;
-  if ((simTime > 1.5 && simTime - lastActivity > 1.6) || simTime > 45) finishRun();
+  const done = targets.every(t => t.hit) && simTime - Math.max(lastTick, 0) > 2;
+  if (done || (simTime > 1.5 && simTime - lastActivity > 1.6) || simTime > 45) finishRun();
 }
 
 function finishRun() {
