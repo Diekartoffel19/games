@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Seiltänzer 3D: Zwischen den Wolkenkratzern</title>
+<meta name="description" content="Balanciere in der Abenddämmerung auf einem Drahtseil zwischen Wolkenkratzern. Windböen, schwingendes Seil, Tauben auf der Stange – ein falscher Schritt und es geht 180 Meter abwärts.">
+<meta name="keywords" content="Seiltänzer Spiel, Balance Spiel, Hochseil, 3D Browser Spiel, Three.js, Wolkenkratzer">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#2a1d3a">
+<link rel="canonical" href="https://rwpxe.com/games/seiltaenzer.html">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Seiltänzer 3D: Zwischen den Wolkenkratzern">
+<meta property="og:description" content="Ein Seil, eine Stange, 180 Meter Luft darunter. Wie weit kommst du?">
+<meta property="og:locale" content="de_DE">
+
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- Geometrie aus Blender (models/seiltaenzer.blend): Seiltänzer mit Stange, Taube, Seilanker, 3 Dach-Varianten -->
+<script src="models/seiltaenzer_models.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #2a1d3a; color: #fff4ea;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+  #view { position: fixed; inset: 0; z-index: 1; }
+  #view canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+
+  .back-btn {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 50;
+    color: #ffe2c8; text-decoration: none; font-weight: 700; font-size: 0.9rem;
+    background: rgba(30, 14, 30, 0.8); border: 1px solid rgba(255, 160, 90, 0.5);
+    padding: 0 16px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px;
+  }
+  .back-btn:hover { background: #b4532a; color: #fff; }
+  .top-actions {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 50;
+    display: flex; gap: 8px;
+  }
+  .action-btn {
+    background: rgba(30, 14, 30, 0.8); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff4ea;
+    padding: 0 14px; min-height: 44px; min-width: 44px; border-radius: 999px; cursor: pointer; font-size: 0.85rem; font-weight: 700;
+  }
+  .action-btn:hover { background: rgba(180, 83, 42, 0.6); }
+
+  #hud {
+    position: fixed; top: calc(64px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 20;
+    display: flex; flex-wrap: wrap; gap: 6px; max-width: min(560px, 70vw); pointer-events: none;
+  }
+  .pill {
+    background: rgba(30, 14, 30, 0.72); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 999px;
+    padding: 4px 12px; font-size: 0.82rem; font-weight: 800; color: #d8b9a8; white-space: nowrap;
+  }
+  .pill b { color: #ffb070; }
+  #stylePill.on { border-color: #fde047; } #stylePill.on b { color: #fde047; }
+
+  #progress {
+    position: fixed; top: calc(18px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 20;
+    width: min(300px, 40vw); height: 8px; border-radius: 999px; background: rgba(30, 14, 30, 0.75);
+    border: 1px solid rgba(255, 176, 112, 0.4); overflow: hidden; pointer-events: none;
+  }
+  #progFill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #f97316, #fde047); }
+
+  #wind {
+    position: fixed; top: calc(36px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 20;
+    font-size: clamp(1rem, 3vw, 1.3rem); font-weight: 950; color: #dff2ff; background: rgba(10, 30, 50, 0.8); border: 1px solid rgba(150, 210, 255, 0.6);
+    border-radius: 999px; padding: 2px 16px;
+    opacity: 0; pointer-events: none; white-space: nowrap; transition: opacity 0.2s;
+  }
+  #wind.warn { animation: blink 0.35s infinite alternate; }
+  @keyframes blink { from { filter: brightness(0.7); } to { filter: brightness(1.6); } }
+
+  #meter {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(40px + env(safe-area-inset-bottom)); z-index: 20;
+    width: min(230px, 50vw); pointer-events: none;
+  }
+  #meter svg { width: 100%; display: block; overflow: visible; }
+  #meterTxt { position: absolute; left: 50%; transform: translateX(-50%); bottom: -4px; white-space: nowrap; text-align: center; font-size: 0.7rem; font-weight: 900; letter-spacing: 1px; color: #ffe2c8; background: rgba(30, 14, 30, 0.85); border-radius: 999px; padding: 2px 10px; }
+  #meter.perfect #meterTxt { color: #fde047; }
+
+  #msg {
+    position: fixed; top: 21%; left: 50%; transform: translate(-50%, -50%); z-index: 30; pointer-events: none;
+    text-align: center; opacity: 0; transition: opacity 0.25s; font-size: clamp(1.4rem, 4.5vw, 2.2rem); font-weight: 950;
+    text-shadow: 0 0 18px rgba(255, 140, 60, 0.6), 0 2px 4px #000; max-width: calc(100vw - 32px);
+  }
+  #msg.show { opacity: 1; }
+  #msg small { display: block; font-size: 0.5em; font-weight: 800; color: #ffd9c0; }
+  #flash { position: fixed; inset: 0; z-index: 12; pointer-events: none; background: radial-gradient(circle, transparent 35%, rgba(200, 20, 20, 0.65)); opacity: 0; }
+
+  #hint span { background: rgba(30, 14, 30, 0.75); border-radius: 999px; padding: 3px 12px; }
+  #hint {
+    position: fixed; bottom: calc(6px + env(safe-area-inset-bottom)); left: 0; right: 0; z-index: 20; text-align: center;
+    pointer-events: none; color: rgba(255, 226, 200, 0.85); font-size: 0.78rem; font-weight: 600; padding: 0 12px;
+  }
+  kbd {
+    background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px;
+    padding: 0 5px; font-family: inherit; font-weight: 800; color: #fff;
+  }
+
+  .modal {
+    position: fixed; inset: 0; z-index: 60; background: rgba(20, 8, 20, 0.6); display: none; align-items: center; justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .card {
+    background: linear-gradient(165deg, #3a1f3a, #150a18); border: 2px solid #ff9a5a; border-radius: 22px; max-width: 520px; width: 100%;
+    max-height: 100%; overflow-y: auto; padding: clamp(20px, 5vw, 30px); text-align: center; box-shadow: 0 0 60px rgba(255, 140, 60, 0.25);
+  }
+  .card h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 5vw, 2.2rem); font-weight: 950; color: #ffb070; text-shadow: 0 0 20px rgba(255, 140, 60, 0.5); }
+  .card p { color: #e8cbbb; font-size: 0.93rem; line-height: 1.5; margin: 0 0 14px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; text-align: left; }
+  .stats:empty { display: none; }
+  .stat { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 8px 12px; }
+  .stat div:first-child { font-size: 0.7rem; color: #c49a88; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat div:last-child { font-size: 1.3rem; font-weight: 900; color: #fff4ea; }
+  .primary {
+    width: 100%; min-height: 52px; border: none; border-radius: 14px; cursor: pointer; font-size: 1.1rem; font-weight: 900;
+    background: linear-gradient(135deg, #fdba74, #ea580c); color: #2a0f00;
+  }
+  .primary:hover { filter: brightness(1.1); }
+
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  body.touch #hint { display: none; }
+  body.touch #meter { bottom: calc(118px + env(safe-area-inset-bottom)); width: min(240px, 56vw); }
+  .tbtn {
+    position: fixed; z-index: 40; bottom: calc(18px + env(safe-area-inset-bottom)); height: 84px; border-radius: 22px; touch-action: none;
+    border: 2px solid rgba(255, 176, 112, 0.55); background: rgba(30, 14, 30, 0.6); color: #ffe2c8; font-size: 0.9rem; font-weight: 900;
+  }
+  .tbtn.on { background: #b4532a; }
+  #btnWalk { left: 50%; transform: translateX(-50%); width: min(200px, 44vw); }
+  #btnShake { right: calc(14px + env(safe-area-inset-right)); width: 72px; height: 72px; border-radius: 50%; font-size: 1.4rem; }
+  #btnTilt { left: calc(14px + env(safe-area-inset-left)); width: 72px; height: 72px; border-radius: 50%; font-size: 0.75rem; }
+  #touchZones { position: fixed; top: 45%; left: 0; right: 0; z-index: 5; display: flex; justify-content: space-between; padding: 0 18px; pointer-events: none; font-size: 0.78rem; font-weight: 800; color: rgba(255, 226, 200, 0.45); }
+  body.tilt #touchZones { display: none; }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back-btn">← Arcade</a>
+<div class="top-actions">
+  <button class="action-btn" id="pauseBtn" title="Pause (P)">⏸</button>
+  <button class="action-btn" id="soundBtn" title="Sound an/aus">🔊</button>
+</div>
+
+<div id="view"></div>
+<div id="flash"></div>
+
+<div id="hud">
+  <div class="pill">⭐ <b id="hScore">0</b></div>
+  <div class="pill">🏙️ Seil <b id="hLevel">1</b></div>
+  <div class="pill">📏 <b id="hDist">0</b> m</div>
+  <div class="pill" id="stylePill">✨ <b id="hStyle">0</b></div>
+  <div class="pill">❤️ <b id="hLives">3</b></div>
+  <div class="pill">🏆 <b id="hBest">0</b></div>
+</div>
+<div id="progress"><div id="progFill"></div></div>
+<div id="wind"></div>
+
+<div id="meter">
+  <svg viewBox="0 0 220 120" id="meterSvg"></svg>
+  <div id="meterTxt">BALANCE</div>
+</div>
+<div id="msg"></div>
+<div id="hint">
+  <span><kbd>A</kbd>/<kbd>D</kbd> oder <kbd>Maus</kbd> Stange neigen · <kbd>W</kbd>/<kbd>Klick halten</kbd> gehen · <kbd>Leer</kbd> Tauben abschütteln · <kbd>P</kbd> Pause</span>
+</div>
+
+<div id="touch">
+  <div id="touchZones"><span>◀ links halten</span><span>rechts halten ▶</span></div>
+  <button class="tbtn" id="btnTilt">📱<br>Neigen</button>
+  <button class="tbtn" id="btnWalk">🚶 Halten = Gehen</button>
+  <button class="tbtn" id="btnShake">🐦</button>
+</div>
+
+<div class="modal" id="modal">
+  <div class="card">
+    <h1 id="mTitle">🎪 Seiltänzer 3D</h1>
+    <p id="mText"></p>
+    <div class="stats" id="mStats"></div>
+    <button class="primary" id="mBtn">Aufs Seil</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ============ ArcadeCore ============
+const AC = window.ArcadeCore || null;
+const snd = (name, ...a) => { try { if (AC && AC[name]) AC[name](...a); } catch (e) {} };
+const KEY = 'seiltaenzer';
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const V3 = THREE.Vector3;
+
+const DATA = window.SEILTAENZER_MODELS;
+if (!DATA) { $('mText').textContent = 'Modelle (models/seiltaenzer_models.js) konnten nicht geladen werden.'; $('modal').style.display = 'flex'; $('mBtn').hidden = true; return; }
+
+// ============ Tuning ============
+const ROPE_Y = 1.1, ROOF = 16, ANCHOR_IN = 6.8, CLAMP = 0.85, GROUND_Y = -180;
+const FALL_AT = 0.62;              // Neigung (rad), ab der man fällt
+const PERFECT = 0.06;              // Stil-Bereich
+const WALK_MAX = 2.2, LIVES = 3;
+// Level-Parameter: Spannweite, Böen, Seil-Schwingen, Tauben, schlaffes Seil, Regen
+function lvl(n) {
+  return {
+    L: Math.min(110, 30 + 12 * n),
+    gust: Math.min(1.5, 0.45 + 0.17 * n), gustEvery: Math.max(3.2, 9 - 0.8 * n),
+    sway: Math.min(0.7, 0.1 + 0.08 * n),
+    pigeons: n >= 2, pigeonEvery: Math.max(5, 15 - 1.4 * n),
+    slack: n >= 4, rain: n >= 5,
+  };
+}
+const NEWS = {
+  2: 'Tauben! 🐦<small>Sie landen auf der Stange – Leertaste schüttelt sie ab</small>',
+  3: 'Das Seil schwingt stärker<small>In der Mitte am schlimmsten</small>',
+  4: 'Schlaffes Seil<small>Mehr Durchhang, wackliger Stand</small>',
+  5: 'Regen 🌧️<small>Rutschige Stange, unruhiger Wind</small>',
+};
+
+// ============ Renderer ============
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+$('view').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x7a4f70, 0.0026);
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 2500);
+function fitCamera() {
+  camera.aspect = innerWidth / innerHeight; camera.fov = camera.aspect < 1 ? 82 : 62;
+  camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
+}
+fitCamera(); addEventListener('resize', fitCamera);
+
+// ============ Dämmerungs-Himmel ============
+const SUN_DIR = new V3(-0.55, 0.07, -0.83).normalize();
+{
+  const g = new THREE.SphereGeometry(1800, 32, 20), col = [], c = new THREE.Color();
+  const stops = [[-1, 0x2a1d3a], [-0.05, 0x5a3355], [0.0, 0xff8a4c], [0.06, 0xf06a5a], [0.2, 0x7a3f78], [0.5, 0x2c2456], [1, 0x0f1030]];
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i) / 1800;
+    let k = 0; while (k < stops.length - 2 && y > stops[k + 1][0]) k++;
+    const [y0, c0] = stops[k], [y1, c1] = stops[k + 1];
+    c.set(c0).lerp(new THREE.Color(c1), clamp((y - y0) / (y1 - y0), 0, 1));
+    // Richtung Sonne etwas heller
+    const s = Math.max(0, (p.getX(i) * SUN_DIR.x + p.getZ(i) * SUN_DIR.z) / 1800);
+    c.lerp(new THREE.Color(0xffb070), s * s * 0.35 * clamp(1 - Math.abs(y) * 3, 0, 1));
+    col.push(c.r, c.g, c.b);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  var sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  sky.renderOrder = -1; scene.add(sky);
+  var sun = new THREE.Mesh(new THREE.CircleGeometry(38, 32), new THREE.MeshBasicMaterial({ color: 0xffd08a, fog: false }));
+  scene.add(sun);
+}
+scene.add(new THREE.HemisphereLight(0xffb89a, 0x2a2048, 0.75));
+const sunLight = new THREE.DirectionalLight(0xff9a5a, 1.25);
+sunLight.position.copy(SUN_DIR).multiplyScalar(100).add(new V3(0, 40, 0)); scene.add(sunLight);
+const fill = new THREE.DirectionalLight(0x8a7aff, 0.35); fill.position.set(30, 20, 40); scene.add(fill);
+
+// ============ Texturen ============
+function canvasTex(w, h, draw, rx = 1, ry = 1) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  draw(cv.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+  t.anisotropy = 4; t.encoding = THREE.sRGBEncoding;
+  return t;
+}
+// Fassade: Fensterraster, ein Teil der Fenster ist beleuchtet (eigene Emissive-Map)
+const LIT = [];
+for (let i = 0; i < 8 * 32; i++) LIT.push(Math.random() < 0.28 ? ['#ffd38a', '#ffe7b0', '#ffb45a', '#cfe8ff'][Math.floor(Math.random() * 4)] : null);
+const drawWindows = emissive => (x, w, h) => {
+  x.fillStyle = emissive ? '#000' : '#2a2c38'; x.fillRect(0, 0, w, h);
+  for (let r = 0; r < 32; r++) for (let c = 0; c < 8; c++) {
+    const lit = LIT[r * 8 + c];
+    x.fillStyle = emissive ? (lit || '#000') : lit ? '#806a50' : (r + c) % 3 ? '#1a1d28' : '#33405a';
+    x.fillRect(c * 16 + 3, r * 8 + 2, 10, 5);
+  }
+};
+const facadeMap = canvasTex(128, 256, drawWindows(false), 2, 2);
+const facadeEmit = canvasTex(128, 256, drawWindows(true), 2, 2);
+const facadeMat = new THREE.MeshLambertMaterial({ map: facadeMap, emissiveMap: facadeEmit, emissive: 0xffffff, emissiveIntensity: 0.95 });
+const roofTopMat = new THREE.MeshLambertMaterial({ color: 0x24242c });
+const streetTex = canvasTex(256, 256, (x, w, h) => {
+  x.fillStyle = '#16121c'; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#ff9a40'; x.fillRect(0, 120, w, 16); x.fillRect(120, 0, 16, h);
+  x.fillStyle = '#ffe0a0'; for (let i = 0; i < w; i += 16) { x.fillRect(i, 122, 6, 3); x.fillRect(122, i, 3, 6); }
+  x.fillStyle = '#ff3030'; for (let i = 8; i < w; i += 32) { x.fillRect(i, 131, 6, 3); x.fillRect(131, i, 3, 6); }
+}, 60, 60);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshBasicMaterial({ map: streetTex }));
+ground.rotation.x = -Math.PI / 2; ground.position.set(0, GROUND_Y, -1200); scene.add(ground);
+
+// ============ Modelle aus Blender ============
+const MATS = {};
+const matFor = (c, e) => MATS[c + e] || (MATS[c + e] = new THREE.MeshStandardMaterial({
+  color: c, flatShading: true, roughness: 0.85, metalness: 0.05, emissive: e ? c : 0x000000, emissiveIntensity: e ? 1.2 : 0 }));
+const MODEL = {};
+DATA.objects.forEach(o => {
+  const g = new THREE.Group();
+  o.parts.forEach(p => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(p.v, 3)); geo.setIndex(p.f); geo.computeVertexNormals();
+    g.add(new THREE.Mesh(geo, matFor(p.c, p.e)));
+  });
+  g.position.fromArray(o.t);
+  MODEL[o.n] = { g, parent: o.p };
+});
+// Baum aus Teilen mit gleichem Präfix (z.B. walker_body/legL/legR/pole), jedes Mal frisch geklont
+function makeRig(prefix) {
+  const parts = {};
+  Object.keys(MODEL).filter(n => n.startsWith(prefix + '_')).forEach(n => { parts[n.slice(prefix.length + 1)] = MODEL[n].g.clone(); });
+  Object.keys(parts).forEach(k => { const p = MODEL[prefix + '_' + k].parent; if (p) parts[p.slice(prefix.length + 1)].add(parts[k]); });
+  return parts;
+}
+const ROOFS = ['roof_A', 'roof_B', 'roof_C'];
+
+// ============ Welt: Gebäude-Kette, Seile, Hintergrund-Stadt ============
+const spans = [];     // { level, L, z0, z1, rope (statisches Mesh) }
+const buildings = []; // z-Mitte jedes Gebäudes
+const shaftGeo = new THREE.BoxGeometry(ROOF, -GROUND_Y, ROOF);
+const ropeMat = new THREE.MeshStandardMaterial({ color: 0xd9c7a0, roughness: 0.6, metalness: 0.3 });
+const plankMat = new THREE.MeshLambertMaterial({ color: 0x8a5a32 });
+function addBuilding(zc, k) {
+  const shaft = new THREE.Mesh(shaftGeo, [facadeMat, facadeMat, roofTopMat, roofTopMat, facadeMat, facadeMat]);
+  shaft.position.set(0, GROUND_Y / 2 - 0.3, zc); scene.add(shaft);
+  const roof = MODEL[ROOFS[k % 3]].g.clone(); roof.position.set(0, 0, zc); if (k % 2) roof.rotation.y = Math.PI; scene.add(roof);
+  if (k > 0) { const a = MODEL.anchor.g.clone(); a.position.set(0, 0, zc + ANCHOR_IN); a.rotation.y = Math.PI; scene.add(a); }
+  const d = MODEL.anchor.g.clone(); d.position.set(0, 0, zc - ANCHOR_IN); scene.add(d);
+  const plank = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, ANCHOR_IN * 2 - 1.2), plankMat);
+  plank.position.set(0, 1.0, zc); scene.add(plank);
+  buildings.push(zc);
+}
+function ensureWorld(k) {
+  if (!buildings.length) addBuilding(0, 0);
+  while (spans.length < k + 3) {
+    const n = spans.length, P = lvl(n + 1), z0 = buildings[n] - ANCHOR_IN - CLAMP, z1 = z0 - P.L;
+    const s = { level: n + 1, L: P.L, z0, z1, P };
+    s.rope = new THREE.Mesh(ropeGeo(s, 0, 0, 0), ropeMat); scene.add(s.rope);
+    spans.push(s);
+    addBuilding(z1 - ANCHOR_IN - CLAMP, n + 1);
+  }
+}
+// Seilform: Durchhang + Delle unter dem Läufer + seitliches Schwingen
+const sagOf = s => s.P.slack ? 1.8 : 0.7;
+function ropePoint(s, f, uw, dip, sx, out) {
+  const tri = uw <= 0 ? 0 : f < uw ? f / uw : (1 - f) / Math.max(1e-4, 1 - uw);
+  return out.set(sx * Math.sin(Math.PI * f), ROPE_Y - sagOf(s) * 4 * f * (1 - f) - dip * tri, s.z0 + (s.z1 - s.z0) * f);
+}
+function ropeGeo(s, uw, dip, sx) {
+  const pts = [];
+  for (let i = 0; i <= 40; i++) pts.push(ropePoint(s, i / 40, uw, dip, sx, new V3()));
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 0.03, 5, false);
+}
+
+// Hintergrund-Stadt: eine InstancedMesh-Ladung Hochhäuser links und rechts
+{
+  const N = 420, city = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), [facadeMat, facadeMat, roofTopMat, roofTopMat, facadeMat, facadeMat], N);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    const side = i % 2 ? 1 : -1, w = rnd(14, 34), d = rnd(14, 34), top = rnd(-110, 35) * (Math.random() < 0.15 ? 0.3 : 1);
+    const x = side * rnd(26, 340), z = rnd(200, -3200), h = top - GROUND_Y;
+    m.compose(new V3(x, GROUND_Y + h / 2, z), q, new V3(w, h, d));
+    city.setMatrixAt(i, m);
+    city.setColorAt(i, c.setHSL(rnd(0.6, 0.95), rnd(0.05, 0.25), rnd(0.55, 1)));
+  }
+  scene.add(city);
+}
+
+// ============ Läufer & Tauben ============
+const W = makeRig('walker');
+scene.add(W.body);
+const pigeons = [];  // { rig, side, state: 'in'|'sit'|'out'|'off', t }
+for (let i = 0; i < 4; i++) {
+  const rig = makeRig('pigeon'); rig.body.visible = false; rig.body.scale.setScalar(1.6); W.pole.add(rig.body);
+  pigeons.push({ rig, side: i < 2 ? -1 : 1, slot: i % 2, state: 'off', t: 0 });
+}
+const POLE_END = 2.45;
+
+// Windlinien & Regen (Liniensegmente rund um den Läufer)
+const STREAKS = 160;
+const streakGeo = new THREE.BufferGeometry(); streakGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(STREAKS * 6), 3));
+const streakMat = new THREE.LineBasicMaterial({ color: 0xdff2ff, transparent: true, opacity: 0, depthWrite: false, fog: false });
+const streaks = new THREE.LineSegments(streakGeo, streakMat); streaks.frustumCulled = false; scene.add(streaks);
+const streakData = []; for (let i = 0; i < STREAKS; i++) streakData.push({ x: rnd(-20, 20), y: rnd(-6, 5), z: rnd(-20, 5), len: rnd(2, 5) });
+const DROPS = 700;
+const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(DROPS * 6), 3));
+const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0x9fb8d8, transparent: true, opacity: 0.45, fog: false }));
+rain.frustumCulled = false; rain.visible = false; scene.add(rain);
+const dropData = []; for (let i = 0; i < DROPS; i++) dropData.push(new V3(rnd(-20, 20), rnd(-15, 15), rnd(-30, 10)));
+
+// ============ Audio ============
+function tone(freq, dur, o = {}) {
+  if (!AC || AC.isMuted()) return;
+  const ctx = AC.getAudioContext(); if (!ctx) return;
+  try {
+    const t0 = ctx.currentTime + (o.delay || 0);
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if (o.slide) osc.frequency.exponentialRampToValueAtTime(o.slide, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(o.gain || 0.1, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g);
+    if (ctx.createStereoPanner && o.pan) { const p = ctx.createStereoPanner(); p.pan.value = clamp(o.pan, -1, 1); g.connect(p); p.connect(ctx.destination); }
+    else g.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+// Dauerwind: Rauschen durch Bandpass, Lautstärke/Höhe/Stereo folgen der Böe
+let windNode = null;
+function initWind() {
+  if (windNode || !AC) return;
+  const ctx = AC.getAudioContext(); if (!ctx) return;
+  try {
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0);
+    let last = 0; for (let i = 0; i < d.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8; bp.frequency.value = 400;
+    const g = ctx.createGain(); g.gain.value = 0;
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    src.connect(bp); bp.connect(g);
+    if (pan) { g.connect(pan); pan.connect(ctx.destination); } else g.connect(ctx.destination);
+    src.start();
+    windNode = { ctx, bp, g, pan };
+  } catch (e) {}
+}
+function setWindSound(level, dir) {
+  if (!windNode) return;
+  const t = windNode.ctx.currentTime, on = AC.isMuted() || state !== 'play' || phase === 'fall' ? 0 : 1;
+  windNode.g.gain.setTargetAtTime(on * (0.04 + 0.5 * level), t, 0.1);
+  windNode.bp.frequency.setTargetAtTime(300 + 900 * level, t, 0.15);
+  if (windNode.pan) windNode.pan.pan.setTargetAtTime(-dir * 0.7 * Math.min(1, level * 2), t, 0.2); // kommt von der Gegenseite
+}
+const coo = (side) => { tone(420, 0.18, { slide: 330, gain: 0.07, pan: side * 0.8, type: 'triangle' }); tone(380, 0.22, { slide: 300, gain: 0.06, pan: side * 0.8, delay: 0.22, type: 'triangle' }); };
+const flapSnd = (side) => { for (let i = 0; i < 4; i++) tone(rnd(160, 240), 0.05, { type: 'square', gain: 0.04, pan: side * 0.8, delay: i * 0.06 }); };
+
+// ============ Spielzustand ============
+let state = 'menu', phase = 'rope', score = 0, style = 0, lives = LIVES, elapsed = 0;
+let spanIdx = 0, u = 0, v = 0, theta = 0, omega = 0, pole = 0, stepPh = 0, lastStep = 0;
+let bonus = 0, cpBonus = 0, cpStyle = 0, distDone = 0;
+let gust = null, gustTimer = 5, pigeonTimer = 10, swayT = 0, roofT = 0, heartbeat = 0, perfectT = 0, cooT = 0;
+let resumeFromCp = false, fall = null, msgTimer = 0, flashT = 0, shake = 0, demoT = 0;
+let best = Number(AC ? AC.getScore(KEY) : 0) || 0;
+const keys = {};
+let mouseP = 0, mouseActive = false, mouseWalk = false, touchWalk = false, tiltOn = false, tiltP = 0, isTouch = false;
+const touchPts = new Map();
+
+const span = () => spans[spanIdx];
+function showMsg(html, t = 1.8) { $('msg').innerHTML = html; $('msg').classList.add('show'); msgTimer = t; }
+
+function placeAtSpanStart() {
+  ensureWorld(spanIdx);
+  phase = 'rope'; u = 0; v = 0; theta = rnd(-0.02, 0.02); omega = 0; pole = 0; fall = null; stepPh = 0; lastStep = 0; perfectT = 0;
+  gust = null; gustTimer = rnd(3, 5); pigeonTimer = rnd(6, 10); swayT = 0;
+  pigeons.forEach(p => { p.state = 'off'; p.rig.body.visible = false; });
+  rain.visible = span().P.rain;
+  W.body.rotation.set(0, 0, 0);
+  ropePoint(span(), 0, 0, 0, 0, W.body.position);
+  updateWalker(0);
+  camera.position.copy(W.body.position).add(new V3(0, 3.2, 4.4));
+}
+
+function resetGame() {
+  score = 0; style = 0; lives = LIVES; elapsed = 0; spanIdx = 0; bonus = 0; cpBonus = 0; cpStyle = 0; distDone = 0;
+  flashT = 0; shake = 0; msgTimer = 0; $('flash').style.opacity = 0; $('msg').classList.remove('show');
+  clearInput(); placeAtSpanStart(); updateHud();
+}
+
+// ============ Physik ============
+const _p = new V3(), _q = new V3();
+function inputP() {
+  const k = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+  if (k) return k;
+  if (isTouch) {
+    if (tiltOn) return tiltP;
+    let sum = 0, n = 0;
+    touchPts.forEach(x => { sum += clamp((x - innerWidth / 2) / (innerWidth * 0.3), -1, 1); n++; });
+    return n ? sum / n : 0;
+  }
+  return mouseActive ? mouseP : 0;
+}
+const walking = () => keys.KeyW || keys.ArrowUp || mouseWalk || touchWalk;
+
+function gustEnv() {
+  if (!gust) return { warn: 0, f: 0 };
+  const t = gust.t;
+  if (t < 0) return { warn: 1 + t / 1.6, f: 0 }; // Vorwarnung 1,6 s
+  const e = t < 0.4 ? t / 0.4 : t > gust.dur - 0.6 ? Math.max(0, (gust.dur - t) / 0.6) : 1;
+  return { warn: 0, f: e };
+}
+
+function stepRope(dt) {
+  const s = span(), P = s.P;
+  const pIn = inputP();
+  const rainy = P.rain;
+  pole += (pIn - pole) * Math.min(1, dt * (rainy ? 4.5 : 7));   // Stange folgt mit Verzögerung
+
+  // Gehen: schneller = instabiler
+  const want = walking() ? WALK_MAX : 0;
+  v += clamp(want - v, -3.5 * dt, 1.4 * dt);
+  u = Math.min(s.L, u + v * dt);
+  const f = u / s.L;
+
+  // Böen
+  gustTimer -= dt;
+  if (!gust && gustTimer <= 0) {
+    gust = { t: -1.6, dur: rnd(1.4, 2.6), dir: Math.random() < 0.5 ? -1 : 1, str: P.gust * rnd(0.75, 1.1) };
+  }
+  if (gust) { gust.t += dt; if (gust.t > gust.dur) { gust = null; gustTimer = rnd(0.7, 1.2) * P.gustEvery; } }
+  const ge = gustEnv();
+  const windF = gust ? gust.dir * gust.str * ge.f : 0;
+
+  // Seil schwingt seitlich, in der Mitte am stärksten (Schwingt-Beschleunigung kippt den Läufer)
+  swayT += dt;
+  const ws = 1.25 + 0.15 * Math.sin(swayT * 0.31);
+  const swayAmp = (P.sway + (P.slack ? 0.2 : 0)) * (0.6 + 0.4 * Math.min(1, v / WALK_MAX + Math.abs(windF)));
+  const sx = swayAmp * Math.sin(ws * swayT) + windF * 0.25;
+  const ax = -swayAmp * Math.sin(Math.PI * f) * ws * ws * Math.sin(ws * swayT);
+
+  // Tauben auf der Stange: Gewicht an einem Ende
+  let pig = 0; pigeons.forEach(p => { if (p.state === 'sit') pig += p.side * 0.32; });
+
+  // Schritte: jeder Schritt ein kleiner Schubs, abwechselnd links/rechts
+  stepPh += v * dt * 1.6;
+  if (Math.floor(stepPh) !== lastStep) {
+    lastStep = Math.floor(stepPh);
+    omega += (lastStep % 2 ? 1 : -1) * (0.05 + 0.06 * v) + rnd(-1, 1) * 0.07 * v * (rainy ? 1.6 : 1);
+    tone(rnd(90, 120), 0.08, { type: 'triangle', gain: 0.05 });
+  }
+
+  // Invertiertes Pendel
+  const A = 1.7 + (P.slack ? 0.35 : 0) + 0.25 * v / WALK_MAX, B = rainy ? 2.1 : 2.4, D = 0.75;
+  const noise = rnd(-1, 1) * (0.25 + 0.35 * v + (rainy ? 0.5 : 0));
+  const sub = 3, h = dt / sub;
+  for (let i = 0; i < sub; i++) {
+    const acc = A * Math.sin(theta) + B * pole + windF + pig - ax * 0.55 * Math.cos(theta) + noise - D * omega;
+    omega += acc * h; theta += omega * h;
+  }
+
+  // Stil & Punkte
+  const near = Math.abs(theta) < PERFECT && v > 0.4;
+  if (near) { style += 12 * s.level * dt; perfectT += dt; } else perfectT = 0;
+  score = Math.floor((distDone + u) * 10 + style + bonus);
+
+  // Rauschen im Ohr, Herzschlag bei Schräglage
+  setWindSound(ge.f * Math.min(1, gust ? gust.str : 0) + ge.warn * 0.15 + 0.05 * swayAmp, gust ? gust.dir : 0);
+  heartbeat -= dt;
+  if (Math.abs(theta) > 0.38 && heartbeat <= 0) { heartbeat = 0.45; tone(62, 0.12, { gain: 0.25 }); tone(55, 0.12, { gain: 0.2, delay: 0.14 }); }
+
+  s.rope.geometry.dispose();
+  s.rope.geometry = ropeGeo(s, f, 0.45 * Math.sin(Math.PI * f) + 0.05, sx);
+  ropePoint(s, f, f, 0.45 * Math.sin(Math.PI * f) + 0.05, sx, _p);
+  W.body.position.copy(_p);
+
+  if (Math.abs(theta) > FALL_AT) startFall();
+  else if (u >= s.L) arrive();
+  return { windF, ge };
+}
+
+function updatePigeons(dt) {
+  const s = span();
+  if (phase === 'rope' && s.P.pigeons) {
+    pigeonTimer -= dt;
+    if (pigeonTimer <= 0) {
+      pigeonTimer = rnd(0.7, 1.3) * s.P.pigeonEvery;
+      const free = pigeons.filter(p => p.state === 'off');
+      if (free.length) {
+        const p = free[Math.floor(Math.random() * free.length)];
+        p.state = 'in'; p.t = 0; p.rig.body.visible = true; coo(p.side);
+      }
+    }
+  }
+  pigeons.forEach(p => {
+    const b = p.rig.body, home = _q.set(p.side * (POLE_END - p.slot * 0.28), 0.06, 0);
+    if (p.state === 'off') return;
+    p.t += dt;
+    let flap = 0;
+    if (p.state === 'in') {
+      const k = Math.min(1, p.t / 1.6), e = 1 - (1 - k) * (1 - k);
+      b.position.set(home.x + p.side * 9 * (1 - e), home.y + 5 * (1 - e), home.z - 7 * (1 - e));
+      b.rotation.set(0, Math.atan2(-p.side, 0.6) * (1 - e) + (p.side > 0 ? -0.4 : 0.4) * e, 0);
+      flap = 1;
+      if (k >= 1) { p.state = 'sit'; p.t = 0; showMsg('🐦 Taube auf der Stange!<small>Leertaste = abschütteln</small>', 1.4); }
+    } else if (p.state === 'sit') {
+      b.position.copy(home); b.rotation.x = Math.sin(p.t * 3 + p.slot) * 0.15; // nicken
+      if (Math.random() < dt * 0.25) coo(p.side);
+    } else if (p.state === 'out') {
+      b.position.set(home.x + p.side * p.t * 6, home.y + p.t * 4, home.z + p.t * 2);
+      b.rotation.set(0, p.side > 0 ? -1.5 : 1.5, 0);
+      flap = 1;
+      if (p.t > 1.6) { p.state = 'off'; b.visible = false; }
+    }
+    const w = flap ? Math.sin(p.t * 38) * 0.9 : 0;
+    p.rig.wingL.rotation.z = w; p.rig.wingR.rotation.z = -w;
+    p.rig.wingL.scale.x = p.rig.wingR.scale.x = flap ? 1 : 0.4; // sitzend: Flügel angelegt
+  });
+}
+function shakePole() {
+  if (state !== 'play' || phase !== 'rope') return;
+  let any = false;
+  pigeons.forEach(p => { if (p.state === 'sit' || p.state === 'in') { p.state = 'out'; p.t = 0; any = true; flapSnd(p.side); } });
+  omega += rnd(-1, 1) * 0.22; // Schütteln kostet Ruhe
+  shake = Math.max(shake, 0.12);
+  if (!any) tone(200, 0.08, { type: 'square', gain: 0.03 });
+}
+
+function arrive() {
+  const s = span();
+  phase = 'roof'; roofT = 0; distDone += s.L; u = 0; v = 0; gust = null; perfectT = 0;
+  bonus += 250 * s.level; cpBonus = bonus; cpStyle = style; score = Math.floor(distDone * 10 + style + bonus);
+  pigeons.forEach(p => { if (p.state !== 'off') { p.state = 'out'; p.t = 0; } });
+  snd('powerup');
+  showMsg(`🏁 Dach ${s.level + 1} erreicht!<small>Checkpoint · +${250 * s.level} Bonus</small>`, 2.2);
+  ensureWorld(spanIdx + 1);
+}
+function stepRoof(dt) {
+  roofT += dt;
+  const s = span(), zFrom = s.z1, zTo = spans[spanIdx + 1].z0;
+  const k = clamp(roofT / 4, 0, 1);
+  theta *= Math.exp(-4 * dt); omega = 0; pole *= Math.exp(-4 * dt);
+  W.body.position.set(0, 1.04, zFrom + (zTo - zFrom) * k);
+  stepPh += dt * 3;
+  setWindSound(0.03, 0);
+  if (k >= 1) {
+    spanIdx++;
+    placeAtSpanStart();
+    const n = span().level;
+    if (NEWS[n]) showMsg(NEWS[n], 3); else showMsg(`Seil ${n} · ${span().L} m`, 1.8);
+  }
+}
+
+function startFall() {
+  phase = 'fall';
+  const dir = Math.sign(theta) || 1;
+  fall = { t: 0, dir, vel: new V3(dir * 2.2, 1.2, 0), spin: dir * 2.4, rot: theta };
+  pigeons.forEach(p => { if (p.state !== 'off') { p.state = 'out'; p.t = 0; } });
+  tone(900, 2.2, { type: 'sawtooth', slide: 180, gain: 0.06 });
+  tone(600, 2.2, { type: 'triangle', slide: 120, gain: 0.08 });
+  flashT = 0.6; shake = 0.3;
+}
+function stepFall(dt) {
+  fall.t += dt;
+  fall.vel.y = Math.max(-45, fall.vel.y - 9.81 * dt);
+  W.body.position.addScaledVector(fall.vel, dt);
+  fall.rot += fall.spin * dt; fall.spin *= 1 + dt * 0.3;
+  W.body.rotation.set(-fall.t * 1.4, 0, -fall.rot);
+  if (fall.t > 2.8) lifeLost();
+}
+
+function lifeLost() {
+  lives--;
+  snd('explosion');
+  state = 'over';
+  clearInput();
+  if (lives <= 0) { gameOver(); return; }
+  openModal('😱 Abgestürzt!', `Zum Glück gibt's ein Sprungtuch. Noch <b>${lives}</b> ${lives === 1 ? 'Versuch' : 'Versuche'} – weiter ab dem letzten Dach.`,
+    'Vom Dach weiter', [['Punkte', score], ['Seil', span().level], ['Geschafft', Math.floor(distDone + u) + ' m'], ['Rekord', Math.max(best, score)]]);
+  resumeFromCp = true;
+}
+
+function gameOver() {
+  snd('gameOver');
+  const record = score > best;
+  if (record) { best = score; if (AC) AC.saveScore(KEY, best); }
+  openModal(record ? '🏆 Neuer Rekord!' : '🎪 Vorstellung beendet', 'Alle Versuche aufgebraucht. Das Publikum unten applaudiert trotzdem.', 'Nochmal',
+    [['Punkte', score], ['Seile geschafft', spanIdx], ['Strecke', Math.floor(distDone + u) + ' m'], ['Stil', Math.floor(style)], ['Zeit', Math.round(elapsed) + ' s'], ['Rekord', best]]);
+}
+
+// ============ Darstellung ============
+const _look = new V3(), _cam = new V3();
+function updateWalker(dt) {
+  if (phase !== 'fall') {
+    W.body.rotation.set(0, 0, -theta);
+    W.pole.rotation.set(0, 0, -pole * 0.38);
+    W.pole.position.x = pole * 0.08;
+    const sw = Math.sin(stepPh * Math.PI) * Math.min(1, phase === 'roof' ? 1 : v / WALK_MAX) * 0.35;
+    W.legL.rotation.x = sw; W.legR.rotation.x = -sw;
+    // freies Bein pendelt gegen die Neigung
+    W.legL.rotation.z = W.legR.rotation.z = clamp(theta * 0.8, -0.3, 0.3);
+  } else {
+    W.legL.rotation.x = Math.sin(fall.t * 14) * 0.8; W.legR.rotation.x = -W.legL.rotation.x;
+    W.pole.rotation.z += dt * 3;
+  }
+}
+
+function updateCamera(dt) {
+  const p = W.body.position;
+  if (phase === 'fall') {
+    // Kamera stürzt hinterher und schaut nach unten
+    _cam.set(p.x * 0.6, Math.max(p.y + 7 + fall.t * 2, GROUND_Y + 10), p.z + 6);
+    camera.position.lerp(_cam, 1 - Math.exp(-2.2 * dt));
+    camera.lookAt(p);
+  } else {
+    _cam.set(p.x * 0.7, p.y + 3.2, p.z + 4.4);
+    camera.position.lerp(_cam, 1 - Math.exp(-5 * dt));
+    _look.set(p.x * 0.5, p.y - 3.2, p.z - 7);
+    camera.lookAt(_look);
+    camera.rotateZ(-theta * 0.22);
+  }
+  if (shake > 0) { shake -= dt; camera.position.x += rnd(-1, 1) * shake * 0.3; camera.position.y += rnd(-1, 1) * shake * 0.3; }
+  sky.position.copy(camera.position);
+  sun.position.copy(camera.position).addScaledVector(SUN_DIR, 1600); sun.lookAt(camera.position);
+}
+
+function updateFx(dt, windF, ge) {
+  const p = W.body.position, arr = streakGeo.attributes.position.array;
+  const dir = gust ? gust.dir : 1, vis = gust ? Math.max(ge.warn * 0.35, ge.f) : 0;
+  const spd = 8 + 30 * Math.abs(windF);
+  for (let i = 0; i < STREAKS; i++) {
+    const s = streakData[i];
+    s.x += dir * spd * dt;
+    if (s.x > 20) s.x -= 40; if (s.x < -20) s.x += 40;
+    const x = p.x + s.x, y = p.y + s.y, z = p.z + s.z;
+    arr[i * 6] = x; arr[i * 6 + 1] = y; arr[i * 6 + 2] = z;
+    arr[i * 6 + 3] = x - dir * s.len * (0.5 + vis); arr[i * 6 + 4] = y + 0.05; arr[i * 6 + 5] = z;
+  }
+  streakGeo.attributes.position.needsUpdate = true;
+  streakMat.opacity = vis * 0.85;
+  if (rain.visible) {
+    const ra = rainGeo.attributes.position.array;
+    for (let i = 0; i < DROPS; i++) {
+      const d = dropData[i];
+      d.y -= 22 * dt; d.x += windF * 6 * dt;
+      if (d.y < -15) { d.y += 30; d.x = rnd(-20, 20); }
+      const x = camera.position.x + d.x, y = camera.position.y + d.y, z = camera.position.z + d.z;
+      ra[i * 6] = x; ra[i * 6 + 1] = y; ra[i * 6 + 2] = z;
+      ra[i * 6 + 3] = x - windF * 0.2; ra[i * 6 + 4] = y + 0.7; ra[i * 6 + 5] = z;
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+  }
+  // Wind-Anzeige
+  const w = $('wind');
+  if (gust && phase === 'rope') {
+    w.style.opacity = 1;
+    w.textContent = gust.dir > 0 ? 'Böe von links  →→→' : '←←←  Böe von rechts';
+    w.classList.toggle('warn', ge.warn > 0);
+  } else w.style.opacity = 0;
+}
+
+// ============ HUD ============
+const ARC_R = 92, CX = 110, CY = 108, MAXDEG = 62;
+function arcPath(a0, a1, r) {
+  const p = a => [CX + r * Math.sin(a * Math.PI / 180), CY - r * Math.cos(a * Math.PI / 180)];
+  const [x0, y0] = p(a0), [x1, y1] = p(a1);
+  return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+}
+{
+  const deg = t => t / FALL_AT * MAXDEG, segs = [[-FALL_AT, -0.4, '#ef4444'], [-0.4, -0.2, '#f59e0b'], [-0.2, -PERFECT, '#84cc16'], [-PERFECT, PERFECT, '#fde047'],
+    [PERFECT, 0.2, '#84cc16'], [0.2, 0.4, '#f59e0b'], [0.4, FALL_AT, '#ef4444']];
+  $('meterSvg').innerHTML =
+    `<path d="${arcPath(-MAXDEG - 3, MAXDEG + 3, ARC_R)}" stroke="rgba(30,14,30,0.8)" stroke-width="22" fill="none" stroke-linecap="round"/>` +
+    segs.map(([a, b, c]) => `<path d="${arcPath(deg(a), deg(b), ARC_R)}" stroke="${c}" stroke-width="12" fill="none" opacity="0.85"/>`).join('') +
+    `<g id="poleMark"><path d="M${CX} ${CY - ARC_R + 12} l-6 10 h12 z" fill="#7dd3fc"/></g>` +
+    `<g id="needle"><line x1="${CX}" y1="${CY}" x2="${CX}" y2="${CY - ARC_R - 10}" stroke="#1a0a1a" stroke-width="8" stroke-linecap="round"/><line x1="${CX}" y1="${CY}" x2="${CX}" y2="${CY - ARC_R - 10}" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="${CX}" cy="${CY}" r="7" fill="#fff"/></g>`;
+}
+function updateHud() {
+  $('hScore').textContent = score; $('hLevel').textContent = span() ? span().level : 1;
+  $('hDist').textContent = Math.floor(distDone + u); $('hStyle').textContent = Math.floor(style);
+  $('hLives').textContent = lives; $('hBest').textContent = Math.max(best, score);
+  $('stylePill').classList.toggle('on', perfectT > 0.3);
+  $('meter').classList.toggle('perfect', perfectT > 0.3);
+  const pig = pigeons.some(p => p.state === 'sit');
+  $('meterTxt').innerHTML = Math.abs(theta) > 0.4 ? 'VORSICHT!' : pig ? '🐦 <kbd>Leer</kbd> abschütteln' : perfectT > 1.5 ? 'PERFEKT ✨' : 'BALANCE · <span style="color:#7dd3fc">▲ Stange</span>';
+  $('needle').setAttribute('transform', `rotate(${clamp(theta / FALL_AT, -1.1, 1.1) * MAXDEG} ${CX} ${CY})`);
+  $('poleMark').setAttribute('transform', `rotate(${pole * MAXDEG * 0.9} ${CX} ${CY})`);
+  $('progFill').style.width = (span() ? (phase === 'roof' ? 100 : u / span().L * 100) : 0) + '%';
+}
+
+// ============ Ablauf ============
+function openModal(title, text, btn, stats) {
+  $('mTitle').textContent = title; $('mText').innerHTML = text; $('mBtn').textContent = btn;
+  $('mStats').innerHTML = (stats || []).map(([k, v]) => `<div class="stat"><div>${k}</div><div>${v}</div></div>`).join('');
+  $('modal').style.display = 'flex';
+}
+function start() {
+  if (state === 'play') return;
+  $('modal').style.display = 'none';
+  initWind();
+  if (state === 'over' && resumeFromCp) {
+    resumeFromCp = false; bonus = cpBonus; style = cpStyle; score = Math.floor(distDone * 10 + style + bonus); clearInput(); placeAtSpanStart();
+    showMsg(`Seil ${span().level} · zweiter Versuch`, 1.6);
+  } else if (state !== 'pause') {
+    resetGame();
+    showMsg(`Seil 1 · ${span().L} m<small>Halte die Nadel in der Mitte</small>`, 2.4);
+  }
+  state = 'play';
+}
+function clearInput() {
+  for (const k in keys) keys[k] = false;
+  mouseWalk = touchWalk = false; touchPts.clear();
+  document.querySelectorAll('.tbtn.on').forEach(el => { if (el.id !== 'btnTilt') el.classList.remove('on'); });
+}
+function pause() {
+  if (state !== 'play') return;
+  state = 'pause'; clearInput(); setWindSound(0, 0);
+  openModal('⏸ Pause', 'Das Seil wartet. Der Wind nicht unbedingt.', 'Weiter');
+}
+
+// ============ Eingabe ============
+const canvas = renderer.domElement;
+document.addEventListener('mousemove', e => {
+  mouseP = clamp((e.clientX / innerWidth - 0.5) * 2.4, -1, 1); mouseActive = true;
+});
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') { if (e.button === 0) { mouseWalk = true; canvas.setPointerCapture(e.pointerId); } return; }
+  setTouch(); touchPts.set(e.pointerId, e.clientX);
+});
+canvas.addEventListener('pointermove', e => { if (touchPts.has(e.pointerId)) touchPts.set(e.pointerId, e.clientX); });
+const ptrEnd = e => { if (e.pointerType === 'mouse' && e.button === 0) mouseWalk = false; touchPts.delete(e.pointerId); };
+addEventListener('pointerup', ptrEnd); addEventListener('pointercancel', ptrEnd);
+
+addEventListener('keydown', e => {
+  if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  if (['KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight'].includes(e.code)) mouseActive = false; // Tastatur hat Vorrang, bis die Maus wieder bewegt wird
+  if (e.repeat) return;
+  if (e.code === 'Space') shakePole();
+  if (e.code === 'Escape' && state === 'play') pause();
+  if (e.code === 'KeyP') { if (state === 'play') pause(); else if (state === 'pause') start(); }
+  if (e.code === 'Enter' && state !== 'play') start();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; pause(); });
+document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => b.blur()));
+document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+function setTouch() { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); } }
+addEventListener('touchstart', setTouch, { passive: true, once: true });
+function holdBtn(el, set) {
+  el.addEventListener('pointerdown', e => { e.preventDefault(); setTouch(); el.setPointerCapture(e.pointerId); set(true); el.classList.add('on'); });
+  const off = () => { set(false); el.classList.remove('on'); };
+  el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
+}
+holdBtn($('btnWalk'), on => { touchWalk = on; });
+$('btnShake').addEventListener('pointerdown', e => { e.preventDefault(); setTouch(); shakePole(); });
+// Neigungssteuerung (Handy kippen); iOS braucht eine Erlaubnis per Tipp
+addEventListener('deviceorientation', e => {
+  const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  const val = ang === 90 ? e.beta : ang === -90 || ang === 270 ? -e.beta : e.gamma;
+  if (val != null) tiltP = clamp(val / 22, -1, 1);
+});
+$('btnTilt').addEventListener('click', () => {
+  const toggle = () => { tiltOn = !tiltOn; $('btnTilt').classList.toggle('on', tiltOn); document.body.classList.toggle('tilt', tiltOn); };
+  if (!tiltOn && window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) {
+    DeviceOrientationEvent.requestPermission().then(r => { if (r === 'granted') toggle(); }).catch(() => {});
+  } else toggle();
+});
+
+$('mBtn').addEventListener('click', start);
+$('pauseBtn').addEventListener('click', () => { if (state === 'play') pause(); else if (state === 'pause') start(); });
+const soundLabel = () => { $('soundBtn').textContent = AC && AC.isMuted() ? '🔇' : '🔊'; };
+$('soundBtn').addEventListener('click', () => { if (AC) AC.toggleMute(); soundLabel(); });
+soundLabel();
+
+// ============ Loop ============
+let last = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  let fx = { windF: 0, ge: { warn: 0, f: 0 } };
+  if (state === 'play') {
+    elapsed += dt;
+    if (phase === 'rope') fx = stepRope(dt);
+    else if (phase === 'roof') stepRoof(dt);
+    else if (phase === 'fall') stepFall(dt);
+    updatePigeons(dt);
+    if (msgTimer > 0 && (msgTimer -= dt) <= 0) $('msg').classList.remove('show');
+    if (flashT > 0) { flashT = Math.max(0, flashT - dt * 1.2); $('flash').style.opacity = flashT; }
+    updateHud();
+  } else if (state === 'menu') {
+    // Menü: leichtes Schaukeln, Kamera kreist langsam
+    demoT += dt; theta = Math.sin(demoT * 0.9) * 0.08; pole = -Math.sin(demoT * 0.9 - 0.4) * 0.5;
+  }
+  if (state === 'play' || state === 'menu') updateWalker(dt);
+  if (state !== 'play' || phase === 'fall') setWindSound(0, 0);
+  if (state === 'menu') {
+    const p = W.body.position;
+    camera.position.set(p.x + Math.sin(demoT * 0.15) * 7, p.y + 2.5, p.z + Math.cos(demoT * 0.15) * 7);
+    camera.lookAt(p.x, p.y - 0.5, p.z - 4);
+    sky.position.copy(camera.position);
+    sun.position.copy(camera.position).addScaledVector(SUN_DIR, 1600); sun.lookAt(camera.position);
+  } else if (state === 'play' || state === 'over') updateCamera(dt);
+  updateFx(dt, fx.windF, fx.ge);
+  renderer.render(scene, camera);
+}
+
+ensureWorld(0); placeAtSpanStart();
+$('hBest').textContent = best;
+openModal('🎪 Seiltänzer 3D', 'Ein Drahtseil, eine Balancierstange und 180 Meter Abenddämmerung darunter. ' +
+  'Du kippst ständig zur Seite – fang die Neigung mit <b>A</b>/<b>D</b> oder der <b>Maus</b> ab, indem du die Stange neigst. ' +
+  '<b>W</b> oder <b>Klick halten</b> = gehen. Schneller gehen = mehr Wackeln.<br><br>' +
+  '💨 <b>Böen</b> kündigen sich mit Windlinien und Rauschen an. Das Seil schwingt in der Mitte am stärksten. ' +
+  '🐦 <b>Tauben</b> landen auf der Stange – <b>Leertaste</b> schüttelt sie ab. Jedes Dach ist ein Checkpoint, ' +
+  'Zeit in perfekter Balance gibt ✨ Stilpunkte.', 'Aufs Seil');
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
