@@ -290,7 +290,8 @@ const ArcadeCore = (() => {
     'dominokette': 'dominokette_stars',
     'tresorknacker': 'tresorknacker_best',
     'seiltaenzer': 'seiltaenzer_best',
-    'eisangler': 'eisangler_best'
+    'eisangler': 'eisangler_best',
+    'tiefenrausch': 'tiefenrausch_best'
   };
 
   function getScore(gameKey) {
