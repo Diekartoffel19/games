@@ -124,6 +124,18 @@
     background: linear-gradient(135deg, #fdba74, #ea580c); color: #2a0f00;
   }
   .primary:hover { filter: brightness(1.1); }
+  .secondary {
+    width: 100%; min-height: 46px; margin-top: 10px; border-radius: 14px; cursor: pointer; font-size: 1rem; font-weight: 900;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 176, 112, 0.5); color: #ffe2c8;
+  }
+  .secondary:hover { background: rgba(180, 83, 42, 0.45); }
+  .coins { color: #fde047; font-weight: 900; }
+  #shopList { display: grid; gap: 10px; margin: 12px 0; text-align: left; }
+  .up { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 12px; }
+  .up b { color: #ffb070; } .up small { color: #c49a88; font-size: 0.78rem; display: block; }
+  .up .lv { font-size: 0.75rem; color: #d8b9a8; }
+  .up button { grid-row: span 2; min-width: 92px; min-height: 44px; border: none; border-radius: 12px; cursor: pointer; font-weight: 900; background: linear-gradient(135deg, #fdba74, #ea580c); color: #2a0f00; }
+  .up button:disabled { background: rgba(255, 255, 255, 0.1); color: #8a7070; cursor: default; }
 
   #touch { display: none; }
   body.touch #touch { display: block; }
@@ -158,6 +170,7 @@
   <div class="pill">📏 <b id="hDist">0</b> m</div>
   <div class="pill" id="stylePill">✨ <b id="hStyle">0</b></div>
   <div class="pill">❤️ <b id="hLives">3</b></div>
+  <div class="pill" id="netPill" hidden title="Sicherheitsnetz bereit">🥅 <b>Netz</b></div>
   <div class="pill">🏆 <b id="hBest">0</b></div>
 </div>
 <div id="progress"><div id="progFill"></div></div>
@@ -185,6 +198,16 @@
     <p id="mText"></p>
     <div class="stats" id="mStats"></div>
     <button class="primary" id="mBtn">Aufs Seil</button>
+    <button class="secondary" id="mShop">🛒 Shop (S)</button>
+  </div>
+</div>
+<div class="modal" id="shop" style="z-index: 70">
+  <div class="card">
+    <h1>🛒 Ausrüstung</h1>
+    <p>Trinkgeld vom Publikum: <span class="coins" id="sCoins">0</span> 🪙</p>
+    <div id="shopList"></div>
+    <button class="primary" id="sClose">Zurück (Esc)</button>
+    <button class="secondary" id="sReset">Fortschritt zurücksetzen</button>
   </div>
 </div>
 
@@ -203,7 +226,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const V3 = THREE.Vector3;
 
 const DATA = window.SEILTAENZER_MODELS;
-if (!DATA) { $('mText').textContent = 'Modelle (models/seiltaenzer_models.js) konnten nicht geladen werden.'; $('modal').style.display = 'flex'; $('mBtn').hidden = true; return; }
+if (!DATA) { $('mText').textContent = 'Modelle (models/seiltaenzer_models.js) konnten nicht geladen werden.'; $('modal').style.display = 'flex'; $('mBtn').hidden = $('mShop').hidden = true; return; }
 
 // ============ Tuning ============
 const ROPE_Y = 1.1, ROOF = 16, ANCHOR_IN = 6.8, CLAMP = 0.85, GROUND_Y = -180;
@@ -220,6 +243,24 @@ function lvl(n) {
     slack: n >= 4, rain: n >= 5,
   };
 }
+// ============ Upgrade-Shop (Trinkgeld, localStorage) ============
+const SAVE_KEY = 'seiltaenzer_save';
+let save = { coins: 0, levels: {} };
+try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && typeof s === 'object') save = { coins: Math.max(0, Number.isFinite(+s.coins) ? Math.floor(+s.coins) : 0), levels: s.levels && typeof s.levels === 'object' && !Array.isArray(s.levels) ? s.levels : {} }; } catch (e) {}
+const writeSave = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
+const UPS = [
+  { id: 'stange', icon: '🎋', name: 'Längere Stange', max: 5, base: 60, desc: 'Mehr Hebel – du kippst spürbar langsamer.', fx: l => `−${l * 4} % Kippen` },
+  { id: 'sohlen', icon: '👟', name: 'Gummisohlen', max: 4, base: 50, desc: 'Ruhigere Schritte, satter Grip im Regen.', fx: l => `−${l * 12} % Schrittwackeln` },
+  { id: 'wind', icon: '🎐', name: 'Windwarner', max: 3, base: 40, desc: 'Böen kündigen sich früher an.', fx: l => `${(1.6 + 0.6 * l).toFixed(1).replace('.', ',')} s Vorwarnung` },
+  { id: 'tauben', icon: '🦅', name: 'Taubenschreck', max: 3, base: 50, desc: 'Seltener Tauben, sanfteres Abschütteln.', fx: l => `−${Math.round(100 - 100 / (1 + 0.25 * l))} % Tauben, −${l * 30} % Ruck` },
+  { id: 'versuch', icon: '❤️', name: 'Extra-Versuch', max: 2, base: 150, desc: 'Ein zusätzlicher Versuch pro Vorstellung.', fx: l => `${LIVES + l} Versuche` },
+  { id: 'fuesse', icon: '🦶', name: 'Schnelle Füße', max: 4, base: 50, desc: 'Schneller gehen ohne mehr Wackeln.', fx: l => `+${l * 8} % Tempo` },
+  { id: 'stil', icon: '✨', name: 'Stil-Trainer', max: 4, base: 40, desc: 'Breitere Zone für Stilpunkte.', fx: l => `±${((PERFECT + 0.015 * l) * 180 / Math.PI).toFixed(1).replace('.', ',')}° Perfekt-Zone` },
+  { id: 'netz', icon: '🥅', name: 'Sicherheitsnetz', max: 3, base: 30, consumable: true, desc: 'Fängt einen Sturz pro Vorstellung – kein Versuch weg.', fx: l => `Vorrat ${l}` },
+];
+const lv = id => clamp(Math.floor(+save.levels[id]) || 0, 0, UPS.find(u => u.id === id).max);
+const price = up => up.consumable ? up.base : Math.round(up.base * Math.pow(1.6, lv(up.id)));
+const bonusText = () => UPS.filter(u => lv(u.id)).map(u => `${u.icon} ${u.fx(lv(u.id))}`).join(' · ');
 const NEWS = {
   2: 'Tauben! 🐦<small>Sie landen auf der Stange – Leertaste schüttelt sie ab</small>',
   3: 'Das Seil schwingt stärker<small>In der Mitte am schlimmsten</small>',
@@ -452,6 +493,7 @@ let spanIdx = 0, u = 0, v = 0, theta = 0, omega = 0, pole = 0, stepPh = 0, lastS
 let bonus = 0, cpBonus = 0, cpStyle = 0, distDone = 0;
 let gust = null, gustTimer = 5, pigeonTimer = 10, swayT = 0, roofT = 0, heartbeat = 0, perfectT = 0, cooT = 0;
 let resumeFromCp = false, fall = null, msgTimer = 0, flashT = 0, shake = 0, demoT = 0;
+let perfect = PERFECT, netReady = false; // Upgrade-Werte, beim Start einer Vorstellung gesetzt
 let best = Number(AC ? AC.getScore(KEY) : 0) || 0;
 const keys = {};
 let mouseP = 0, mouseActive = false, mouseWalk = false, touchWalk = false, tiltOn = false, tiltP = 0, isTouch = false;
@@ -463,7 +505,7 @@ function showMsg(html, t = 1.8) { $('msg').innerHTML = html; $('msg').classList.
 function placeAtSpanStart() {
   ensureWorld(spanIdx);
   phase = 'rope'; u = 0; v = 0; theta = rnd(-0.02, 0.02); omega = 0; pole = 0; fall = null; stepPh = 0; lastStep = 0; perfectT = 0;
-  gust = null; gustTimer = rnd(3, 5); pigeonTimer = rnd(6, 10); swayT = 0;
+  gust = null; gustTimer = rnd(3, 5); pigeonTimer = rnd(6, 10) * (1 + 0.25 * lv('tauben')); swayT = 0;
   pigeons.forEach(p => { p.state = 'off'; p.rig.body.visible = false; });
   rain.visible = span().P.rain;
   W.body.rotation.set(0, 0, 0);
@@ -473,7 +515,8 @@ function placeAtSpanStart() {
 }
 
 function resetGame() {
-  score = 0; style = 0; lives = LIVES; elapsed = 0; spanIdx = 0; bonus = 0; cpBonus = 0; cpStyle = 0; distDone = 0;
+  lives = LIVES + lv('versuch'); perfect = PERFECT + 0.015 * lv('stil'); netReady = lv('netz') > 0; drawMeter();
+  score = 0; style = 0; elapsed = 0; spanIdx = 0; bonus = 0; cpBonus = 0; cpStyle = 0; distDone = 0;
   flashT = 0; shake = 0; msgTimer = 0; $('flash').style.opacity = 0; $('msg').classList.remove('show');
   clearInput(); placeAtSpanStart(); updateHud();
 }
@@ -496,7 +539,7 @@ const walking = () => keys.KeyW || keys.ArrowUp || mouseWalk || touchWalk;
 function gustEnv() {
   if (!gust) return { warn: 0, f: 0 };
   const t = gust.t;
-  if (t < 0) return { warn: 1 + t / 1.6, f: 0 }; // Vorwarnung 1,6 s
+  if (t < 0) return { warn: 1 + t / gust.warnT, f: 0 }; // Vorwarnung 1,6 s (+ Windwarner)
   const e = t < 0.4 ? t / 0.4 : t > gust.dur - 0.6 ? Math.max(0, (gust.dur - t) / 0.6) : 1;
   return { warn: 0, f: e };
 }
@@ -504,19 +547,21 @@ function gustEnv() {
 function stepRope(dt) {
   const s = span(), P = s.P;
   const pIn = inputP();
-  const rainy = P.rain;
-  pole += (pIn - pole) * Math.min(1, dt * (rainy ? 4.5 : 7));   // Stange folgt mit Verzögerung
+  const rainy = P.rain, grip = 1 - 0.15 * lv('sohlen'); // grip: Anteil der Regen-Rutschigkeit, der bleibt
+  pole += (pIn - pole) * Math.min(1, dt * (rainy ? 7 - 2.5 * grip : 7));   // Stange folgt mit Verzögerung
 
-  // Gehen: schneller = instabiler
-  const want = walking() ? WALK_MAX : 0;
-  v += clamp(want - v, -3.5 * dt, 1.4 * dt);
+  // Gehen: schneller = instabiler (Schnelle Füße: mehr Tempo, Wackeln skaliert mit vw = Tempo relativ zum Maximum)
+  const spd = 1 + 0.08 * lv('fuesse');
+  const want = walking() ? WALK_MAX * spd : 0;
+  v += clamp(want - v, -3.5 * spd * dt, 1.4 * spd * dt);
   u = Math.min(s.L, u + v * dt);
-  const f = u / s.L;
+  const f = u / s.L, vw = v / spd;
 
   // Böen
   gustTimer -= dt;
   if (!gust && gustTimer <= 0) {
-    gust = { t: -1.6, dur: rnd(1.4, 2.6), dir: Math.random() < 0.5 ? -1 : 1, str: P.gust * rnd(0.75, 1.1) };
+    const warnT = 1.6 + 0.6 * lv('wind');
+    gust = { t: -warnT, warnT, dur: rnd(1.4, 2.6), dir: Math.random() < 0.5 ? -1 : 1, str: P.gust * rnd(0.75, 1.1) };
   }
   if (gust) { gust.t += dt; if (gust.t > gust.dur) { gust = null; gustTimer = rnd(0.7, 1.2) * P.gustEvery; } }
   const ge = gustEnv();
@@ -525,7 +570,7 @@ function stepRope(dt) {
   // Seil schwingt seitlich, in der Mitte am stärksten (Schwingt-Beschleunigung kippt den Läufer)
   swayT += dt;
   const ws = 1.25 + 0.15 * Math.sin(swayT * 0.31);
-  const swayAmp = (P.sway + (P.slack ? 0.2 : 0)) * (0.6 + 0.4 * Math.min(1, v / WALK_MAX + Math.abs(windF)));
+  const swayAmp = (P.sway + (P.slack ? 0.2 : 0)) * (0.6 + 0.4 * Math.min(1, vw / WALK_MAX + Math.abs(windF)));
   const sx = swayAmp * Math.sin(ws * swayT) + windF * 0.25;
   const ax = -swayAmp * Math.sin(Math.PI * f) * ws * ws * Math.sin(ws * swayT);
 
@@ -533,16 +578,16 @@ function stepRope(dt) {
   let pig = 0; pigeons.forEach(p => { if (p.state === 'sit') pig += p.side * 0.32; });
 
   // Schritte: jeder Schritt ein kleiner Schubs, abwechselnd links/rechts
-  stepPh += v * dt * 1.6;
+  stepPh += vw * dt * 1.6;
   if (Math.floor(stepPh) !== lastStep) {
     lastStep = Math.floor(stepPh);
-    omega += (lastStep % 2 ? 1 : -1) * (0.05 + 0.06 * v) + rnd(-1, 1) * 0.07 * v * (rainy ? 1.6 : 1);
+    omega += ((lastStep % 2 ? 1 : -1) * (0.05 + 0.06 * vw) + rnd(-1, 1) * 0.07 * vw * (rainy ? 1 + 0.6 * grip : 1)) * (1 - 0.12 * lv('sohlen'));
     tone(rnd(90, 120), 0.08, { type: 'triangle', gain: 0.05 });
   }
 
-  // Invertiertes Pendel
-  const A = 1.7 + (P.slack ? 0.35 : 0) + 0.25 * v / WALK_MAX, B = rainy ? 2.1 : 2.4, D = 0.75;
-  const noise = rnd(-1, 1) * (0.25 + 0.35 * v + (rainy ? 0.5 : 0));
+  // Invertiertes Pendel (Längere Stange: kleinerer Kipp-Term A)
+  const A = (1.7 + (P.slack ? 0.35 : 0) + 0.25 * vw / WALK_MAX) * (1 - 0.04 * lv('stange')), B = rainy ? 2.4 - 0.3 * grip : 2.4, D = 0.75;
+  const noise = rnd(-1, 1) * (0.25 + 0.35 * vw + (rainy ? 0.5 * grip : 0));
   const sub = 3, h = dt / sub;
   for (let i = 0; i < sub; i++) {
     const acc = A * Math.sin(theta) + B * pole + windF + pig - ax * 0.55 * Math.cos(theta) + noise - D * omega;
@@ -550,7 +595,7 @@ function stepRope(dt) {
   }
 
   // Stil & Punkte
-  const near = Math.abs(theta) < PERFECT && v > 0.4;
+  const near = Math.abs(theta) < perfect && v > 0.4;
   if (near) { style += 12 * s.level * dt; perfectT += dt; } else perfectT = 0;
   score = Math.floor((distDone + u) * 10 + style + bonus);
 
@@ -574,7 +619,7 @@ function updatePigeons(dt) {
   if (phase === 'rope' && s.P.pigeons) {
     pigeonTimer -= dt;
     if (pigeonTimer <= 0) {
-      pigeonTimer = rnd(0.7, 1.3) * s.P.pigeonEvery;
+      pigeonTimer = rnd(0.7, 1.3) * s.P.pigeonEvery * (1 + 0.25 * lv('tauben'));
       const free = pigeons.filter(p => p.state === 'off');
       if (free.length) {
         const p = free[Math.floor(Math.random() * free.length)];
@@ -611,7 +656,7 @@ function shakePole() {
   if (state !== 'play' || phase !== 'rope') return;
   let any = false;
   pigeons.forEach(p => { if (p.state === 'sit' || p.state === 'in') { p.state = 'out'; p.t = 0; any = true; flapSnd(p.side); } });
-  omega += rnd(-1, 1) * 0.22; // Schütteln kostet Ruhe
+  omega += rnd(-1, 1) * 0.22 * (1 - 0.3 * lv('tauben')); // Schütteln kostet Ruhe
   shake = Math.max(shake, 0.12);
   if (!any) tone(200, 0.08, { type: 'square', gain: 0.03 });
 }
@@ -660,22 +705,32 @@ function stepFall(dt) {
 }
 
 function lifeLost() {
-  lives--;
   snd('explosion');
   state = 'over';
   clearInput();
+  if (netReady) {
+    netReady = false; save.levels.netz = lv('netz') - 1; writeSave(); resumeFromCp = true;
+    openModal('🥅 Sicherheitsnetz!', `Das Netz hat dich gefangen – <b>kein Versuch verloren</b>. Noch <b>${lives}</b> ${lives === 1 ? 'Versuch' : 'Versuche'}.`,
+      'Vom Dach weiter', [['Punkte', score], ['Seil', span().level], ['Netze übrig', lv('netz')], ['Rekord', Math.max(best, score)]]);
+    return;
+  }
+  lives--;
   if (lives <= 0) { gameOver(); return; }
   openModal('😱 Abgestürzt!', `Zum Glück gibt's ein Sprungtuch. Noch <b>${lives}</b> ${lives === 1 ? 'Versuch' : 'Versuche'} – weiter ab dem letzten Dach.`,
     'Vom Dach weiter', [['Punkte', score], ['Seil', span().level], ['Geschafft', Math.floor(distDone + u) + ' m'], ['Rekord', Math.max(best, score)]]);
   resumeFromCp = true;
 }
 
+// Trinkgeld: 10 Grundgage + bis zum letzten Dach gesicherte Punkte voll (/15), ungesicherter Rest halb (/30)
+const tipFor = (total, secured) => 10 + Math.floor(secured / 15 + Math.max(0, total - secured) / 30);
 function gameOver() {
   snd('gameOver');
   const record = score > best;
   if (record) { best = score; if (AC) AC.saveScore(KEY, best); }
-  openModal(record ? '🏆 Neuer Rekord!' : '🎪 Vorstellung beendet', 'Alle Versuche aufgebraucht. Das Publikum unten applaudiert trotzdem.', 'Nochmal',
-    [['Punkte', score], ['Seile geschafft', spanIdx], ['Strecke', Math.floor(distDone + u) + ' m'], ['Stil', Math.floor(style)], ['Zeit', Math.round(elapsed) + ' s'], ['Rekord', best]]);
+  const tip = tipFor(score, Math.floor(distDone * 10 + cpStyle + cpBonus));
+  save.coins += tip; writeSave();
+  openModal(record ? '🏆 Neuer Rekord!' : '🎪 Vorstellung beendet', `Alle Versuche aufgebraucht. Das Publikum unten applaudiert trotzdem – <span class="coins">+${tip} Trinkgeld</span> 🪙`, 'Nochmal',
+    [['Punkte', score], ['Seile geschafft', spanIdx], ['Strecke', Math.floor(distDone + u) + ' m'], ['Stil', Math.floor(style)], ['Trinkgeld', `+${tip} 🪙`], ['Rekord', best]], true);
 }
 
 // ============ Darstellung ============
@@ -756,9 +811,9 @@ function arcPath(a0, a1, r) {
   const [x0, y0] = p(a0), [x1, y1] = p(a1);
   return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
 }
-{
-  const deg = t => t / FALL_AT * MAXDEG, segs = [[-FALL_AT, -0.4, '#ef4444'], [-0.4, -0.2, '#f59e0b'], [-0.2, -PERFECT, '#84cc16'], [-PERFECT, PERFECT, '#fde047'],
-    [PERFECT, 0.2, '#84cc16'], [0.2, 0.4, '#f59e0b'], [0.4, FALL_AT, '#ef4444']];
+function drawMeter() { // gelbe Zone = aktuelle Perfekt-Zone (Stil-Trainer)
+  const deg = t => t / FALL_AT * MAXDEG, segs = [[-FALL_AT, -0.4, '#ef4444'], [-0.4, -0.2, '#f59e0b'], [-0.2, -perfect, '#84cc16'], [-perfect, perfect, '#fde047'],
+    [perfect, 0.2, '#84cc16'], [0.2, 0.4, '#f59e0b'], [0.4, FALL_AT, '#ef4444']];
   $('meterSvg').innerHTML =
     `<path d="${arcPath(-MAXDEG - 3, MAXDEG + 3, ARC_R)}" stroke="rgba(30,14,30,0.8)" stroke-width="22" fill="none" stroke-linecap="round"/>` +
     segs.map(([a, b, c]) => `<path d="${arcPath(deg(a), deg(b), ARC_R)}" stroke="${c}" stroke-width="12" fill="none" opacity="0.85"/>`).join('') +
@@ -768,7 +823,7 @@ function arcPath(a0, a1, r) {
 function updateHud() {
   $('hScore').textContent = score; $('hLevel').textContent = span() ? span().level : 1;
   $('hDist').textContent = Math.floor(distDone + u); $('hStyle').textContent = Math.floor(style);
-  $('hLives').textContent = lives; $('hBest').textContent = Math.max(best, score);
+  $('hLives').textContent = lives; $('hBest').textContent = Math.max(best, score); $('netPill').hidden = !netReady;
   $('stylePill').classList.toggle('on', perfectT > 0.3);
   $('meter').classList.toggle('perfect', perfectT > 0.3);
   const pig = pigeons.some(p => p.state === 'sit');
@@ -779,11 +834,55 @@ function updateHud() {
 }
 
 // ============ Ablauf ============
-function openModal(title, text, btn, stats) {
+function openModal(title, text, btn, stats, shop) {
   $('mTitle').textContent = title; $('mText').innerHTML = text; $('mBtn').textContent = btn;
   $('mStats').innerHTML = (stats || []).map(([k, v]) => `<div class="stat"><div>${k}</div><div>${v}</div></div>`).join('');
+  $('mShop').hidden = !shop;
   $('modal').style.display = 'flex';
 }
+function menuModal() {
+  const b = bonusText();
+  openModal('🎪 Seiltänzer 3D', 'Ein Drahtseil, eine Balancierstange und 180 Meter Abenddämmerung darunter. ' +
+    'Du kippst ständig zur Seite – fang die Neigung mit <b>A</b>/<b>D</b> oder der <b>Maus</b> ab, indem du die Stange neigst. ' +
+    '<b>W</b> oder <b>Klick halten</b> = gehen. Schneller gehen = mehr Wackeln.<br><br>' +
+    '💨 <b>Böen</b> kündigen sich mit Windlinien und Rauschen an. Das Seil schwingt in der Mitte am stärksten. ' +
+    '🐦 <b>Tauben</b> landen auf der Stange – <b>Leertaste</b> schüttelt sie ab. Jedes Dach ist ein Checkpoint, ' +
+    'Zeit in perfekter Balance gibt ✨ Stilpunkte.<br><br>' +
+    `🪙 <span class="coins">${save.coins} Trinkgeld</span>` + (b ? `<br><small>Ausrüstung: ${b}</small>` : ''), 'Aufs Seil', null, true);
+}
+
+// ============ Shop ============
+let shopOpen = false;
+function renderShop(focusId) {
+  $('sCoins').textContent = save.coins;
+  $('shopList').innerHTML = UPS.map(up => {
+    const l = lv(up.id), maxed = l >= up.max, p = price(up);
+    return `<div class="up"><div><b>${up.icon} ${up.name}</b> <span class="lv">${up.consumable ? 'Vorrat' : 'Stufe'} ${l}/${up.max}</span><small>${up.desc}</small></div>` +
+      `<button data-id="${up.id}" ${maxed || save.coins < p ? 'disabled' : ''}>${maxed ? 'MAX' : p + ' 🪙'}</button>` +
+      `<small>${maxed ? up.fx(l) : (l ? up.fx(l) + ' → ' : 'Nächste Stufe: ') + up.fx(l + 1)}</small></div>`;
+  }).join('');
+  const b = focusId && $('shopList').querySelector(`[data-id="${focusId}"]`);
+  (b && !b.disabled ? b : $('sClose')).focus({ preventScroll: true });
+}
+function openShop() { shopOpen = true; clearInput(); $('modal').style.display = 'none'; $('shop').style.display = 'flex'; renderShop(); $('shop').querySelector('.card').scrollTop = 0; } // Hauptmodal ausblenden, damit Tab nicht dahinter landet
+function closeShop() {
+  shopOpen = false; clearInput(); $('shop').style.display = 'none';
+  $('modal').style.display = 'flex'; if (state === 'menu') menuModal();
+}
+$('shopList').addEventListener('click', e => {
+  const b = e.target.closest('button[data-id]'); if (!b) return;
+  const up = UPS.find(x => x.id === b.dataset.id), p = price(up);
+  if (lv(up.id) >= up.max || save.coins < p) return;
+  save.coins -= p; save.levels[up.id] = lv(up.id) + 1; writeSave();
+  snd('powerup');
+  renderShop(up.id);
+});
+$('mShop').addEventListener('click', openShop);
+$('sClose').addEventListener('click', closeShop);
+$('sReset').addEventListener('click', () => {
+  if (!confirm('Trinkgeld und alle Upgrades wirklich zurücksetzen? Der Rekord bleibt.')) return;
+  save = { coins: 0, levels: {} }; writeSave(); renderShop();
+});
 function start() {
   if (state === 'play') return;
   $('modal').style.display = 'none';
@@ -822,6 +921,8 @@ const ptrEnd = e => { if (e.pointerType === 'mouse' && e.button === 0) mouseWalk
 addEventListener('pointerup', ptrEnd); addEventListener('pointercancel', ptrEnd);
 
 addEventListener('keydown', e => {
+  if (shopOpen) { if (e.code === 'Escape') closeShop(); return; } // Shop: Tab/Enter/Leer bedienen die Buttons normal
+  if ((e.code === 'KeyS' && !e.ctrlKey && !e.metaKey && !e.altKey || (e.code === 'Enter' || e.code === 'Space') && document.activeElement === $('mShop')) && !e.repeat && state !== 'play' && !$('mShop').hidden && $('modal').style.display === 'flex') { e.preventDefault(); openShop(); return; }
   if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   if (['KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight'].includes(e.code)) mouseActive = false; // Tastatur hat Vorrang, bis die Maus wieder bewegt wird
@@ -896,14 +997,9 @@ function frame(now) {
   renderer.render(scene, camera);
 }
 
-ensureWorld(0); placeAtSpanStart();
+ensureWorld(0); placeAtSpanStart(); drawMeter();
 $('hBest').textContent = best;
-openModal('🎪 Seiltänzer 3D', 'Ein Drahtseil, eine Balancierstange und 180 Meter Abenddämmerung darunter. ' +
-  'Du kippst ständig zur Seite – fang die Neigung mit <b>A</b>/<b>D</b> oder der <b>Maus</b> ab, indem du die Stange neigst. ' +
-  '<b>W</b> oder <b>Klick halten</b> = gehen. Schneller gehen = mehr Wackeln.<br><br>' +
-  '💨 <b>Böen</b> kündigen sich mit Windlinien und Rauschen an. Das Seil schwingt in der Mitte am stärksten. ' +
-  '🐦 <b>Tauben</b> landen auf der Stange – <b>Leertaste</b> schüttelt sie ab. Jedes Dach ist ein Checkpoint, ' +
-  'Zeit in perfekter Balance gibt ✨ Stilpunkte.', 'Aufs Seil');
+menuModal();
 requestAnimationFrame(frame);
 })();
 </script>
