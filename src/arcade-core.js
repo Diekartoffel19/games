@@ -283,7 +283,8 @@ const ArcadeCore = (() => {
     'grundriss': 'grundriss_wins',
     'zauberwuerfel': 'zauberwuerfel_best_3',
     'heapbreach': 'heapbreach_best',
-    'omaswlan': 'omaswlan_best'
+    'omaswlan': 'omaswlan_best',
+    'kranfuehrer': 'kranfuehrer_best'
   };
 
   function getScore(gameKey) {
