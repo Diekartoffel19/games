@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Tiefenrausch 3D: Tiefsee-Bergbau</title>
+<meta name="description" content="Steuere ein kleines U-Boot in einen endlosen Tiefseegraben: Erz abbauen, Sauerstoff und Druck im Blick behalten, Monster abwehren und an der Station dein Boot für immer tiefere Zonen aufrüsten.">
+<meta name="keywords" content="U-Boot Spiel, Tiefsee, Bergbau, Roguelite, Upgrade, 3D, Browser Spiel, Three.js">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#04121c">
+<link rel="canonical" href="https://rwpxe.com/games/tiefenrausch.html">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tiefenrausch 3D: Tiefsee-Bergbau">
+<meta property="og:description" content="Tauche in den Graben, bohre Erz, überlebe Kalmare und den Leviathan – und rüste dein U-Boot für den Schlund auf.">
+<meta property="og:locale" content="de_DE">
+
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- Geometrie aus Blender (models/tiefenrausch.blend): U-Boot, Station, Kreaturen, Erze, Wracks -->
+<script src="models/tiefenrausch_models.js"></script>
+<script src="tiefenrausch/data.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #04121c; color: #dff6ff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+  #view { position: fixed; inset: 0; z-index: 1; }
+  #view canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+
+  .back-btn {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 80;
+    color: #9fe8ff; text-decoration: none; font-weight: 700; font-size: 0.9rem;
+    background: rgba(2, 18, 30, 0.8); border: 1px solid rgba(80, 200, 255, 0.45);
+    padding: 0 16px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px;
+  }
+  .back-btn:hover { background: #0b5a7a; color: #fff; }
+  .top-actions { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 80; display: flex; gap: 8px; }
+  .action-btn {
+    background: rgba(2, 18, 30, 0.8); border: 1px solid rgba(255, 255, 255, 0.22); color: #dff6ff;
+    padding: 0 14px; min-height: 44px; min-width: 44px; border-radius: 999px; cursor: pointer; font-size: 0.85rem; font-weight: 700;
+  }
+  .action-btn:hover { background: rgba(11, 90, 122, 0.8); }
+
+  /* ---------- HUD ---------- */
+  #hud { display: none; }
+  body.diving #hud { display: block; }
+  #bars {
+    position: fixed; top: calc(66px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 20; width: 210px; pointer-events: none;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .bar { position: relative; height: 20px; border-radius: 999px; background: rgba(2, 14, 24, 0.75); border: 1px solid rgba(255, 255, 255, 0.18); overflow: hidden; }
+  .bar i { position: absolute; inset: 0 auto 0 0; width: 100%; border-radius: 999px; transition: width 0.15s; }
+  .bar span { position: relative; z-index: 1; display: block; padding: 0 10px; font-size: 0.74rem; font-weight: 800; line-height: 20px; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+  #o2Bar i { background: linear-gradient(90deg, #1e88e5, #6ad1ff); }
+  #hullBar i { background: var(--hull, #4ade80); }
+  #batBar i { background: linear-gradient(90deg, #d4a10b, #ffe066); }
+  #cargoBar i { background: linear-gradient(90deg, #b45309, #fbbf24); }
+  .bar.low { border-color: #ff5a5a; animation: blink 0.6s infinite alternate; }
+  @keyframes blink { to { background: rgba(110, 10, 10, 0.85); } }
+  #moneyPill { font-size: 0.82rem; font-weight: 800; background: rgba(2, 14, 24, 0.75); border-radius: 999px; padding: 3px 10px; border: 1px solid rgba(255,255,255,0.18); }
+  #moneyPill b { color: #fde68a; }
+  #upgReady { color: #86efac; font-size: 0.75rem; font-weight: 800; text-shadow: 0 1px 2px #000; display: none; }
+
+  #depth {
+    position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 20; pointer-events: none; text-align: center;
+    background: rgba(2, 14, 24, 0.72); border: 1px solid rgba(80, 200, 255, 0.4); border-radius: 16px; padding: 4px 18px 6px; min-width: 170px;
+  }
+  #dVal { font-size: 1.8rem; font-weight: 950; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+  #dVal.over { color: #ff6b6b; }
+  #dSub { font-size: 0.7rem; font-weight: 700; color: #8fd8f0; }
+  #dZone { font-size: 0.74rem; font-weight: 800; color: #c9f1ff; }
+
+  #radar {
+    position: fixed; right: calc(12px + env(safe-area-inset-right)); top: calc(66px + env(safe-area-inset-top)); z-index: 20;
+    width: 170px; height: 170px; border-radius: 50%; border: 2px solid rgba(80, 220, 255, 0.55); background: rgba(0, 20, 26, 0.72); pointer-events: none;
+  }
+  #contract {
+    position: fixed; right: calc(12px + env(safe-area-inset-right)); top: calc(246px + env(safe-area-inset-top)); z-index: 20; width: 190px; pointer-events: none;
+    font-size: 0.74rem; font-weight: 700; background: rgba(2, 14, 24, 0.72); border-radius: 12px; padding: 6px 10px; border: 1px solid rgba(255,255,255,0.14); color: #cfeaf5;
+  }
+  #contract:empty { display: none; }
+  #contract b { color: #fde68a; }
+  #bossBar { position: fixed; top: calc(86px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(420px, 60vw); z-index: 21; display: none; pointer-events: none; text-align: center; font-weight: 900; font-size: 0.8rem; color: #8affd8; text-shadow: 0 1px 3px #000; }
+  #bossBar div { height: 10px; border-radius: 999px; background: rgba(0,0,0,0.6); border: 1px solid #3affc0; overflow: hidden; margin-top: 3px; }
+  #bossBar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #0f766e, #5eead4); }
+
+  #combo { position: fixed; left: 50%; top: 64%; transform: translateX(-50%); z-index: 20; pointer-events: none; font-weight: 950; font-size: 1.2rem; color: #fde047; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.2s; }
+  #combo.show { opacity: 1; }
+  #reticle { position: fixed; left: 0; top: 0; z-index: 15; width: 34px; height: 34px; margin: -17px 0 0 -17px; pointer-events: none; border: 2px solid rgba(160, 240, 255, 0.55); border-radius: 50%; }
+  #reticle::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(160, 240, 255, 0.9); }
+  #reticle.lock { border-color: #ff4d4d; transform: scale(1.25); }
+  #oreMark { position: fixed; left: 0; top: 0; z-index: 15; width: 44px; height: 44px; margin: -22px 0 0 -22px; pointer-events: none; display: none;
+    background: linear-gradient(#fde047, #fde047) 0 0 / 12px 2px no-repeat, linear-gradient(#fde047, #fde047) 0 0 / 2px 12px no-repeat,
+      linear-gradient(#fde047, #fde047) 100% 0 / 12px 2px no-repeat, linear-gradient(#fde047, #fde047) 100% 0 / 2px 12px no-repeat,
+      linear-gradient(#fde047, #fde047) 0 100% / 12px 2px no-repeat, linear-gradient(#fde047, #fde047) 0 100% / 2px 12px no-repeat,
+      linear-gradient(#fde047, #fde047) 100% 100% / 12px 2px no-repeat, linear-gradient(#fde047, #fde047) 100% 100% / 2px 12px no-repeat; }
+  #oreMark span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 0.72rem; font-weight: 800; color: #fde68a; margin-bottom: 4px;
+    background: rgba(2, 14, 24, 0.85); border: 1px solid rgba(253, 224, 71, 0.5); border-radius: 999px; padding: 1px 8px; }
+  #oreMark.bad { filter: hue-rotate(-50deg) saturate(1.5); }
+  #oreMark.bad span { color: #fca5a5; }
+  #prog { position: absolute; left: 0; bottom: -8px; height: 4px; width: 0; background: #fde047; border-radius: 2px; box-shadow: 0 0 6px #fde047; }
+  body.hasTarget #reticle { opacity: 0.25; }
+  #beacon { position: fixed; z-index: 15; pointer-events: none; display: none; font-size: 0.8rem; font-weight: 900; color: #86efac; text-shadow: 0 1px 3px #000; transform: translate(-50%, -50%); white-space: nowrap; }
+
+  #msg {
+    position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%); z-index: 30; pointer-events: none; text-align: center; opacity: 0; transition: opacity 0.25s;
+    font-size: clamp(1.2rem, 4vw, 1.9rem); font-weight: 950; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9); max-width: calc(100vw - 32px);
+  }
+  #msg.show { opacity: 1; }
+  #msg small { display: block; font-size: 0.52em; font-weight: 800; color: #bfeeff; }
+  #banner { position: fixed; top: calc(108px + env(safe-area-inset-top)); left: 0; right: 0; z-index: 31; pointer-events: none; text-align: center; opacity: 0; transition: opacity 0.6s;
+    background: linear-gradient(90deg, transparent, rgba(1, 10, 18, 0.78) 20%, rgba(1, 10, 18, 0.78) 80%, transparent); padding: 10px 0 12px; }
+  #banner.show { opacity: 1; }
+  #banner h2 { margin: 0; font-size: clamp(1.5rem, 5.5vw, 2.8rem); font-weight: 950; letter-spacing: 4px; text-transform: uppercase; color: #e6fbff; text-shadow: 0 0 30px rgba(80, 220, 255, 0.8), 0 2px 6px #000; }
+  #banner p { margin: 6px auto 0; max-width: 560px; padding: 0 16px; font-size: 0.92rem; font-weight: 700; color: #e0f6ff; text-shadow: 0 1px 4px #000; }
+  #toasts { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 32; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: min(520px, calc(100vw - 24px)); }
+  .toast { background: rgba(2, 18, 30, 0.88); border: 1px solid rgba(80, 220, 255, 0.5); border-radius: 12px; padding: 6px 14px; font-size: 0.85rem; font-weight: 700; text-align: center; animation: tin 0.25s; }
+  .toast.gold { border-color: #fde047; color: #fef3c7; }
+  .toast.tip { border-color: #86efac; color: #dcfce7; }
+  @keyframes tin { from { opacity: 0; transform: translateY(10px); } }
+
+  #fx { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+  #flash { position: fixed; inset: 0; z-index: 13; pointer-events: none; background: radial-gradient(circle, transparent 35%, rgba(255, 30, 20, 0.6)); opacity: 0; }
+  body.hideHint #hint { display: none; }
+  #hint {
+    position: fixed; bottom: calc(10px + env(safe-area-inset-bottom)); left: 0; right: 0; z-index: 19; text-align: center; pointer-events: none;
+    color: #cfeaf5; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); font-size: 0.74rem; font-weight: 700; padding: 0 12px;
+  }
+  kbd { background: rgba(255, 255, 255, 0.18); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px; padding: 0 5px; font-family: inherit; font-weight: 800; color: #fff; }
+
+  /* ---------- Station / Modals ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 60; background: rgba(1, 8, 14, 0.45); display: none; align-items: center; justify-content: center;
+    padding: calc(64px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
+  }
+  .card {
+    background: linear-gradient(165deg, rgba(6, 38, 56, 0.97), rgba(2, 12, 20, 0.97)); border: 2px solid #38bdf8; border-radius: 20px; max-width: 720px; width: 100%;
+    max-height: 100%; overflow-y: auto; padding: clamp(14px, 3.5vw, 24px); box-shadow: 0 0 60px rgba(56, 189, 248, 0.25);
+  }
+  .card h1 { margin: 0 0 6px; font-size: clamp(1.4rem, 4.5vw, 2rem); font-weight: 950; color: #7dd3fc; text-align: center; }
+  .card p { color: #bfe3f2; font-size: 0.9rem; line-height: 1.5; margin: 0 0 12px; }
+  #topStats { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
+  #topStats span { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; padding: 4px 12px; font-weight: 800; font-size: 0.85rem; }
+  #topStats b { color: #fde68a; }
+  #tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  #tabs button { flex: 1 1 auto; min-height: 40px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(255,255,255,0.05); color: #cfeaf5; font-weight: 800; cursor: pointer; font-size: 0.85rem; position: relative; }
+  #tabs button.on { background: #0369a1; color: #fff; border-color: #7dd3fc; }
+  #tabs button .badge { position: absolute; top: -6px; right: -4px; background: #22c55e; color: #032; border-radius: 999px; font-size: 0.7rem; padding: 0 6px; font-weight: 900; }
+  .primary {
+    width: 100%; min-height: 52px; border: none; border-radius: 14px; cursor: pointer; font-size: 1.1rem; font-weight: 900;
+    background: linear-gradient(135deg, #67e8f9, #0284c7); color: #02131f;
+  }
+  .primary:hover { filter: brightness(1.08); }
+  .ghost { width: 100%; min-height: 44px; margin-top: 8px; border-radius: 14px; cursor: pointer; font-size: 0.92rem; font-weight: 800; background: rgba(255,255,255,0.05); border: 1px solid rgba(56,189,248,0.5); color: #bae6fd; }
+  .ghost:hover { background: rgba(3, 105, 161, 0.5); }
+  .ghost.danger { border-color: rgba(248, 113, 113, 0.6); color: #fca5a5; font-size: 0.82rem; }
+  .row { display: flex; gap: 10px; align-items: center; text-align: left; margin-bottom: 7px; padding: 8px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.11); border-radius: 12px; }
+  .row > div { flex: 1; min-width: 0; }
+  .row h3 { margin: 0; font-size: 0.95rem; color: #7dd3fc; }
+  .row h3 span { font-size: 0.74rem; color: #e0f2fe; font-weight: 700; margin-left: 4px; }
+  .row small { display: block; color: #8fb8c8; font-size: 0.76rem; }
+  .row .val { font-size: 0.78rem; color: #cfeaf5; }
+  .row .val b { color: #86efac; }
+  .row button { min-width: 84px; min-height: 44px; border: none; border-radius: 12px; cursor: pointer; font-weight: 900; font-size: 0.85rem; background: linear-gradient(135deg, #fde047, #f59e0b); color: #2a1702; }
+  .row button:disabled { background: rgba(255,255,255,0.1); color: #6f8c99; cursor: default; }
+  .row.done { border-color: rgba(134, 239, 172, 0.5); }
+  .row.locked { opacity: 0.55; }
+  .pbar { height: 6px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden; margin-top: 4px; }
+  .pbar i { display: block; height: 100%; background: #38bdf8; }
+  .cat { margin: 12px 0 6px; font-size: 0.8rem; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: #67e8f9; }
+  .sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 10px 0; }
+  .sum div { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 6px 10px; }
+  .sum div small { display: block; font-size: 0.68rem; color: #8fb8c8; font-weight: 700; text-transform: uppercase; }
+  .sum div b { font-size: 1.15rem; color: #f0f9ff; }
+  .tipBox { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(134, 239, 172, 0.4); border-radius: 12px; padding: 8px 12px; font-size: 0.85rem; color: #dcfce7; margin-bottom: 10px; }
+
+  /* ---------- Touch ---------- */
+  #touch { display: none; }
+  body.touch.diving #touch { display: block; }
+  body.touch #hint { display: none; }
+  body.touch #radar { width: 120px; height: 120px; }
+  body.touch #contract { top: calc(194px + env(safe-area-inset-top)); width: 150px; font-size: 0.68rem; }
+  body.touch #bars { width: 160px; }
+  #stick {
+    position: fixed; left: calc(20px + env(safe-area-inset-left)); bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 40;
+    width: 150px; height: 150px; border-radius: 50%; touch-action: none; background: rgba(2, 18, 30, 0.4); border: 2px solid rgba(80, 220, 255, 0.45);
+  }
+  #knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: rgba(80, 220, 255, 0.6); pointer-events: none; }
+  .tbtn {
+    position: fixed; z-index: 40; width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(80, 220, 255, 0.55);
+    background: rgba(2, 18, 30, 0.6); color: #e0f7ff; font-size: 1.3rem; touch-action: none;
+  }
+  .tbtn.on { background: #0369a1; }
+  #tUp { right: calc(150px + env(safe-area-inset-right)); bottom: calc(100px + env(safe-area-inset-bottom)); }
+  #tDown { right: calc(150px + env(safe-area-inset-right)); bottom: calc(30px + env(safe-area-inset-bottom)); }
+  #tMine { right: calc(18px + env(safe-area-inset-right)); bottom: calc(30px + env(safe-area-inset-bottom)); width: 78px; height: 78px; font-size: 1.7rem; }
+  #tHarp { right: calc(84px + env(safe-area-inset-right)); bottom: calc(118px + env(safe-area-inset-bottom)); }
+  #tSonar { right: calc(18px + env(safe-area-inset-right)); bottom: calc(126px + env(safe-area-inset-bottom)); }
+  #tBoost { right: calc(84px + env(safe-area-inset-right)); bottom: calc(188px + env(safe-area-inset-bottom)); }
+  #tBuoy { right: calc(18px + env(safe-area-inset-right)); bottom: calc(196px + env(safe-area-inset-bottom)); }
+  #tBomb { right: calc(150px + env(safe-area-inset-right)); bottom: calc(170px + env(safe-area-inset-bottom)); }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back-btn">← Arcade</a>
+<div class="top-actions">
+  <button class="action-btn" id="pauseBtn" title="Pause (P)">⏸</button>
+  <button class="action-btn" id="soundBtn" title="Sound an/aus">🔊</button>
+</div>
+
+<div id="view"></div>
+<canvas id="fx"></canvas>
+<div id="flash"></div>
+
+<div id="hud">
+  <div id="depth"><div id="dVal">0 m</div><div id="dZone"></div><div id="dSub"></div></div>
+  <div id="bars">
+    <div class="bar" id="o2Bar"><i></i><span id="o2Txt">O₂</span></div>
+    <div class="bar" id="hullBar"><i></i><span id="hullTxt">Hülle</span></div>
+    <div class="bar" id="batBar"><i></i><span id="batTxt">Akku</span></div>
+    <div class="bar" id="cargoBar"><i></i><span id="cargoTxt">Fracht</span></div>
+    <div><span id="moneyPill">💰 <b id="hMoney">0</b> Cr</span></div>
+    <div id="upgReady">🔧 Upgrade bezahlbar – auftauchen!</div>
+  </div>
+  <canvas id="radar" width="170" height="170"></canvas>
+  <div id="contract"></div>
+  <div id="bossBar">🐉 LEVIATHAN<div><i id="bossFill"></i></div></div>
+  <div id="reticle"></div>
+  <div id="oreMark"><div id="prog"></div><span id="oreLbl"></span></div>
+  <div id="beacon"></div>
+  <div id="combo"></div>
+  <div id="hint">
+    <kbd>W</kbd><kbd>S</kbd> fahren · <kbd>A</kbd><kbd>D</kbd> drehen · <kbd>Leer</kbd>/<kbd>Shift</kbd> hoch/runter · <kbd>Maus</kbd>/<kbd>Q</kbd><kbd>E</kbd> zielen ·
+    <kbd>Linksklick</kbd>/<kbd>F</kbd> bohren · <kbd>Rechtsklick</kbd>/<kbd>G</kbd> Harpune · <kbd>R</kbd> Sonar · <kbd>B</kbd> Turbo · <kbd>L</kbd> Licht · <kbd>T</kbd> Notboje · <kbd>X</kbd> Bombe · <kbd>P</kbd> Pause · <kbd>H</kbd> Hilfe aus
+  </div>
+</div>
+
+<div id="msg"></div>
+<div id="banner"><h2 id="bTitle"></h2><p id="bText"></p></div>
+<div id="toasts"></div>
+
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <button class="tbtn" id="tUp">⬆</button>
+  <button class="tbtn" id="tDown">⬇</button>
+  <button class="tbtn" id="tMine">⛏</button>
+  <button class="tbtn" id="tHarp">🔱</button>
+  <button class="tbtn" id="tSonar">📡</button>
+  <button class="tbtn" id="tBoost">💨</button>
+  <button class="tbtn" id="tBuoy">🎈</button>
+  <button class="tbtn" id="tBomb">💣</button>
+</div>
+
+<div class="modal" id="station">
+  <div class="card">
+    <h1>🤿 Tiefenrausch 3D</h1>
+    <div id="topStats"></div>
+    <div id="tabs"></div>
+    <div id="tabBody"></div>
+  </div>
+</div>
+
+<div class="modal" id="pauseModal">
+  <div class="card" style="max-width:420px;text-align:center">
+    <h1>⏸ Pause</h1>
+    <p id="pauseInfo"></p>
+    <button class="primary" id="resumeBtn">Weiter tauchen</button>
+    <button class="ghost danger" id="abortBtn">Tauchgang aufgeben (Fracht geht verloren)</button>
+  </div>
+</div>
+
+<div class="modal" id="deathModal">
+  <div class="card" style="max-width:460px;text-align:center">
+    <h1 id="dTitle">💥 Hülle zerstört</h1>
+    <p id="dText"></p>
+    <button class="primary" id="dBtn">Zurück zur Station</button>
+  </div>
+</div>
+
+<script src="tiefenrausch/game.js"></script>
+</body>
+</html>
