@@ -138,6 +138,21 @@
   }
   .secondary-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
   .secondary-btn[hidden] { display: none; }
+
+  .float {
+    position: fixed; left: 0; top: 0; z-index: 15; pointer-events: none; white-space: nowrap;
+    font-weight: 900; font-size: 0.95rem; text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+    background: rgba(15, 23, 42, 0.55); border-radius: 10px; padding: 2px 8px;
+  }
+  #splats { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+  .splat {
+    position: absolute; width: 110px; height: 90px; margin: -45px 0 0 -55px; opacity: 0.85;
+    border-radius: 48% 52% 40% 60% / 55% 45% 60% 40%;
+    background: radial-gradient(circle at 40% 40%, #fafaf9 0 30%, #e7e5e4 45%, rgba(214, 211, 209, 0.6) 62%, transparent 72%);
+    animation: splatFade 9s forwards;
+  }
+  @keyframes splatFade { 0%, 70% { opacity: 0.85; } 100% { opacity: 0; } }
+  #hCombo { color: #f472b6; }
 </style>
 </head>
 <body>
@@ -150,10 +165,12 @@
 </div>
 
 <div id="canvas-container"></div>
+<div id="splats"></div>
 
 <div id="hud">
   <div class="hud-pill">🗼 Schicht <b id="hShift">1/5</b></div>
   <div class="hud-pill">🕐 <b id="hTime">22:00</b></div>
+  <div class="hud-pill good">⭐ Punkte <b id="hScore">0</b> <b id="hCombo"></b></div>
   <div class="hud-pill good">⛵ Gerettet <b id="hSaved">0</b></div>
   <div class="hud-pill warn">💥 Wracks <b id="hWrecks">0/3</b></div>
   <div class="hud-pill">🏆 <b id="hBest">0</b></div>
@@ -234,6 +251,22 @@ function params(s) {
   };
 }
 
+// Schiffstypen: need = nötige Blinker, pts = Punkte pro Rettung, from = ab Schicht (0-basiert)
+const TYPES = {
+  kutter: { name: 'Fischkutter', hull: [0x6b3a1e, 0x2b3a55, 0x7a1f1f, 0x3f3f46], scale: 1.5, speed: 1, need: 1, pts: 1, w: 5, from: 0 },
+  enten: { name: 'Gummienten-Frachter', hull: [0x1e3a8a], scale: 1.7, speed: 0.9, need: 1, pts: 2, w: 2, from: 0 },
+  speed: { name: 'Influencer-Speedboot', hull: [0xf43f5e], scale: 1.1, speed: 1.9, need: 1, pts: 2, w: 2, from: 1 },
+  butter: { name: 'Butterfahrt-Dampfer', hull: [0xf1f5f9], scale: 2.3, speed: 0.6, need: 2, pts: 3, w: 2, from: 1 },
+  korn: { name: 'Käpt’n Korn', hull: [0x2f6b2f], scale: 1.5, speed: 0.8, need: 1, pts: 3, w: 0, from: 2 },
+};
+function pickType(shift) {
+  const list = Object.entries(TYPES).filter(([, t]) => t.w && shift >= t.from);
+  let r = Math.random() * list.reduce((a, [, t]) => a + t.w, 0);
+  for (const [k, t] of list) if ((r -= t.w) <= 0) return k;
+  return 'kutter';
+}
+const HELP_LINES = { kutter: 'Hilfe!', enten: 'Quietsch!', speed: 'Bro, wo ist die Straße?', butter: 'Wo ist das Buffet?', korn: 'Hicks!' };
+const SAVE_LINES = { kutter: 'Moin!', enten: 'Quak quak!', speed: 'Krasser Content!', butter: 'Heizdecken für alle!', korn: 'Prooost!' };
 const QUIPS_SAVE = ['Der Kapitän winkt dankbar.', 'Ein Matrose wirft dir eine Kusshand zu.', 'Ladung Fischbrötchen gerettet.', 'Kurs geändert, Hose trocken.', '„Moin!“ schallt es übers Wasser.'];
 const QUIPS_WRECK = ['Das war mal ein Fischkutter.', 'Ladung: 4000 Gummienten. Jetzt frei.', 'Die Versicherung ruft morgen an.', 'Der Reeder schreibt dir einen Brief. Einen bösen.', 'Neues Riff-Dekor für die Fische.'];
 const SHIFT_LINES = ['Leichter Sturm, wenig Verkehr. Zum Warmwerden.', 'Der Nebel zieht auf. Die Möwen auch.', 'Strandräuber an der Küste! Und Käpt’n Korn hat Landgang gehabt.', 'Dichter Nebel, volle Fahrrinne, leerer Kaffee.', 'Die Jahrhundert-Sturmnacht. Halt durch, Hinnerk!', 'Endlos-Modus: Die Nacht hört nie auf.'];
@@ -396,23 +429,35 @@ const G = {
   mast: new THREE.CylinderGeometry(0.07, 0.07, 3.2, 6),
   bottle: new THREE.CylinderGeometry(0.4, 0.4, 1.3, 10),
   neck: new THREE.CylinderGeometry(0.14, 0.2, 0.6, 8),
-  light: new THREE.SphereGeometry(0.18, 8, 6),
+  light: new THREE.SphereGeometry(0.3, 8, 6),
+  duck: new THREE.SphereGeometry(0.22, 8, 6),
 };
-function makeShip(korn) {
+const duckMat = new THREE.MeshLambertMaterial({ color: 0xfacc15, emissive: 0x332200 });
+function makeShip(type) {
+  const T = TYPES[type], korn = type === 'korn';
   const g = new THREE.Group(), mats = [];
   const mat = c => { const m = new THREE.MeshLambertMaterial({ color: c }); mats.push(m); return m; };
   const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
-  const hullM = mat(korn ? 0x2f6b2f : pick([0x6b3a1e, 0x2b3a55, 0x7a1f1f, 0x3f3f46]));
+  const hullM = mat(pick(T.hull));
   add(G.hull, hullM, 0, 0.3, 0);
   add(G.bow, hullM, 0, 0.3, 2.9);
-  add(G.cabin, mat(0xe7dcc4), 0, 1.2, -0.8);
-  add(G.mast, mat(0x52361f), 0, 2.2, 0.7);
+  if (type === 'butter') { // zwei Decks + Schornstein
+    const deck = mat(0xe2e8f0);
+    add(G.hull, deck, 0, 1.1, -0.2).scale.set(0.8, 0.8, 0.8);
+    add(G.cabin, deck, 0, 1.9, -0.6);
+    add(G.neck, mat(0xdc2626), 0, 2.7, -1.2).scale.set(2, 2, 2);
+  } else if (type !== 'speed') {
+    add(G.cabin, mat(0xe7dcc4), 0, 1.2, -0.8);
+    add(G.mast, mat(0x52361f), 0, 2.2, 0.7);
+  } else add(G.cabin, mat(0x111827), 0, 0.85, -0.4).scale.set(0.9, 0.5, 1);
   if (korn) {
     const bm = mat(0x1f7a3a);
     add(G.bottle, bm, 0, 1.4, 1.5); add(G.neck, bm, 0, 2.35, 1.5);
   }
-  const light = add(G.light, new THREE.MeshBasicMaterial({ color: korn ? 0xd946ef : 0xfff7d6 }), 0, 3.85, 0.7);
-  g.scale.setScalar(1.5);
+  if (type === 'enten') { const dm = mat(0xfacc15); for (let i = 0; i < 6; i++) add(G.duck, dm, (i % 2 - 0.5) * 0.8, 0.95, 0.4 + (i >> 1) * 0.6); }
+  // Positionslicht ignoriert den Nebel, damit man Schiffe auch in dichten Nächten findet
+  const light = add(G.light, new THREE.MeshBasicMaterial({ color: korn ? 0xd946ef : 0xfff7d6, fog: false }), 0, type === 'speed' ? 1.4 : 3.85, 0.7);
+  g.scale.setScalar(T.scale);
   scene.add(g);
   return { g, mats, light, phase: rnd(0, 6) };
 }
@@ -441,7 +486,7 @@ function makeGull() {
     return w;
   });
   [-0.04, 0.04].forEach(x => add(new THREE.CylinderGeometry(0.008, 0.008, 0.08, 4), gullOrange, x, -0.17, 0));
-  g.scale.setScalar(1.0);
+  g.scale.setScalar(0.8);
   return { g, wings };
 }
 
@@ -450,38 +495,46 @@ const S = {
   mode: 'menu', shift: 0, endless: false, t: 0, saved: 0, wrecks: 0, best: 0,
   yaw: 0, aim: 0, focus: 0.2, charge: 100,
   flashT: 0, flashCd: 0, hornCd: 0, spawnT: 2, gullT: 12, fireT: 15, boltT: 8, bolt: 0, thunderT: 0,
-  endT: 0, shake: 0, msgT: 0,
-  ships: [], gulls: [], fire: null, reefs: [TOWER_REEF],
+  endT: 0, shake: 0, msgT: 0, score: 0, combo: 0, comboT: 0, slowT: 0, emptyMsgT: 0,
+  ships: [], gulls: [], ducks: [], fire: null, reefs: [TOWER_REEF],
 };
 try { S.best = Number(AC && AC.getScore(KEY)) || 0; } catch (e) { S.best = 0; }
 const keys = new Set();
 const curParams = () => params(S.endless ? 5 + S.t / 60 : S.shift);
 
 function saveBest() {
-  if (S.saved <= S.best) return false;
-  S.best = S.saved;
+  if (S.score <= S.best) return false;
+  S.best = S.score;
   try { AC && AC.saveScore(KEY, S.best); } catch (e) {}
   return true;
 }
 
 // ============ Aktionen ============
 function flash() {
-  if (S.mode !== 'play' || S.flashCd > 0 || S.charge < 4) return;
+  if (S.mode !== 'play' || S.flashCd > 0) return;
+  if (S.charge < 4) { showMsg('Zu wenig Strom', 'Erst kurbeln!', '#f87171'); return; }
   S.flashCd = 0.45; S.flashT = 0.25; S.charge -= 4;
   snd('playTone', 1250, 0.07, 'square', 0.05);
-  let saved = 0, blocked = '';
+  let saved = 0, blocked = '', gained = 0;
   for (const s of S.ships) {
     if (s.state === 'safe' || s.state === 'wreck' || !beamHit(S.yaw, S.focus, s.x, s.z)) continue;
     if (s.state === 'lured') { blocked = 'Der Kapitän starrt nur aufs Feuer – erst löschen!'; continue; }
     if (s.korn && s.glare > KORN_GLARE) { blocked = 'Käpt’n Korn ist zu geblendet. Kurz wegleuchten!'; continue; }
+    if (--s.need > 0) { floatText(s, 'Hä? Nochmal!', '#fbbf24'); snd('pop'); continue; }
     s.state = 'safe';
     s.safeH = Math.atan2(s.x, s.z) + (s.x >= 0 ? 0.6 : -0.6);
     s.light.material.color.setHex(0x4ade80);
+    // Kombo: Rettungen kurz hintereinander multiplizieren, Fernrettung gibt Bonus
+    S.combo = S.comboT > 0 ? Math.min(5, S.combo + 1) : 1; S.comboT = 3;
+    const far = Math.hypot(s.x, s.z) > 95, pts = (TYPES[s.type].pts + (far ? 1 : 0)) * S.combo;
+    gained += pts;
+    floatText(s, `${SAVE_LINES[s.type]} +${pts}${far ? ' 🔭' : ''}`, '#4ade80');
     saved++;
   }
   if (saved) {
-    S.saved += saved; snd('coin');
-    showMsg(saved > 1 ? `${saved} Schiffe gerettet!` : 'Schiff gerettet!', pick(QUIPS_SAVE), '#4ade80');
+    S.saved += saved; S.score += gained; snd('coin');
+    if (S.combo > 1) snd('playTone', 600 + S.combo * 150, 0.12, 'triangle', 0.08);
+    showMsg(saved > 1 ? `${saved} Schiffe auf einen Streich!` : S.combo > 1 ? `Kombo ×${S.combo}!` : 'Schiff gerettet!', pick(QUIPS_SAVE), '#4ade80');
   } else if (blocked) showMsg('Keine Reaktion', blocked, '#fbbf24');
 }
 
@@ -511,10 +564,10 @@ function hornSound() {
 
 function horn() {
   if (S.mode !== 'play' || S.hornCd > 0) return;
-  S.hornCd = HORN_CD; S.shake = 0.25; hornSound();
+  S.hornCd = HORN_CD; S.shake = 0.25; S.slowT = 3.5; hornSound();
   let n = 0;
   for (const g of S.gulls) if (!g.flee) { g.flee = true; g.t = 0; n++; }
-  showMsg('TUUUUUT!', n ? `${n} Möwe${n > 1 ? 'n' : ''} verscheucht` : 'Die Möwen sind beeindruckt. Nicht.', '#93c5fd');
+  showMsg('TUUUUUT!', (n ? `${n} Möwe${n > 1 ? 'n' : ''} verscheucht · ` : '') + 'Alle Schiffe gehen erschrocken vom Gas.', '#93c5fd');
 }
 
 function setFocus(f) { S.focus = clamp(f, 0, 1); }
@@ -525,9 +578,10 @@ function spawnShip(p) {
   const t = pick(targets), a = rnd(-0.85, 0.85);
   const x = Math.sin(a) * SPAWN_R, z = -Math.cos(a) * SPAWN_R;
   const korn = Math.random() < p.korn && !S.ships.some(s => s.korn && s.state !== 'wreck');
-  const s = Object.assign(makeShip(korn), {
-    x, z, h: Math.atan2(t.x - x, t.z - z), speed: p.speed * (korn ? 0.8 : rnd(0.85, 1.15)),
-    state: 'sail', target: t, korn, glare: 0, sinkT: 0, lit: false,
+  const type = korn ? 'korn' : pickType(S.endless ? 5 : S.shift), T = TYPES[type];
+  const s = Object.assign(makeShip(type), {
+    x, z, h: Math.atan2(t.x - x, t.z - z), speed: p.speed * T.speed * rnd(0.85, 1.15),
+    state: 'sail', target: t, korn, type, need: T.need, glare: 0, sinkT: 0, lit: false, helped: false, danger: false,
   });
   S.ships.push(s);
   if (korn) showMsg('🍺 Käpt’n Korn ist unterwegs!', 'Nur kurz anleuchten und blinken – sonst fährt er aufs Licht zu.', '#c084fc');
@@ -567,18 +621,24 @@ function clearWorld() {
   while (S.ships.length) removeShip(0);
   for (const g of S.gulls) camera.remove(g.g);
   S.gulls = [];
+  for (const d of S.ducks) scene.remove(d.m);
+  S.ducks = [];
+  $('splats').innerHTML = '';
+  for (const f of floats) f.el.remove();
+  floats.length = 0;
   removeFire();
 }
 
 function startGame() {
-  S.shift = 0; S.saved = 0; S.endless = false;
+  S.shift = 0; S.saved = 0; S.score = 0; S.endless = false;
   startShift();
 }
 
 function startShift() {
   clearWorld();
   S.reefs = buildReefs(S.endless ? 5 : S.shift);
-  Object.assign(S, { t: 0, wrecks: 0, charge: 100, aim: 0, focus: 0.2, flashT: 0, flashCd: 0, hornCd: 0, spawnT: 2, gullT: params(S.shift).gull, fireT: 12, endT: 0, mode: 'play' });
+  // yaw lief im Menü endlos hoch – zurücksetzen, sonst zeigt die Folgekamera ins Leere
+  Object.assign(S, { t: 0, wrecks: 0, charge: 100, yaw: 0, aim: 0, focus: 0.2, combo: 0, comboT: 0, slowT: 0, emptyMsgT: 0, flashT: 0, flashCd: 0, hornCd: 0, spawnT: 2, gullT: params(S.shift).gull, fireT: 12, endT: 0, mode: 'play' });
   hideModal();
   showMsg(S.endless ? 'Endlos-Nacht' : `Schicht ${S.shift + 1}`, SHIFT_LINES[Math.min(S.shift, 5)], '#fde68a');
 }
@@ -593,7 +653,7 @@ function shiftDone() {
     sub: last
       ? 'Die Reederei schickt dir eine Kiste Fischbrötchen und einen Orden aus Kronkorken. Aber der Sturm ist noch nicht fertig mit dir …'
       : 'Die Sonne geht auf, der Kaffee ist kalt, alle Möwen sind satt. Kurz schlafen, dann geht’s weiter.',
-    stats: [['Gerettet', S.saved], ['Wracks', `${S.wrecks}/3`], ['Schicht', `${S.shift + 1}/5`], ['Rekord', S.best + (rec ? ' ★' : '')]],
+    stats: [['Punkte', S.score], ['Gerettet', S.saved], ['Wracks', `${S.wrecks}/3`], ['Rekord', S.best + (rec ? ' ★' : '')]],
     primary: [last ? 'Endlos-Modus (Enter)' : 'Nächste Schicht (Enter)', () => { if (last) S.endless = true; S.shift++; startShift(); }],
     secondary: last ? ['Neue Karriere (R)', startGame] : null,
   });
@@ -606,7 +666,7 @@ function gameOver() {
   showModal({
     title: 'Fristlos gekündigt!',
     sub: 'Drei Wracks in einer Nacht. Die Reederei schickt dir zum Abschied Schwimmflügel und eine Taschenlampe.',
-    stats: [['Gerettet', S.saved], ['Schicht', S.endless ? 'Endlos' : `${S.shift + 1}/5`], ['Rekord', S.best + (rec ? ' ★' : '')], ['Nachtzeit', clockText()]],
+    stats: [['Punkte', S.score], ['Gerettet', S.saved], ['Schicht', S.endless ? 'Endlos' : `${S.shift + 1}/5`], ['Rekord', S.best + (rec ? ' ★' : '')]],
     primary: ['Neue Karriere (Enter)', startGame],
   });
 }
@@ -626,7 +686,15 @@ function wreck(s, reef) {
   s.state = 'wreck';
   S.wrecks++; S.shake = 0.6;
   snd('explosion');
-  const sub = s.korn && reef.tower ? 'Käpt’n Korn hat den Leuchtturm geküsst. Prost.' : pick(QUIPS_WRECK);
+  const sub = s.korn && reef.tower ? 'Käpt’n Korn hat den Leuchtturm geküsst. Prost.'
+    : s.type === 'enten' ? '4000 Gummienten sind jetzt frei. Quietsch.'
+    : s.type === 'butter' ? 'Die Heizdecken schwimmen. Die Rentner auch.'
+    : s.type === 'speed' ? 'Livestream beendet.' : pick(QUIPS_WRECK);
+  if (s.type === 'enten') for (let i = 0; i < 14; i++) {
+    const m = new THREE.Mesh(G.duck, duckMat); scene.add(m);
+    S.ducks.push({ m, x: s.x + rnd(-3, 3), z: s.z + rnd(-3, 3), vx: rnd(-1.5, 1.5), vz: rnd(-1.5, 1.5), t: 0 });
+  }
+  S.combo = 0; S.comboT = 0;
   showMsg('💥 Schiffbruch!', `${sub} (${S.wrecks}/${MAX_WRECKS})`, '#f87171');
   if (S.wrecks >= MAX_WRECKS && !S.endT) S.endT = 1.8;
 }
@@ -640,18 +708,24 @@ function update(dt) {
   // Zielen & Fokus
   const turn = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   S.aim = clamp(S.aim + turn * 1.3 * dt, -MAX_YAW, MAX_YAW);
-  S.yaw = turnTo(S.yaw, S.aim, 2.6 * dt);
+  S.yaw = turnTo(S.yaw, S.aim, 5 * dt);
   const fz = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   if (fz) setFocus(S.focus + fz * 0.8 * dt);
 
   // Dynamo
   const wasOn = S.charge > 0;
   S.charge = Math.max(0, S.charge - (1.6 + 1.4 * S.focus) * dt);
-  if (wasOn && S.charge === 0) { showMsg('Dynamo leer!', 'Kurbeln, Hinnerk, kurbeln! (F)', '#f87171'); snd('hit'); }
+  S.emptyMsgT = Math.max(0, S.emptyMsgT - dt);
+  if (wasOn && S.charge === 0) {
+    snd('hit');
+    if (!S.emptyMsgT) { showMsg('Dynamo leer!', 'Kurbeln, Hinnerk, kurbeln! (F)', '#f87171'); S.emptyMsgT = 5; }
+  }
   const beamOn = S.charge > 0;
   S.flashT = Math.max(0, S.flashT - dt);
   S.flashCd = Math.max(0, S.flashCd - dt);
   S.hornCd = Math.max(0, S.hornCd - dt);
+  S.slowT = Math.max(0, S.slowT - dt);
+  if (S.comboT > 0 && (S.comboT -= dt) <= 0) S.combo = 0;
 
   // Spawns
   if ((S.spawnT -= dt) <= 0) {
@@ -708,12 +782,16 @@ function update(dt) {
       want = Math.atan2(t.x - s.x, t.z - s.z);
     }
     s.h = turnTo(s.h, want, (s.state === 'safe' ? 0.9 : 0.45) * dt);
-    const v = s.speed * (s.state === 'lured' ? 1.25 : 1);
+    const v = s.speed * (s.state === 'lured' ? 1.25 : 1) * (S.slowT > 0 ? 0.4 : 1);
     s.x += Math.sin(s.h) * v * dt; s.z += Math.cos(s.h) * v * dt;
 
     if (s.state !== 'safe') {
       const reef = hitReef(s.x, s.z, S.reefs, 1.6);
-      if (reef) wreck(s, reef);
+      if (reef) { wreck(s, reef); continue; }
+      // Gefahr: in Kürze auf Kollisionskurs → rotes Blinklicht + Hilferuf
+      s.danger = !!hitReef(s.x + Math.sin(s.h) * 20, s.z + Math.cos(s.h) * 20, S.reefs, 1.6) || !!hitReef(s.x + Math.sin(s.h) * 10, s.z + Math.cos(s.h) * 10, S.reefs, 1.6);
+      if (s.danger && !s.helped) { s.helped = true; floatText(s, HELP_LINES[s.type], '#f87171'); snd('playTone', 880, 0.09, 'square', 0.04); }
+      s.light.material.color.setHex(s.danger && (S.t * 4 | 0) % 2 ? 0xff2020 : s.korn ? 0xd946ef : 0xfff7d6);
     } else if (Math.hypot(s.x, s.z) > 175) { removeShip(i); continue; }
 
     const t = S.t + s.phase;
@@ -738,7 +816,18 @@ function update(dt) {
       g.g.position.copy(g.home); g.g.position.y += Math.abs(Math.sin(g.t * 2)) * 0.01;
       g.g.rotation.z = Math.sin(g.t * 0.8) * 0.15;
       g.wings.forEach(w => { w.rotation.z = 0; });
+      if (!g.pooped && g.t > 5) { g.pooped = true; splat(); }
+      if (Math.random() < dt * 0.25) { snd('playTone', 1400, 0.07, 'triangle', 0.04); setTimeout(() => snd('playTone', 1150, 0.1, 'triangle', 0.035), 90); }
     }
+  }
+
+  // Treibende Gummienten
+  for (let i = S.ducks.length - 1; i >= 0; i--) {
+    const d = S.ducks[i];
+    d.t += dt; d.x += d.vx * dt; d.z += d.vz * dt;
+    d.m.position.set(d.x, waveH(d.x, d.z, S.t) * 0.8 + 0.2, d.z);
+    d.m.rotation.y = d.t;
+    if (d.t > 25) { scene.remove(d.m); S.ducks.splice(i, 1); }
   }
 
   // Gewitter
@@ -828,6 +917,35 @@ function hideModal() { $('modal').style.display = 'none'; modalOpts = null; }
 $('mPrimary').addEventListener('click', () => modalOpts && modalOpts.primary[1]());
 $('mSecondary').addEventListener('click', () => modalOpts && modalOpts.secondary && modalOpts.secondary[1]());
 
+// Sprechblasen über Schiffen (folgen dem Schiff, steigen auf, verblassen)
+const floats = [], _fp = new THREE.Vector3();
+function floatText(s, text, color) {
+  const el = document.createElement('div');
+  el.className = 'float'; el.textContent = text; el.style.color = color;
+  document.body.appendChild(el);
+  floats.push({ el, s, t: 0 });
+}
+function updateFloats(dt) {
+  for (let i = floats.length - 1; i >= 0; i--) {
+    const f = floats[i];
+    f.t += dt;
+    _fp.set(f.s.x, 6 + f.t * 4, f.s.z).project(camera);
+    if (f.t > 1.8 || _fp.z > 1) { f.el.remove(); floats.splice(i, 1); continue; }
+    f.el.style.transform = `translate(${(_fp.x + 1) / 2 * innerWidth}px, ${(1 - _fp.y) / 2 * innerHeight}px) translate(-50%, -100%)`;
+    f.el.style.opacity = String(Math.min(1, (1.8 - f.t) * 2));
+  }
+}
+function splat() {
+  const el = document.createElement('div');
+  el.className = 'splat';
+  el.style.left = rnd(15, 85) + '%'; el.style.top = rnd(25, 70) + '%';
+  el.style.transform = `rotate(${rnd(0, 360)}deg) scale(${rnd(0.8, 1.4)})`;
+  $('splats').appendChild(el);
+  setTimeout(() => el.remove(), 9000);
+  snd('playTone', 180, 0.12, 'sine', 0.08);
+  showMsg('Platsch!', 'Eine Möwe hat dir die Scheibe verziert.', '#e5e7eb');
+}
+
 function showMsg(title, sub, color) {
   const el = $('msg');
   el.innerHTML = `<span style="color:${color}">${title}</span><small>${sub || ''}</small>`;
@@ -846,9 +964,11 @@ function updateHUD() {
   const touch = document.body.classList.contains('touch');
   setText('hShift', S.endless ? '∞' : `${S.shift + 1}/5`);
   setText('hTime', clockText());
+  setText('hScore', String(S.score));
+  setText('hCombo', S.combo > 1 ? `×${S.combo}` : '');
   setText('hSaved', String(S.saved));
   setText('hWrecks', `${S.wrecks}/${MAX_WRECKS}`);
-  setText('hBest', String(Math.max(S.best, S.saved)));
+  setText('hBest', String(Math.max(S.best, S.score)));
   setText('hCharge', Math.ceil(S.charge) + ' %');
   $('pCharge').classList.toggle('warn', S.charge < 25);
   setText('hFocus', S.focus < 0.35 ? 'breit' : S.focus < NARROW ? 'mittel' : 'eng');
@@ -858,6 +978,7 @@ function updateHUD() {
   if (S.charge <= 0) task = touch ? 'Dynamo leer! ⚙️ Kurbeln antippen!' : 'Dynamo leer! F drücken, so schnell du kannst!';
   else if (S.fire) task = `🔥 Feuer löschen: Strahl eng stellen${touch ? '' : ' (W)'} und draufhalten – ${Math.floor(S.fire.prog / FIRE_TIME * 100)} %`;
   else if (S.gulls.filter(g => !g.flee).length >= 2) task = touch ? 'Möwen auf der Scheibe! 📯 Horn!' : 'Möwen auf der Scheibe! Nebelhorn (H / Rechtsklick)';
+  else if (S.ships.some(s => s.danger && s.state !== 'safe' && s.state !== 'wreck')) task = '🚨 Schiff in Not (rotes Licht)! Anleuchten und blinken!';
   else if (S.ships.some(s => s.korn && s.state !== 'safe' && s.state !== 'wreck')) task = 'Käpt’n Korn: nur kurz anleuchten und sofort blinken!';
   else if (S.charge < 25) task = touch ? 'Dynamo schwach – ⚙️ Kurbeln!' : 'Dynamo schwach – F kurbeln!';
   else task = touch ? 'Ziehen zum Zielen, tippen zum Blinken' : 'Schiffe anleuchten und blinken (Klick / Leertaste)';
@@ -886,7 +1007,7 @@ window.addEventListener('keydown', e => {
   if ($('modal').style.display === 'flex') {
     if (e.repeat) return;
     if (e.code === 'Enter' && modalOpts) { e.preventDefault(); modalOpts.primary[1](); }
-    else if (e.code === 'Escape' && S.mode === 'pause') resumeGame();
+    else if ((e.code === 'Escape' || e.code === 'KeyP') && S.mode === 'pause') resumeGame();
     else if (e.code === 'KeyR' && S.mode !== 'menu' && S.mode !== 'play') startGame();
     return;
   }
@@ -908,6 +1029,8 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), WATER = new THREE.
 let pinchDist = 0, tap = null;
 function aimAt(e) {
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  // Kamera folgt dem Strahl (schmale Fenster): Raycast würde sich selbst verstärken → Bildschirm-X direkt abbilden
+  if (camFollow) { S.aim = clamp(ndc.x * MAX_YAW * 1.15, -MAX_YAW, MAX_YAW); return; }
   ray.setFromCamera(ndc, camera);
   const d = ray.ray.direction, p = ray.ray.intersectPlane(WATER, hitP);
   S.aim = clamp(p ? Math.atan2(p.x, -p.z) : Math.atan2(d.x, -d.z), -MAX_YAW, MAX_YAW);
@@ -917,7 +1040,7 @@ canvas.addEventListener('pointerdown', e => {
   if (S.mode !== 'play') return;
   if (e.pointerType === 'mouse') {
     if (e.button === 2) horn();
-    else if (e.button === 0) { aimAt(e); flash(); }
+    else if (e.button === 0) { aimAt(e); S.yaw = S.aim; flash(); } // Blinken dort, wo geklickt wurde, nicht beim nachlaufenden Strahl
     return;
   }
   document.body.classList.add('touch');
@@ -945,7 +1068,7 @@ canvas.addEventListener('pointermove', e => {
   }
 });
 const endPtr = e => {
-  if (tap && ptrs.size === 1 && performance.now() - tap.t < 350) flash();
+  if (tap && ptrs.size === 1 && performance.now() - tap.t < 350) { if (!camFollow) S.yaw = S.aim; flash(); }
   ptrs.delete(e.pointerId); pinchDist = 0; tap = null;
 };
 canvas.addEventListener('pointerup', endPtr);
@@ -960,6 +1083,7 @@ function frame(now) {
   const dt = clamp((now - last) / 1000, 0, 0.1); last = now; // rAF-Zeitstempel kann vor performance.now() liegen
   if (S.mode === 'play') update(dt);
   updateVisuals(dt, now / 1000);
+  updateFloats(S.mode === 'play' ? dt : 0);
   updateHUD();
   renderer.render(scene, camera);
 }
@@ -972,7 +1096,7 @@ showModal({
     (touch
       ? 'Ziehen: Strahl schwenken · Tippen: Blinken · Zwei Finger: Fokus · Buttons: Fokus, ⚙️ Dynamo kurbeln, 📯 Nebelhorn'
       : '<kbd>Maus</kbd> oder <kbd>A</kbd>/<kbd>D</kbd> Strahl schwenken · <kbd>Klick</kbd>/<kbd>Leertaste</kbd> Blinken<br><kbd>Mausrad</kbd>/<kbd>W</kbd>/<kbd>S</kbd> Fokus (eng = weiter) · <kbd>F</kbd> Dynamo kurbeln · <kbd>H</kbd>/<kbd>Rechtsklick</kbd> Nebelhorn') +
-    '<br><br>Leuchte Schiffe an und blinke, damit sie abdrehen. Möwen auf der Scheibe? Nebelhorn! Ab Schicht 3 zünden Strandräuber falsche Feuer, und Käpt’n Korn verträgt kein Dauerlicht.',
+    '<br><br>Leuchte Schiffe an und blinke, damit sie abdrehen. Rotes Blinklicht = gleich kracht’s! Schnelle Rettungen hintereinander geben Kombo-Punkte, weit draußen gibt’s Bonus. Butterfahrt-Dampfer brauchen zwei Blinker. Das Nebelhorn verscheucht Möwen <i>und</i> bremst kurz alle Schiffe. Ab Schicht 3 zünden Strandräuber falsche Feuer, und Käpt’n Korn verträgt kein Dauerlicht.',
   stats: [['Rekord', S.best], ['Schichten', '5 + Endlos']],
   primary: ['Schicht beginnen (Enter)', startGame],
 });
