@@ -292,7 +292,8 @@ const ArcadeCore = (() => {
     'seiltaenzer': 'seiltaenzer_best',
     'eisangler': 'eisangler_best',
     'tiefenrausch': 'tiefenrausch_best',
-    'wettermacher': 'wettermacher_best'
+    'wettermacher': 'wettermacher_best',
+    'orbitgolf': 'orbitgolf_best'
   };
 
   function getScore(gameKey) {

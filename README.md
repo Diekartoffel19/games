@@ -13,6 +13,7 @@ Eine umfassende, eigenständige Sammlung von **über 65 Browser-Games, interakti
 Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Audio API via [`src/arcade-core.js`](src/arcade-core.js)) und Touch-/Keyboard-Steuerung:
 
 * **Physik & Ragdoll:**
+  * [`games/orbitgolf.html`](games/orbitgolf.html) — *Orbit-Golf 3D (Minigolf zwischen kleinen Planeten: jeder Himmelskörper zieht per Newton-Gravitation am Ball – Bogenschläge, Orbit-Putts um den eigenen Planeten, Schleuder-Manöver an Schwarzem Loch und Sonne, Wurmloch, Boost-Ring, kreisender Mond und Doppelstern; 5 Oberflächen mit eigener Reibung und Sprungkraft (Gras, Eis, Gummi, Sand, Fels), Schleuder-Steuerung mit 1-Sekunden-Flugbahnvorschau und Geisterspur, 12 Löcher mit Par, Kurs-Rekord & Bestwert pro Loch)*
   * [games/thermal_nomad.html](games/thermal_nomad.html) — *Thermal Nomad 3D: Arctic Survival (Exakte Euler-Thermodynamik mit Tsurf & Tcore, Sonnen-Raycasting, Reflektions-Spiegeln, Thermoschilden, Aerosol-Nebel & physikalischem Lastenschlitten)*
   * [`games/ballistics.html`](games/ballistics.html) — *Panzer-Querschnitt: Slow-Mo Ballistik & Zerstörungs-Simulator (Mehrschicht-Panzerung, ERA, Keramik, Spalling & Röntgen-Kill-Cam)*
   * [`games/magnet.html`](games/magnet.html) — *Magnet-Puzzler: Polaritäts-Panik (Coulomb-Physik, Decken-Anziehung & Büroklammern-Abwehr)*
