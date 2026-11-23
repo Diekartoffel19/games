@@ -2,7 +2,7 @@
 
 Dieses Dokument enthält:
 1. **🚀 Engineering-Blueprint:** Schritt-für-Schritt-Anleitung & Code-Vorlage für die Konvertierung / Neuentwicklung von Spielen in **Three.js 3D** (kompatibel mit dem Repository-Stack).
-## 🧊 Bestehende 3D-Spiele (52 Spiele)
+## 🧊 Bestehende 3D-Spiele (53 Spiele)
 3. **⭐ Top 3D-Upgrade-Kandidaten (5 Spiele):** Die 2D-Spiele, bei denen ein 3D-Upgrade massiven spielerischen & visuellen Mehrwert liefert.
 4. **🚫 Entfernte 2D-Titel & Begründung:** Warum 55 Minigames (wie *Tetris*, *2048*, *Spire*, *Pixel Alchemy*) bewusst in 2D bleiben und nicht portiert werden sollten.
 
@@ -145,7 +145,7 @@ Alle 3D-Spiele in diesem Projekt laufen **ohne Build-Step**, direkt im Browser v
 
 ---
 
-## 🧊 Bestehende 3D-Spiele (52 Spiele)
+## 🧊 Bestehende 3D-Spiele (53 Spiele)
 
 Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 
@@ -203,6 +203,7 @@ Diese Spiele sind bereits vollumfänglich in **Three.js / WebGL** realisiert:
 | 50 | ⛳ **Orbit-Golf 3D** | [`games/orbitgolf.html`](games/orbitgolf.html) | `skill` | Three.js | Minigolf zwischen Low-Poly-Planeten mit echter Punktmassen-Gravitation (Substeps à 1/240 s): Ball rollt auf Kugeloberflächen mit Roll- und Stoßreibung, hebt oberhalb der Orbitalgeschwindigkeit ab, Orbit-Putts und Gravitationsschleudern. 5 Oberflächen (Gras, Eis, Gummi, Sand-Bunker, Fels), Sonne (verglüht) und Schwarzes Loch (Akkretionsscheiben-Shader, verschluckt), Wurmloch-Paar, Boost-Ring, kinematisch kreisender Mond und Doppelstern. Schleuder-Steuerung relativ zur Kamera im Tangentialraum, separat einstellbarer Abschusswinkel, 1,25-s-Flugbahnvorschau aus derselben Physik, Geisterspur des letzten Schlags, Kamera mit Parallel-Transport des Up-Vektors. 12 Löcher (Kurs-Par 35), Strafschläge, Scorecard, Kurs-Rekord |
 | 51 | 🗼 **Leuchtturm 3D** | [`games/leuchtturm.html`](games/leuchtturm.html) | `sim` | Three.js | Leuchtturmwärter in der Sturmnacht, Kamera im gläsernen Laternenraum: SpotLight + additiver Lichtkegel per Maus-Raycast auf die Wasserebene oder A/D schwenken, Fokus breit (kurz, weit gefächert) bis eng (lang, schmal) per Mausrad/W/S/Pinch; unbeleuchtete Schiffe halten stur aufs Riff zu, angeleuchtet + Blinken (Klick/Leertaste) drehen sie ab. Dynamo entlädt sich bei Licht und Blinken, F/Button kurbelt; Möwen landen auf der Scheibe und verdecken die Sicht, Nebelhorn (H/Rechtsklick, Cooldown, eigener WebAudio-Klang) verscheucht sie. Ab Schicht 3 falsche Feuer der Strandräuber auf den Klippen (locken Schiffe, 1,5 s engen Strahl draufhalten) und Käpt’n Korn (zu lange angeleuchtet → fährt auf den Turm zu). CPU-Wellen auf PlaneGeometry mit Flat-Shading, Regen-Linien, Blitze mit Donner, Dämmerungs-Himmel am Schichtende, prozedurale rot-weiße Ziegel-CanvasTexture; 5 Schichten mit steigendem Nebel, Tempo, Verkehr & Möwen, danach Endlos-Modus mit Rekord (gerettete Schiffe) |
 | 52 | 🎭 **Schattenkunst 3D** | [`games/schattenkunst.html`](games/schattenkunst.html) | `puzzle` | Three.js | Schattenpuzzle im Künstleratelier: Haushaltsmüll aus gruppierten Primitiven (Klobürste, Brezel, Quietscheente, Wäscheklammer, Kleiderbügel, Pümpel, Banane) schwebt vor einem DirectionalLight mit Shadow-Map, der Schatten fällt als orthografische Projektion auf die Wand. Zielsilhouette wird aus der versteckten Lösungspose per OrthographicCamera entlang der Lichtachse in ein 96×96-WebGLRenderTarget gerendert (Layer + overrideMaterial) und als CanvasTexture-Umriss an die Wand gelegt; aktuelle Pose wird alle 150 ms gleich gerendert, per readRenderTargetPixels gelesen und per IoU verglichen. Startpose = Lösung mit garantierter Mindeststörung, Einrast-Hilfe ab 95 %. Ab Werk 6 zweiter Scheinwerfer im 90°-Winkel auf die Seitenwand (Wertung = Minimum beider IoUs). Steuerung per WASDQE/Maus-Trackball/Touch, 10 Werke mit Sternen nach Zeit & Fehlversuchen, Meisterprüfung als Endlosmodus auf Zeit |
+| 53 | 📝 **Spick-Alarm 3D: Quanten-BWL** | [`games/spickalarm.html`](games/spickalarm.html) | `stealth` | Three.js | First-Person-Klausur-Stealth im Low-Poly-Hörsaal: sitzend umsehen (Pointer-Lock, begrenzter Blickwinkel), Spick-Quellen (Spicker im Mäppchen mit Klappdeckel, Kevins Blatt, Altklausur-Reste an der Tafel) werden per Zoom-Halten schrittweise scharf (CanvasTexture mit Unschärfe-Filter & Buchstaben-Enthüllung); Verdachts-Meter aus Sichtkegel + Raycast-Sichtlinie (Mitstudierende verdecken), schneller bei Zoom & Nähe. Prof. Knurr läuft auf einem Ring-Pfad um die Bänke: Tafel-Phasen (sicher), Rundumblick, Laserpointer auf Reihen, plötzliches Umdrehen mit Husten-Vorwarnung, Schritt-Sounds nach Entfernung. Radiergummi an die Heizung lenkt ab, Papierflieger fangen verrät Antworten, Assistentin ab Klausur 4, Petze Pascal in Klausur 5 (Zettel zuschnippen, damit Knurr ihn rauswirft). Klausurblatt per Raycast-UV ankreuzen, Notenschlüssel 1,0–5,0, Bestnote je Klausur in `spickalarm_grades` |
 
 *(Zusätzliches 3D-Entwicklertool: [`git/index.html`](git/index.html) – GitHistory 3D Commit-Visualizer mit Shadern).*
 
