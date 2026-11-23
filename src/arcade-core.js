@@ -293,7 +293,8 @@ const ArcadeCore = (() => {
     'eisangler': 'eisangler_best',
     'tiefenrausch': 'tiefenrausch_best',
     'wettermacher': 'wettermacher_best',
-    'orbitgolf': 'orbitgolf_best'
+    'orbitgolf': 'orbitgolf_best',
+    'spickalarm': 'spickalarm_best'
   };
 
   function getScore(gameKey) {
