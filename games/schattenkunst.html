@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Schattenkunst 3D — Müll im Rampenlicht</title>
-<meta name="description" content="Dreh Klobürste, Brezel und Quietscheente vor dem Scheinwerfer, bis ihr Schatten die Zielform an der Wand trifft. 10 Werke, zwei Scheinwerfer und ein gnadenloser Kunstkritiker.">
+<meta name="description" content="Dreh Klobürste, Pümpel und Quietscheente vor dem Scheinwerfer, bis ihr Schatten ein Motiv ergibt: Sektglas, Segelboot, Hase. 10 Werke, zwei Scheinwerfer und ein gnadenloser Kunstkritiker.">
 <meta name="keywords" content="Schattenpuzzle, Schattenkunst, 3D Puzzle, Browser Spiel, Shadow Art, Three.js">
 <meta name="robots" content="index, follow">
 <meta name="theme-color" content="#15111a">
@@ -64,14 +64,16 @@
   }
   .hud-pill b { color: #facc15; }
   .hud-pill.warn b { color: #f87171; }
-  .hud-pill.good { border-color: #4ade80; }
-  .hud-pill.good b { color: #4ade80; }
 
-  #task {
+  /* Deckungsbalken + Aufgabe gestapelt, damit ein umbrechender Text nichts überdeckt */
+  #stack {
     position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(118px + env(safe-area-inset-bottom)); z-index: 20;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: max-content; max-width: calc(100vw - 32px);
+  }
+  #task {
     background: rgba(24, 16, 30, 0.75); border: 1px solid rgba(244, 114, 182, 0.4); border-radius: 999px;
     padding: 6px 16px; font-size: 0.95rem; font-weight: 800; color: #fbcfe8; pointer-events: none; text-align: center;
-    max-width: calc(100vw - 32px); font-style: italic;
+    font-style: italic;
   }
   #bottom-hint {
     position: fixed; bottom: calc(76px + env(safe-area-inset-bottom)); left: 16px; right: 16px; z-index: 20;
@@ -82,7 +84,36 @@
     padding: 1px 6px; border-radius: 6px; font-weight: 800; color: #fff;
   }
   body.touch #bottom-hint { display: none; }
-  body.touch #task { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  body.touch #stack { bottom: calc(130px + env(safe-area-inset-bottom)); } /* Platz für zwei Knopfreihen */
+  body.touch #task { font-size: 0.82rem; }
+  body.touch .tbtn .lbl { display: none; }
+  body:not(.two) .two-only { display: none; }
+
+  /* Live-Deckungsbalken: rot → gelb → grün, Strich bei der 90-%-Marke */
+  #covbar {
+    position: relative; width: min(340px, calc(100vw - 32px)); height: 22px; border-radius: 999px; overflow: hidden;
+    background: rgba(24, 16, 30, 0.8); border: 1px solid rgba(255, 255, 255, 0.25);
+  }
+  #covfill { position: absolute; inset: 0 auto 0 0; width: 0; transition: width 0.15s, background-color 0.15s; }
+  #covmark { position: absolute; top: 0; bottom: 0; left: 90%; width: 2px; background: #fff; opacity: 0.8; }
+  #covtxt { position: relative; display: block; text-align: center; font-size: 0.78rem; font-weight: 900; line-height: 20px; text-shadow: 0 1px 3px #000; }
+  body.menu #stack, body.menu #critic { display: none; }
+
+  #critic {
+    position: fixed; left: calc(12px + env(safe-area-inset-left)); bottom: calc(200px + env(safe-area-inset-bottom)); z-index: 35;
+    display: flex; align-items: flex-end; gap: 8px; max-width: min(320px, calc(100vw - 24px)); pointer-events: none;
+    opacity: 0; transform: translateY(10px); transition: opacity 0.25s, transform 0.25s;
+  }
+  #critic.show { opacity: 1; transform: none; }
+  #critic .face { font-size: 2.4rem; line-height: 1; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
+  #critic .bubble {
+    position: relative; background: #fdf4ff; color: #2a1830; border-radius: 16px 16px 16px 4px; padding: 8px 12px;
+    font-size: 0.9rem; font-weight: 700; font-style: italic; box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+  }
+  body.touch #critic { bottom: auto; top: calc(124px + env(safe-area-inset-top)); }
+
+  .confetti { position: fixed; top: -16px; width: 9px; height: 14px; z-index: 55; pointer-events: none; animation: sk-fall linear forwards; }
+  @keyframes sk-fall { to { transform: translate(var(--dx), 108vh) rotate(var(--r)); } }
 
   #tbar {
     position: fixed; left: 0; right: 0; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 40;
@@ -165,25 +196,30 @@
 
 <div id="hud">
   <div class="hud-pill">🎭 <b id="hLevel">Werk 1/10</b></div>
-  <div class="hud-pill" id="hCov">🎯 Deckung <b id="hScore">0 %</b></div>
   <div class="hud-pill" id="hTimePill">⏱ <b id="hTime">0:00</b></div>
   <div class="hud-pill">📨 Einreichungen <b id="hSubs">0</b></div>
   <div class="hud-pill">🧺 <b id="hObj">–</b></div>
 </div>
 
 <div id="msg"></div>
-<div id="task">„Ente gut, alles gut“</div>
+<div id="stack">
+  <div id="covbar"><div id="covfill"></div><div id="covmark"></div><span id="covtxt">Deckung 0 %</span></div>
+  <div id="task">„Ente gut, alles gut“</div>
+</div>
+<div id="critic"><span class="face">🧐</span><div class="bubble" id="criticTxt"></div></div>
 <div id="bottom-hint">
-  <span class="key-badge">W A S D Q E</span> / Ziehen: drehen · <span class="key-badge">Shift</span> + Tasten/Ziehen: schieben · <span class="key-badge">Rad</span> Tiefe ·
-  <span class="key-badge">1-4</span>/<span class="key-badge">Tab</span> Objekt · <span class="key-badge">LEER</span> einreichen · <span class="key-badge">R</span> zurücksetzen · Rechtsklick-Ziehen: Kamera
+  <span class="key-badge">W A S D Q E</span> / Ziehen: drehen · <span class="key-badge">Shift</span> + Tasten/Ziehen: schieben · <span class="two-only"><span class="key-badge">Rad</span> Tiefe · </span>
+  <span class="key-badge">1-4</span>/<span class="key-badge">Tab</span> Objekt · <span class="key-badge">LEER</span> einreichen · <span class="key-badge">Z</span> rückgängig · <span class="key-badge">H</span> Tipp · <span class="key-badge">R</span> Reset · Rechtsklick-Ziehen: Kamera
 </div>
 
 <div id="tbar">
   <button class="tbtn touch-only" id="tMode">↻ Drehen</button>
   <button class="tbtn touch-only" id="tRollL">⟲</button>
   <button class="tbtn touch-only" id="tRollR">⟳</button>
-  <button class="tbtn" id="tNext">⇥ Objekt</button>
-  <button class="tbtn" id="tReset">↺ Reset</button>
+  <button class="tbtn" id="tNext" title="Nächstes Objekt (Tab)">⇥<span class="lbl"> Objekt</span></button>
+  <button class="tbtn" id="tUndo" title="Rückgängig (Z)">↶</button>
+  <button class="tbtn" id="tReset" title="Zurücksetzen (R)">↺<span class="lbl"> Reset</span></button>
+  <button class="tbtn" id="tHint" title="Tipp: Geisterbild der Lösung (H) – kostet einen Stern">💡<span class="lbl"> Tipp</span></button>
   <button class="tbtn primary" id="tSubmit">✔ Einreichen</button>
 </div>
 
@@ -226,21 +262,33 @@ console.assert(iou(Uint8Array.of(1, 0, 1), Uint8Array.of(1, 0, 1)) === 1, 'IoU: 
 console.assert(iou(Uint8Array.of(1, 0), Uint8Array.of(0, 1)) === 0, 'IoU: disjunkt');
 console.assert(iou(new Uint8Array(3), new Uint8Array(3)) === 0, 'IoU: leer');
 
+// 1-px-Dilatation (Kreuz): dünner Bügeldraht verzeiht so 1 px Versatz in der Wertung
+function dilate(m, n) {
+  const o = m.slice();
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const i = y * n + x;
+    if (!m[i] && ((x > 0 && m[i - 1]) || (x < n - 1 && m[i + 1]) || (y > 0 && m[i - n]) || (y < n - 1 && m[i + n]))) o[i] = 1;
+  }
+  return o;
+}
+console.assert(dilate(Uint8Array.of(0, 0, 0, 0, 1, 0, 0, 0, 0), 3).join('') === '010111010', 'Dilatation: Kreuz');
+
 // ============ Konstanten ============
 const WALL = 6, FLOOR_Y = -4.5, H = 4, N = 96, BOUND = 3;
 const WIN = 0.9, SNAP = 0.95;
 
+// Jede Lösungspose ist so gebaut, dass der Schatten wirklich das Motiv zeigt (side = Seitenwand ab Werk 6)
 const LEVELS = [
-  { name: 'Ente gut, alles gut', par: 40, items: [['ente', 0, 0, 0, 0, -25, -15]] },
-  { name: 'Stillleben mit Klobürste', par: 40, items: [['klobuerste', 0, 0, 0, 20, 0, -40]] },
-  { name: 'Die Brezel des Anstoßes', par: 50, items: [['brezel', 0, 0.2, 0, 35, -20, 160]] },
-  { name: 'Ausgewaschene Hoffnung', par: 70, items: [['kleiderbuegel', 0, 0.8, 0, 0, 15, -10], ['waescheklammer', 1.2, -0.8, 0.3, 0, 0, 35]] },
-  { name: 'Dackel aus Abflussrohr', par: 80, items: [['puempel', -1.2, 0.2, 0, 0, 0, -75], ['banane', 1.0, -0.4, 0.4, 0, 20, 180]] },
-  { name: 'Doppelte Ente, halbe Würde', par: 70, two: true, items: [['ente', 0, 0, 0, 20, -40, 10]] },
-  { name: 'Klobürste im Kreuzverhör', par: 90, two: true, items: [['klobuerste', -0.8, 0, 0.5, 25, 0, -30], ['waescheklammer', 1, 0.3, -0.6, 15, 40, -20]] },
-  { name: 'Der Brezel-Bananen-Pakt', par: 100, two: true, items: [['brezel', -0.6, 0.6, 0.4, 20, 35, 10], ['banane', 0.9, -0.9, -0.5, -15, 25, 200]] },
-  { name: 'Ménage à trois im Badezimmer', par: 140, two: true, items: [['ente', -1.6, -0.6, 0.8, 0, 30, 0], ['puempel', 0.4, 0.3, -0.4, 10, 0, 25], ['kleiderbuegel', 1.6, 1.3, 0.5, -20, -30, 8]] },
-  { name: 'Das Gesamtkunstwerk', par: 160, two: true, items: [['klobuerste', -1.8, 0.2, 0, 0, 0, 30], ['brezel', 0.2, 0.9, 0.6, 15, -25, -10], ['banane', 1.4, -1.2, -0.8, 30, 10, 120]] },
+  { name: 'Ente gut, alles gut', motif: 'Ente', par: 40, easy: true, items: [['ente', 0, 0, 0, 0, -25, -10]] },
+  { name: 'Die Brezel des Anstoßes', motif: 'Schweinenase', par: 40, easy: true, items: [['brezel', 0, 0.3, 0, 0, 0, 0]] },
+  { name: 'Prost, Abfluss!', motif: 'Sektglas', par: 60, items: [['puempel', 0, 0.8, 0, 0, 0, 180], ['brezel', 0, -0.9, 0, 90, 0, 0]] },
+  { name: 'Ahoi, Bügelfalte', motif: 'Segelboot', par: 70, items: [['kleiderbuegel', -0.35, 0.8, 0, 0, 0, 90], ['banane', 0, -0.45, 0, 0, 0, 180]] },
+  { name: 'O Tannenbaum, o Klobürste', motif: 'Tannenbaum', par: 100, items: [['klobuerste', 0, -0.9, 0, 0, 0, 0], ['kleiderbuegel', 0, -0.2, 0, 0, 0, 0], ['kleiderbuegel', 0, 0.75, 0, 0, 0, 0]] },
+  { name: 'Doppelte Ente, halbe Würde', motif: 'Ente', side: 'Schneemann', par: 70, two: true, items: [['ente', 0, 0, 0, 0, 0, 0]] },
+  { name: 'Sekt für zwei', motif: 'Sektglas', side: 'noch ein Sektglas', par: 90, two: true, items: [['puempel', 0, 0.8, 0, 0, 0, 180], ['brezel', 0, -0.9, 0, 90, 0, 0]] },
+  { name: 'Winterdienst', motif: 'Schneemann mit Schippe', side: 'Ente beim Angeln', par: 110, two: true, items: [['ente', 0.5, -0.6, 0, 0, 90, 0], ['klobuerste', -0.9, 0, 0.3, -35, 0, -20]] },
+  { name: 'Hasenente nach Wittgenstein', motif: 'Hase', side: 'Dampfer-Ente', par: 140, two: true, items: [['ente', 0, -1.1, 0, 0, 90, 0], ['waescheklammer', -0.3, 0.7, 0, 0, 0, 20], ['waescheklammer', 0.3, 0.7, 0, 0, 0, -8]] },
+  { name: 'Silvester im Atelier', motif: 'Schneemann mit Sektglas', side: 'Ente mit Sektglas', par: 160, two: true, items: [['ente', -0.7, -0.8, 0.8, 0, 90, 0], ['puempel', 1.1, 0.25, -2.1, 0, 0, 180], ['brezel', 1.1, -1.45, -2.1, 90, 0, 0]] },
 ];
 
 const CRIT_FAIL = [
@@ -327,11 +375,12 @@ function makeLamp(x, z, rotY) {
   const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4.8, 8), metal); stand.position.y = -2.4;
   const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 12), metal); foot.position.y = -4.8;
   g.add(body, lens, stand, foot);
-  g.position.set(x, 0.3, z); g.rotation.y = rotY;
+  const s = 0.45; // klein, damit der Scheinwerfer nicht das halbe Bild verdeckt
+  g.scale.setScalar(s); g.position.set(x, FLOOR_Y + 4.85 * s, z); g.rotation.y = rotY;
   scene.add(g); return g;
 }
-makeLamp(0, 9, 0);
-const lampB = makeLamp(9, 0, Math.PI / 2);
+makeLamp(-2.6, 7.5, 0);
+const lampB = makeLamp(7.5, -2.6, Math.PI / 2);
 
 // Ziel-Overlays an den Wänden (Maske als CanvasTexture)
 function makeOverlay() {
@@ -344,14 +393,14 @@ function makeOverlay() {
 const ovA = makeOverlay(); ovA.mesh.position.set(0, 0, -WALL + 0.02);
 const ovB = makeOverlay(); ovB.mesh.rotation.y = Math.PI / 2; ovB.mesh.position.set(-WALL + 0.02, 0, 0);
 
-function drawOverlay(ov, m) {
+function drawOverlay(ov, m, solid) {
   const img = ov.ctx.createImageData(N, N), d = img.data;
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const i = y * N + x;
     if (!m[i]) continue;
     const edge = x === 0 || y === 0 || x === N - 1 || y === N - 1 || !m[i - 1] || !m[i + 1] || !m[i - N] || !m[i + N];
     const o = ((N - 1 - y) * N + x) * 4; // readPixels-Zeilen laufen von unten nach oben
-    d.set(edge ? [255, 214, 70, 235] : [255, 70, 170, 70], o);
+    d.set(edge ? [255, 214, 70, 235] : solid ? [255, 190, 60, 210] : [255, 70, 170, 70], o);
   }
   ov.ctx.putImageData(img, 0, 0); ov.tex.needsUpdate = true;
 }
@@ -366,6 +415,7 @@ const camA = maskCam(0, 20), camB = maskCam(20, 0);
 const rt = new THREE.WebGLRenderTarget(N, N), pix = new Uint8Array(N * N * 4);
 const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
 const tgtA = new Uint8Array(N * N), tgtB = new Uint8Array(N * N), curA = new Uint8Array(N * N), curB = new Uint8Array(N * N);
+const raw = new Uint8Array(N * N);
 
 function renderMask(cam, out) {
   scene.overrideMaterial = whiteMat; scene.background = BLACK;
@@ -374,7 +424,8 @@ function renderMask(cam, out) {
   renderer.readRenderTargetPixels(rt, 0, 0, N, N, pix);
   renderer.setRenderTarget(null);
   scene.overrideMaterial = null; scene.background = BG;
-  for (let i = 0; i < N * N; i++) out[i] = pix[i * 4] > 127 ? 1 : 0;
+  for (let i = 0; i < N * N; i++) raw[i] = pix[i * 4] > 127 ? 1 : 0;
+  out.set(dilate(raw, N));
   return out;
 }
 
@@ -396,7 +447,7 @@ const JUNK = {
     part(g, new THREE.ConeGeometry(0.25, 0.5, 6), 0xfacc15, -1.15, 0.15, 0, 0, 0, Math.PI / 2 - 0.5);
     [-0.3, 0.3].forEach(z => part(g, new THREE.SphereGeometry(0.07, 6, 5), 0x111111, 0.98, 0.8, z));
   } },
-  klobuerste: { name: 'Klobürste', build(g) {
+  klobuerste: { name: 'Klobürste', spin: true, build(g) {
     part(g, new THREE.CylinderGeometry(0.07, 0.07, 2.2, 8), 0xf8fafc, 0, 0.55, 0);
     part(g, new THREE.CylinderGeometry(0.4, 0.36, 0.8, 12), 0x374151, 0, -0.95, 0);
     part(g, new THREE.TorusGeometry(0.17, 0.05, 6, 14), 0xf8fafc, 0, 1.8, 0);
@@ -408,8 +459,8 @@ const JUNK = {
     for (let i = 0; i < 6; i++) part(g, new THREE.BoxGeometry(0.07, 0.07, 0.07), 0xffffff, Math.cos(i) * 0.95, Math.sin(i) * 0.76, 0.17);
   } },
   waescheklammer: { name: 'Wäscheklammer', build(g) {
-    part(g, new THREE.BoxGeometry(0.22, 2.1, 0.32), 0xd6b98c, -0.16, 0, 0, 0, 0, 0.09);
-    part(g, new THREE.BoxGeometry(0.22, 2.1, 0.32), 0xd6b98c, 0.16, 0, 0, 0, 0, -0.09);
+    part(g, new THREE.BoxGeometry(0.26, 2.1, 0.32), 0xd6b98c, -0.12, 0, 0, 0, 0, 0.035);
+    part(g, new THREE.BoxGeometry(0.26, 2.1, 0.32), 0xd6b98c, 0.12, 0, 0, 0, 0, -0.035);
     part(g, new THREE.TorusGeometry(0.22, 0.05, 6, 14), 0x9ca3af, 0, 0.15, 0, 0, Math.PI / 2, 0);
   } },
   kleiderbuegel: { name: 'Kleiderbügel', build(g) {
@@ -419,7 +470,7 @@ const JUNK = {
     rod(g, 0, 0.35, 0, 0.7, 0.035, 0x9ca3af);
     part(g, new THREE.TorusGeometry(0.22, 0.035, 6, 16, Math.PI * 1.3), 0x9ca3af, -0.22, 0.7, 0);
   } },
-  puempel: { name: 'Pümpel', build(g) {
+  puempel: { name: 'Pümpel', spin: true, build(g) {
     part(g, new THREE.CylinderGeometry(0.08, 0.08, 2.0, 8), 0xa16207, 0, 0.55, 0);
     part(g, new THREE.SphereGeometry(0.62, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xdc2626, 0, -0.45, 0).material.side = THREE.DoubleSide;
   } },
@@ -441,6 +492,7 @@ function buildJunk(type, idx) {
 const S = {
   mode: 'menu', level: 0, endless: false, sel: 0, time: 0, subs: 0, iA: 0, iB: 1, score: 0, measureT: 0,
   snapping: false, snapDone: false, lastManip: 0, msgT: 0, timer: 0, solved: 0, best: 0, two: false, moveMode: false, spec: null,
+  hints: 0, undo: [], prevScore: 0, criticT: 0, ghostT: 0, revealT: 0, result: null,
 };
 let objs = [], stars = [];
 try { stars = JSON.parse(localStorage.getItem(STAR_KEY)) || []; } catch (e) { stars = []; }
@@ -458,29 +510,60 @@ function measure() {
 }
 
 function perturb(o) {
+  const k = S.spec.easy ? 0.5 : 1;
   _v.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).normalize();
-  _q.setFromAxisAngle(_v, rnd(0.8, 1.6));
+  _q.setFromAxisAngle(_v, rnd(0.8, 1.6) * k);
   o.g.quaternion.copy(o.solQ).premultiply(_q);
-  _v.set(rnd(-1, 1), rnd(-1, 1), S.two ? rnd(-1, 1) : 0).normalize().multiplyScalar(rnd(0.6, 1.1));
+  _v.set(rnd(-1, 1), rnd(-1, 1), S.two ? rnd(-1, 1) : 0).normalize().multiplyScalar(rnd(0.6, 1.1) * k);
   clampPos(o.g.position.copy(o.solP).add(_v));
 }
 
+// Alle Posen mit gleichem Schatten: Lösungen gleichartiger Teile (zwei Bügel sind austauschbar) und ohne
+// Seitenlicht die z-Spiegelung D·Q·D – jedes Teil ist spiegelsymmetrisch zu seiner lokalen xy-Ebene.
+const MIRROR_Z = new THREE.Matrix4().makeScale(1, 1, -1), _m = new THREE.Matrix4(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
+const mirrorQ = q => new THREE.Quaternion().setFromRotationMatrix(_m.makeRotationFromQuaternion(q).premultiply(MIRROR_Z).multiply(MIRROR_Z));
+function solutionsFor(o) {
+  return objs.filter(x => x.type === o.type).flatMap(x => S.two ? [{ p: x.solP, q: x.solQ }] : [{ p: x.solP, q: x.solQ }, { p: x.solP, q: mirrorQ(x.solQ) }]);
+}
+// Nächste gleichwertige Lösung; bei drehsymmetrischen Teilen (Klobürste, Pümpel) zählt nur die Stielrichtung
+function nearestSolution(o) {
+  let best = null;
+  for (const c of o.sols) {
+    let q = c.q;
+    if (o.spin) {
+      _a.copy(AXIS_Y).applyQuaternion(o.g.quaternion); _b.copy(AXIS_Y).applyQuaternion(c.q);
+      q = new THREE.Quaternion().setFromUnitVectors(_a, _b).multiply(o.g.quaternion);
+    }
+    const p = o.g.position, d = Math.hypot(p.x - c.p.x, p.y - c.p.y, S.two ? p.z - c.p.z : 0), a = o.g.quaternion.angleTo(q);
+    if (!best || d + a < best.d + best.a) best = { p: c.p, q, d, a };
+  }
+  return best;
+}
+console.assert((() => { // Selbsttest: z-Spiegelung von 25° um Y ist −25° um Y
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.44);
+  return mirrorQ(q).angleTo(q.clone().invert()) < 1e-6;
+})(), 'mirrorQ: Spiegelung um z');
+
 function setupPuzzle(spec) {
   objs.forEach(o => { scene.remove(o.g); o.g.traverse(m => { if (m.isMesh) { m.geometry.dispose(); m.material.dispose(); } }); });
+  clearGhost();
   objs = spec.items.map(([type, px, py, pz, rx, ry, rz], i) => {
     const g = buildJunk(type, i);
     g.position.set(px, py, pz); g.rotation.set(rx * DEG, ry * DEG, rz * DEG);
-    return { g, name: JUNK[type].name, solP: g.position.clone(), solQ: g.quaternion.clone(), startP: null, startQ: null };
+    return { g, type, name: JUNK[type].name, spin: !!JUNK[type].spin, solP: g.position.clone(), solQ: g.quaternion.clone(), startP: null, startQ: null };
   });
   S.spec = spec; S.two = !!spec.two;
+  objs.forEach(o => { o.sols = solutionsFor(o); });
+  document.body.classList.toggle('two', S.two);
   lightB.visible = ovB.mesh.visible = lampB.visible = S.two;
   drawOverlay(ovA, renderMask(camA, tgtA));
   if (S.two) drawOverlay(ovB, renderMask(camB, tgtB));
   // Startpose: Lösung + garantierte Mindeststörung, bis die Deckung deutlich daneben liegt
-  for (let t = 0; t < 15; t++) { objs.forEach(perturb); measure(); if (S.score < 0.5) break; }
+  for (let t = 0; t < 15; t++) { objs.forEach(perturb); measure(); if (S.score < (spec.easy ? 0.7 : 0.5)) break; }
   objs.forEach(o => { o.startP = o.g.position.clone(); o.startQ = o.g.quaternion.clone(); });
-  S.sel = 0; S.time = 0; S.subs = 0; S.snapping = false; S.snapDone = false; S.measureT = 0;
-  highlight();
+  S.sel = 0; S.time = 0; S.subs = 0; S.hints = 0; S.undo = []; S.prevScore = S.score;
+  S.snapping = false; S.snapDone = false; S.measureT = 0;
+  highlight(); updateTouchBtns();
 }
 
 function highlight() {
@@ -490,22 +573,73 @@ function select(i) {
   if (!objs.length) return;
   S.sel = (i + objs.length) % objs.length; highlight(); snd('pop', 1.2);
 }
+function pushUndo() {
+  S.undo.push(objs.map(o => [o.g.position.clone(), o.g.quaternion.clone()]));
+  if (S.undo.length > 60) S.undo.shift();
+}
+function undo() {
+  const u = S.undo.pop();
+  if (!u) { showMsg('Nichts zum Rückgängigmachen', '', '#a8a2b8'); return; }
+  objs.forEach((o, i) => { o.g.position.copy(u[i][0]); o.g.quaternion.copy(u[i][1]); });
+  S.snapping = false; S.snapDone = false; S.measureT = 0; snd('pop', 0.9);
+}
 function resetPose() {
+  pushUndo();
   objs.forEach(o => { o.g.position.copy(o.startP); o.g.quaternion.copy(o.startQ); });
   S.snapping = false; S.snapDone = false; snd('pop', 0.7);
 }
-// Ohne Seitenlicht ist die Tiefe (z) für den Schatten egal
+// Ohne Seitenlicht ist die Tiefe (z) für den Schatten egal; merkt sich das Einrast-Ziel pro Teil
 const closeToSolution = () => objs.every(o => {
-  const p = o.g.position, s = o.solP;
-  return Math.hypot(p.x - s.x, p.y - s.y, S.two ? p.z - s.z : 0) < 0.4 && o.g.quaternion.angleTo(o.solQ) < 0.4;
+  const s = nearestSolution(o);
+  o.snapP = s.p; o.snapQ = s.q;
+  return s.d < 0.4 && s.a < 0.4;
 });
 
+// Tipp: Geisterbild des gewählten Teils in seiner Lösungspose
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.5, depthWrite: false });
+let ghost = null;
+function clearGhost() { if (ghost) scene.remove(ghost); ghost = null; S.ghostT = 0; }
+function showHint() {
+  const o = objs[S.sel];
+  if (!o) return;
+  clearGhost();
+  ghost = o.g.clone();
+  ghost.traverse(m => { m.layers.set(0); if (m.isMesh) { m.material = ghostMat; m.castShadow = false; } });
+  const s = nearestSolution(o);
+  ghost.position.copy(s.p); ghost.quaternion.copy(s.q);
+  scene.add(ghost); S.ghostT = 3.5;
+  if (S.endless) S.timer -= 10; else S.hints++;
+  snd('pop', 0.6);
+  showMsg('💡 Tipp', `Das blaue Geisterbild zeigt, wo „${o.name}“ hingehört. ${S.endless ? '(−10 s)' : '(kostet einen Stern)'}`, '#7dd3fc');
+}
+
+function critic(text, t = 3.5) {
+  $('criticTxt').textContent = `„${text}“`;
+  $('critic').classList.add('show'); S.criticT = t;
+}
+function confetti(n = 70) {
+  const cols = ['#f472b6', '#facc15', '#4ade80', '#38bdf8', '#fb923c', '#c084fc'];
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.cssText = `left:${rnd(0, 100)}vw;background:${pick(cols)};animation-duration:${rnd(1.6, 2.8)}s;animation-delay:${rnd(0, 0.4)}s;--dx:${rnd(-120, 120)}px;--r:${rnd(-720, 720)}deg`;
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 3500);
+  }
+}
+function applause() { // Klatschen: kurze, zufällige Klicks
+  for (let i = 0; i < 26; i++) setTimeout(() => snd('playTone', rnd(1400, 3200), 0.025, 'square', 0.025), 250 + i * rnd(35, 70));
+}
+
 // ============ Spielablauf ============
+const motifText = sp => sp.motif ? (sp.two ? `Rückwand: ${sp.motif} · Seitenwand: ${sp.side}` : `Motiv: ${sp.motif}`) : 'Motiv: abstrakt';
 function startLevel(i) {
   S.endless = false; S.level = i;
   setupPuzzle(LEVELS[i]);
   S.mode = 'play'; hideModal();
-  showMsg(`Werk ${i + 1}: „${LEVELS[i].name}“`, LEVELS[i].two ? 'Zwei Scheinwerfer! Beide Schatten müssen passen.' : 'Bring den Schatten in die leuchtende Form.', '#facc15');
+  const sp = LEVELS[i];
+  showMsg(`Werk ${i + 1}: „${sp.name}“`, sp.two ? `Zwei Scheinwerfer! ${motifText(sp)} – beide Schatten müssen passen.` : `${motifText(sp)}. Bring den Schatten in die leuchtende Form.`, '#facc15');
+  if (i === 5) critic('Ab jetzt schaut auch die Seitenwand zu. Sie ist noch strenger als ich.', 5);
 }
 function startEndless() {
   S.endless = true; S.solved = 0; S.timer = 75;
@@ -528,27 +662,40 @@ function submit() {
   S.subs++;
   if (S.score >= WIN) return solved();
   snd('hit');
-  showMsg(`${Math.round(S.score * 100)} % – abgelehnt`, `„${pick(CRIT_FAIL)}“`, '#f87171');
+  showMsg(`${Math.round(S.score * 100)} % – abgelehnt`, `Ab ${Math.round(WIN * 100)} % nimmt die Galerie das Werk.`, '#f87171');
+  critic(pick(CRIT_FAIL));
 }
 
 function solved() {
-  snd('powerup');
-  S.snapping = true;
+  snd('powerup'); applause();
+  if (closeToSolution()) S.snapping = true;
   if (S.endless) {
     S.solved++; S.timer += 20;
-    showMsg('Verkauft! +20 s', `„${pick(CRIT_WIN[3])}“`, '#4ade80');
+    showMsg('Verkauft! +20 s', '', '#4ade80');
+    critic(pick(CRIT_WIN[3]), 2.5); confetti(25);
     nextEndless();
     return;
   }
+  // Enthüllung: Zielform füllt sich, Konfetti, Kritiker – danach erst das Ergebnis
   const spec = LEVELS[S.level], fails = S.subs - 1;
-  const st = Math.max(1, 3 - (S.time > spec.par ? 1 : 0) - (fails > 0 ? 1 : 0));
+  const st = Math.max(1, 3 - (S.time > spec.par ? 1 : 0) - (fails > 0 ? 1 : 0) - S.hints);
   if (st > (stars[S.level] || 0)) { stars[S.level] = st; try { localStorage.setItem(STAR_KEY, JSON.stringify(stars)); } catch (e) {} }
+  const quote = pick(CRIT_WIN[st]);
+  S.result = { spec, fails, st, quote, score: S.score };
+  S.mode = 'reveal'; S.revealT = 2.4; clearGhost();
+  drawOverlay(ovA, tgtA, true); if (S.two) drawOverlay(ovB, tgtB, true);
+  showMsg(`${'★'.repeat(st)}${'☆'.repeat(3 - st)} ${spec.two ? spec.motif + ' & ' + spec.side : spec.motif}!`, 'Verkauft an einen Sammler mit zu viel Geld.', '#4ade80');
+  critic(quote, 3); confetti();
+}
+function showResult() {
+  const r = S.result;
+  if (S.mode !== 'reveal' || !r) return;
   S.mode = 'done';
   const last = S.level + 1 >= LEVELS.length;
   showModal({
-    title: (last ? 'Vernissage komplett! ' : '') + '★'.repeat(st) + '☆'.repeat(3 - st),
-    sub: `„${spec.name}“<br><br><i>Der Kritiker: „${pick(CRIT_WIN[st])}“</i>` + (last ? '<br><br>Alle zehn Werke hängen. Zeit für die <b>Meisterprüfung</b>?' : ''),
-    stats: [['Deckung', Math.round(S.score * 100) + ' %'], ['Zeit', fmt(S.time)], ['Fehlversuche', fails], ['Ziel-Zeit', fmt(spec.par)]],
+    title: (last ? 'Vernissage komplett! ' : '') + '★'.repeat(r.st) + '☆'.repeat(3 - r.st),
+    sub: `„${r.spec.name}“ – ${motifText(r.spec)}<br><br><i>Der Kritiker: „${r.quote}“</i>` + (last ? '<br><br>Alle zehn Werke hängen. Zeit für die <b>Meisterprüfung</b>?' : ''),
+    stats: [['Deckung', Math.round(r.score * 100) + ' %'], ['Zeit', `${fmt(S.time)} / ${fmt(r.spec.par)}`], ['Fehlversuche', r.fails], ['Tipps', S.hints]],
     primary: last ? ['Zum Atelier (Enter)', showMenu] : ['Nächstes Werk (Enter)', () => startLevel(S.level + 1)],
     secondary: ['Nochmal versuchen', () => startLevel(S.level)],
   });
@@ -587,9 +734,9 @@ function showMenu() {
   if (first < 0) first = 0;
   showModal({
     title: 'Schattenkunst 3D',
-    sub: 'Der Scheinwerfer wirft den Schatten deines Mülls an die Wand. Dreh und schieb den Krempel, bis er die leuchtende Zielform trifft (≥ 90 % Deckung), dann reiche ein. Ab Werk 6 kommt ein zweiter Scheinwerfer dazu.<br><br>' + (touch
-      ? 'Tippen: Objekt wählen · Ein Finger: drehen (oder schieben, Knopf unten) · ⟲ ⟳ rollen · Zwei Finger: Kamera'
-      : '<kbd>Klick</kbd> wählen · <kbd>Ziehen</kbd> drehen · <kbd>Shift</kbd>+Ziehen schieben · Rechtsklick-Ziehen: Kamera · Rad: Tiefe<br><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>Shift</kbd>+Tasten schieben · <kbd>1</kbd>–<kbd>4</kbd>/<kbd>Tab</kbd> Objekt · <kbd>Leertaste</kbd> einreichen · <kbd>R</kbd> zurücksetzen'),
+    sub: 'Der Scheinwerfer wirft den Schatten deines Mülls an die Wand. Dreh und schieb Quietscheente, Pümpel & Co., bis ihr Schatten das Motiv ergibt – ein Sektglas, ein Segelboot, ein Hase … (≥ 90 % Deckung), dann reiche ein. Ab Werk 6 verlangt ein zweiter Scheinwerfer ein zweites Motiv auf der Seitenwand.<br><br>' + (touch
+      ? 'Tippen: Objekt wählen · Ein Finger: drehen (oder schieben, Knopf unten) · ⟲ ⟳ rollen · Zwei Finger: Kamera · ↶ rückgängig · 💡 Tipp kostet einen Stern'
+      : '<kbd>Klick</kbd> wählen · <kbd>Ziehen</kbd> drehen · <kbd>Shift</kbd>+Ziehen schieben · Rechtsklick-Ziehen: Kamera · ab Werk 6 Rad: Tiefe<br><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>Shift</kbd>+Tasten schieben · <kbd>1</kbd>–<kbd>4</kbd>/<kbd>Tab</kbd> Objekt · <kbd>Leertaste</kbd> einreichen · <kbd>Z</kbd> rückgängig · <kbd>H</kbd> Tipp (−1 ★) · <kbd>R</kbd> zurücksetzen'),
     stats: [['Sterne', `${total} / ${LEVELS.length * 3}`], ['Meisterprüfung', S.best + ' Werke']],
     levels: true,
     primary: [`Werk ${first + 1} ausstellen (Enter)`, () => startLevel(first)],
@@ -605,7 +752,7 @@ function showModal(o) {
   $('mSub').innerHTML = o.sub;
   $('mStats').innerHTML = (o.stats || []).map(([l, v]) => `<div class="stat-box"><div class="stat-label">${l}</div><div class="stat-value">${v}</div></div>`).join('');
   $('mLevels').innerHTML = o.levels ? LEVELS.map((l, i) =>
-    `<button class="lvl-btn" data-l="${i}" title="${l.name}"${unlocked(i) ? '' : ' disabled'}>${i + 1}<small>${'★'.repeat(stars[i] || 0) || '·'}</small></button>`).join('') : '';
+    `<button class="lvl-btn" data-l="${i}" title="${l.name} (${motifText(l)})"${unlocked(i) ? '' : ' disabled'}>${i + 1}<small>${'★'.repeat(stars[i] || 0) || '·'}</small></button>`).join('') : '';
   $('mPrimary').textContent = o.primary[0];
   $('mSecondary').hidden = !o.secondary;
   if (o.secondary) $('mSecondary').textContent = o.secondary[0];
@@ -627,15 +774,25 @@ const hudCache = {};
 function setText(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } }
 function updateHUD() {
   const pc = v => Math.round(v * 100) + ' %';
+  document.body.classList.toggle('menu', S.mode === 'menu');
   setText('hLevel', S.endless ? `Meisterprüfung · ${S.solved} verkauft` : `Werk ${S.level + 1}/${LEVELS.length}`);
-  setText('hScore', S.two ? `${pc(S.iA)} | ${pc(S.iB)}` : pc(S.iA));
-  $('hCov').classList.toggle('good', S.score >= WIN);
+  setText('covtxt', S.two ? `Rückwand ${pc(S.iA)} · Seitenwand ${pc(S.iB)}` : `Deckung ${pc(S.iA)}`);
+  const fill = $('covfill');
+  fill.style.width = pc(S.score).replace(' ', '');
+  fill.style.backgroundColor = `hsl(${Math.round(clamp((S.score - 0.3) / 0.6, 0, 1) * 120)}, 75%, 45%)`;
   setText('hTime', S.endless ? fmt(Math.max(0, S.timer)) : fmt(S.time));
   $('hTimePill').classList.toggle('warn', S.endless ? S.timer < 15 : !!S.spec && S.time > S.spec.par);
   setText('hSubs', String(S.subs));
   const o = objs[S.sel];
   setText('hObj', o ? (objs.length > 1 ? `${o.name} (${S.sel + 1}/${objs.length})` : o.name) : '–');
-  setText('task', S.spec ? `„${S.spec.name}“` + (S.score >= WIN && S.mode === 'play' ? ' · bereit zum Einreichen!' : '') : '');
+  let task = S.spec ? `„${S.spec.name}“ · ${motifText(S.spec)}` : '';
+  if (S.mode === 'play' && S.score >= WIN) task = '✔ Passt! Jetzt einreichen (Leertaste / ✔)';
+  else if (S.mode === 'play' && !S.endless && S.level === 0) { // Einstieg: Schritt für Schritt
+    const touch = document.body.classList.contains('touch');
+    task = S.score < 0.6 ? (touch ? 'Wisch über die Ente, um sie zu drehen – der Schatten dreht mit' : 'Ziehen (oder W A S D) dreht die Ente – der Schatten dreht mit')
+      : (touch ? 'Wärmer! Mit „✥ Schieben“ den Schatten in die Form rücken' : 'Wärmer! Shift + Ziehen schiebt den Schatten in die Form');
+  }
+  setText('task', task);
 }
 
 function updateSoundBtn() {
@@ -653,16 +810,21 @@ function toggleMoveMode() {
   $('tMode').classList.toggle('on', S.moveMode);
   $('tRollL').textContent = S.moveMode ? '⤓ Tiefe' : '⟲';
   $('tRollR').textContent = S.moveMode ? '⤒ Tiefe' : '⟳';
+  updateTouchBtns();
 }
+// Tiefe verschieben ändert ohne Seitenlicht nichts am Schatten → Knöpfe dann ausblenden
+function updateTouchBtns() { $('tRollL').hidden = $('tRollR').hidden = S.moveMode && !S.two; }
 const tap = (id, fn) => $(id).addEventListener('click', e => { e.currentTarget.blur(); if (S.mode === 'play') fn(); });
 tap('tMode', toggleMoveMode);
 tap('tNext', () => select(S.sel + 1));
+tap('tUndo', undo);
 tap('tReset', resetPose);
+tap('tHint', showHint);
 tap('tSubmit', submit);
 let touchRoll = 0;
 [['tRollL', -1], ['tRollR', 1]].forEach(([id, v]) => {
   const el = $(id);
-  el.addEventListener('pointerdown', e => { e.preventDefault(); touchRoll = v; });
+  el.addEventListener('pointerdown', e => { e.preventDefault(); if (S.mode === 'play') pushUndo(); touchRoll = v; });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, () => { touchRoll = 0; }));
 });
 
@@ -674,7 +836,7 @@ function orbit(dx, dy) {
   cam.pitch = clamp(cam.pitch + dy * 0.005, -0.25, 1.1);
 }
 function updateCamera() {
-  const d = cam.dist * Math.max(1, 1.2 / camera.aspect), cp = Math.cos(cam.pitch);
+  const d = cam.dist * Math.max(1, 0.8 / camera.aspect), cp = Math.cos(cam.pitch);
   camera.position.set(camCenter.x + Math.sin(cam.yaw) * cp * d, camCenter.y + Math.sin(cam.pitch) * d, camCenter.z + Math.cos(cam.yaw) * cp * d);
   camera.lookAt(camCenter);
 }
@@ -690,13 +852,17 @@ window.addEventListener('keydown', e => {
     else if (e.code === 'Escape' && S.mode === 'pause') resumeGame();
     return;
   }
+  if (S.mode === 'reveal' && !e.repeat && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); showResult(); return; }
   if (S.mode !== 'play') return;
   keys.add(e.code);
   if (e.repeat) return;
+  if (GAME_KEYS.indexOf(e.code) > 1) pushUndo(); // WASDQE: Pose vor dem Drehen merken
   if (e.code === 'Tab') select(S.sel + (e.shiftKey ? -1 : 1));
   else if (/^Digit[1-4]$/.test(e.code) && +e.code[5] <= objs.length) select(+e.code[5] - 1);
   else if (e.code === 'Space') submit();
   else if (e.code === 'KeyR') resetPose();
+  else if (e.code === 'KeyZ' || e.code === 'Backspace') undo();
+  else if (e.code === 'KeyH') showHint();
   else if (e.code === 'Escape' || e.code === 'KeyP') pauseGame();
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
@@ -708,7 +874,9 @@ function applyKeys(o, dt) {
   const a = k('KeyD') - k('KeyA'), b = k('KeyS') - k('KeyW'), c = k('KeyE') - k('KeyQ') + touchRoll;
   if (!o || (!a && !b && !c)) return false;
   if (S.moveMode || keys.has('ShiftLeft') || keys.has('ShiftRight')) {
-    o.g.position.x += a * 2 * dt; o.g.position.y -= b * 2 * dt; o.g.position.z += c * 2 * dt;
+    const dz = S.two ? c : 0; // Tiefe zählt nur mit Seitenlicht
+    if (!a && !b && !dz) return false;
+    o.g.position.x += a * 2 * dt; o.g.position.y -= b * 2 * dt; o.g.position.z += dz * 2 * dt;
     clampPos(o.g.position);
   } else {
     rotateObj(o, AXIS_Y, a * 1.8 * dt); rotateObj(o, AXIS_X, b * 1.8 * dt); rotateObj(o, AXIS_Z, -c * 1.8 * dt);
@@ -754,7 +922,10 @@ canvas.addEventListener('pointermove', e => {
   if (!drag.moved) return;
   if (ptrs.size >= 2) orbit(dx / ptrs.size, dy / ptrs.size);
   else if (drag.button === 2) orbit(dx, dy);
-  else if (S.mode === 'play' && objs[S.sel]) manipulate(objs[S.sel], dx, dy, S.moveMode || e.shiftKey);
+  else if (S.mode === 'play' && objs[S.sel]) {
+    if (!drag.undo) { pushUndo(); drag.undo = true; }
+    manipulate(objs[S.sel], dx, dy, S.moveMode || e.shiftKey);
+  }
 });
 function endPtr(e, cancel) {
   if (!ptrs.has(e.pointerId)) return;
@@ -767,7 +938,8 @@ canvas.addEventListener('pointercancel', e => endPtr(e, true));
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   const o = objs[S.sel];
-  if (S.mode !== 'play' || !o) return;
+  if (S.mode !== 'play' || !o || !S.two) return; // ohne Seitenlicht ändert die Tiefe den Schatten nicht
+  if (performance.now() - S.lastManip > 500) pushUndo();
   o.g.position.z = clamp(o.g.position.z - Math.sign(e.deltaY) * 0.15, -BOUND, BOUND);
   S.snapping = false; S.lastManip = performance.now();
 }, { passive: false });
@@ -783,6 +955,10 @@ function update(dt) {
   if ((S.measureT -= dt) <= 0) {
     S.measureT = 0.15;
     measure();
+    // Wärmer/kälter: Tonhöhe folgt der Deckung, solange gedreht wird
+    if (active && Math.abs(S.score - S.prevScore) > 0.004) snd('playTone', 180 + 720 * S.score, 0.07, 'triangle', 0.035);
+    if (S.score >= WIN && S.prevScore < WIN) snd('coin');
+    S.prevScore = S.score;
     if (S.score < WIN) S.snapDone = false;
     // Einrast-Hilfe: kurz vor dem Ziel sanft in die Lösung gleiten
     if (S.score > SNAP && !S.snapDone && !active && closeToSolution()) {
@@ -797,8 +973,8 @@ function stepSnap(dt) {
   const k = 1 - Math.exp(-8 * dt);
   let done = true;
   objs.forEach(o => {
-    o.g.position.lerp(o.solP, k); o.g.quaternion.slerp(o.solQ, k);
-    if (o.g.position.distanceTo(o.solP) > 0.002 || o.g.quaternion.angleTo(o.solQ) > 0.002) done = false;
+    o.g.position.lerp(o.snapP, k); o.g.quaternion.slerp(o.snapQ, k);
+    if (o.g.position.distanceTo(o.snapP) > 0.002 || o.g.quaternion.angleTo(o.snapQ) > 0.002) done = false;
   });
   if (done) S.snapping = false;
 }
@@ -814,7 +990,11 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (S.mode === 'play') update(dt);
   stepSnap(dt);
+  if (S.mode === 'reveal' && (S.revealT -= dt) <= 0) showResult();
   if (S.msgT > 0 && (S.msgT -= dt) <= 0) $('msg').classList.remove('show');
+  if (S.criticT > 0 && (S.criticT -= dt) <= 0) $('critic').classList.remove('show');
+  if (ghost && (S.ghostT -= dt) <= 0) clearGhost();
+  ghostMat.opacity = 0.5 * Math.min(1, S.ghostT);
   ovA.mesh.material.opacity = ovB.mesh.material.opacity = 0.8 + 0.2 * Math.sin(now / 350);
   updateCamera(); updateHUD();
   renderer.render(scene, camera);
