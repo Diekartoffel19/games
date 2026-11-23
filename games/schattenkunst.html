@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Schattenkunst 3D — Müll im Rampenlicht</title>
+<meta name="description" content="Dreh Klobürste, Brezel und Quietscheente vor dem Scheinwerfer, bis ihr Schatten die Zielform an der Wand trifft. 10 Werke, zwei Scheinwerfer und ein gnadenloser Kunstkritiker.">
+<meta name="keywords" content="Schattenpuzzle, Schattenkunst, 3D Puzzle, Browser Spiel, Shadow Art, Three.js">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#15111a">
+<link rel="canonical" href="https://rwpxe.com/games/schattenkunst.html">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Schattenkunst 3D — Müll im Rampenlicht">
+<meta property="og:description" content="Aus Haushaltsmüll wird Kunst: Dreh den Krempel, bis der Schatten passt.">
+<meta property="og:locale" content="de_DE">
+
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+
+<link rel="stylesheet" href="../style.css">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script src="../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #15111a; color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+  #canvas-container { position: fixed; inset: 0; z-index: 1; }
+  #canvas-container canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+
+  .back-btn {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 50;
+    color: #fce7f3; text-decoration: none; font-weight: 700;
+    background: rgba(24, 16, 30, 0.75); border: 1px solid rgba(244, 114, 182, 0.5);
+    padding: 0 16px; min-height: 44px; display: inline-flex; align-items: center;
+    border-radius: 999px; backdrop-filter: blur(10px); font-size: 0.9rem;
+  }
+  .back-btn:hover { background: #be185d; color: #fff; }
+
+  .top-actions {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 50;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .action-btn {
+    background: rgba(24, 16, 30, 0.75); border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #f1f5f9; padding: 0 14px; min-height: 44px; min-width: 44px; border-radius: 999px; backdrop-filter: blur(10px);
+    cursor: pointer; font-size: 0.85rem; font-weight: 700;
+  }
+  .action-btn:hover { background: rgba(50, 30, 60, 0.9); }
+
+  #hud {
+    position: fixed; top: calc(64px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); z-index: 20;
+    display: flex; flex-wrap: wrap; gap: 6px; max-width: min(620px, calc(100vw - 24px)); pointer-events: none;
+  }
+  .hud-pill {
+    background: rgba(24, 16, 30, 0.7); border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 999px; padding: 4px 12px; font-size: 0.82rem; font-weight: 800;
+    color: #a8a2b8; backdrop-filter: blur(8px); white-space: nowrap;
+  }
+  .hud-pill b { color: #facc15; }
+  .hud-pill.warn b { color: #f87171; }
+  .hud-pill.good { border-color: #4ade80; }
+  .hud-pill.good b { color: #4ade80; }
+
+  #task {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(118px + env(safe-area-inset-bottom)); z-index: 20;
+    background: rgba(24, 16, 30, 0.75); border: 1px solid rgba(244, 114, 182, 0.4); border-radius: 999px;
+    padding: 6px 16px; font-size: 0.95rem; font-weight: 800; color: #fbcfe8; pointer-events: none; text-align: center;
+    max-width: calc(100vw - 32px); font-style: italic;
+  }
+  #bottom-hint {
+    position: fixed; bottom: calc(76px + env(safe-area-inset-bottom)); left: 16px; right: 16px; z-index: 20;
+    text-align: center; pointer-events: none; color: rgba(255, 255, 255, 0.75); font-size: 0.8rem; font-weight: 600;
+  }
+  .key-badge {
+    background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.4);
+    padding: 1px 6px; border-radius: 6px; font-weight: 800; color: #fff;
+  }
+  body.touch #bottom-hint { display: none; }
+  body.touch #task { bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+  #tbar {
+    position: fixed; left: 0; right: 0; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 40;
+    display: flex; justify-content: center; flex-wrap: wrap; gap: 8px;
+    padding: 0 calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));
+  }
+  .tbtn {
+    min-height: 48px; min-width: 52px; padding: 0 14px; border-radius: 14px; touch-action: none;
+    background: rgba(24, 16, 30, 0.8); border: 2px solid rgba(255, 255, 255, 0.25); color: #f1f5f9;
+    font-weight: 900; font-size: 0.9rem; cursor: pointer;
+  }
+  .tbtn:hover { background: rgba(60, 30, 70, 0.9); }
+  .tbtn.primary { border-color: #4ade80; color: #bbf7d0; }
+  .tbtn.on { background: #be185d; border-color: #f9a8d4; }
+  body:not(.touch) .touch-only { display: none; }
+
+  #msg {
+    position: fixed; top: 34%; left: 50%; transform: translate(-50%, -50%) scale(0.8); z-index: 30;
+    pointer-events: none; text-align: center; opacity: 0; transition: opacity 0.25s, transform 0.25s;
+    font-size: clamp(1.6rem, 5vw, 2.6rem); font-weight: 950; text-shadow: 0 4px 16px rgba(0,0,0,0.8);
+    width: min(90vw, 640px);
+  }
+  #msg.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #msg small { display: block; font-size: 0.45em; font-weight: 800; color: #f1e8f5; font-style: italic; margin-top: 4px; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 60; background: rgba(15, 10, 20, 0.7); backdrop-filter: blur(10px);
+    display: none; align-items: center; justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+  }
+  .modal-card {
+    background: linear-gradient(165deg, #2a1830, #120c18); border: 2px solid #f472b6; border-radius: 24px;
+    max-width: 520px; width: 100%; max-height: 100%; overflow-y: auto; padding: clamp(20px, 5vw, 32px);
+    text-align: center; box-shadow: 0 25px 60px rgba(0,0,0,0.7);
+  }
+  .modal-card h1 {
+    margin: 0 0 6px; font-size: clamp(1.7rem, 5vw, 2.3rem); font-weight: 950;
+    background: linear-gradient(135deg, #f472b6, #facc15); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .modal-card .subtitle { color: #e2d9ea; font-size: 0.95rem; margin: 0 0 16px; line-height: 1.45; }
+  .modal-card .subtitle kbd {
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; padding: 0 5px; font-family: inherit; font-weight: 800;
+  }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; text-align: left; }
+  .stats-grid:empty, .lvl-grid:empty { display: none; }
+  .stat-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 10px 12px; }
+  .stat-label { font-size: 0.72rem; color: #a8a2b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 1.35rem; font-weight: 900; color: #f8fafc; margin-top: 2px; }
+  .lvl-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0 0 16px; }
+  .lvl-btn {
+    min-height: 52px; border-radius: 12px; border: 1px solid rgba(244,114,182,0.5); background: rgba(255,255,255,0.06);
+    color: #fff; font-weight: 900; font-size: 1rem; cursor: pointer; padding: 4px 0;
+  }
+  .lvl-btn small { display: block; font-size: 0.7rem; color: #facc15; letter-spacing: 1px; }
+  .lvl-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .lvl-btn:not(:disabled):hover { background: rgba(244,114,182,0.25); }
+  .primary-btn {
+    width: 100%; min-height: 52px; background: linear-gradient(135deg, #ec4899, #f59e0b); color: #111; border: none;
+    border-radius: 14px; font-size: 1.1rem; font-weight: 900; cursor: pointer; box-shadow: 0 10px 25px rgba(236, 72, 153, 0.35);
+  }
+  .primary-btn:hover { filter: brightness(1.08); }
+  .secondary-btn {
+    margin-top: 10px; min-height: 44px; width: 100%; background: transparent; border: 1px solid rgba(255,255,255,0.25);
+    color: #e2d9ea; border-radius: 12px; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  }
+  .secondary-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .secondary-btn[hidden] { display: none; }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="back back-btn">← Arcade</a>
+
+<div class="top-actions">
+  <button class="action-btn" id="pauseBtn" title="Pause (Esc)">⏸</button>
+  <button class="action-btn" id="soundBtn" title="Sound an/aus">🔊 Sound: An</button>
+</div>
+
+<div id="canvas-container"></div>
+
+<div id="hud">
+  <div class="hud-pill">🎭 <b id="hLevel">Werk 1/10</b></div>
+  <div class="hud-pill" id="hCov">🎯 Deckung <b id="hScore">0 %</b></div>
+  <div class="hud-pill" id="hTimePill">⏱ <b id="hTime">0:00</b></div>
+  <div class="hud-pill">📨 Einreichungen <b id="hSubs">0</b></div>
+  <div class="hud-pill">🧺 <b id="hObj">–</b></div>
+</div>
+
+<div id="msg"></div>
+<div id="task">„Ente gut, alles gut“</div>
+<div id="bottom-hint">
+  <span class="key-badge">W A S D Q E</span> / Ziehen: drehen · <span class="key-badge">Shift</span> + Tasten/Ziehen: schieben · <span class="key-badge">Rad</span> Tiefe ·
+  <span class="key-badge">1-4</span>/<span class="key-badge">Tab</span> Objekt · <span class="key-badge">LEER</span> einreichen · <span class="key-badge">R</span> zurücksetzen · Rechtsklick-Ziehen: Kamera
+</div>
+
+<div id="tbar">
+  <button class="tbtn touch-only" id="tMode">↻ Drehen</button>
+  <button class="tbtn touch-only" id="tRollL">⟲</button>
+  <button class="tbtn touch-only" id="tRollR">⟳</button>
+  <button class="tbtn" id="tNext">⇥ Objekt</button>
+  <button class="tbtn" id="tReset">↺ Reset</button>
+  <button class="tbtn primary" id="tSubmit">✔ Einreichen</button>
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal-card">
+    <h1 id="mTitle">Schattenkunst 3D</h1>
+    <p class="subtitle" id="mSub"></p>
+    <div class="stats-grid" id="mStats"></div>
+    <div class="lvl-grid" id="mLevels"></div>
+    <button class="primary-btn" id="mPrimary">Start</button>
+    <button class="secondary-btn" id="mSecondary" hidden>Zurück</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ============ ArcadeCore ============
+const AC = window.ArcadeCore || null;
+const snd = (name, ...a) => { try { if (AC && AC[name]) AC[name](...a); } catch (e) {} };
+const KEY = 'schattenkunst', STAR_KEY = 'schattenkunst_stars';
+
+// ============ Helfer ============
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const DEG = Math.PI / 180;
+
+// Intersection over Union zweier Binärmasken (0/1). Beide leer → 0.
+function iou(a, b) {
+  let inter = 0, uni = 0;
+  for (let i = 0; i < a.length; i++) { if (a[i] & b[i]) inter++; if (a[i] | b[i]) uni++; }
+  return uni ? inter / uni : 0;
+}
+console.assert(iou(Uint8Array.of(1, 1, 0, 0), Uint8Array.of(1, 0, 1, 0)) === 1 / 3, 'IoU: Teilüberlappung');
+console.assert(iou(Uint8Array.of(1, 0, 1), Uint8Array.of(1, 0, 1)) === 1, 'IoU: identisch');
+console.assert(iou(Uint8Array.of(1, 0), Uint8Array.of(0, 1)) === 0, 'IoU: disjunkt');
+console.assert(iou(new Uint8Array(3), new Uint8Array(3)) === 0, 'IoU: leer');
+
+// ============ Konstanten ============
+const WALL = 6, FLOOR_Y = -4.5, H = 4, N = 96, BOUND = 3;
+const WIN = 0.9, SNAP = 0.95;
+
+const LEVELS = [
+  { name: 'Ente gut, alles gut', par: 40, items: [['ente', 0, 0, 0, 0, -25, -15]] },
+  { name: 'Stillleben mit Klobürste', par: 40, items: [['klobuerste', 0, 0, 0, 20, 0, -40]] },
+  { name: 'Die Brezel des Anstoßes', par: 50, items: [['brezel', 0, 0.2, 0, 35, -20, 160]] },
+  { name: 'Ausgewaschene Hoffnung', par: 70, items: [['kleiderbuegel', 0, 0.8, 0, 0, 15, -10], ['waescheklammer', 1.2, -0.8, 0.3, 0, 0, 35]] },
+  { name: 'Dackel aus Abflussrohr', par: 80, items: [['puempel', -1.2, 0.2, 0, 0, 0, -75], ['banane', 1.0, -0.4, 0.4, 0, 20, 180]] },
+  { name: 'Doppelte Ente, halbe Würde', par: 70, two: true, items: [['ente', 0, 0, 0, 20, -40, 10]] },
+  { name: 'Klobürste im Kreuzverhör', par: 90, two: true, items: [['klobuerste', -0.8, 0, 0.5, 25, 0, -30], ['waescheklammer', 1, 0.3, -0.6, 15, 40, -20]] },
+  { name: 'Der Brezel-Bananen-Pakt', par: 100, two: true, items: [['brezel', -0.6, 0.6, 0.4, 20, 35, 10], ['banane', 0.9, -0.9, -0.5, -15, 25, 200]] },
+  { name: 'Ménage à trois im Badezimmer', par: 140, two: true, items: [['ente', -1.6, -0.6, 0.8, 0, 30, 0], ['puempel', 0.4, 0.3, -0.4, 10, 0, 25], ['kleiderbuegel', 1.6, 1.3, 0.5, -20, -30, 8]] },
+  { name: 'Das Gesamtkunstwerk', par: 160, two: true, items: [['klobuerste', -1.8, 0.2, 0, 0, 0, 30], ['brezel', 0.2, 0.9, 0.6, 15, -25, -10], ['banane', 1.4, -1.2, -0.8, 30, 10, 120]] },
+];
+
+const CRIT_FAIL = [
+  'Das ist kein Schatten, das ist ein Hilferuf.',
+  'Mutig. Falsch, aber mutig.',
+  'Ich sehe … Verzweiflung. Und Haushaltswaren.',
+  'Konzeptuell interessant. Praktisch Unfug.',
+  'Meine Nichte malt bessere Schatten. Sie ist drei. Und ein Hamster.',
+  'Nein. Einfach nein. Mit Sahne obendrauf: nein.',
+  'Haben Sie das Licht angemacht oder nur gehofft?',
+];
+const CRIT_WIN = [null,
+  ['Hat lange gedauert. Wie Kunst. Oder ein Behördengang.', 'Man sieht die Mühe. Leider sieht man nur die Mühe.', 'Akzeptabel. Mehr sage ich ohne Anwalt nicht.'],
+  ['Solide. Ein bisschen Baumarkt, aber solide.', 'Nicht begeistert, nicht empört. Für mich ist das viel.', 'Hängt man sich ins Gästeklo. Passt.'],
+  ['Ein Meisterwerk! Ich weine in meinen Rollkragenpullover.', 'Endlich nimmt jemand den Müll ernst.', 'Dafür baut die Documenta einen neuen Flügel an.'],
+];
+const ADJ = ['Melancholische', 'Postmoderne', 'Verstörende', 'Schüchterne', 'Ungelüftete', 'Brutalistische', 'Feuchte'];
+const NOUN = ['Steuererklärung', 'Sehnsucht', 'Nebenkostenabrechnung', 'Morgenroutine', 'Mittagspause', 'Midlife-Crisis', 'Gurkenscheibe'];
+
+// ============ Renderer & Szene ============
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+$('canvas-container').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const BG = new THREE.Color(0x15111a), BLACK = new THREE.Color(0);
+scene.background = BG;
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+scene.add(new THREE.HemisphereLight(0xfff4e0, 0x302030, 0.45));
+
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  return new THREE.CanvasTexture(c);
+}
+const plaster = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#ebe3d5'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 1600; i++) {
+    const v = 205 + Math.random() * 40 | 0;
+    g.fillStyle = `rgba(${v},${v - 8},${v - 22},0.4)`; g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+  }
+});
+const planks = canvasTex(256, 256, (g, w) => {
+  for (let i = 0; i < 8; i++) {
+    g.fillStyle = i % 2 ? '#5b3f2a' : '#684a33'; g.fillRect(0, i * 32, w, 32);
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, i * 32, w, 2);
+  }
+  ['#ec4899', '#38bdf8', '#facc15', '#4ade80'].forEach(c => { // Farbkleckse der Künstlerin
+    g.fillStyle = c;
+    for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(Math.random() * w, Math.random() * 256, 2 + Math.random() * 5, 0, 7); g.fill(); }
+  });
+});
+planks.wrapS = planks.wrapT = THREE.RepeatWrapping; planks.repeat.set(3, 3);
+
+const wallMat = new THREE.MeshLambertMaterial({ map: plaster });
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 11), wallMat);
+backWall.position.set(0, FLOOR_Y + 5.5, -WALL);
+const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 11), wallMat);
+sideWall.rotation.y = Math.PI / 2; sideWall.position.set(-WALL, FLOOR_Y + 5.5, 0);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshLambertMaterial({ map: planks }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR_Y;
+backWall.receiveShadow = sideWall.receiveShadow = true;
+scene.add(backWall, sideWall, floor);
+
+// Parallele Scheinwerfer: Schatten = orthografische Projektion auf die Wand
+function makeLight(x, z) {
+  const l = new THREE.DirectionalLight(0xfff1d6, 0.8);
+  l.position.set(x, 0, z); l.castShadow = true;
+  const c = l.shadow.camera; c.left = c.bottom = -6.5; c.right = c.top = 6.5; c.near = 1; c.far = 40;
+  l.shadow.mapSize.set(2048, 2048); l.shadow.bias = -0.0005;
+  scene.add(l, l.target);
+  return l;
+}
+const lightA = makeLight(0, 20), lightB = makeLight(20, 0);
+
+function makeLamp(x, z, rotY) {
+  const g = new THREE.Group(), metal = new THREE.MeshStandardMaterial({ color: 0x1f1b24, roughness: 0.4, metalness: 0.6 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.75, 1.1, 16), metal); body.rotation.x = Math.PI / 2;
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.6, 16), new THREE.MeshBasicMaterial({ color: 0xfff6d8 }));
+  lens.position.z = -0.56; lens.rotation.y = Math.PI;
+  const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4.8, 8), metal); stand.position.y = -2.4;
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 12), metal); foot.position.y = -4.8;
+  g.add(body, lens, stand, foot);
+  g.position.set(x, 0.3, z); g.rotation.y = rotY;
+  scene.add(g); return g;
+}
+makeLamp(0, 9, 0);
+const lampB = makeLamp(9, 0, Math.PI / 2);
+
+// Ziel-Overlays an den Wänden (Maske als CanvasTexture)
+function makeOverlay() {
+  const c = document.createElement('canvas'); c.width = c.height = N;
+  const tex = new THREE.CanvasTexture(c);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2 * H, 2 * H), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  mesh.renderOrder = 2; scene.add(mesh);
+  return { mesh, tex, ctx: c.getContext('2d') };
+}
+const ovA = makeOverlay(); ovA.mesh.position.set(0, 0, -WALL + 0.02);
+const ovB = makeOverlay(); ovB.mesh.rotation.y = Math.PI / 2; ovB.mesh.position.set(-WALL + 0.02, 0, 0);
+
+function drawOverlay(ov, m) {
+  const img = ov.ctx.createImageData(N, N), d = img.data;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = y * N + x;
+    if (!m[i]) continue;
+    const edge = x === 0 || y === 0 || x === N - 1 || y === N - 1 || !m[i - 1] || !m[i + 1] || !m[i - N] || !m[i + N];
+    const o = ((N - 1 - y) * N + x) * 4; // readPixels-Zeilen laufen von unten nach oben
+    d.set(edge ? [255, 214, 70, 235] : [255, 70, 170, 70], o);
+  }
+  ov.ctx.putImageData(img, 0, 0); ov.tex.needsUpdate = true;
+}
+
+// Masken-Kameras entlang der Lichtrichtungen; Müll liegt zusätzlich auf Layer 1
+function maskCam(x, z) {
+  const c = new THREE.OrthographicCamera(-H, H, H, -H, 0.1, 50);
+  c.position.set(x, 0, z); c.lookAt(0, 0, 0); c.layers.set(1);
+  return c;
+}
+const camA = maskCam(0, 20), camB = maskCam(20, 0);
+const rt = new THREE.WebGLRenderTarget(N, N), pix = new Uint8Array(N * N * 4);
+const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+const tgtA = new Uint8Array(N * N), tgtB = new Uint8Array(N * N), curA = new Uint8Array(N * N), curB = new Uint8Array(N * N);
+
+function renderMask(cam, out) {
+  scene.overrideMaterial = whiteMat; scene.background = BLACK;
+  renderer.setRenderTarget(rt);
+  renderer.render(scene, cam);
+  renderer.readRenderTargetPixels(rt, 0, 0, N, N, pix);
+  renderer.setRenderTarget(null);
+  scene.overrideMaterial = null; scene.background = BG;
+  for (let i = 0; i < N * N; i++) out[i] = pix[i * 4] > 127 ? 1 : 0;
+  return out;
+}
+
+// ============ Müll aus Primitiven ============
+function part(g, geo, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, s) {
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.05, flatShading: true }));
+  m.position.set(x, y, z); m.rotation.set(rx, ry, rz);
+  if (s) m.scale.set(s[0], s[1], s[2]);
+  g.add(m); return m;
+}
+function rod(g, x1, y1, x2, y2, r, color) {
+  part(g, new THREE.CylinderGeometry(r, r, Math.hypot(x2 - x1, y2 - y1), 8), color, (x1 + x2) / 2, (y1 + y2) / 2, 0, 0, 0, Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2);
+}
+const JUNK = {
+  ente: { name: 'Quietscheente', build(g) {
+    part(g, new THREE.SphereGeometry(0.8, 14, 10), 0xfacc15, 0, -0.2, 0, 0, 0, 0, [1.35, 0.85, 1]);
+    part(g, new THREE.SphereGeometry(0.48, 12, 9), 0xfacc15, 0.7, 0.65, 0);
+    part(g, new THREE.ConeGeometry(0.2, 0.5, 8), 0xf97316, 1.32, 0.58, 0, 0, 0, -Math.PI / 2);
+    part(g, new THREE.ConeGeometry(0.25, 0.5, 6), 0xfacc15, -1.15, 0.15, 0, 0, 0, Math.PI / 2 - 0.5);
+    [-0.3, 0.3].forEach(z => part(g, new THREE.SphereGeometry(0.07, 6, 5), 0x111111, 0.98, 0.8, z));
+  } },
+  klobuerste: { name: 'Klobürste', build(g) {
+    part(g, new THREE.CylinderGeometry(0.07, 0.07, 2.2, 8), 0xf8fafc, 0, 0.55, 0);
+    part(g, new THREE.CylinderGeometry(0.4, 0.36, 0.8, 12), 0x374151, 0, -0.95, 0);
+    part(g, new THREE.TorusGeometry(0.17, 0.05, 6, 14), 0xf8fafc, 0, 1.8, 0);
+  } },
+  brezel: { name: 'Brezel', build(g) {
+    part(g, new THREE.TorusGeometry(0.95, 0.17, 8, 28), 0x92400e, 0, 0, 0, 0, 0, 0, [1, 0.8, 1]);
+    part(g, new THREE.TorusGeometry(0.42, 0.15, 8, 18), 0x92400e, -0.38, -0.12, 0.05);
+    part(g, new THREE.TorusGeometry(0.42, 0.15, 8, 18), 0x92400e, 0.38, -0.12, -0.05);
+    for (let i = 0; i < 6; i++) part(g, new THREE.BoxGeometry(0.07, 0.07, 0.07), 0xffffff, Math.cos(i) * 0.95, Math.sin(i) * 0.76, 0.17);
+  } },
+  waescheklammer: { name: 'Wäscheklammer', build(g) {
+    part(g, new THREE.BoxGeometry(0.22, 2.1, 0.32), 0xd6b98c, -0.16, 0, 0, 0, 0, 0.09);
+    part(g, new THREE.BoxGeometry(0.22, 2.1, 0.32), 0xd6b98c, 0.16, 0, 0, 0, 0, -0.09);
+    part(g, new THREE.TorusGeometry(0.22, 0.05, 6, 14), 0x9ca3af, 0, 0.15, 0, 0, Math.PI / 2, 0);
+  } },
+  kleiderbuegel: { name: 'Kleiderbügel', build(g) {
+    rod(g, -1.3, -0.5, 1.3, -0.5, 0.05, 0xb45309);
+    rod(g, -1.3, -0.5, 0, 0.35, 0.06, 0xb45309);
+    rod(g, 1.3, -0.5, 0, 0.35, 0.06, 0xb45309);
+    rod(g, 0, 0.35, 0, 0.7, 0.035, 0x9ca3af);
+    part(g, new THREE.TorusGeometry(0.22, 0.035, 6, 16, Math.PI * 1.3), 0x9ca3af, -0.22, 0.7, 0);
+  } },
+  puempel: { name: 'Pümpel', build(g) {
+    part(g, new THREE.CylinderGeometry(0.08, 0.08, 2.0, 8), 0xa16207, 0, 0.55, 0);
+    part(g, new THREE.SphereGeometry(0.62, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xdc2626, 0, -0.45, 0).material.side = THREE.DoubleSide;
+  } },
+  banane: { name: 'Banane', build(g) {
+    part(g, new THREE.TorusGeometry(1.1, 0.2, 8, 20, 1.9), 0xfde047, 0, -0.8, 0, 0, 0, Math.PI / 2 - 0.95);
+    rod(g, -0.9, -0.16, -1.15, -0.32, 0.07, 0x4d3319);
+    part(g, new THREE.SphereGeometry(0.1, 6, 5), 0x3f2a14, 0.9, -0.16, 0);
+  } },
+};
+function buildJunk(type, idx) {
+  const g = new THREE.Group();
+  JUNK[type].build(g);
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.layers.enable(1); } });
+  g.userData.idx = idx;
+  scene.add(g); return g;
+}
+
+// ============ Zustand ============
+const S = {
+  mode: 'menu', level: 0, endless: false, sel: 0, time: 0, subs: 0, iA: 0, iB: 1, score: 0, measureT: 0,
+  snapping: false, snapDone: false, lastManip: 0, msgT: 0, timer: 0, solved: 0, best: 0, two: false, moveMode: false, spec: null,
+};
+let objs = [], stars = [];
+try { stars = JSON.parse(localStorage.getItem(STAR_KEY)) || []; } catch (e) { stars = []; }
+try { S.best = Number(AC && AC.getScore(KEY)) || 0; } catch (e) { S.best = 0; }
+
+const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _r = new THREE.Vector3(), _u = new THREE.Vector3();
+const AXIS_X = new THREE.Vector3(1, 0, 0), AXIS_Y = new THREE.Vector3(0, 1, 0), AXIS_Z = new THREE.Vector3(0, 0, 1);
+const clampPos = p => p.set(clamp(p.x, -BOUND, BOUND), clamp(p.y, -BOUND, BOUND), clamp(p.z, -BOUND, BOUND));
+function rotateObj(o, axis, ang) { _q.setFromAxisAngle(axis, ang); o.g.quaternion.premultiply(_q); }
+
+function measure() {
+  S.iA = iou(renderMask(camA, curA), tgtA);
+  S.iB = S.two ? iou(renderMask(camB, curB), tgtB) : 1;
+  S.score = Math.min(S.iA, S.iB);
+}
+
+function perturb(o) {
+  _v.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).normalize();
+  _q.setFromAxisAngle(_v, rnd(0.8, 1.6));
+  o.g.quaternion.copy(o.solQ).premultiply(_q);
+  _v.set(rnd(-1, 1), rnd(-1, 1), S.two ? rnd(-1, 1) : 0).normalize().multiplyScalar(rnd(0.6, 1.1));
+  clampPos(o.g.position.copy(o.solP).add(_v));
+}
+
+function setupPuzzle(spec) {
+  objs.forEach(o => { scene.remove(o.g); o.g.traverse(m => { if (m.isMesh) { m.geometry.dispose(); m.material.dispose(); } }); });
+  objs = spec.items.map(([type, px, py, pz, rx, ry, rz], i) => {
+    const g = buildJunk(type, i);
+    g.position.set(px, py, pz); g.rotation.set(rx * DEG, ry * DEG, rz * DEG);
+    return { g, name: JUNK[type].name, solP: g.position.clone(), solQ: g.quaternion.clone(), startP: null, startQ: null };
+  });
+  S.spec = spec; S.two = !!spec.two;
+  lightB.visible = ovB.mesh.visible = lampB.visible = S.two;
+  drawOverlay(ovA, renderMask(camA, tgtA));
+  if (S.two) drawOverlay(ovB, renderMask(camB, tgtB));
+  // Startpose: Lösung + garantierte Mindeststörung, bis die Deckung deutlich daneben liegt
+  for (let t = 0; t < 15; t++) { objs.forEach(perturb); measure(); if (S.score < 0.5) break; }
+  objs.forEach(o => { o.startP = o.g.position.clone(); o.startQ = o.g.quaternion.clone(); });
+  S.sel = 0; S.time = 0; S.subs = 0; S.snapping = false; S.snapDone = false; S.measureT = 0;
+  highlight();
+}
+
+function highlight() {
+  objs.forEach((o, i) => o.g.traverse(m => { if (m.isMesh) m.material.emissive.setHex(i === S.sel && objs.length > 1 ? 0x3a2a00 : 0); }));
+}
+function select(i) {
+  if (!objs.length) return;
+  S.sel = (i + objs.length) % objs.length; highlight(); snd('pop', 1.2);
+}
+function resetPose() {
+  objs.forEach(o => { o.g.position.copy(o.startP); o.g.quaternion.copy(o.startQ); });
+  S.snapping = false; S.snapDone = false; snd('pop', 0.7);
+}
+// Ohne Seitenlicht ist die Tiefe (z) für den Schatten egal
+const closeToSolution = () => objs.every(o => {
+  const p = o.g.position, s = o.solP;
+  return Math.hypot(p.x - s.x, p.y - s.y, S.two ? p.z - s.z : 0) < 0.4 && o.g.quaternion.angleTo(o.solQ) < 0.4;
+});
+
+// ============ Spielablauf ============
+function startLevel(i) {
+  S.endless = false; S.level = i;
+  setupPuzzle(LEVELS[i]);
+  S.mode = 'play'; hideModal();
+  showMsg(`Werk ${i + 1}: „${LEVELS[i].name}“`, LEVELS[i].two ? 'Zwei Scheinwerfer! Beide Schatten müssen passen.' : 'Bring den Schatten in die leuchtende Form.', '#facc15');
+}
+function startEndless() {
+  S.endless = true; S.solved = 0; S.timer = 75;
+  nextEndless();
+  S.mode = 'play'; hideModal();
+  showMsg('Meisterprüfung', 'Jedes verkaufte Werk bringt +20 s. Die Galerie wartet nicht.', '#facc15');
+}
+function nextEndless() {
+  const n = Math.min(3, 1 + (S.solved >= 2) + (S.solved >= 5));
+  const types = Object.keys(JUNK).sort(() => Math.random() - 0.5).slice(0, n);
+  setupPuzzle({
+    name: `${pick(ADJ)} ${pick(NOUN)}`, two: S.solved >= 3,
+    items: types.map((t, i) => [t, (i - (n - 1) / 2) * 2.2 + rnd(-0.3, 0.3), rnd(-1, 1), rnd(-0.8, 0.8), rnd(-180, 180), rnd(-180, 180), rnd(-180, 180)]),
+  });
+}
+
+function submit() {
+  if (S.mode !== 'play') return;
+  measure();
+  S.subs++;
+  if (S.score >= WIN) return solved();
+  snd('hit');
+  showMsg(`${Math.round(S.score * 100)} % – abgelehnt`, `„${pick(CRIT_FAIL)}“`, '#f87171');
+}
+
+function solved() {
+  snd('powerup');
+  S.snapping = true;
+  if (S.endless) {
+    S.solved++; S.timer += 20;
+    showMsg('Verkauft! +20 s', `„${pick(CRIT_WIN[3])}“`, '#4ade80');
+    nextEndless();
+    return;
+  }
+  const spec = LEVELS[S.level], fails = S.subs - 1;
+  const st = Math.max(1, 3 - (S.time > spec.par ? 1 : 0) - (fails > 0 ? 1 : 0));
+  if (st > (stars[S.level] || 0)) { stars[S.level] = st; try { localStorage.setItem(STAR_KEY, JSON.stringify(stars)); } catch (e) {} }
+  S.mode = 'done';
+  const last = S.level + 1 >= LEVELS.length;
+  showModal({
+    title: (last ? 'Vernissage komplett! ' : '') + '★'.repeat(st) + '☆'.repeat(3 - st),
+    sub: `„${spec.name}“<br><br><i>Der Kritiker: „${pick(CRIT_WIN[st])}“</i>` + (last ? '<br><br>Alle zehn Werke hängen. Zeit für die <b>Meisterprüfung</b>?' : ''),
+    stats: [['Deckung', Math.round(S.score * 100) + ' %'], ['Zeit', fmt(S.time)], ['Fehlversuche', fails], ['Ziel-Zeit', fmt(spec.par)]],
+    primary: last ? ['Zum Atelier (Enter)', showMenu] : ['Nächstes Werk (Enter)', () => startLevel(S.level + 1)],
+    secondary: ['Nochmal versuchen', () => startLevel(S.level)],
+  });
+}
+
+function endlessOver() {
+  S.mode = 'over';
+  snd('gameOver');
+  const rec = S.solved > S.best;
+  if (rec) { S.best = S.solved; try { AC && AC.saveScore(KEY, S.best); } catch (e) {} }
+  showModal({
+    title: 'Galerie geschlossen!',
+    sub: 'Der Hausmeister kehrt deine Kunst zusammen.' + (rec ? '<br><b style="color:#facc15">🏆 Neuer Rekord!</b>' : ''),
+    stats: [['Verkaufte Werke', S.solved], ['Rekord', S.best]],
+    primary: ['Nochmal (Enter)', startEndless], secondary: ['Zum Atelier', showMenu],
+  });
+}
+
+function pauseGame() {
+  if (S.mode !== 'play') return;
+  S.mode = 'pause'; keys.clear(); touchRoll = 0;
+  showModal({
+    title: 'Pause', sub: 'Der Kritiker holt sich einen Espresso.',
+    stats: [['Deckung', Math.round(S.score * 100) + ' %'], [S.endless ? 'Restzeit' : 'Zeit', fmt(S.endless ? S.timer : S.time)]],
+    primary: ['Weiter (Enter / Esc)', resumeGame], secondary: ['Zum Atelier', showMenu],
+  });
+}
+function resumeGame() { if (S.mode === 'pause') { S.mode = 'play'; hideModal(); } }
+
+const unlocked = i => i === 0 || (stars[i - 1] || 0) > 0;
+function showMenu() {
+  S.mode = 'menu'; S.endless = false;
+  const touch = document.body.classList.contains('touch');
+  const total = stars.reduce((a, b) => a + (b || 0), 0);
+  let first = LEVELS.findIndex((l, i) => !stars[i]);
+  if (first < 0) first = 0;
+  showModal({
+    title: 'Schattenkunst 3D',
+    sub: 'Der Scheinwerfer wirft den Schatten deines Mülls an die Wand. Dreh und schieb den Krempel, bis er die leuchtende Zielform trifft (≥ 90 % Deckung), dann reiche ein. Ab Werk 6 kommt ein zweiter Scheinwerfer dazu.<br><br>' + (touch
+      ? 'Tippen: Objekt wählen · Ein Finger: drehen (oder schieben, Knopf unten) · ⟲ ⟳ rollen · Zwei Finger: Kamera'
+      : '<kbd>Klick</kbd> wählen · <kbd>Ziehen</kbd> drehen · <kbd>Shift</kbd>+Ziehen schieben · Rechtsklick-Ziehen: Kamera · Rad: Tiefe<br><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>Shift</kbd>+Tasten schieben · <kbd>1</kbd>–<kbd>4</kbd>/<kbd>Tab</kbd> Objekt · <kbd>Leertaste</kbd> einreichen · <kbd>R</kbd> zurücksetzen'),
+    stats: [['Sterne', `${total} / ${LEVELS.length * 3}`], ['Meisterprüfung', S.best + ' Werke']],
+    levels: true,
+    primary: [`Werk ${first + 1} ausstellen (Enter)`, () => startLevel(first)],
+    secondary: ['🎓 Meisterprüfung (auf Zeit)', startEndless],
+  });
+}
+
+// ============ UI ============
+let modalOpts = null;
+function showModal(o) {
+  modalOpts = o;
+  $('mTitle').textContent = o.title;
+  $('mSub').innerHTML = o.sub;
+  $('mStats').innerHTML = (o.stats || []).map(([l, v]) => `<div class="stat-box"><div class="stat-label">${l}</div><div class="stat-value">${v}</div></div>`).join('');
+  $('mLevels').innerHTML = o.levels ? LEVELS.map((l, i) =>
+    `<button class="lvl-btn" data-l="${i}" title="${l.name}"${unlocked(i) ? '' : ' disabled'}>${i + 1}<small>${'★'.repeat(stars[i] || 0) || '·'}</small></button>`).join('') : '';
+  $('mPrimary').textContent = o.primary[0];
+  $('mSecondary').hidden = !o.secondary;
+  if (o.secondary) $('mSecondary').textContent = o.secondary[0];
+  $('modal').style.display = 'flex';
+}
+function hideModal() { $('modal').style.display = 'none'; modalOpts = null; }
+const modalOpen = () => $('modal').style.display === 'flex';
+$('mPrimary').addEventListener('click', () => modalOpts && modalOpts.primary[1]());
+$('mSecondary').addEventListener('click', () => modalOpts && modalOpts.secondary && modalOpts.secondary[1]());
+$('mLevels').addEventListener('click', e => { const b = e.target.closest('.lvl-btn'); if (b && !b.disabled) startLevel(+b.dataset.l); });
+
+function showMsg(title, sub, color) {
+  const el = $('msg');
+  el.innerHTML = `<span style="color:${color}">${title}</span><small>${sub || ''}</small>`;
+  el.classList.add('show'); S.msgT = 2.4;
+}
+
+const hudCache = {};
+function setText(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } }
+function updateHUD() {
+  const pc = v => Math.round(v * 100) + ' %';
+  setText('hLevel', S.endless ? `Meisterprüfung · ${S.solved} verkauft` : `Werk ${S.level + 1}/${LEVELS.length}`);
+  setText('hScore', S.two ? `${pc(S.iA)} | ${pc(S.iB)}` : pc(S.iA));
+  $('hCov').classList.toggle('good', S.score >= WIN);
+  setText('hTime', S.endless ? fmt(Math.max(0, S.timer)) : fmt(S.time));
+  $('hTimePill').classList.toggle('warn', S.endless ? S.timer < 15 : !!S.spec && S.time > S.spec.par);
+  setText('hSubs', String(S.subs));
+  const o = objs[S.sel];
+  setText('hObj', o ? (objs.length > 1 ? `${o.name} (${S.sel + 1}/${objs.length})` : o.name) : '–');
+  setText('task', S.spec ? `„${S.spec.name}“` + (S.score >= WIN && S.mode === 'play' ? ' · bereit zum Einreichen!' : '') : '');
+}
+
+function updateSoundBtn() {
+  const muted = AC ? AC.isMuted() : false;
+  $('soundBtn').textContent = muted ? '🔇 Sound: Aus' : '🔊 Sound: An';
+}
+$('soundBtn').addEventListener('click', e => { if (AC) AC.toggleMute(); updateSoundBtn(); e.currentTarget.blur(); });
+window.addEventListener('arcade_mute_changed', updateSoundBtn);
+updateSoundBtn();
+$('pauseBtn').addEventListener('click', e => { e.currentTarget.blur(); S.mode === 'pause' ? resumeGame() : pauseGame(); });
+
+function toggleMoveMode() {
+  S.moveMode = !S.moveMode;
+  $('tMode').textContent = S.moveMode ? '✥ Schieben' : '↻ Drehen';
+  $('tMode').classList.toggle('on', S.moveMode);
+  $('tRollL').textContent = S.moveMode ? '⤓ Tiefe' : '⟲';
+  $('tRollR').textContent = S.moveMode ? '⤒ Tiefe' : '⟳';
+}
+const tap = (id, fn) => $(id).addEventListener('click', e => { e.currentTarget.blur(); if (S.mode === 'play') fn(); });
+tap('tMode', toggleMoveMode);
+tap('tNext', () => select(S.sel + 1));
+tap('tReset', resetPose);
+tap('tSubmit', submit);
+let touchRoll = 0;
+[['tRollL', -1], ['tRollR', 1]].forEach(([id, v]) => {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); touchRoll = v; });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, () => { touchRoll = 0; }));
+});
+
+// ============ Kamera ============
+const cam = { yaw: 0.62, pitch: 0.22, dist: 16 };
+const camCenter = new THREE.Vector3(-1.2, 0.2, -1.2);
+function orbit(dx, dy) {
+  cam.yaw = clamp(cam.yaw - dx * 0.005, 0.05, 1.5);
+  cam.pitch = clamp(cam.pitch + dy * 0.005, -0.25, 1.1);
+}
+function updateCamera() {
+  const d = cam.dist * Math.max(1, 1.2 / camera.aspect), cp = Math.cos(cam.pitch);
+  camera.position.set(camCenter.x + Math.sin(cam.yaw) * cp * d, camCenter.y + Math.sin(cam.pitch) * d, camCenter.z + Math.cos(cam.yaw) * cp * d);
+  camera.lookAt(camCenter);
+}
+
+// ============ Eingabe: Tastatur ============
+const keys = new Set();
+const GAME_KEYS = ['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE'];
+window.addEventListener('keydown', e => {
+  if (GAME_KEYS.includes(e.code)) e.preventDefault();
+  if (modalOpen()) {
+    if (e.repeat) return;
+    if (e.code === 'Enter' && modalOpts) { e.preventDefault(); modalOpts.primary[1](); }
+    else if (e.code === 'Escape' && S.mode === 'pause') resumeGame();
+    return;
+  }
+  if (S.mode !== 'play') return;
+  keys.add(e.code);
+  if (e.repeat) return;
+  if (e.code === 'Tab') select(S.sel + (e.shiftKey ? -1 : 1));
+  else if (/^Digit[1-4]$/.test(e.code) && +e.code[5] <= objs.length) select(+e.code[5] - 1);
+  else if (e.code === 'Space') submit();
+  else if (e.code === 'KeyR') resetPose();
+  else if (e.code === 'Escape' || e.code === 'KeyP') pauseGame();
+});
+window.addEventListener('keyup', e => keys.delete(e.code));
+window.addEventListener('blur', () => { keys.clear(); touchRoll = 0; pauseGame(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+
+function applyKeys(o, dt) {
+  const k = c => keys.has(c) ? 1 : 0;
+  const a = k('KeyD') - k('KeyA'), b = k('KeyS') - k('KeyW'), c = k('KeyE') - k('KeyQ') + touchRoll;
+  if (!o || (!a && !b && !c)) return false;
+  if (S.moveMode || keys.has('ShiftLeft') || keys.has('ShiftRight')) {
+    o.g.position.x += a * 2 * dt; o.g.position.y -= b * 2 * dt; o.g.position.z += c * 2 * dt;
+    clampPos(o.g.position);
+  } else {
+    rotateObj(o, AXIS_Y, a * 1.8 * dt); rotateObj(o, AXIS_X, b * 1.8 * dt); rotateObj(o, AXIS_Z, -c * 1.8 * dt);
+  }
+  return true;
+}
+
+// ============ Eingabe: Maus / Touch ============
+const canvas = renderer.domElement, ptrs = new Map(), ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let drag = null;
+function manipulate(o, dx, dy, move) {
+  _r.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
+  if (move) {
+    const z = o.g.position.z;
+    clampPos(o.g.position.addScaledVector(_r, dx * 0.012).addScaledVector(_u, -dy * 0.012));
+    if (!S.two) o.g.position.z = z;
+  }
+  else { rotateObj(o, _u, dx * 0.01); rotateObj(o, _r, dy * 0.01); }
+  S.snapping = false; S.lastManip = performance.now();
+}
+function pickAt(x, y) {
+  ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(objs.map(o => o.g), true)[0];
+  if (!hit) return;
+  let g = hit.object;
+  while (g.parent && g.userData.idx === undefined) g = g.parent;
+  if (g.userData.idx !== undefined) select(g.userData.idx);
+}
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') document.body.classList.add('touch');
+  canvas.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 1) drag = { button: e.button, moved: false, sx: e.clientX, sy: e.clientY };
+  else if (drag) drag.moved = true; // zweiter Finger: Kamera statt Tippen
+});
+canvas.addEventListener('pointermove', e => {
+  const pt = ptrs.get(e.pointerId);
+  if (!pt || !drag) return;
+  const dx = e.clientX - pt.x, dy = e.clientY - pt.y;
+  pt.x = e.clientX; pt.y = e.clientY;
+  if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6) drag.moved = true;
+  if (!drag.moved) return;
+  if (ptrs.size >= 2) orbit(dx / ptrs.size, dy / ptrs.size);
+  else if (drag.button === 2) orbit(dx, dy);
+  else if (S.mode === 'play' && objs[S.sel]) manipulate(objs[S.sel], dx, dy, S.moveMode || e.shiftKey);
+});
+function endPtr(e, cancel) {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.delete(e.pointerId);
+  if (!cancel && drag && !drag.moved && drag.button === 0 && !ptrs.size && S.mode === 'play') pickAt(e.clientX, e.clientY);
+  if (!ptrs.size) drag = null;
+}
+canvas.addEventListener('pointerup', e => endPtr(e, false));
+canvas.addEventListener('pointercancel', e => endPtr(e, true));
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const o = objs[S.sel];
+  if (S.mode !== 'play' || !o) return;
+  o.g.position.z = clamp(o.g.position.z - Math.sign(e.deltaY) * 0.15, -BOUND, BOUND);
+  S.snapping = false; S.lastManip = performance.now();
+}, { passive: false });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+if (window.matchMedia && matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
+
+// ============ Hauptschleife ============
+function update(dt) {
+  S.time += dt;
+  if (S.endless && (S.timer -= dt) <= 0) { endlessOver(); return; }
+  const active = applyKeys(objs[S.sel], dt) || performance.now() - S.lastManip < 250;
+  if (active) S.snapping = false;
+  if ((S.measureT -= dt) <= 0) {
+    S.measureT = 0.15;
+    measure();
+    if (S.score < WIN) S.snapDone = false;
+    // Einrast-Hilfe: kurz vor dem Ziel sanft in die Lösung gleiten
+    if (S.score > SNAP && !S.snapDone && !active && closeToSolution()) {
+      S.snapping = S.snapDone = true;
+      snd('pop', 1.5);
+      showMsg('Klick!', 'Eingerastet – Leertaste zum Einreichen.', '#4ade80');
+    }
+  }
+}
+function stepSnap(dt) {
+  if (!S.snapping) return;
+  const k = 1 - Math.exp(-8 * dt);
+  let done = true;
+  objs.forEach(o => {
+    o.g.position.lerp(o.solP, k); o.g.quaternion.slerp(o.solQ, k);
+    if (o.g.position.distanceTo(o.solP) > 0.002 || o.g.quaternion.angleTo(o.solQ) > 0.002) done = false;
+  });
+  if (done) S.snapping = false;
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+let last = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (S.mode === 'play') update(dt);
+  stepSnap(dt);
+  if (S.msgT > 0 && (S.msgT -= dt) <= 0) $('msg').classList.remove('show');
+  ovA.mesh.material.opacity = ovB.mesh.material.opacity = 0.8 + 0.2 * Math.sin(now / 350);
+  updateCamera(); updateHUD();
+  renderer.render(scene, camera);
+}
+
+setupPuzzle(LEVELS[0]);
+showMenu();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

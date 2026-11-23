@@ -294,7 +294,8 @@ const ArcadeCore = (() => {
     'tiefenrausch': 'tiefenrausch_best',
     'wettermacher': 'wettermacher_best',
     'orbitgolf': 'orbitgolf_best',
-    'leuchtturm': 'leuchtturm_best'
+    'leuchtturm': 'leuchtturm_best',
+    'schattenkunst': 'schattenkunst_best'
   };
 
   function getScore(gameKey) {
