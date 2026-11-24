@@ -296,7 +296,8 @@ const ArcadeCore = (() => {
     'orbitgolf': 'orbitgolf_best',
     'leuchtturm': 'leuchtturm_best',
     'schattenkunst': 'schattenkunst_best',
-    'spickalarm': 'spickalarm_best'
+    'spickalarm': 'spickalarm_best',
+    'liegenkrieg': 'liegenkrieg_best'
   };
 
   function getScore(gameKey) {
