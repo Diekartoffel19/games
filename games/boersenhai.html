@@ -549,8 +549,15 @@ function marketStep(dt) {
     a.price *= Math.exp(lr);
     a.lastZ = z;
   }
-  // Live-Kurse (Finnhub) überschreiben die Simulation; nicht bei der Historien-Generierung
-  if (!genMode) for (const s in LIVE.px) if (BY[s]) BY[s].price = LIVE.px[s];
+  // Live-Kurse (Finnhub): Simulation liefert nur noch Rauschen, das zum echten Kurs gezogen wird.
+  // Beim ersten Live-Kurs der Sitzung wird die Historie skaliert, damit der Chart nicht springt.
+  if (!genMode) for (const s in LIVE.px) {
+    const a = BY[s], L = LIVE.px[s];
+    if (!a) continue;
+    a.imp = 0; a.impRate = 0; a.reg = 0;
+    if (!LIVE.sync[s]) { scaleSeries(a, L / a.price); a.price = L; LIVE.sync[s] = 1; }
+    else a.price *= Math.pow(L / a.price, 0.2);
+  }
   for (const d of DERIVED) {
     const old = d.price;
     d.k *= Math.exp(-d.ter * dtY);
@@ -659,6 +666,8 @@ const TPL = {
 };
 
 function addNews(text, tone, syms) {
+  // Erfundene News nur zu Live-Instrumenten wären irreführend (Kurs folgt dem echten Markt)
+  if (!genMode && syms && syms.length && syms.every(s => LIVE.px[s])) return;
   news.unshift({ id: evId++, t: now, text, tone, syms: syms || [] });
   if (news.length > 80) news.length = 80;
   if (!genMode) {
@@ -1208,8 +1217,24 @@ const KEY_STORE = 'boersenhai_finnhub_key';
 const LIVE_SYMS = { GOLD: 'OANDA:XAU_USD', SILB: 'OANDA:XAG_USD', BRNT: 'OANDA:BCO_USD', BTC: 'BINANCE:BTCUSDT', ETH: 'BINANCE:ETHUSDT', EURUSD: 'OANDA:EUR_USD', EURGBP: 'OANDA:EUR_GBP' };
 const FH_REV = {}; for (const s in LIVE_SYMS) FH_REV[LIVE_SYMS[s]] = s;
 const POLL_MS = 3000, WS_FRESH = 20000, REST_MIN = 15000, REST_MAX = 120000;
-const LIVE = { px: {}, src: {}, at: {}, wsT: {}, dead: {}, next: {}, iv: {}, ws: null, wsTimer: 0, pollTimer: 0, pauseUntil: 0, retry: 0 };
+const PC_MAX_AGE = 3600000;   // Vortagesschluss (für echte Tagesänderung) stündlich auffrischen
+const LIVE_RESET = ['px', 'src', 'at', 'wsT', 'dead', 'next', 'iv', 'sync', 'pc', 'pcAt'];
+const LIVE = { ws: null, wsState: 'aus', wsTimer: 0, pollTimer: 0, pauseUntil: 0, retry: 0 };
+for (const k of LIVE_RESET) LIVE[k] = {};
 function getKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+
+// Key-Test über ein Symbol, das in jedem Finnhub-Plan enthalten ist
+async function checkKey(key) {
+  try {
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 8000);
+    const r = await fetch('https://finnhub.io/api/v1/quote?symbol=AAPL&token=' + encodeURIComponent(key), { signal: ctl.signal });
+    clearTimeout(to);
+    if (r.status === 401 || r.status === 403) return 'bad';
+    if (r.status === 429) return 'limit';
+    const j = r.ok ? await r.json() : null;
+    return j && j.c > 0 ? 'ok' : 'bad';
+  } catch (e) { return 'net'; }
+}
 
 async function fetchQuote(sym, key) {
   try {
@@ -1217,11 +1242,14 @@ async function fetchQuote(sym, key) {
     const r = await fetch('https://finnhub.io/api/v1/quote?symbol=' + encodeURIComponent(LIVE_SYMS[sym]) + '&token=' + encodeURIComponent(key), { signal: ctl.signal });
     clearTimeout(to);
     if (r.status === 429) { LIVE.pauseUntil = Date.now() + 60000; return; }   // Kontingent erreicht → 1 min Pause
-    if (r.status === 401 || r.status === 403) { LIVE.dead[sym] = true; return; } // nicht im Plan / Key ungültig
+    if (r.status === 401) { stopLive(); toast('Finnhub: API-Key ungültig oder gesperrt – Live-Kurse aus. 🔑 zum Prüfen.', 'err', 8000); return; }
+    if (r.status === 403) { LIVE.dead[sym] = true; return; }                     // Symbol nicht im Plan
     const j = r.ok ? await r.json() : null;
     if (!j || j.error || !(j.c > 0)) { if (j) LIVE.dead[sym] = true; return; }
     const changed = LIVE.px[sym] !== j.c;
-    LIVE.px[sym] = j.c; LIVE.src[sym] = 'REST'; LIVE.at[sym] = Date.now();
+    if (j.pc > 0) { LIVE.pc[sym] = j.pc; LIVE.pcAt[sym] = Date.now(); }
+    // Aktueller WS-Kurs ist genauer als der REST-Snapshot
+    if (Date.now() - (LIVE.wsT[sym] || 0) >= WS_FRESH) { LIVE.px[sym] = j.c; LIVE.src[sym] = 'REST'; LIVE.at[sym] = Date.now(); }
     // Kurs unverändert (z. B. Wochenende) → seltener abfragen
     LIVE.iv[sym] = changed ? REST_MIN : Math.min(REST_MAX, (LIVE.iv[sym] || REST_MIN) * 2);
     LIVE.next[sym] = Date.now() + LIVE.iv[sym];
@@ -1232,19 +1260,20 @@ function pollOne() {
   if (!key || document.hidden || t < LIVE.pauseUntil) return;
   let best = null;
   for (const s in LIVE_SYMS) {
-    if (LIVE.dead[s] || t - (LIVE.wsT[s] || 0) < WS_FRESH || (LIVE.next[s] || 0) > t) continue;
+    const wsOk = t - (LIVE.wsT[s] || 0) < WS_FRESH, pcOk = t - (LIVE.pcAt[s] || 0) < PC_MAX_AGE;
+    if (LIVE.dead[s] || (wsOk && pcOk) || (LIVE.next[s] || 0) > t) continue;
     if (!best || (LIVE.next[s] || 0) < (LIVE.next[best] || 0)) best = s;
   }
   if (best) { LIVE.next[best] = t + REST_MIN; fetchQuote(best, key); }
-  $('btnKey').style.color = Object.keys(LIVE.px).length ? 'var(--up)' : '';
+  $('btnKey').style.borderColor = Object.keys(LIVE.px).length ? 'var(--up)' : '';
 }
 function connectWS() {
   const key = getKey();
   if (!key || LIVE.ws) return;
   let ws;
   try { ws = new WebSocket('wss://ws.finnhub.io?token=' + encodeURIComponent(key)); } catch (e) { return; }
-  LIVE.ws = ws;
-  ws.onopen = () => { LIVE.retry = 0; for (const s in LIVE_SYMS) ws.send(JSON.stringify({ type: 'subscribe', symbol: LIVE_SYMS[s] })); };
+  LIVE.ws = ws; LIVE.wsState = 'verbinde …';
+  ws.onopen = () => { LIVE.retry = 0; LIVE.wsState = 'verbunden'; for (const s in LIVE_SYMS) ws.send(JSON.stringify({ type: 'subscribe', symbol: LIVE_SYMS[s] })); };
   ws.onmessage = e => {
     let m; try { m = JSON.parse(e.data); } catch (err) { return; }
     if (m.type !== 'trade' || !Array.isArray(m.data)) return;
@@ -1258,26 +1287,33 @@ function connectWS() {
     LIVE.ws = null;
     if (!getKey()) return;
     LIVE.retry = Math.min(5, LIVE.retry + 1);
-    LIVE.wsTimer = setTimeout(connectWS, 2000 * Math.pow(2, LIVE.retry));   // 4 s … 64 s
+    const ms = 2000 * Math.pow(2, LIVE.retry);   // 4 s … 64 s
+    LIVE.wsState = 'getrennt – neuer Versuch in ' + ms / 1000 + ' s';
+    LIVE.wsTimer = setTimeout(connectWS, ms);
   };
 }
 function stopLive() {
   if (LIVE.ws) { LIVE.ws.onclose = null; LIVE.ws.close(); LIVE.ws = null; }
   clearTimeout(LIVE.wsTimer); clearInterval(LIVE.pollTimer);
-  for (const k of ['px', 'src', 'at', 'wsT', 'dead', 'next', 'iv']) LIVE[k] = {};
-  LIVE.retry = 0; LIVE.pauseUntil = 0;
-  $('btnKey').style.color = '';
+  for (const k of LIVE_RESET) LIVE[k] = {};
+  LIVE.retry = 0; LIVE.pauseUntil = 0; LIVE.wsState = 'aus';
+  $('btnKey').style.borderColor = '';
 }
 function startLive() {
   stopLive();
-  if (!getKey()) return;
+  const key = getKey();
+  if (!key) return;
   connectWS();
+  // Einmaliger Start-Abruf aller Symbole (7 Requests), danach gedrosseltes Polling
+  const t = Date.now();
+  LIVE.init = Promise.all(Object.keys(LIVE_SYMS).map(s => { LIVE.next[s] = t + REST_MIN; return fetchQuote(s, key); }));
   LIVE.pollTimer = setInterval(pollOne, POLL_MS);
 }
 // Startkurse für ein neues Spiel: nur fehlende Symbole per REST holen (max. 7 Requests)
 async function fetchLivePrices() {
   const key = getKey();
   if (!key) return {};
+  await LIVE.init;
   await Promise.all(Object.keys(LIVE_SYMS).filter(s => !LIVE.px[s] && !LIVE.dead[s]).map(s => fetchQuote(s, key)));
   const got = Object.keys(LIVE.px), miss = Object.keys(LIVE_SYMS).filter(s => !LIVE.px[s]);
   if (got.length) toast('Live-Kurse: ' + got.join(', ') + (miss.length ? ' · simuliert: ' + miss.join(', ') : ''), 'ok', 6000);
@@ -1285,36 +1321,56 @@ async function fetchLivePrices() {
   return Object.assign({}, LIVE.px);
 }
 function liveStatusHtml() {
-  if (!getKey()) return '';
+  if (!getKey()) return '<p class="mut">Kein Key gespeichert – alle Kurse werden simuliert.</p>';
   const t = Date.now();
-  return '<table style="width:100%;margin:8px 0">' + Object.keys(LIVE_SYMS).map(s => {
-    const a = BY[s];
-    const st = LIVE.dead[s] ? '<span class="dn">nicht im Plan</span>'
-      : LIVE.px[s] ? '<span class="up">' + LIVE.src[s] + '</span> · vor ' + Math.round((t - LIVE.at[s]) / 1000) + ' s'
-      : '<span class="mut">warte …</span>';
-    return '<tr><td>' + s + '</td><td class="num">' + (LIVE.px[s] && a ? fpc(a, LIVE.px[s]) : '–') + '</td><td>' + st + '</td></tr>';
-  }).join('') + '</table>' + (t < LIVE.pauseUntil ? '<p class="dn">Finnhub-Limit erreicht – REST pausiert kurz.</p>' : '');
+  return '<p style="margin:10px 0 4px">WebSocket: <b>' + esc(LIVE.wsState) + '</b>' + (t < LIVE.pauseUntil ? ' · <span class="dn">REST-Limit erreicht, kurze Pause</span>' : '') + '</p>' +
+    '<table style="width:100%">' + Object.keys(LIVE_SYMS).map(s => {
+      const a = BY[s];
+      const st = LIVE.dead[s] ? '<span class="dn">nicht im Plan</span>'
+        : LIVE.px[s] ? '<span class="up">' + LIVE.src[s] + '</span> · vor ' + Math.max(0, Math.round((t - LIVE.at[s]) / 1000)) + ' s'
+        : '<span class="mut">warte …</span>';
+      const ch = LIVE.px[s] && LIVE.pc[s] ? (LIVE.px[s] / LIVE.pc[s] - 1) * 100 : NaN;
+      return '<tr><td>' + s + '</td><td class="num">' + (LIVE.px[s] && a ? fpc(a, LIVE.px[s]) : '–') + '</td><td class="num ' + cl(ch) + '">' + (Number.isFinite(ch) ? sPct(ch) : '') + '</td><td>' + st + '</td></tr>';
+    }).join('') + '</table>';
 }
+const KEY_MSG = {
+  ok: ['up', '✓ Key gültig – Live-Kurse werden verbunden.'],
+  bad: ['dn', '✗ Key ungültig (Finnhub lehnt ihn ab). Nicht gespeichert.'],
+  limit: ['acc', '⚠ Finnhub-Limit gerade erreicht – Key gespeichert, Live-Kurse starten gleich.'],
+  net: ['dn', '✗ Keine Verbindung zu finnhub.io (Internet/Adblocker?). Nicht gespeichert.']
+};
 function showKeyDialog() {
   $('modal').dataset.lock = '';
   openModal(
     '<h2>🔑 Live-Kurse (optional)</h2>' +
-    '<p>Mit einem kostenlosen <a href="https://finnhub.io/register" target="_blank" rel="noopener" style="color:var(--acc)">Finnhub</a>-API-Key folgen Gold, Silber, Brent, Bitcoin, Ether, EUR/USD und EUR/GBP dem <b>echten Marktkurs</b> (WebSocket, sonst REST alle ≥ 15 s). Fiktive Aktien und ETFs bleiben simuliert. Im Zeitraffer bewegen sich Live-Kurse nur in Echtzeit.</p>' +
+    '<p>Mit einem kostenlosen <a href="https://finnhub.io/register" target="_blank" rel="noopener" style="color:var(--acc)">Finnhub</a>-API-Key folgen Gold, Silber, Brent, Bitcoin, Ether, EUR/USD und EUR/GBP dem <b>echten Marktkurs</b> inkl. echter Tagesänderung. Fiktive Aktien und ETFs bleiben simuliert. Erfundene News zu Live-Instrumenten entfallen.</p>' +
     '<p class="mut">Der Key wird nur lokal in deinem Browser gespeichert und nur an finnhub.io gesendet.</p>' +
     '<input id="keyIn" type="password" autocomplete="off" placeholder="Finnhub-API-Key" value="' + esc(getKey()) + '" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)">' +
-    liveStatusHtml() +
-    '<div class="mbtns"><button id="keyDel">Key löschen</button><button id="keyClose">Schließen</button><button class="pri" id="keySave">Speichern</button></div>'
+    '<p id="keyMsg" style="min-height:1.3em;margin:6px 0 0"></p>' +
+    '<div id="liveStat">' + liveStatusHtml() + '</div>' +
+    '<div class="mbtns"><button id="keyDel">Key löschen</button><button id="keyClose">Schließen</button><button class="pri" id="keySave">Prüfen &amp; speichern</button></div>'
   );
+  const msg = (kind, text) => { $('keyMsg').className = kind === 'acc' ? '' : kind; $('keyMsg').style.color = kind === 'acc' ? 'var(--acc)' : ''; $('keyMsg').textContent = text; };
+  // Status live mitlaufen lassen, solange der Dialog offen ist
+  const iv = setInterval(() => { if (!$('liveStat')) return clearInterval(iv); $('liveStat').innerHTML = liveStatusHtml(); }, 1000);
   $('keyClose').addEventListener('click', closeModal);
-  $('keyDel').addEventListener('click', () => { localStorage.removeItem(KEY_STORE); stopLive(); closeModal(); toast('API-Key gelöscht – alle Kurse werden simuliert.', 'info'); });
-  $('keySave').addEventListener('click', () => {
-    const v = $('keyIn').value.trim();
-    if (v === getKey()) { closeModal(); return; }
-    if (v) localStorage.setItem(KEY_STORE, v); else localStorage.removeItem(KEY_STORE);
-    startLive();
-    closeModal();
-    toast(v ? 'API-Key gespeichert – Live-Kurse werden verbunden.' : 'API-Key entfernt.', 'info', 5000);
-  });
+  $('keyDel').addEventListener('click', () => { localStorage.removeItem(KEY_STORE); stopLive(); msg('mut', 'Key gelöscht – alle Kurse werden simuliert.'); $('keyIn').value = ''; });
+  const save = async () => {
+    const v = $('keyIn').value.trim(), btn = $('keySave');
+    if (!v) { msg('dn', 'Bitte einen Key eingeben.'); return; }
+    btn.disabled = true; btn.textContent = 'Prüfe …'; msg('mut', 'Teste Key bei Finnhub …');
+    const res = await checkKey(v);
+    if (!$('keySave')) return;   // Dialog inzwischen geschlossen
+    btn.disabled = false; btn.innerHTML = 'Prüfen &amp; speichern';
+    msg(KEY_MSG[res][0], KEY_MSG[res][1]);
+    if (res === 'ok' || res === 'limit') {
+      const changed = v !== getKey();
+      localStorage.setItem(KEY_STORE, v);
+      if (changed || !LIVE.ws) startLive();
+    }
+  };
+  $('keySave').addEventListener('click', save);
+  $('keyIn').addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
 }
 
 async function startNewGame() {
@@ -1961,6 +2017,7 @@ function wMatch(a) {
   return a.cls === wFilter;
 }
 function change24(a) {
+  if (LIVE.px[a.sym] && LIVE.pc[a.sym]) return (a.price / LIVE.pc[a.sym] - 1) * 100;   // echte Tagesänderung
   const s = a.series[300];
   if (!s.t.length) return 0;
   let i = Math.floor((now - 86400 - s.t[0]) / 300);
@@ -2450,6 +2507,7 @@ function boot() {
   buildStatic();
   updMute();
   setTimeout(async () => {
+    startLive();   // vor dem Laden, damit neue Spiele die bereits geholten Kurse nutzen
     const st = readSave();
     let symSel = 'NOVA', first = false;
     if (st) {
@@ -2460,7 +2518,6 @@ function boot() {
     showLoading(false);
     if (first) showHelp(true);
     setInterval(saveGame, 15000);
-    startLive();
     requestAnimationFrame(t => { lastT = t; frame(t); });
   }, 20);
 }
