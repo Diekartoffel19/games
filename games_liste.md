@@ -223,9 +223,9 @@ Diese 5 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von eine
 
 ---
 
-## 🚫 Warum 55 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
+## 🚫 Warum 56 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
 
-Die restlichen 55 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
+Die restlichen 56 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
 
 1. **Reine Gitter- & Zahlenspiele (Grid Classics & Terminal Roguelikes):**
    - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`), Bubble Fusion (`games/bubblefusion.html`)*  
@@ -254,3 +254,7 @@ Die restlichen 55 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 9. **2.5D-Pixel-Horden-Survival:**
    - *Wellenbrecher (`games/wellenbrecher.html`)*  
    *Begründung:* Das Spiel ist bewusst 2.5D statt echtem 3D: Pixel-Sprites werden nach Fußpunkt (Y) sortiert, Felsen und Ruinenmauern bestehen aus Deck- und Frontfläche, Gegner, Münzen und Projektile haben eine Höhe (z) mit Bodenschatten. So bleibt der knackige Pixel-Look erhalten, während Hunderte Gegner auf einer riesigen Insel flüssig laufen – eine echte 3D-Kamera würde die Übersicht über die Horden um den zentrierten Spieler zerstören.
+
+10. **2.5D-Stoff-Physik-Wurfspiel:**
+   - *Liegen-Krieg: Handtuch um 6 Uhr (`games/liegenkrieg.html`)*  
+   *Begründung:* Die Draufsicht ist die Spielmechanik: Man muss alle Liegen, die Laufwege der Frühaufsteher und den Sichtkegel des Bademeisters gleichzeitig überblicken. Die Höhe (z) steckt trotzdem in der Simulation: Jedes Handtuch ist ein 6×8-Massepunkt-Netz (PBD) mit Luftwiderstand, Wind, Kollision mit Liegen, Schirmen und Palmen, wird mit leichter Kamera-Perspektive und Sonnenschatten gezeichnet und braucht deshalb kein Three.js.
