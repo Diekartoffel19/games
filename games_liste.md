@@ -234,7 +234,7 @@ Die restlichen 56 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
    - *Spire of Cards, Backpack Gladiator, Grundriss (Raum-Drafting-Roguelike, `games/grundriss.html`)*  
    *Begründung:* Inventarverwaltung und Kartenstapel benötigen saubere 2D-GUIs mit Tooltips und Hover-Zuständen. 3D-Karten verlangsamen das schnelle Lesen.
 3. **Finanz-, Strategie- & Text-Simulationen:**
-   - *Wall Street Trader (Stocks), Wähl Mich! (Propaganda), El Patrón, Kiez Simulator*  
+   - *Börsenhai: Trading-Terminal (`games/boersenhai.html`), Wähl Mich! (Propaganda), El Patrón, Kiez Simulator*  
    *Begründung:* Diese Spiele basieren auf Diagrammen, Zeitreihen, Dialogbäumen und Menüentscheidungen. Ein 3D-Canvas böte keinerlei spielmechanischen Nutzen.
 4. **Zelluläre Automaten & Pixel-Physik:**
    - *Pixel Alchemy (Sandbox), Game of Life*  
