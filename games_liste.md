@@ -223,9 +223,9 @@ Diese 5 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von eine
 
 ---
 
-## 🚫 Warum 59 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
+## 🚫 Warum 60 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
 
-Die restlichen 59 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
+Die restlichen 60 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
 
 1. **Reine Gitter- & Zahlenspiele (Grid Classics & Terminal Roguelikes):**
    - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`), Bubble Fusion (`games/bubblefusion.html`)*  
@@ -266,3 +266,7 @@ Die restlichen 59 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 12. **Top-Down-Seilphysik-Simulation:**
    - *Gassi-Chaos: Hundesitter-Simulator (`games/gassichaos.html`)*  
    *Begründung:* Der Witz entsteht aus der Draufsicht: Bis zu sechs Verlet-Leinen wickeln sich sichtbar um Laternen, Bäume und Passanten und kreuzen sich zu Knoten – das muss man auf einen Blick überblicken, um rechtzeitig zurückzulaufen oder zu entwirren. Eine 3D-Kamera würde Leinen, Hunde und Hindernisse gegenseitig verdecken, und die Wicklungs-Erkennung (Umlaufwinkel um Hindernisse) ist ohnehin eine reine 2D-Rechnung.
+
+13. **Seitenansicht-Physik-Rennen im Pixel-Look:**
+   - *Schrottkiste: Pixel-Rallye (`games/schrottkiste.html`)*  
+   *Begründung:* Das Spiel lebt von der reinen Seitenansicht: Rampen, Loopings, Wippen und Abrissbirnen sind 2D-Starrkörper-Physik (Matter.js), und die einzige Steuerung – Gas und Rückwärts, in der Luft zum Kippen – setzt voraus, dass man Neigung und Gelände auf einen Blick sieht. Eine 3D-Kamera würde die Landewinkel verschleiern und den Pixel-Look zerstören.
