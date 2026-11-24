@@ -298,7 +298,8 @@ const ArcadeCore = (() => {
     'schattenkunst': 'schattenkunst_best',
     'spickalarm': 'spickalarm_best',
     'liegenkrieg': 'liegenkrieg_best',
-    'boersenhai': 'boersenhai_best'
+    'boersenhai': 'boersenhai_best',
+    'gassichaos': 'gassichaos_best'
   };
 
   function getScore(gameKey) {

@@ -223,9 +223,9 @@ Diese 5 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von eine
 
 ---
 
-## 🚫 Warum 56 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
+## 🚫 Warum 57 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
 
-Die restlichen 56 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
+Die restlichen 57 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
 
 1. **Reine Gitter- & Zahlenspiele (Grid Classics & Terminal Roguelikes):**
    - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`), Bubble Fusion (`games/bubblefusion.html`)*  
@@ -258,3 +258,7 @@ Die restlichen 56 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 10. **2.5D-Stoff-Physik-Wurfspiel:**
    - *Liegen-Krieg: Handtuch um 6 Uhr (`games/liegenkrieg.html`)*  
    *Begründung:* Die Draufsicht ist die Spielmechanik: Man muss alle Liegen, die Laufwege der Frühaufsteher und den Sichtkegel des Bademeisters gleichzeitig überblicken. Die Höhe (z) steckt trotzdem in der Simulation: Jedes Handtuch ist ein 6×8-Massepunkt-Netz (PBD) mit Luftwiderstand, Wind, Kollision mit Liegen, Schirmen und Palmen, wird mit leichter Kamera-Perspektive und Sonnenschatten gezeichnet und braucht deshalb kein Three.js.
+
+11. **Top-Down-Seilphysik-Simulation:**
+   - *Gassi-Chaos: Hundesitter-Simulator (`games/gassichaos.html`)*  
+   *Begründung:* Der Witz entsteht aus der Draufsicht: Bis zu sechs Verlet-Leinen wickeln sich sichtbar um Laternen, Bäume und Passanten und kreuzen sich zu Knoten – das muss man auf einen Blick überblicken, um rechtzeitig zurückzulaufen oder zu entwirren. Eine 3D-Kamera würde Leinen, Hunde und Hindernisse gegenseitig verdecken, und die Wicklungs-Erkennung (Umlaufwinkel um Hindernisse) ist ohnehin eine reine 2D-Rechnung.

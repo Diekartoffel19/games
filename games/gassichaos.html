@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Gassi-Chaos: Hundesitter-Simulator</title>
+<meta name="description" content="Bis zu 6 Hunde an echten Seil-Leinen durch Park und Straße führen: Dackel schnüffeln, Huskys ziehen, Möpse streiken – Leinen wickeln sich um Laternen, Bäume und Passanten. Haufen eintüten, Hunde pünktlich zurückbringen, Upgrades kaufen.">
+<meta name="theme-color" content="#3f7d3a">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<link rel="stylesheet" href="../style.css">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+:root { --ink:#20301c; --paper:#fffaf0; --accent:#ff7a1a; --panel:rgba(30,45,28,.95); --good:#7bd36b; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; padding:0; height:100%; overflow:hidden; background:#3f7d3a; color:var(--paper); font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; text-align:left; min-height:0; }
+canvas#c { position:fixed; inset:0; width:100%; height:100%; max-width:none; margin:0; border:0; border-radius:0; display:block; touch-action:none; background:#6fae4f; }
+.back { position:fixed; top:10px; left:12px; z-index:100; }
+#muteBtn { position:fixed; top:10px; right:12px; z-index:100; font-size:18px; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.25); color:#fff; border-radius:10px; width:42px; height:38px; cursor:pointer; }
+#touch { position:fixed; right:12px; bottom:14px; z-index:30; display:none; flex-direction:column; gap:8px; }
+#touch button { font:inherit; font-weight:800; font-size:15px; color:#fff; background:rgba(20,30,18,.72); border:2px solid rgba(255,255,255,.35); border-radius:14px; padding:10px 12px; min-width:118px; min-height:46px; cursor:pointer; touch-action:none; }
+#touch button:active, #touch button.on { background:rgba(255,122,26,.85); }
+.ov { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:rgba(15,25,12,.55); padding:14px; overflow:auto; }
+.ov.hide { display:none; }
+.panel { background:var(--panel); border:3px solid var(--accent); border-radius:18px; padding:18px 22px; max-width:640px; width:100%; margin:auto; box-shadow:0 10px 0 rgba(0,0,0,.35); text-align:center; }
+.panel h1 { margin:0 0 4px; font-size:clamp(26px,6vw,40px); color:#ffd27a; letter-spacing:-.5px; }
+.panel h2 { margin:6px 0 10px; font-size:20px; color:#ffd27a; }
+.panel p { margin:6px 0; line-height:1.4; color:#f3eedd; }
+.panel .small { font-size:13px; opacity:.8; }
+.panel button { font:inherit; font-weight:800; font-size:18px; color:#fff; background:linear-gradient(#ff9a3d,#e0600b); border:0; border-radius:12px; padding:11px 24px; margin:8px 4px 0; cursor:pointer; box-shadow:0 4px 0 #8a3a05; }
+.panel button:active { transform:translateY(3px); box-shadow:0 1px 0 #8a3a05; }
+.panel button.alt { background:linear-gradient(#6b7f63,#4a5a44); box-shadow:0 4px 0 #2a3426; font-size:14px; }
+.panel button:disabled { opacity:.45; cursor:default; }
+.dogs { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:8px; margin:10px 0; text-align:left; }
+.dogc { background:rgba(255,255,255,.08); border-radius:10px; padding:8px 10px; font-size:13px; border-left:5px solid #fff; }
+.dogc b { font-size:15px; }
+.res { text-align:left; margin:8px auto; max-width:440px; font-size:15px; }
+.res div { display:flex; justify-content:space-between; gap:10px; padding:2px 0; border-bottom:1px dashed rgba(255,255,255,.12); }
+.res .neg { color:#ff8f8f; } .res .pos { color:var(--good); }
+.res .tot { font-weight:900; font-size:18px; border-bottom:0; padding-top:6px; }
+.shop { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:8px; margin:10px 0; text-align:left; }
+.up { background:rgba(255,255,255,.08); border-radius:10px; padding:8px 10px; display:flex; gap:10px; align-items:center; font-size:13px; }
+.up .ic { font-size:26px; }
+.up .tx { flex:1; }
+.up button { font-size:14px; padding:7px 10px; margin:0; white-space:nowrap; }
+.lv { color:#ffd27a; font-weight:800; }
+ul.how { text-align:left; margin:8px auto; max-width:470px; padding-left:20px; line-height:1.45; font-size:14px; }
+#selftest { position:fixed; left:12px; bottom:12px; z-index:200; background:#000c; color:#7f7; font:12px monospace; padding:6px 10px; border-radius:6px; display:none; white-space:pre; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<button id="muteBtn" title="Ton an/aus">🔊</button>
+<canvas id="c"></canvas>
+<div id="touch">
+  <button id="bBag">🛍️ Eintüten</button>
+  <button id="bTreat">🦴 Leckerli</button>
+  <button id="bUntangle">🌀 Entwirren</button>
+</div>
+<div id="ov" class="ov"><div class="panel" id="panel"></div></div>
+<div id="selftest"></div>
+<script>
+'use strict';
+const AC = window.ArcadeCore || null;
+const snd = (name, ...a) => { try { if (AC && AC[name]) AC[name](...a); } catch (e) {} };
+const KEY = 'gassichaos';
+const SAVE_KEY = 'gassichaos_save';
+
+// ================= Mathe =================
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[(Math.random() * a.length) | 0];
+const dist = (ax, ay, bx, by) => Math.hypot(bx - ax, by - ay);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function mulberry32(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function angLerp(a, b, t) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * t; }
+
+// echte Kreuzung zweier Strecken (Endpunkte zählen nicht)
+function segCross(ax, ay, bx, by, cx, cy, dx, dy) {
+  const d1x = bx - ax, d1y = by - ay, d2x = dx - cx, d2y = dy - cy;
+  const den = d1x * d2y - d1y * d2x;
+  if (Math.abs(den) < 1e-9) return false;
+  const t = ((cx - ax) * d2y - (cy - ay) * d2x) / den;
+  const u = ((cx - ax) * d1y - (cy - ay) * d1x) / den;
+  return t > 0 && t < 1 && u > 0 && u < 1;
+}
+// Summe der Winkeländerung einer Polylinie um einen Punkt (2π = einmal ganz herumgewickelt)
+function windingAngle(pts, cx, cy) {
+  let tot = 0, prev = Math.atan2(pts[0].y - cy, pts[0].x - cx);
+  for (let i = 1; i < pts.length; i++) {
+    const a = Math.atan2(pts[i].y - cy, pts[i].x - cx);
+    let d = a - prev;
+    if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
+    tot += d; prev = a;
+  }
+  return tot;
+}
+
+// ================= Leinen-Physik (Verlet) =================
+const SEG_LEN = 12; // kurze Segmente, damit die Leine nicht durch dünne Laternen rutscht
+function makeRope(x0, y0, x1, y1, len) {
+  const n = Math.max(8, Math.ceil(len / SEG_LEN)), p = [];
+  for (let i = 0; i <= n; i++) { const t = i / n, x = lerp(x0, x1, t), y = lerp(y0, y1, t); p.push({ x, y, px: x, py: y }); }
+  return { p, len, obs: [], touching: false, cx: 0, cy: 0, ex: x1, ey: y1 };
+}
+// p[0] = Hand (fest), p[n] = Hund (wird bei Überlänge zurückgezogen). Ergebnis: r.cx/r.cy = Korrektur am Hund.
+function solveRopes(ropes, knots, iters) {
+  for (const r of ropes) {
+    const P = r.p, n = P.length;
+    for (let i = 1; i < n - 1; i++) {
+      const q = P[i], vx = (q.x - q.px) * 0.86, vy = (q.y - q.py) * 0.86;
+      q.px = q.x; q.py = q.y; q.x += vx; q.y += vy;
+    }
+    const e = P[n - 1]; r.ex = e.x; r.ey = e.y; e.px = e.x; e.py = e.y; r.touching = false;
+  }
+  for (let k = 0; k < iters; k++) {
+    for (const r of ropes) {
+      const P = r.p, n = P.length, seg = r.len / (n - 1);
+      for (let i = 0; i < n - 1; i++) {
+        const a = P[i], b = P[i + 1];
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
+        if (d <= seg) continue; // Leine ist schlaff erlaubt, nur Dehnung wird korrigiert
+        const wa = i === 0 ? 0 : 1, wb = i + 1 === n - 1 ? 0.4 : 1;
+        const f = (d - seg) / d / (wa + wb);
+        a.x += dx * f * wa; a.y += dy * f * wa; b.x -= dx * f * wb; b.y -= dy * f * wb;
+      }
+      for (let i = 1; i < n - 1; i++) {
+        const q = P[i];
+        for (const o of r.obs) {
+          const dx = q.x - o.x, dy = q.y - o.y, rr = o.r + 2, d2 = dx * dx + dy * dy;
+          if (d2 < rr * rr) {
+            const d = Math.sqrt(d2) || 1e-3;
+            q.x = o.x + dx / d * rr; q.y = o.y + dy / d * rr;
+            if (o.ped) o.ped.ropeHit = r; else r.touching = true;
+          }
+        }
+      }
+    }
+    for (const kn of knots) {
+      const a = kn.ra.p[kn.ia], b = kn.rb.p[kn.ib];
+      if (!a || !b) continue;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      a.x = b.x = mx; a.y = b.y = my;
+    }
+  }
+  for (const r of ropes) { // harte Unzerreißbarkeit: von der Hand aus durchziehen
+    const P = r.p, n = P.length, seg = r.len / (n - 1);
+    for (let i = 1; i < n; i++) {
+      const a = P[i - 1], b = P[i], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+      if (d > seg) { b.x = a.x + dx / d * seg; b.y = a.y + dy / d * seg; }
+    }
+    r.cx = P[n - 1].x - r.ex; r.cy = P[n - 1].y - r.ey;
+  }
+}
+function ropePathLen(r) { let s = 0; for (let i = 1; i < r.p.length; i++) s += dist(r.p[i - 1].x, r.p[i - 1].y, r.p[i].x, r.p[i].y); return s; }
+// Wicklungen um Hindernisse, die die Leine berührt (0 = gerade vorbei, 1 = einmal komplett herum)
+function ropeWraps(r) {
+  let w = 0;
+  for (const o of r.obs) {
+    if (!o.wrap) continue;
+    let near = false;
+    for (const q of r.p) if ((q.x - o.x) ** 2 + (q.y - o.y) ** 2 < (o.r + 10) ** 2) { near = true; break; }
+    if (!near) continue;
+    const a = Math.abs(windingAngle(r.p, o.x, o.y));
+    if (a > Math.PI * 1.15) w += Math.min(3, (a - Math.PI) / Math.PI);
+  }
+  return w;
+}
+
+// ================= Selbsttest (?selftest) =================
+function runSelfTest() {
+  const res = [];
+  const t = (name, ok) => { res.push((ok ? 'OK   ' : 'FAIL ') + name); console.assert(ok, name); };
+  t('segCross X', segCross(0, 0, 10, 10, 0, 10, 10, 0));
+  t('segCross parallel', !segCross(0, 0, 10, 0, 0, 5, 10, 5));
+  t('segCross getrennt', !segCross(0, 0, 1, 1, 5, 5, 6, 7));
+  const circ = []; for (let i = 0; i <= 64; i++) { const a = i / 64 * Math.PI * 2; circ.push({ x: Math.cos(a) * 20, y: Math.sin(a) * 20 }); }
+  t('winding Vollkreis ≈ 2π', Math.abs(windingAngle(circ, 0, 0) - Math.PI * 2) < 1e-6);
+  t('winding gerade Linie < π', Math.abs(windingAngle([{ x: -50, y: 30 }, { x: 0, y: 30 }, { x: 50, y: 30 }], 0, 0)) < Math.PI);
+  // 1) Überdehnung: Hund wird auf Leinenlänge zurückgezogen
+  const r1 = makeRope(0, 0, 50, 0, 120); const e1 = r1.p[r1.p.length - 1]; e1.x = 400; e1.y = 0;
+  solveRopes([r1], [], 12);
+  t('Leine max. Länge (Hund-Hand)', dist(0, 0, e1.x, e1.y) <= 120 + 0.01);
+  t('Leine max. Länge (Pfad)', ropePathLen(r1) <= 120 + 0.01);
+  t('Korrektur zeigt zur Hand', r1.cx < -250);
+  // 2) Um Laterne gewickelt: bleibt gewickelt, verkürzt die effektive Leine
+  // Hand (60,0) → Laterne bei (100,0), 1,125 Umdrehungen herum, dann Schwanz nach unten; alle Abstände < Segmentlänge
+  const post = { x: 100, y: 0, r: 7, wrap: true };
+  const r2 = makeRope(0, 0, 0, 0, 240); const n2 = r2.p.length;
+  for (let i = 0; i < n2; i++) {
+    const q = r2.p[i]; let x, y;
+    if (i <= 3) { x = 60 + i * 9.7; y = 0; }
+    else if (i <= 12) { const a = Math.PI - ((i - 4) / 8) * Math.PI * 2.25; x = 100 + Math.cos(a) * 11; y = Math.sin(a) * 11; }
+    else { const a = Math.PI - Math.PI * 2.25; x = 100 + Math.cos(a) * 11 - (i - 12) * 2; y = Math.sin(a) * 11 + (i - 12) * 9; }
+    q.x = q.px = x; q.y = q.py = y;
+  }
+  r2.obs = [post];
+  let dog = { x: r2.p[n2 - 1].x, y: r2.p[n2 - 1].y };
+  for (let f = 0; f < 150; f++) {
+    const dx = 100 - dog.x, dy = 400 - dog.y, d = Math.hypot(dx, dy) || 1; dog.x += dx / d * 3; dog.y += dy / d * 3;
+    r2.p[0].x = 60; r2.p[0].y = 0; r2.p[n2 - 1].x = dog.x; r2.p[n2 - 1].y = dog.y;
+    solveRopes([r2], [], 12); dog.x = r2.p[n2 - 1].x; dog.y = r2.p[n2 - 1].y;
+  }
+  t('Wicklung bleibt bestehen', Math.abs(windingAngle(r2.p, post.x, post.y)) > Math.PI);
+  t('Wicklung erkannt', ropeWraps(r2) > 0.3);
+  t('Wicklung kürzt Leine', dist(60, 0, dog.x, dog.y) < 240 - 30);
+  t('Leine hat Laterne berührt', r2.touching);
+  // 3) Knoten verbindet zwei Leinen
+  const ra = makeRope(0, 0, 100, 100, 300), rb = makeRope(0, 0, 100, -100, 300);
+  const kn = { ra, rb, ia: 6, ib: 6 };
+  solveRopes([ra, rb], [kn], 12);
+  t('Knoten hält Leinen zusammen', dist(ra.p[6].x, ra.p[6].y, rb.p[6].x, rb.p[6].y) < 2);
+  const ok = res.filter(s => s.startsWith('OK')).length;
+  const summary = `[selftest] gassichaos: ${ok}/${res.length} bestanden`;
+  console.log(summary + '\n' + res.join('\n'));
+  const el = document.getElementById('selftest'); el.style.display = 'block'; el.textContent = summary + '\n' + res.join('\n');
+  return ok === res.length;
+}
+
+// ================= Daten =================
+const BREEDS = {
+  dackel:    { name: 'Dackel',    emoji: '🌭', speed: 95,  pull: 0.3,  size: 9,  col: '#8a4b22', dark: '#55290d', quirk: 'Schnüffelt an JEDEM Pfosten.',
+               attract: { post: 1.6, squirrel: .7, cat: .7, pigeon: .3, food: .5, person: .25, mail: .9, dog: .6 } },
+  husky:     { name: 'Husky',     emoji: '🐺', speed: 180, pull: 0.75, size: 13, col: '#c9d1da', dark: '#4f5964', quirk: 'Zieht wie ein Schlittenhund.',
+               attract: { post: .15, squirrel: 1.0, cat: 1.1, pigeon: .5, food: .3, person: .1, mail: .6, dog: .7 } },
+  chihuahua: { name: 'Chihuahua', emoji: '🐀', speed: 125, pull: 0.12, size: 6,  col: '#e6c48e', dark: '#9b7442', quirk: 'Kläfft ALLES an.',
+               attract: { post: .2, squirrel: .5, cat: .9, pigeon: .4, food: .3, person: .9, mail: 1.6, dog: 1.2 } },
+  labrador:  { name: 'Labrador',  emoji: '🦮', speed: 145, pull: 0.55, size: 13, col: '#e8c15a', dark: '#a77f22', quirk: 'Rennt zu allem Essbaren.',
+               attract: { post: .3, squirrel: .4, cat: .4, pigeon: .3, food: 2.6, person: .7, mail: .5, dog: .5 } },
+  mops:      { name: 'Mops',      emoji: '🐶', speed: 70,  pull: 0.65, size: 10, col: '#d9b98a', dark: '#2b2420', quirk: 'Faul. Muss gezogen werden.',
+               attract: { post: .2, squirrel: .1, cat: .1, pigeon: .1, food: 1.0, person: .3, mail: .2, dog: .2 } },
+  pudel:     { name: 'Pudel',     emoji: '🐩', speed: 150, pull: 0.4,  size: 10, col: '#f4f1ec', dark: '#b9aea3', quirk: 'Jagt Tauben. Immer.',
+               attract: { post: .3, squirrel: .6, cat: .6, pigeon: 2.4, food: .4, person: .3, mail: .5, dog: .6 } },
+};
+const DOG_NAMES = ['Bello', 'Waldi', 'Luna', 'Rocky', 'Krümel', 'Frau Schnuffel', 'Sir Wuffington', 'Brutus', 'Kekschen', 'Hasso', 'Paula', 'Gizmo', 'Bärbel', 'Kalle', 'Fiffi', 'Lord Sabber', 'Muffin', 'Rambo', 'Prinzessin', 'Schnitzel'];
+const OWNERS = ['Fam. Müller', 'Frau Schmidt', 'Herr Kaczmarek', 'Dr. Bellmann', 'Oma Hilde', 'Fam. Öztürk', 'Herr Pingel', 'Frau Dr. Wuff', 'WG Kalle & Mo', 'Pfarrer Gruber', 'Frau v. Pudelsheim', 'Hausmeister Kurt'];
+const LEASH_COLS = ['#e63946', '#2a9df4', '#ffb703', '#8338ec', '#06d6a0', '#ff5fa2'];
+const T = {
+  pickup: ['WUFF! Endlich!', 'Raus! Raus! RAUS!', '*wedel wedel*', 'Du riechst nach anderen Hunden…', 'Gassi?! GASSI!!'],
+  owner: ['Viel Spaß, mein Schatz!', 'Er hat heute schon 3 Socken gegessen.', 'Nicht an der Wurstbude vorbei!', 'Sie ist sehr sensibel!', 'Bring ihn heil zurück!'],
+  sniff: ['*schnüffel*', '*schnüffel schnüffel*', 'Ah, Rex war hier.', '*markier*', 'Zeitung lesen…'],
+  done: ['Ahh, erledigt!', 'Nach Hause, Diener!', 'Mission erfüllt.', 'Jetzt Sofa.'],
+  mops: ['Nö.', '*schnarch*', 'Ich streike.', 'Trag mich.', 'Zu weit.'],
+  drag: ['*wird geschleift*', 'Tierquälerei!', 'Nööö…'],
+  bark: { dackel: 'WAU!', husky: 'AWOOO!', chihuahua: 'KLÄFF!', labrador: 'WUFF!', mops: '*röchel*', pudel: 'Wouf!' },
+  ped: ['Na, du Süßer!', 'Leine kürzer, bitte!', 'Ruhe da!', 'Iiih, der sabbert!', 'Haben Sie DEN im Griff?', 'Ist der lieb?'],
+  mail: ['Nicht schon wieder ihr!', 'Ich hab nur Werbung!', 'HILFE!', 'Ich kündige!'],
+  trip: ['HEY!!', 'Mein Knie!', 'Leinen-Lasso?!', 'Ich zeig Sie an!'],
+  neighbor: ['Das ist MEIN Rasen! 25 €!', 'Ich hab ALLES gefilmt! Bußgeld!', 'Sowas kommt in die Nachbarschafts-App!', 'Ich mach das jetzt selbst. 25 €!'],
+  bag: ['Eingetütet!', 'Lauwarm. Lecker.', 'Profi am Werk.', 'Bitte nicht reißen…'],
+  fall: ['UAAAH!', 'Ich kündige!', 'Meine Würde!', 'Warum ich?!', 'Das gibt blaue Flecken…'],
+  laugh: ['HAHAHA!', '*filmt*', 'Hoppla!', 'Alles gut?!'],
+  knot: ['Knoten!', 'Verheddert!', 'Oh nein…'],
+  wurst: ['MEINE BRATWURST! 4 €!', 'Haltet den Dieb!', 'Das kostet extra!'],
+};
+const UPG = {
+  rolle:    { name: 'Rollleine',         icon: '🧵', desc: '+35 Leinenlänge. Mehr Freiheit, mehr Chaos.', cost: [60, 150, 280] },
+  leckerli: { name: 'Leckerli-Beutel',   icon: '🦴', desc: '+1 Leckerli (Q): alle Hunde kommen sofort zu dir & beruhigen sich.', cost: [40, 100, 200] },
+  beutel:   { name: 'Kotbeutel-Spender', icon: '🛍️', desc: '+3 Tüten pro Schicht & größere Aufheb-Reichweite.', cost: [30, 80, 160] },
+  schuhe:   { name: 'Laufschuhe',        icon: '👟', desc: 'Schneller, standfester, verhedderst dich langsamer.', cost: [50, 120, 240] },
+  hunde:    { name: 'Hundeschein',       icon: '📜', desc: '+1 Hund pro Schicht (max. 6). Mehr Hunde = mehr Geld.', cost: [80, 180, 320, 500] },
+};
+
+// ================= Spielstand =================
+let save = loadSave();
+function loadSave() {
+  const d = { money: 0, shift: 1, up: {}, best: 0, total: 0, stats: { dogs: 0, falls: 0, poops: 0 } };
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (s && typeof s === 'object') { Object.assign(d, s); d.stats = Object.assign({ dogs: 0, falls: 0, poops: 0 }, s.stats || {}); }
+  } catch (e) {}
+  const up = {}; for (const k in UPG) up[k] = clamp((d.up && d.up[k]) | 0, 0, UPG[k].cost.length); d.up = up;
+  d.money = Number.isFinite(+d.money) ? +d.money : 0; d.shift = Math.max(1, d.shift | 0);
+  d.best = Number.isFinite(+d.best) ? +d.best : 0; d.total = Number.isFinite(+d.total) ? +d.total : 0;
+  return d;
+}
+function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+const leashLen = () => 150 + 35 * save.up.rolle;
+const bagRange = () => 60 + 15 * save.up.beutel;
+const pSpeed = () => 165 + 22 * save.up.schuhe;
+const pullResist = () => 1 - 0.15 * save.up.schuhe;
+const dogCount = () => Math.min(6, 2 + save.up.hunde);
+const euro = v => Math.round(v).toLocaleString('de-DE') + ' €';
+
+// ================= Karte =================
+const W = 2400, H = 1700;
+const houses = [], OBS = [], RECTS = [], WAYPTS = [];
+const ZENTRALE = { x: 10, y: 770, w: 130, h: 160 };
+const SPAWN = { x: 200, y: 850 };
+const FOUNTAIN = { x: 1200, y: 850, r: 70 };
+const STAND = { x: 1705, y: 640, fx: 1705, fy: 690, rect: { x: 1660, y: 615, w: 90, h: 50 }, cd: 0, bubT: 0 };
+const PATHS = [[150, 850, 2350, 850], [1200, 200, 1200, 1500], [420, 200, 1060, 760], [2000, 1500, 1340, 940], [1900, 200, 1320, 760]];
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy, t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+  return dist(px, py, ax + dx * t, ay + dy * t);
+}
+function buildMap() {
+  const rng = mulberry32(4711);
+  const cols = ['#e07a5f', '#f2cc8f', '#81b29a', '#9c89b8', '#f4a261', '#6d9dc5'];
+  for (let i = 0; i < 6; i++) {
+    const cx = 330 + i * 360;
+    houses.push({ x: cx - 110, y: 8, w: 220, h: 130, door: { x: cx, y: 168 }, top: true, owner: OWNERS[i], col: cols[i], bubT: 0 });
+    houses.push({ x: cx - 110, y: H - 138, w: 220, h: 130, door: { x: cx, y: H - 168 }, top: false, owner: OWNERS[i + 6], col: cols[(i + 3) % 6], bubT: 0 });
+  }
+  for (const h of houses) { h.x0 = h.door.x; h.y0 = h.door.y; RECTS.push(h); }
+  RECTS.push(ZENTRALE, STAND.rect);
+  OBS.push({ x: FOUNTAIN.x, y: FOUNTAIN.y, r: FOUNTAIN.r, kind: 'fountain', body: true, wrap: true });
+  OBS.push({ x: 1680, y: 640, r: 24, kind: 'stand', body: false, wrap: false }, { x: 1730, y: 640, r: 24, kind: 'stand', body: false, wrap: false });
+  const onPath = (x, y, m) => PATHS.some(s => segDist(x, y, ...s) < m) || Math.abs(dist(x, y, FOUNTAIN.x, FOUNTAIN.y) - 150) < m;
+  // Laternen
+  for (let x = 330; x < 2300; x += 260) if (Math.abs(x - 1200) > 200) OBS.push({ x, y: 850 + ((x / 260 | 0) % 2 ? 46 : -46), r: 6, kind: 'lamp', body: true, wrap: true, sniff: true });
+  for (let y = 300; y < 1450; y += 240) if (Math.abs(y - 850) > 200) OBS.push({ x: 1200 + ((y / 240 | 0) % 2 ? 42 : -42), y, r: 6, kind: 'lamp', body: true, wrap: true, sniff: true });
+  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; OBS.push({ x: 1200 + Math.cos(a) * 190, y: 850 + Math.sin(a) * 190, r: 6, kind: 'lamp', body: true, wrap: true, sniff: true }); }
+  // Hydranten auf dem Gehweg
+  for (let i = 0; i < 7; i++) { const x = 150 + i * 360; OBS.push({ x, y: 196, r: 7, kind: 'hydrant', body: true, wrap: true, sniff: true }, { x, y: H - 196, r: 7, kind: 'hydrant', body: true, wrap: true, sniff: true }); }
+  // Bänke
+  const benches = [[600, 780, 1], [900, 920, 1], [1520, 780, 1], [2100, 920, 1], [1130, 480, 0], [1270, 1200, 0], [760, 1350, 1], [1800, 1100, 1]];
+  for (const [x, y, hor] of benches) {
+    const w = hor ? 64 : 20, h = hor ? 20 : 64;
+    RECTS.push({ x: x - w / 2, y: y - h / 2, w, h, bench: true });
+    for (let k = -1; k <= 1; k++) OBS.push({ x: x + (hor ? k * 24 : 0), y: y + (hor ? 0 : k * 24), r: 10, kind: 'bench', body: false, wrap: true });
+  }
+  // Bäume
+  let tries = 0, trees = 0;
+  while (trees < 44 && tries++ < 3000) {
+    const x = 230 + rng() * (W - 300), y = 280 + rng() * (H - 560);
+    if (onPath(x, y, 75) || dist(x, y, FOUNTAIN.x, FOUNTAIN.y) < 250 || dist(x, y, STAND.x, STAND.y) < 130) continue;
+    if (OBS.some(o => dist(x, y, o.x, o.y) < (o.kind === 'tree' ? 120 : 70))) continue;
+    if (RECTS.some(R => x > R.x - 50 && x < R.x + R.w + 50 && y > R.y - 50 && y < R.y + R.h + 50)) continue;
+    OBS.push({ x, y, r: 15, kind: 'tree', body: true, wrap: true, sniff: true, canopy: 40 + rng() * 18, hue: rng() });
+    trees++;
+  }
+  // Wegpunkte für Passanten
+  for (let x = 120; x < W; x += 180) WAYPTS.push({ x, y: 172 }, { x, y: H - 172 });
+  for (const s of PATHS) for (let t = 0; t <= 1; t += 0.2) WAYPTS.push({ x: lerp(s[0], s[2], t), y: lerp(s[1], s[3], t) });
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; WAYPTS.push({ x: 1200 + Math.cos(a) * 150, y: 850 + Math.sin(a) * 150 }); }
+}
+
+// ================= Hintergrund (einmal vorrendern) =================
+let bg = null;
+function renderBg() {
+  bg = document.createElement('canvas'); bg.width = W; bg.height = H;
+  const g = bg.getContext('2d'), rng = mulberry32(99);
+  g.fillStyle = '#74b354'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 1600; i++) { g.fillStyle = rng() < .5 ? 'rgba(40,90,30,.12)' : 'rgba(170,220,120,.12)'; g.beginPath(); g.arc(rng() * W, rng() * H, 6 + rng() * 22, 0, 7); g.fill(); }
+  for (let i = 0; i < 260; i++) { g.fillStyle = pick(['#fff', '#ffd23f', '#ff8fb1', '#b9a6ff']); g.beginPath(); g.arc(rng() * W, 230 + rng() * (H - 460), 2.2, 0, 7); g.fill(); }
+  // Gehwege
+  g.fillStyle = '#c9c4bb'; g.fillRect(0, 140, W, 62); g.fillRect(0, H - 202, W, 62);
+  g.strokeStyle = 'rgba(0,0,0,.08)'; g.lineWidth = 1;
+  for (let x = 0; x < W; x += 30) { g.beginPath(); g.moveTo(x, 140); g.lineTo(x, 202); g.moveTo(x, H - 202); g.lineTo(x, H - 140); g.stroke(); }
+  g.fillStyle = '#a9a39a'; g.fillRect(0, 200, W, 5); g.fillRect(0, H - 205, W, 5);
+  // Parkwege
+  const path = (w, c) => { g.strokeStyle = c; g.lineWidth = w; g.lineCap = 'round'; for (const s of PATHS) { g.beginPath(); g.moveTo(s[0], s[1]); g.lineTo(s[2], s[3]); g.stroke(); } g.beginPath(); g.arc(1200, 850, 150, 0, 7); g.stroke(); };
+  path(62, '#c8ab78'); path(52, '#e3cb98');
+  // Brunnen
+  g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(1200, 850, 78, 0, 7); g.fill();
+  g.fillStyle = '#4aa3d8'; g.beginPath(); g.arc(1200, 850, 66, 0, 7); g.fill();
+  g.fillStyle = '#7cc6ef'; g.beginPath(); g.arc(1190, 840, 40, 0, 7); g.fill();
+  g.fillStyle = '#b5b5b5'; g.beginPath(); g.arc(1200, 850, 14, 0, 7); g.fill();
+  // Häuser
+  for (const h of houses) {
+    g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(h.x + 6, h.y + 6, h.w, h.h);
+    g.fillStyle = h.col; g.fillRect(h.x, h.y, h.w, h.h);
+    g.fillStyle = 'rgba(0,0,0,.15)'; if (h.top) g.fillRect(h.x, h.y, h.w, h.h / 2); else g.fillRect(h.x, h.y + h.h / 2, h.w, h.h / 2);
+    g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 2; g.beginPath(); g.moveTo(h.x, h.y + h.h / 2); g.lineTo(h.x + h.w, h.y + h.h / 2); g.stroke();
+    for (let k = 0; k < 14; k++) { g.beginPath(); g.moveTo(h.x + k * 16, h.y); g.lineTo(h.x + k * 16, h.y + h.h); g.strokeStyle = 'rgba(0,0,0,.06)'; g.stroke(); }
+    g.fillStyle = '#6b3f1e'; g.fillRect(h.door.x - 16, h.top ? h.y + h.h - 6 : h.y - 4, 32, 10);
+    g.fillStyle = '#fff'; g.font = 'bold 18px Trebuchet MS, sans-serif'; g.textAlign = 'center';
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(h.door.x - 80, h.y + h.h / 2 - 15, 160, 28);
+    g.fillStyle = '#fff'; g.fillText(h.owner, h.door.x, h.y + h.h / 2 + 6);
+  }
+  // Gassi-Zentrale
+  const Z = ZENTRALE; g.fillStyle = '#ff7a1a'; g.fillRect(Z.x, Z.y, Z.w, Z.h); g.fillStyle = '#c65406'; g.fillRect(Z.x, Z.y, Z.w, 24);
+  g.save(); g.translate(Z.x + Z.w / 2, Z.y + Z.h / 2 + 10); g.rotate(-Math.PI / 2); g.fillStyle = '#fff'; g.font = 'bold 22px Trebuchet MS, sans-serif'; g.textAlign = 'center'; g.fillText('GASSI-ZENTRALE', 0, 8); g.restore();
+  // Bänke
+  for (const R of RECTS) if (R.bench) {
+    g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(R.x + 4, R.y + 4, R.w, R.h);
+    g.fillStyle = '#8b5a2b'; g.fillRect(R.x, R.y, R.w, R.h); g.strokeStyle = '#5e3a17'; g.lineWidth = 2;
+    for (let k = 1; k < 3; k++) { g.beginPath(); if (R.w > R.h) { g.moveTo(R.x, R.y + k * R.h / 3); g.lineTo(R.x + R.w, R.y + k * R.h / 3); } else { g.moveTo(R.x + k * R.w / 3, R.y); g.lineTo(R.x + k * R.w / 3, R.y + R.h); } g.stroke(); }
+  }
+  // Baumkronen (unter den Leinen, Stamm kommt dynamisch)
+  for (const o of OBS) if (o.kind === 'tree') {
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath(); g.arc(o.x + 10, o.y + 12, o.canopy, 0, 7); g.fill();
+    g.fillStyle = o.hue < .5 ? '#2f7a2a' : '#3b8a35'; g.beginPath(); g.arc(o.x, o.y, o.canopy, 0, 7); g.fill();
+    g.fillStyle = 'rgba(160,220,110,.35)';
+    for (let k = 0; k < 5; k++) { const a = k * 1.3 + o.hue * 6; g.beginPath(); g.arc(o.x + Math.cos(a) * o.canopy * .45, o.y + Math.sin(a) * o.canopy * .45, o.canopy * .4, 0, 7); g.fill(); }
+  }
+}
+
+// ================= Zustand =================
+let G = null;
+const player = { x: SPAWN.x, y: SPAWN.y, vx: 0, vy: 0, face: 0, walk: 0, rag: null, bubT: 0, slow: 0 };
+const cam = { x: SPAWN.x, y: SPAWN.y, zoom: 1 };
+let mode = 'title', paused = false;
+
+function newShift() {
+  const n = dogCount();
+  const hs = shuffle([...houses.keys()]).slice(0, n);
+  const bks = shuffle(Object.keys(BREEDS));
+  const names = shuffle(DOG_NAMES.slice());
+  G = {
+    t: 0, dur: 150, dogs: [], peds: [], critters: [], foods: [], poops: [], bubbles: [], parts: [], knots: [], pairT: {},
+    tangle: 0, stress: 0, wraps: 0, bags: 4 + 3 * save.up.beutel, treats: 1 + save.up.leckerli,
+    pay: [], fines: [], falls: 0, bagged: 0, shake: 0, evT: 4, untangle: 0, treatT: 0, hintT: 12, ended: false,
+  };
+  for (let i = 0; i < n; i++) {
+    const h = houses[hs[i]], b = bks[i % bks.length];
+    G.dogs.push({
+      id: i, breed: b, name: names[i], house: h, state: 'wait', x: h.door.x + rand(-20, 20), y: h.door.y + (h.top ? 14 : -14),
+      vx: 0, vy: 0, dvx: 0, dvy: 0, face: h.top ? Math.PI / 2 : -Math.PI / 2, leg: 0, need: 100, happy: rand(52, 64), poopAt: rand(30, 65), pooped: false,
+      act: 'idle', actT: 0, tgt: null, thinkT: 0, wanderT: 0, wx: 0, wy: 0, barkT: 0, bubT: 0, sniffed: new Map(), rope: null, col: LEASH_COLS[i], dragT: 0, knotT: 0,
+    });
+  }
+  Object.assign(player, { x: SPAWN.x, y: SPAWN.y, vx: 0, vy: 0, face: 0, rag: null, slow: 0 });
+  cam.x = player.x; cam.y = player.y; STAND.cd = 0;
+  for (let i = 0; i < 4 + Math.min(4, save.shift - 1); i++) spawnPed(pick(['walker', 'walker', 'jogger', 'oma', 'dogwalker']), true);
+  spawnPigeons(1200 + rand(-200, 200), 850 + rand(-200, 200));
+}
+
+// ================= Effekte =================
+function say(ent, txt, col, dur, force) {
+  if (!ent || (!force && ent.bubT > 0)) return;
+  ent.bubT = (dur || 2.2) * 0.8;
+  G.bubbles.push({ ent, txt, col: col || '#fff', t: 0, max: dur || 2.2 });
+  if (G.bubbles.length > 16) G.bubbles.shift();
+}
+function puff(x, y, n, col, spd, size, life, kind) {
+  for (let i = 0; i < n; i++) { const a = rand(0, Math.PI * 2), s = rand(.3, 1) * spd; G.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: life * rand(.6, 1.1), max: life, col, size: size * rand(.6, 1.2), kind: kind || 'dot', rot: rand(0, 6) }); }
+  if (G.parts.length > 500) G.parts.splice(0, G.parts.length - 500);
+}
+function floater(x, y, txt, col) { G.parts.push({ x, y, vx: 0, vy: -40, life: 1.6, max: 1.6, col, txt, kind: 'text', size: 18 }); }
+function shake(v) { G.shake = Math.max(G.shake, v); }
+function fine(reason, amt, x, y) { G.fines.push({ reason, amt }); floater(x, y, '−' + euro(amt), '#ff6b6b'); snd('hit'); shake(4); }
+function bark(d, txt) {
+  if (d.barkT > 0) return;
+  const B = BREEDS[d.breed];
+  d.barkT = d.breed === 'chihuahua' ? 0.9 : 1.7;
+  say(d, txt || T.bark[d.breed], '#ffe9a8', 1.2, true);
+  const f = 900 - B.size * 40; snd('playTone', f, 0.06, 'square', 0.05); setTimeout(() => snd('playTone', f * 0.8, 0.07, 'square', 0.05), 80);
+}
+
+// ================= Spawns =================
+const PED_KINDS = {
+  walker:    { speed: 55,  cols: ['#4d7cfe', '#9b5de5', '#00bbf9', '#f15bb5', '#3a86ff', '#6a994e'] },
+  jogger:    { speed: 125, cols: ['#ff006e', '#fb5607'] },
+  oma:       { speed: 30,  cols: ['#8e7dbe'] },
+  mail:      { speed: 65,  cols: ['#ffcc00'] },
+  dogwalker: { speed: 50,  cols: ['#2a9d8f', '#e76f51'] },
+  nachbar:   { speed: 80,  cols: ['#a8dadc'] },
+};
+function onScreen(x, y, m = 40) { const vw = view.w / cam.zoom / 2 + m, vh = view.h / cam.zoom / 2 + m; return Math.abs(x - cam.x) < vw && Math.abs(y - cam.y) < vh; }
+function spawnPed(kind, anywhere, x, y) {
+  let p = null;
+  if (x === undefined) {
+    for (let i = 0; i < 15; i++) { p = pick(WAYPTS); if (anywhere ? dist(p.x, p.y, SPAWN.x, SPAWN.y) > 250 : !onScreen(p.x, p.y, 60)) break; }
+    x = p.x; y = p.y;
+  }
+  const K = PED_KINDS[kind];
+  const ped = { kind, x, y, vx: 0, vy: 0, r: 11, col: pick(K.cols), speed: K.speed * rand(.85, 1.15), tgt: null, trip: 0, bubT: 0, life: rand(35, 60), face: 0, walk: 0, stay: 0, ropeHit: null, tripCd: 0 };
+  G.peds.push(ped); return ped;
+}
+function spawnPigeons(x, y) { const n = 4 + (Math.random() * 4 | 0); for (let i = 0; i < n; i++) G.critters.push({ kind: 'pigeon', x: x + rand(-40, 40), y: y + rand(-30, 30), vx: 0, vy: 0, z: 0, state: 'peck', t: rand(0, 2), life: 40, bubT: 0, face: rand(0, 6) }); }
+function spotNear(minD, maxD) {
+  for (let i = 0; i < 30; i++) {
+    const a = rand(0, Math.PI * 2), r = rand(minD, maxD), x = player.x + Math.cos(a) * r, y = player.y + Math.sin(a) * r;
+    if (x < 40 || y < 230 || x > W - 40 || y > H - 230) continue;
+    if (OBS.some(o => dist(x, y, o.x, o.y) < o.r + 25) || RECTS.some(R => x > R.x - 20 && x < R.x + R.w + 20 && y > R.y - 20 && y < R.y + R.h + 20)) continue;
+    return { x, y };
+  }
+  return null;
+}
+function spawnEvent() {
+  const r = Math.random() * 10.5;
+  if (r < 3) { // Eichhörnchen
+    const trees = OBS.filter(o => o.kind === 'tree' && dist(o.x, o.y, player.x, player.y) < 500);
+    if (trees.length >= 2) { const a = pick(trees); let b = pick(trees); if (b === a) b = trees.find(t => t !== a); G.critters.push({ kind: 'squirrel', x: a.x, y: a.y, vx: 0, vy: 0, to: b, state: 'run', life: 12, bubT: 0, face: 0 }); return; }
+  }
+  if (r < 5) { const s = spotNear(160, 360); if (s) { spawnPigeons(s.x, s.y); return; } }
+  if (r < 7) { const s = spotNear(260, 420); if (s) { G.critters.push({ kind: 'cat', x: s.x, y: s.y, vx: 0, vy: 0, state: 'sit', life: 22, bubT: 0, face: rand(0, 6), col: pick(['#222', '#e07b39', '#9a9a9a']) }); return; } }
+  if (r < 8.2) { const s = spotNear(180, 380); if (s) { G.foods.push({ x: s.x, y: s.y, kind: pick(['pommes', 'doener', 'brezel']) }); return; } }
+  if (r < 9.2 && !G.peds.some(p => p.kind === 'mail')) { spawnPed('mail'); return; }
+  spawnPed(pick(['dogwalker', 'jogger', 'walker', 'oma']));
+}
+
+// ================= Kollision =================
+function collideBody(e, r) {
+  for (const o of OBS) {
+    if (!o.body) continue;
+    const dx = e.x - o.x, dy = e.y - o.y, rr = o.r + r, d2 = dx * dx + dy * dy;
+    if (d2 < rr * rr) { const d = Math.sqrt(d2) || 1e-3; e.x = o.x + dx / d * rr; e.y = o.y + dy / d * rr; }
+  }
+  for (const R of RECTS) {
+    const nx = clamp(e.x, R.x, R.x + R.w), ny = clamp(e.y, R.y, R.y + R.h), dx = e.x - nx, dy = e.y - ny, d2 = dx * dx + dy * dy;
+    if (d2 < r * r) {
+      if (d2 > 1e-6) { const d = Math.sqrt(d2); e.x = nx + dx / d * r; e.y = ny + dy / d * r; }
+      else { const cy = R.y + R.h / 2; e.y = e.y < cy ? R.y - r : R.y + R.h + r; }
+    }
+  }
+  e.x = clamp(e.x, r, W - r); e.y = clamp(e.y, r, H - r);
+}
+
+// ================= Eingabe =================
+const keys = {};
+let joy = null, holdBtn = false;
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (mode !== 'play' || e.repeat) return;
+  if (e.code === 'Space') bagAction();
+  if (e.code === 'KeyQ') useTreat();
+  if (e.code === 'KeyP' || e.code === 'Escape') setPause(!paused);
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (mode === 'play') setPause(true); });
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+cv.addEventListener('pointerdown', e => {
+  if (mode !== 'play') return;
+  if (paused) { setPause(false); return; }
+  joy = { id: e.pointerId, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, moved: false, t0: performance.now() };
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+});
+cv.addEventListener('pointermove', e => { if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; if (dist(joy.sx, joy.sy, joy.x, joy.y) > 12) joy.moved = true; } });
+const endJoy = e => {
+  if (!joy || e.pointerId !== joy.id) return;
+  if (!joy.moved && performance.now() - joy.t0 < 350) tapAt(joy.x, joy.y);
+  joy = null;
+};
+cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
+const bBag = document.getElementById('bBag'), bTreat = document.getElementById('bTreat'), bUn = document.getElementById('bUntangle');
+bBag.addEventListener('click', () => { if (mode === 'play') bagAction(); });
+bTreat.addEventListener('click', () => { if (mode === 'play') useTreat(); });
+bUn.addEventListener('pointerdown', e => { holdBtn = true; bUn.classList.add('on'); try { bUn.setPointerCapture(e.pointerId); } catch (err) {} });
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) bUn.addEventListener(ev, () => { holdBtn = false; bUn.classList.remove('on'); });
+const muteBtn = document.getElementById('muteBtn');
+const updMute = () => { muteBtn.textContent = AC && AC.isMuted && AC.isMuted() ? '🔇' : '🔊'; };
+muteBtn.addEventListener('click', e => { if (AC && AC.toggleMute) AC.toggleMute(); updMute(); e.currentTarget.blur(); });
+updMute();
+document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') setPause(true); });
+
+function screenToWorld(sx, sy) { return { x: (sx - view.w / 2) / cam.zoom + cam.x, y: (sy - view.h / 2) / cam.zoom + cam.y }; }
+function tapAt(sx, sy) {
+  const w = screenToWorld(sx, sy);
+  const p = G.poops.find(q => dist(q.x, q.y, w.x, w.y) < 40);
+  if (p) { if (dist(p.x, p.y, player.x, player.y) <= bagRange()) bagPoop(p); else say(player, 'Zu weit weg!', '#fff', 1.2, true); }
+}
+
+// ================= Aktionen =================
+function bagPoop(p) {
+  if (G.bags <= 0) { say(player, 'Keine Tüten mehr! 😱', '#ffb4b4', 1.6, true); return; }
+  G.bags--; G.bagged++; G.poops.splice(G.poops.indexOf(p), 1);
+  snd('pop', 0.7); puff(p.x, p.y, 8, '#7a4a1c', 60, 3, .5); say(player, pick(T.bag), '#d6ffcf', 1.4, true);
+}
+function bagAction() {
+  if (player.rag) return;
+  let best = null, bd = bagRange();
+  for (const p of G.poops) { const d = dist(p.x, p.y, player.x, player.y); if (d <= bd) { bd = d; best = p; } }
+  if (best) bagPoop(best); else say(player, pick(['Hier liegt nix.', 'Falscher Alarm.', 'Sauber hier!']), '#fff', 1.1);
+}
+function useTreat() {
+  if (player.rag) return;
+  if (G.treats <= 0) { say(player, 'Leckerli alle! 😬', '#fff', 1.4, true); return; }
+  const on = G.dogs.filter(d => d.state === 'leash'); if (!on.length) { say(player, 'Ich hab doch noch keinen Hund.', '#fff', 1.4, true); return; }
+  G.treats--; G.treatT = 2.6; G.tangle = Math.max(0, G.tangle - 25);
+  for (const d of on) { d.act = 'idle'; d.tgt = null; d.happy = Math.min(100, d.happy + 6); say(d, 'LECKERLI!!', '#ffe9a8', 1.4, true); puff(d.x, d.y - 10, 4, '#ff5fa2', 40, 4, 1, 'heart'); }
+  snd('jump');
+}
+function doUntangle() {
+  if (G.knots.length) { const k = G.knots.pop(); G.tangle = Math.max(0, G.tangle - 20); say(player, 'Knoten gelöst!', '#d6ffcf', 1.4, true); puff(k.ra.p[k.ia].x, k.ra.p[k.ia].y, 8, '#fff', 60, 3, .5); snd('powerup'); }
+  else if (G.wraps > 0.3) { say(player, 'Um den Pfosten muss ich selbst rumlaufen…', '#fff', 2, true); G.tangle = Math.max(0, G.tangle - 10); }
+  else { G.tangle = Math.max(0, G.tangle - 30); say(player, 'Alles locker.', '#fff', 1.2, true); }
+}
+function startFall(dx, dy) {
+  const m = Math.hypot(dx, dy) || 1; dx /= m; dy /= m;
+  const px = player.x, py = player.y, pts = [];
+  const offs = [[0, -12], [0, 0], [0, 12], [-12, -2], [12, -2], [-6, 26], [6, 26]];
+  for (const [ox, oy] of offs) {
+    const x = px + ox, y = py + oy, sp = rand(5, 9);
+    pts.push({ x, y, px: x - dx * sp + rand(-2, 2), py: y - dy * sp + rand(-2, 2) });
+  }
+  player.rag = { pts, t: 0, dur: 1.9, sticks: [[0, 1, 12], [1, 2, 12], [1, 3, 13], [1, 4, 13], [2, 5, 15], [2, 6, 15]] };
+  G.falls++; save.stats.falls++;
+  shake(16); snd('hit'); snd('explosion'); snd('playTone', 220, 0.35, 'sawtooth', 0.08);
+  say(player, pick(T.fall), '#ffb4b4', 1.8, true);
+  puff(px, py, 14, '#d9c9a5', 120, 6, .7); puff(px, py - 20, 6, '#ffd23f', 70, 5, 1.1, 'star');
+  const near = G.peds.filter(p => dist(p.x, p.y, px, py) < 350); if (near.length) say(pick(near), pick(T.laugh), '#fff', 1.8, true);
+  for (const d of G.dogs) if (d.state === 'leash') { d.happy = Math.max(0, d.happy - 6); if (Math.random() < .5) say(d, '?', '#fff', 1.2, true); }
+}
+function updateRagdoll(dt) {
+  const R = player.rag; R.t += dt;
+  for (const q of R.pts) { const vx = (q.x - q.px) * 0.9, vy = (q.y - q.py) * 0.9; q.px = q.x; q.py = q.y; q.x += vx; q.y += vy; }
+  for (let k = 0; k < 4; k++) for (const [a, b, l] of R.sticks) {
+    const A = R.pts[a], B = R.pts[b], dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 1e-3, f = (d - l) / d / 2;
+    A.x += dx * f; A.y += dy * f; B.x -= dx * f; B.y -= dy * f;
+  }
+  for (const q of R.pts) collideBody(q, 4);
+  if (R.t < 0.9 && Math.random() < dt * 8) puff(R.pts[0].x, R.pts[0].y, 1, '#d9c9a5', 40, 4, .5);
+  if (R.t >= R.dur) {
+    player.x = R.pts[1].x; player.y = R.pts[1].y; player.vx = player.vy = 0; player.rag = null;
+    G.knots.length = 0; G.tangle = 0;
+    for (const d of G.dogs) if (d.state === 'leash') d.rope = makeRope(player.x, player.y, d.x, d.y, leashLen());
+    say(player, 'Leinen neu sortiert. Würde verloren.', '#fff', 2, true);
+  }
+}
+
+// ================= Hunde-KI =================
+function tgtPos(t) { return t.kind === 'food' && t.ent === STAND ? { x: STAND.fx, y: STAND.fy } : t.ent; }
+function tgtValid(t) {
+  const e = t.ent;
+  if (t.kind === 'food') return e === STAND ? STAND.cd <= G.t : G.foods.includes(e);
+  if (t.kind === 'squirrel' || t.kind === 'cat' || t.kind === 'pigeon') return G.critters.includes(e) && e.state !== 'fly';
+  if (t.kind === 'person' || t.kind === 'mail' || t.kind === 'dog') return G.peds.includes(e);
+  return true;
+}
+function findTarget(d) {
+  const A = BREEDS[d.breed].attract; let best = null, bs = 0.32;
+  const consider = (kind, ent, x, y, range) => {
+    if ((d.sniffed.get(ent) || 0) > G.t) return;
+    const dd = dist(d.x, d.y, x, y); if (dd > range) return;
+    let s = (A[kind] || 0) / (1 + dd / 140); if (d.tgt && d.tgt.ent === ent) s *= 1.4;
+    if (s > bs) { bs = s; best = { kind, ent }; }
+  };
+  for (const o of OBS) if (o.sniff) consider('post', o, o.x, o.y, 200);
+  for (const c of G.critters) if (c.state !== 'fly') consider(c.kind, c, c.x, c.y, 320);
+  for (const f of G.foods) consider('food', f, f.x, f.y, 300);
+  if (STAND.cd <= G.t) consider('food', STAND, STAND.fx, STAND.fy, 340);
+  for (const p of G.peds) consider(p.kind === 'mail' ? 'mail' : p.kind === 'dogwalker' ? 'dog' : 'person', p, p.x, p.y, 220);
+  return best;
+}
+function onReach(d) {
+  const t = d.tgt, B = BREEDS[d.breed]; d.tgt = null;
+  if (t.kind === 'post') {
+    const long = d.breed === 'dackel';
+    d.act = 'sniff'; d.actT = long ? 3.2 : 1.8; d.need -= long ? 9 : 5; d.happy += 5; d.sniffed.set(t.ent, G.t + 30);
+    say(d, pick(T.sniff), '#e0f4ff', 1.6);
+  } else if (t.kind === 'food') {
+    d.act = 'eat'; d.actT = 1.3; d.happy += 9; d.need -= 3;
+    say(d, d.breed === 'labrador' ? 'BESTER TAG EVER!' : 'MAMPF!', '#ffe9a8', 1.5, true); snd('pop', 1.4);
+    if (t.ent === STAND) { STAND.cd = G.t + 20; say(STAND, pick(T.wurst), '#ffb4b4', 2.2, true); fine('Geklaute Bratwurst', 4, STAND.x, STAND.y - 30); }
+    else { G.foods.splice(G.foods.indexOf(t.ent), 1); puff(t.ent.x, t.ent.y, 6, '#ffd23f', 50, 3, .5); }
+  } else if (t.kind === 'squirrel' || t.kind === 'cat' || t.kind === 'pigeon') {
+    d.happy += 3; d.need -= 2; d.thinkT = 1.2; d.sniffed.set(t.ent, G.t + 8); bark(d);
+  } else {
+    const p = t.ent; d.sniffed.set(p, G.t + 18);
+    if (d.breed === 'chihuahua' || t.kind === 'mail') bark(d); else { d.act = 'sniff'; d.actT = 1; say(d, '*schnupper*', '#e0f4ff', 1.2); }
+    d.happy += 3;
+    say(p, t.kind === 'mail' ? pick(T.mail) : t.kind === 'dog' ? 'Na, ihr zwei?' : pick(T.ped), '#fff', 1.8);
+  }
+  d.happy = clamp(d.happy, 0, 100);
+}
+function updateDog(d, dt) {
+  const B = BREEDS[d.breed];
+  d.barkT -= dt; d.bubT -= dt; d.thinkT -= dt;
+  if (d.state === 'wait') {
+    d.leg += dt * 3;
+    if (d.bubT <= 0 && dist(d.x, d.y, player.x, player.y) < 260 && Math.random() < dt * .5) say(d, pick(['Wuff?', 'Bist DU das?', '*wedel*', 'Hier! HIER!']), '#fff', 1.4);
+    return;
+  }
+  if (d.state !== 'leash') return;
+  const sp = Math.hypot(d.vx, d.vy);
+  if (d.need > 0) d.need -= (1.3 + sp * 0.009) * dt;
+  if (d.need <= 0) {
+    d.need = 0;
+    if (!d.done) { d.done = true; say(d, pick(T.done), '#c8ffbe', 2, true); puff(d.x, d.y - 12, 5, '#ff5fa2', 40, 4, 1, 'heart'); snd('playTone', 880, 0.12, 'triangle', 0.08); }
+  }
+  if (!d.pooped && d.need <= d.poopAt && (d.act === 'idle' || d.act === 'sniff')) { d.act = 'poop'; d.actT = 1.6; say(d, '*hnnnngh*', '#fde68a', 1.6, true); }
+  let tx = null, ty = null, spd = B.speed;
+  if (d.act !== 'idle') {
+    d.actT -= dt;
+    if (d.act === 'sit' && d.dragT > 0.6 && d.bubT <= 0) say(d, pick(T.drag), '#fff', 1.4);
+    if (d.actT <= 0) {
+      if (d.act === 'poop') { G.poops.push({ x: d.x - Math.cos(d.face) * 10, y: d.y - Math.sin(d.face) * 10, t: 0, max: 20 }); d.pooped = true; d.need -= 12; snd('playTone', 140, 0.15, 'sine', 0.08); }
+      d.act = 'idle';
+    }
+  } else if (G.treatT > 0) { tx = player.x; ty = player.y; spd = B.speed * 1.2; }
+  else {
+    if (d.thinkT <= 0) { d.thinkT = rand(0.25, 0.45); d.tgt = findTarget(d); }
+    if (d.tgt && !tgtValid(d.tgt)) d.tgt = null;
+    if (d.tgt) {
+      const p = tgtPos(d.tgt); tx = p.x; ty = p.y; spd = B.speed * 1.15;
+      const reach = d.tgt.kind === 'post' ? d.tgt.ent.r + B.size + 8 : 24;
+      if (dist(d.x, d.y, tx, ty) < reach) onReach(d);
+      else if (d.tgt.kind !== 'post' && d.tgt.kind !== 'food' && dist(d.x, d.y, tx, ty) < 200 && Math.random() < dt * 1.5) bark(d);
+    } else {
+      d.wanderT -= dt;
+      if (d.wanderT <= 0) {
+        d.wanderT = rand(1.5, 3.5); const a = rand(0, Math.PI * 2), r = rand(0.2, 0.6) * leashLen() * (d.breed === 'husky' ? 2.6 : 1);
+        d.wx = Math.cos(a) * r; d.wy = Math.sin(a) * r;
+      }
+      tx = player.x + d.wx; ty = player.y + d.wy;
+      if (d.breed === 'mops') { spd *= 0.7; if (Math.random() < dt * 0.13) { d.act = 'sit'; d.actT = rand(2.5, 5); say(d, pick(T.mops), '#fff', 1.6, true); } }
+    }
+    if (d.breed === 'chihuahua' && d.barkT <= 0) {
+      const near = G.peds.find(p => dist(p.x, p.y, d.x, d.y) < 170) || G.critters.find(c => c.kind === 'cat' && dist(c.x, c.y, d.x, d.y) < 200);
+      if (near) { bark(d); if (near.r && Math.random() < .5) say(near, pick(['Ruhe!!', 'Was ist DAS denn?', 'Süß… aber laut.', 'Ist das ne Ratte?']), '#fff', 1.6); }
+    }
+  }
+  let dvx = 0, dvy = 0;
+  if (tx !== null && d.act === 'idle') { const dx = tx - d.x, dy = ty - d.y, dd = Math.hypot(dx, dy); if (dd > 8) { const s = Math.min(spd, dd * 3); dvx = dx / dd * s; dvy = dy / dd * s; } }
+  d.dvx = dvx; d.dvy = dvy;
+  const k = 1 - Math.exp(-7 * dt); d.vx += (dvx - d.vx) * k; d.vy += (dvy - d.vy) * k;
+  d.x += d.vx * dt; d.y += d.vy * dt; collideBody(d, B.size);
+  if (sp > 6) d.face = angLerp(d.face, Math.atan2(d.vy, d.vx), 1 - Math.exp(-10 * dt));
+  d.leg += sp * dt * 0.15;
+  d.happy = clamp(d.happy, 0, 100);
+}
+
+// ================= Critter & Passanten =================
+function updateCritters(dt) {
+  for (let i = G.critters.length - 1; i >= 0; i--) {
+    const c = G.critters[i]; c.life -= dt; c.bubT -= dt;
+    let nd = null, ndd = 1e9;
+    for (const d of G.dogs) if (d.state === 'leash') { const dd = dist(d.x, d.y, c.x, c.y); if (dd < ndd) { ndd = dd; nd = d; } }
+    const pd = dist(player.x, player.y, c.x, c.y);
+    if (c.kind === 'squirrel') {
+      const dx = c.to.x - c.x, dy = c.to.y - c.y, dd = Math.hypot(dx, dy), s = ndd < 110 ? 270 : 170;
+      if (ndd < 110) say(c, pick(['Tschiep!', 'Ätsch!', 'Zu langsam!']), '#fff', 1.3);
+      if (dd < 10 || c.life < 0) { puff(c.x, c.y, 8, '#3b8a35', 60, 4, .6); G.critters.splice(i, 1); continue; }
+      c.vx = dx / dd * s; c.vy = dy / dd * s; c.face = Math.atan2(dy, dx);
+    } else if (c.kind === 'cat') {
+      if (c.state === 'sit' && ndd < 150) { c.state = 'flee'; c.life = 2.5; say(c, pick(['FAUCH!', 'Miau?!', 'Pöbel!']), '#ffb4b4', 1.4, true); snd('playTone', 1300, 0.12, 'sawtooth', 0.04); }
+      if (c.state === 'flee' && nd) { const dx = c.x - nd.x, dy = c.y - nd.y, dd = Math.hypot(dx, dy) || 1; c.vx = dx / dd * 240; c.vy = dy / dd * 240; c.face = Math.atan2(c.vy, c.vx); }
+      else if (c.state === 'sit') { c.vx = c.vy = 0; }
+      if (c.life < 0) { G.critters.splice(i, 1); continue; }
+    } else if (c.kind === 'pigeon') {
+      if (c.state === 'peck') {
+        c.t -= dt; if (c.t < 0) { c.t = rand(.5, 2); c.face = rand(0, 6); c.vx = Math.cos(c.face) * 20; c.vy = Math.sin(c.face) * 20; }
+        c.vx *= 0.92; c.vy *= 0.92;
+        if (ndd < 80 || pd < 60) {
+          const fx = c.x - (ndd < 80 ? nd.x : player.x), fy = c.y - (ndd < 80 ? nd.y : player.y), m = Math.hypot(fx, fy) || 1;
+          c.state = 'fly'; c.life = 1.6; c.vx = fx / m * 220 + rand(-40, 40); c.vy = fy / m * 220 + rand(-40, 40);
+          puff(c.x, c.y, 3, '#ddd', 60, 3, .8, 'feather');
+          if (!G.flapT || G.flapT < G.t) { G.flapT = G.t + .4; snd('playTone', 300, 0.08, 'triangle', 0.05); setTimeout(() => snd('playTone', 360, 0.06, 'triangle', 0.05), 70); }
+        }
+      } else { c.z += dt * 60; }
+      if (c.life < 0) { G.critters.splice(i, 1); continue; }
+    }
+    c.x += c.vx * dt; c.y += c.vy * dt;
+    if (c.state !== 'fly' && c.kind !== 'squirrel') collideBody(c, 5);
+    if (c.x < -50 || c.x > W + 50 || c.y < -50 || c.y > H + 50) G.critters.splice(i, 1);
+  }
+}
+function updatePeds(dt) {
+  const want = 4 + Math.min(4, save.shift - 1);
+  if (G.peds.filter(p => p.kind !== 'nachbar').length < want && Math.random() < dt * 0.5) spawnPed(pick(['walker', 'walker', 'jogger', 'oma', 'dogwalker']));
+  for (let i = G.peds.length - 1; i >= 0; i--) {
+    const p = G.peds[i]; p.bubT -= dt; p.life -= dt; p.tripCd -= dt;
+    if (p.life < 0 && !onScreen(p.x, p.y, 80)) { G.peds.splice(i, 1); continue; }
+    if (p.trip > 0) { p.trip -= dt; p.vx *= 0.9; p.vy *= 0.9; p.x += p.vx * dt; p.y += p.vy * dt; collideBody(p, p.r); continue; }
+    if (p.stay > 0) { p.stay -= dt; p.face = Math.atan2(player.y - p.y, player.x - p.x); if (p.stay <= 0) p.life = 0; continue; }
+    if (!p.tgt || dist(p.x, p.y, p.tgt.x, p.tgt.y) < 20) {
+      const near = WAYPTS.filter(w => { const d = dist(w.x, w.y, p.x, p.y); return d > 60 && d < 520; });
+      p.tgt = near.length ? pick(near) : pick(WAYPTS);
+    }
+    const dx = p.tgt.x - p.x, dy = p.tgt.y - p.y, dd = Math.hypot(dx, dy) || 1;
+    const k = 1 - Math.exp(-4 * dt); p.vx += (dx / dd * p.speed - p.vx) * k; p.vy += (dy / dd * p.speed - p.vy) * k;
+    p.x += p.vx * dt; p.y += p.vy * dt; collideBody(p, p.r);
+    p.face = angLerp(p.face, Math.atan2(p.vy, p.vx), 1 - Math.exp(-8 * dt)); p.walk += Math.hypot(p.vx, p.vy) * dt * 0.12;
+  }
+}
+
+// ================= Hauptupdate =================
+const view = { w: innerWidth, h: innerHeight, dpr: 1 };
+function update(dt) {
+  G.t += dt; G.hintT -= dt; G.treatT -= dt; G.shake = Math.max(0, G.shake - dt * 30);
+  player.bubT -= dt; STAND.bubT -= dt; player.slow -= dt;
+  for (const h of houses) h.bubT -= dt;
+  G.evT -= dt; if (G.evT <= 0) { G.evT = rand(5, 10) * Math.max(0.45, 1 - 0.06 * (save.shift - 1)); spawnEvent(); }
+
+  // --- Spieler
+  let ix = 0, iy = 0;
+  if (keys.KeyA || keys.ArrowLeft) ix -= 1; if (keys.KeyD || keys.ArrowRight) ix += 1;
+  if (keys.KeyW || keys.ArrowUp) iy -= 1; if (keys.KeyS || keys.ArrowDown) iy += 1;
+  if (joy && joy.moved) { const jx = (joy.x - joy.sx) / 55, jy = (joy.y - joy.sy) / 55; ix += jx; iy += jy; }
+  const im = Math.hypot(ix, iy); if (im > 1) { ix /= im; iy /= im; }
+  const holding = keys.KeyE || holdBtn;
+  if (player.rag) updateRagdoll(dt);
+  else {
+    if (holding && im < 0.15) { G.untangle += dt / 1.1; player.face += dt * 9; if (G.untangle >= 1) { G.untangle = 0; doUntangle(); } }
+    else G.untangle = Math.max(0, G.untangle - dt * 2);
+    const sp = pSpeed() * (player.slow > 0 ? 0.6 : 1) * (G.slowMul || 1), k = 1 - Math.exp(-12 * dt);
+    player.vx += (ix * sp - player.vx) * k; player.vy += (iy * sp - player.vy) * k;
+    player.x += player.vx * dt; player.y += player.vy * dt; collideBody(player, 13);
+    const ps = Math.hypot(player.vx, player.vy);
+    if (ps > 10 && !holding) player.face = angLerp(player.face, Math.atan2(player.vy, player.vx), 1 - Math.exp(-12 * dt));
+    player.walk += ps * dt * 0.1;
+    if (player.slow > 0 && ps > 20 && Math.random() < dt * 6) puff(player.x, player.y + 8, 1, '#6b3f1e', 5, 3, 1.2);
+  }
+  const hand = player.rag ? player.rag.pts[4] : { x: player.x + Math.cos(player.face + 0.6) * 15, y: player.y + Math.sin(player.face + 0.6) * 15 };
+
+  // --- Hunde abholen / abgeben
+  for (const d of G.dogs) {
+    const h = d.house, dh = dist(player.x, player.y, h.door.x, h.door.y);
+    if (d.state === 'wait' && !player.rag && dist(player.x, player.y, d.x, d.y) < 58) {
+      d.state = 'leash'; d.rope = makeRope(hand.x, hand.y, d.x, d.y, leashLen());
+      say(d, pick(T.pickup), '#ffe9a8', 1.8, true); say(h, pick(T.owner), '#fff', 2.4, true); snd('pop', 1.2);
+    } else if (d.state === 'leash' && dh < 75 && !player.rag) {
+      if (d.need <= 0) {
+        d.state = 'home'; d.rope = null; d.x = h.door.x + rand(-25, 25); d.y = h.door.y + (h.top ? 12 : -12);
+        G.knots = G.knots.filter(k => k.da !== d && k.db !== d);
+        const late = G.t > G.dur * 0.75;
+        const base = 14 + d.happy * 0.28 + (late ? 0 : 6) + 2 * Math.min(5, save.shift - 1);
+        const tip = d.happy >= 80 ? Math.round(rand(3, 9)) : 0;
+        G.pay.push({ dog: d, base: Math.round(base), tip });
+        say(h, tip ? `Danke! ${tip} € Trinkgeld!` : d.happy < 35 ? 'Was hast du mit ihm gemacht?!' : 'Danke schön!', '#c8ffbe', 2.4, true);
+        floater(h.door.x, h.door.y - 20, '+' + euro(base + tip), '#7bff6b'); snd('coin'); puff(h.door.x, h.door.y, 10, '#ffd23f', 90, 4, .8, 'star');
+        save.stats.dogs++;
+      } else if (h.bubT <= 0) say(h, d.need > 50 ? 'Der war doch kaum draußen!' : 'Noch eine Runde, bitte!', '#fff', 2.2);
+    }
+  }
+  for (const d of G.dogs) updateDog(d, dt);
+
+  // --- Leinen
+  const on = G.dogs.filter(d => d.state === 'leash');
+  const ropes = [];
+  const pedObs = G.peds.map(p => ({ x: p.x, y: p.y, r: p.r, ped: p, wrap: true }));
+  for (const d of on) {
+    const r = d.rope; r.p[0].x = hand.x; r.p[0].y = hand.y; const e = r.p[r.p.length - 1]; e.x = d.x; e.y = d.y;
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const q of r.p) { if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x; if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y; }
+    x0 -= 90; y0 -= 90; x1 += 90; y1 += 90;
+    r.obs = OBS.filter(o => o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1).concat(pedObs.filter(o => o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1));
+    ropes.push(r);
+  }
+  for (const p of G.peds) p.ropeHit = null;
+  solveRopes(ropes, G.knots, 10);
+  // Zug auf den Spieler: Hunde, die weg wollen, ziehen entlang der Leine; sitzende/schnüffelnde Hunde bremsen.
+  // Ist die Leine um ein Hindernis gewickelt, fängt das Hindernis den Großteil ab.
+  let sx = 0, sy = 0, smag = 0, slow = 1;
+  for (const d of on) {
+    const r = d.rope, P = r.p, e = P[P.length - 1], m = Math.hypot(r.cx, r.cy);
+    d.x = e.x; d.y = e.y; d.dragT = m > 1.2 ? d.dragT + dt : 0;
+    if (m > 0.01) { const nx = r.cx / m, ny = r.cy / m, vn = d.vx * nx + d.vy * ny; if (vn < 0) { d.vx -= vn * nx; d.vy -= vn * ny; } }
+    if (m > 0.3) {
+      let ux = P[1].x - P[0].x, uy = P[1].y - P[0].y; const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
+      const anchor = (r.touching ? 0.3 : 1) * pullResist();
+      const want = Math.max(0, d.dvx * ux + d.dvy * uy) * BREEDS[d.breed].pull * 0.6 * anchor;
+      sx += ux * want; sy += uy * want; smag += want;
+      if (-(player.vx * ux + player.vy * uy) > 20) slow *= 1 - (d.act === 'sit' ? 0.5 : d.act !== 'idle' ? 0.2 : 0.04) * anchor;
+    }
+    if (d.dragT > 1.5) d.happy = Math.max(0, d.happy - dt * (d.breed === 'mops' ? 0.5 : 1.2));
+  }
+  G.slowMul = Math.max(0.3, slow);
+  const sm = Math.hypot(sx, sy);
+  if (!player.rag && sm > 0) { const c = Math.min(sm, pSpeed() * 0.8) / sm; player.x += sx * c * dt; player.y += sy * c * dt; collideBody(player, 13); }
+  // Passanten über die Leine stolpern lassen
+  for (const p of G.peds) if (p.ropeHit && p.trip <= 0 && p.tripCd <= 0 && Math.hypot(p.ropeHit.cx, p.ropeHit.cy) > 0.8) {
+    p.trip = 1.4; p.tripCd = 6; p.vx = rand(-80, 80); p.vy = rand(-80, 80);
+    say(p, pick(T.trip), '#ffb4b4', 2, true); fine('Passant über Leine gestolpert', 8, p.x, p.y - 20); puff(p.x, p.y, 6, '#ffd23f', 60, 4, 1, 'star');
+  }
+  // Knoten: straffe Leinen, die sich länger kreuzen, verheddern sich (schlaff am Boden liegende nicht)
+  const taut = d => dist(hand.x, hand.y, d.x, d.y) > d.rope.len * 0.7;
+  for (let a = 0; a < on.length; a++) for (let b = a + 1; b < on.length; b++) {
+    const A = on[a], B = on[b], key = A.id + '-' + B.id, PA = A.rope.p, PB = B.rope.p;
+    let hit = null;
+    if (taut(A) && taut(B)) for (let i = 4; i < PA.length - 1 && !hit; i++) for (let j = 4; j < PB.length - 1; j++)
+      if (segCross(PA[i].x, PA[i].y, PA[i + 1].x, PA[i + 1].y, PB[j].x, PB[j].y, PB[j + 1].x, PB[j + 1].y)) {
+        // fast parallele Leinen (alle Hunde hinter dir) gelten nicht als Verknotung
+        const a1 = Math.atan2(PA[i + 1].y - PA[i].y, PA[i + 1].x - PA[i].x), a2 = Math.atan2(PB[j + 1].y - PB[j].y, PB[j + 1].x - PB[j].x);
+        if (Math.abs(Math.sin(a1 - a2)) > 0.45) { hit = [i, j]; break; }
+      }
+    if (hit && !player.rag) {
+      G.pairT[key] = (G.pairT[key] || 0) + dt;
+      const has = G.knots.some(k => k.da === A && k.db === B);
+      if (G.pairT[key] > 1.3 && !has && G.knots.length < 5) {
+        G.knots.push({ ra: A.rope, rb: B.rope, ia: hit[0], ib: hit[1], da: A, db: B, life: rand(14, 22) }); G.pairT[key] = -3;
+        say(player, pick(T.knot), '#ffb4b4', 1.4, true); snd('playTone', 160, 0.2, 'square', 0.06); shake(3);
+      }
+    } else G.pairT[key] = Math.max(0, (G.pairT[key] || 0) - dt);
+  }
+  for (let i = G.knots.length - 1; i >= 0; i--) if ((G.knots[i].life -= dt) <= 0) { // Knoten rutschen irgendwann von selbst auf
+    const kp = G.knots[i].ra.p[G.knots[i].ia]; G.knots.splice(i, 1); if (kp) puff(kp.x, kp.y, 5, '#fff', 40, 3, .4);
+    say(player, 'Puh, Knoten von selbst aufgegangen.', '#d6ffcf', 1.6);
+  }
+  // --- Verheddert-O-Meter
+  let wraps = 0; for (const r of ropes) wraps += ropeWraps(r); G.wraps = wraps;
+  const opposing = Math.max(0, smag - sm); // px/s, die sich gegenseitig aufheben = du wirst auseinandergerissen
+  G.stress = G.knots.length * 0.7 + wraps * 0.9 + opposing * 0.005;
+  const rate = 1 - 0.15 * save.up.schuhe;
+  if (G.stress > 0.5) G.tangle += (G.stress - 0.5) * 14 * rate * dt; else G.tangle -= 14 * dt;
+  G.tangle = clamp(G.tangle, 0, 100);
+  if (G.tangle >= 100 && !player.rag) startFall(sx || 1, sy);
+  // Separation Hunde
+  for (let a = 0; a < on.length; a++) {
+    const A = on[a], ra = BREEDS[A.breed].size;
+    const dp = dist(A.x, A.y, player.x, player.y), mp = ra + 12;
+    if (dp < mp && dp > 0 && !player.rag) { A.x = player.x + (A.x - player.x) / dp * mp; A.y = player.y + (A.y - player.y) / dp * mp; }
+    for (let b = a + 1; b < on.length; b++) {
+      const B = on[b], m = ra + BREEDS[B.breed].size, dx = B.x - A.x, dy = B.y - A.y, dd = Math.hypot(dx, dy);
+      if (dd < m && dd > 0) { const f = (m - dd) / dd / 2; A.x -= dx * f; A.y -= dy * f; B.x += dx * f; B.y += dy * f; }
+    }
+  }
+
+  // --- Haufen
+  for (let i = G.poops.length - 1; i >= 0; i--) {
+    const p = G.poops[i]; p.t += dt;
+    if (Math.random() < dt * 2) puff(p.x + rand(-6, 6), p.y - 6, 1, '#222', 14, 1.5, .8);
+    if (!player.rag && dist(p.x, p.y, player.x, player.y) < 9) {
+      G.poops.splice(i, 1); player.slow = 4; say(player, pick(['Neeein! Frisch besohlt!', 'IIIIH!', 'Bitte nicht…']), '#ffb4b4', 1.8, true);
+      snd('playTone', 120, 0.3, 'sawtooth', 0.07); G.tangle = Math.min(100, G.tangle + 15); continue;
+    }
+    if (p.t >= p.max) {
+      G.poops.splice(i, 1);
+      const nb = spawnPed('nachbar', false, clamp(p.x + rand(-40, 40), 20, W - 20), clamp(p.y + rand(-40, 40), 20, H - 20)); nb.stay = 3.2;
+      say(nb, pick(T.neighbor), '#ffb4b4', 3, true); fine('Haufen liegen gelassen', 25, p.x, p.y - 20); shake(6);
+    }
+  }
+  updateCritters(dt); updatePeds(dt);
+  // --- Partikel & Blasen
+  for (let i = G.parts.length - 1; i >= 0; i--) { const q = G.parts[i]; q.life -= dt; if (q.life <= 0) { G.parts.splice(i, 1); continue; } q.x += q.vx * dt; q.y += q.vy * dt; if (q.kind !== 'text') { q.vx *= 0.94; q.vy *= 0.94; } }
+  for (let i = G.bubbles.length - 1; i >= 0; i--) { const b = G.bubbles[i]; b.t += dt; if (b.t >= b.max) G.bubbles.splice(i, 1); }
+  // --- Kamera
+  const k = 1 - Math.exp(-5 * dt), fx = player.rag ? player.rag.pts[1].x : player.x, fy = player.rag ? player.rag.pts[1].y : player.y;
+  cam.x += (fx - cam.x) * k; cam.y += (fy - cam.y) * k;
+  const hw = view.w / cam.zoom / 2, hh = view.h / cam.zoom / 2;
+  cam.x = hw * 2 >= W ? W / 2 : clamp(cam.x, hw, W - hw); cam.y = hh * 2 >= H ? H / 2 : clamp(cam.y, hh, H - hh);
+  // --- Schichtende
+  const allHome = G.dogs.every(d => d.state === 'home');
+  if ((G.t >= G.dur || allHome) && !G.ended) endShift(allHome);
+}
+
+// ================= Zeichnen =================
+function ell(x, y, rx, ry, rot = 0) { ctx.beginPath(); ctx.ellipse(x, y, Math.max(.1, rx), Math.max(.1, ry), rot, 0, Math.PI * 2); ctx.fill(); }
+function circ(x, y, r) { ctx.beginPath(); ctx.arc(x, y, Math.max(.1, r), 0, Math.PI * 2); ctx.fill(); }
+function drawDog(d) {
+  const B = BREEDS[d.breed], s = B.size, sit = d.act === 'sit' || d.act === 'poop';
+  ctx.save(); ctx.translate(d.x, d.y);
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ell(2, 3, s * 1.5, s);
+  ctx.rotate(d.face);
+  const bl = s * (d.breed === 'dackel' ? 1.9 : 1.25) * (sit ? 0.8 : 1), bw = s * (d.breed === 'mops' ? 1.0 : 0.78);
+  const lg = Math.sin(d.leg) * s * 0.35;
+  ctx.fillStyle = B.dark;
+  if (!sit) { circ(bl * .55 + lg, -bw * .8, s * .28); circ(bl * .55 - lg, bw * .8, s * .28); circ(-bl * .55 - lg, -bw * .8, s * .28); circ(-bl * .55 + lg, bw * .8, s * .28); }
+  // Schwanz
+  const wag = Math.sin(G.t * (d.need <= 0 ? 22 : 12) + d.id) * 0.7;
+  ctx.strokeStyle = d.breed === 'husky' ? '#e9eef2' : B.col; ctx.lineWidth = s * (d.breed === 'husky' ? .55 : .3); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-bl * .9, 0); ctx.quadraticCurveTo(-bl * 1.3, wag * s, -bl * 1.6, wag * s * 1.6 * (d.breed === 'mops' ? .3 : 1)); ctx.stroke();
+  if (d.breed === 'pudel') { ctx.fillStyle = '#fff'; circ(-bl * 1.6, wag * s * 1.6, s * .35); }
+  ctx.fillStyle = B.col; ell(0, 0, bl, bw);
+  if (d.breed === 'husky') { ctx.fillStyle = B.dark; ell(-bl * .1, 0, bl * .8, bw * .55); }
+  if (d.breed === 'pudel') { ctx.fillStyle = '#fff'; for (let k = -1; k <= 1; k++) circ(k * bl * .5, 0, bw * .9); }
+  if (d.breed === 'dackel') { ctx.fillStyle = 'rgba(0,0,0,.12)'; ell(0, 0, bl * .8, bw * .4); }
+  // Kopf
+  const hx = bl * .95, hr = s * (d.breed === 'chihuahua' ? .95 : d.breed === 'mops' ? .85 : .72);
+  ctx.fillStyle = B.col; circ(hx, 0, hr);
+  if (d.breed === 'pudel') { ctx.fillStyle = '#fff'; circ(hx - hr * .3, 0, hr * .8); }
+  // Ohren
+  ctx.fillStyle = d.breed === 'mops' ? '#2b2420' : B.dark;
+  if (d.breed === 'chihuahua') { ctx.beginPath(); ctx.moveTo(hx - hr * .2, -hr * .6); ctx.lineTo(hx - hr * 1.4, -hr * 1.9); ctx.lineTo(hx + hr * .3, -hr * .9); ctx.fill(); ctx.beginPath(); ctx.moveTo(hx - hr * .2, hr * .6); ctx.lineTo(hx - hr * 1.4, hr * 1.9); ctx.lineTo(hx + hr * .3, hr * .9); ctx.fill(); ctx.fillStyle = '#f5a3a3'; circ(hx - hr * .6, -hr * 1.1, hr * .25); circ(hx - hr * .6, hr * 1.1, hr * .25); }
+  else if (d.breed === 'husky') { ctx.beginPath(); ctx.moveTo(hx - hr * .5, -hr * .4); ctx.lineTo(hx - hr * .2, -hr * 1.3); ctx.lineTo(hx + hr * .2, -hr * .5); ctx.fill(); ctx.beginPath(); ctx.moveTo(hx - hr * .5, hr * .4); ctx.lineTo(hx - hr * .2, hr * 1.3); ctx.lineTo(hx + hr * .2, hr * .5); ctx.fill(); }
+  else { const fl = Math.sin(G.t * 9 + d.id) * .15; ell(hx - hr * .2, -hr * .95, hr * .55, hr * .3, -.4 + fl); ell(hx - hr * .2, hr * .95, hr * .55, hr * .3, .4 - fl); }
+  // Schnauze
+  ctx.fillStyle = d.breed === 'mops' ? '#2b2420' : d.breed === 'husky' ? '#f1f4f6' : B.col; ell(hx + hr * .75, 0, hr * .55, hr * .45);
+  ctx.fillStyle = '#111'; circ(hx + hr * 1.2, 0, hr * .2);
+  circ(hx + hr * .25, -hr * .4, hr * .14); circ(hx + hr * .25, hr * .4, hr * .14);
+  ctx.restore();
+  if (d.act === 'sniff' && Math.random() < .2) puff(d.x + Math.cos(d.face) * s * 2, d.y + Math.sin(d.face) * s * 2, 1, 'rgba(255,255,255,.7)', 20, 2, .4);
+}
+function drawPerson(x, y, face, walk, body, head, opts = {}) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ell(3, 4, 15, 11);
+  ctx.rotate(face);
+  const st = Math.sin(walk) * 7;
+  ctx.fillStyle = opts.legs || '#2d3142'; ell(st, -5, 6, 3.5); ell(-st, 5, 6, 3.5);
+  if (opts.bag) { ctx.fillStyle = '#7a4a1c'; ell(-6, 12, 7, 5); }
+  ctx.fillStyle = body; ell(0, 0, 8, 13);
+  ctx.fillStyle = opts.arm || body; ell(4 + st * .4, -12, 5, 3.5); ell(4 - st * .4, 12, 5, 3.5);
+  ctx.fillStyle = opts.skin || '#f2c9a0'; circ(2, 0, 7);
+  ctx.fillStyle = head; ell(-1, 0, 6.5, 7);
+  if (opts.band) { ctx.fillStyle = opts.band; ctx.fillRect(-1, -7, 3, 14); }
+  if (opts.cap) { ctx.fillStyle = opts.cap; ell(5, 0, 4, 6); }
+  ctx.restore();
+}
+function drawPed(p) {
+  const tr = p.trip > 0;
+  if (tr) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(G.t * 12); ctx.translate(-p.x, -p.y); }
+  const o = { walker: {}, jogger: { band: '#fff', legs: '#111' }, oma: { legs: '#555' }, mail: { cap: '#1d3557', bag: true, legs: '#1d3557' }, dogwalker: {}, nachbar: { legs: '#a8dadc', cap: '#ff8fb1' } }[p.kind];
+  const hair = { oma: '#d8d0f0', jogger: '#3a2a1a', mail: '#4a3020', nachbar: '#999' }[p.kind] || ['#3a2a1a', '#c9a227', '#111', '#8b3a1a'][(p.col.charCodeAt(2) || 0) % 4];
+  drawPerson(p.x, p.y, p.face, p.walk, p.col, hair, o);
+  if (tr) ctx.restore();
+  if (p.kind === 'dogwalker') { // kleiner Fremdhund
+    const dx = p.x - Math.cos(p.face) * 30 + Math.sin(G.t * 2) * 6, dy = p.y - Math.sin(p.face) * 30 + 10;
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(dx, dy); ctx.stroke();
+    ctx.fillStyle = '#5a3d2b'; ell(dx, dy, 8, 5, p.face); circ(dx + Math.cos(p.face) * 7, dy + Math.sin(p.face) * 7, 4);
+  }
+  if (p.kind === 'oma') { ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(p.x + Math.cos(p.face) * 10, p.y + Math.sin(p.face) * 10); ctx.lineTo(p.x + Math.cos(p.face + .5) * 20, p.y + Math.sin(p.face + .5) * 20); ctx.stroke(); }
+}
+function drawPlayer() {
+  if (player.rag) {
+    const P = player.rag.pts, air = Math.max(0, Math.sin(Math.min(1, player.rag.t / 0.7) * Math.PI)), s = 1 + air * .35;
+    ctx.save(); ctx.translate(P[1].x, P[1].y); ctx.scale(s, s); ctx.translate(-P[1].x, -P[1].y);
+    ctx.lineCap = 'round';
+    const limb = (a, b, w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(P[a].x, P[a].y); ctx.lineTo(P[b].x, P[b].y); ctx.stroke(); };
+    limb(2, 5, 6, '#2d3142'); limb(2, 6, 6, '#2d3142'); limb(1, 3, 5, '#ff7a1a'); limb(1, 4, 5, '#ff7a1a'); limb(0, 2, 13, '#ff7a1a');
+    ctx.fillStyle = '#f2c9a0'; circ(P[0].x, P[0].y, 7.5); ctx.fillStyle = '#5a3a1a'; circ(P[0].x - 2, P[0].y - 2, 5);
+    ctx.restore();
+    for (let i = 0; i < 3; i++) { const a = G.t * 6 + i * 2.1; ctx.fillStyle = '#ffd23f'; ctx.font = '14px sans-serif'; ctx.fillText('★', P[0].x + Math.cos(a) * 14 - 5, P[0].y + Math.sin(a) * 7 - 14); }
+    return;
+  }
+  drawPerson(player.x, player.y, player.face, player.walk, '#ff7a1a', '#5a3a1a', { arm: '#ff9a3d', cap: '#1f6feb' });
+  if (G.untangle > 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(player.x, player.y, 24, -Math.PI / 2, -Math.PI / 2 + G.untangle * Math.PI * 2); ctx.stroke(); }
+}
+function drawRope(d) {
+  const P = d.rope.p;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const [w, c] of [[4.5, 'rgba(0,0,0,.45)'], [2.5, d.col]]) {
+    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(P[0].x, P[0].y);
+    for (let i = 1; i < P.length - 1; i++) { const mx = (P[i].x + P[i + 1].x) / 2, my = (P[i].y + P[i + 1].y) / 2; ctx.quadraticCurveTo(P[i].x, P[i].y, mx, my); }
+    ctx.lineTo(P[P.length - 1].x, P[P.length - 1].y); ctx.stroke();
+  }
+}
+function drawObstacles() {
+  for (const o of OBS) {
+    if (!onScreen(o.x, o.y, 60)) continue;
+    if (o.kind === 'tree') { ctx.fillStyle = '#6b4423'; circ(o.x, o.y, o.r); ctx.fillStyle = '#8a5a30'; circ(o.x - 3, o.y - 3, o.r * .55); }
+    else if (o.kind === 'lamp') { ctx.fillStyle = 'rgba(0,0,0,.2)'; circ(o.x + 3, o.y + 3, o.r + 1); ctx.fillStyle = '#3a3f4a'; circ(o.x, o.y, o.r); ctx.fillStyle = '#ffe9a8'; circ(o.x, o.y, o.r * .5); }
+    else if (o.kind === 'hydrant') { ctx.fillStyle = '#c1121f'; circ(o.x, o.y, o.r); ctx.fillStyle = '#ff4d5a'; circ(o.x - 2, o.y - 2, o.r * .5); }
+  }
+  if (onScreen(STAND.x, STAND.y, 80)) {
+    const R = STAND.rect; ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(R.x + 5, R.y + 5, R.w, R.h);
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#fff' : '#e63946'; ctx.fillRect(R.x + i * R.w / 6, R.y, R.w / 6 + .5, R.h); }
+    ctx.fillStyle = '#5a3a1a'; ctx.fillRect(R.x - 4, R.y + R.h - 8, R.w + 8, 12);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Trebuchet MS, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('WURST-WILLI', R.x + R.w / 2, R.y + R.h + 1);
+    ctx.font = '14px sans-serif'; ctx.fillText(STAND.cd > G.t ? '😤' : '🌭', R.x + R.w / 2, R.y + R.h / 2 + 4);
+  }
+}
+function drawCritter(c) {
+  ctx.save(); ctx.translate(c.x, c.y);
+  if (c.kind === 'pigeon') {
+    const z = c.z || 0; ctx.fillStyle = 'rgba(0,0,0,.18)'; ell(z * .3, z * .3, 6, 4); ctx.translate(0, -z); ctx.rotate(c.face);
+    if (c.state === 'fly') { const f = Math.sin(G.t * 30) * 8; ctx.fillStyle = '#9aa3ad'; ell(0, -6, 4, 7 + f * .3); ell(0, 6, 4, 7 + f * .3); }
+    ctx.fillStyle = '#8d96a0'; ell(0, 0, 7, 4.5); ctx.fillStyle = '#5c6670'; circ(6, 0, 3); ctx.fillStyle = '#f4a261'; circ(9, 0, 1.2);
+  } else if (c.kind === 'squirrel') {
+    ctx.rotate(c.face); ctx.fillStyle = '#b5651d'; ell(-9, 0, 8, 5); ell(0, 0, 6, 3.5); circ(6, 0, 3); ctx.fillStyle = '#e09a5a'; ell(-11, 0, 4, 2.5);
+  } else if (c.kind === 'cat') {
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ell(2, 3, 11, 7); ctx.rotate(c.face);
+    ctx.fillStyle = c.col; ell(0, 0, 10, 6); circ(9, 0, 5.5);
+    ctx.beginPath(); ctx.moveTo(9, -4); ctx.lineTo(12, -9); ctx.lineTo(13, -3); ctx.fill(); ctx.beginPath(); ctx.moveTo(9, 4); ctx.lineTo(12, 9); ctx.lineTo(13, 3); ctx.fill();
+    ctx.strokeStyle = c.col; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-9, 0); ctx.quadraticCurveTo(-16, Math.sin(G.t * 4) * 8, -20, c.state === 'flee' ? 0 : -8); ctx.stroke();
+    ctx.fillStyle = '#ffe14d'; circ(12, -2, 1.3); circ(12, 2, 1.3);
+  }
+  ctx.restore();
+}
+function drawPoop(p) {
+  const warn = p.t > p.max - 6;
+  if (warn) { ctx.strokeStyle = `rgba(255,60,60,${.5 + .5 * Math.sin(G.t * 12)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, 16, 0, 7); ctx.stroke(); }
+  ctx.fillStyle = '#5a3412'; ell(p.x, p.y + 2, 8, 5); ctx.fillStyle = '#6e4218'; ell(p.x, p.y - 2, 6, 4); ctx.fillStyle = '#7d4c1e'; ell(p.x, p.y - 5, 3.5, 3);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y - 22, 6, -Math.PI / 2, -Math.PI / 2 + (1 - p.t / p.max) * Math.PI * 2); ctx.stroke();
+}
+function drawFood(f) {
+  ctx.font = '18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText({ pommes: '🍟', doener: '🥙', brezel: '🥨' }[f.kind], f.x, f.y + 6);
+}
+function toScreen(x, y) { return { x: (x - cam.x) * cam.zoom + view.w / 2, y: (y - cam.y) * cam.zoom + view.h / 2 }; }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function drawBubbles(ox, oy) {
+  ctx.font = 'bold 14px Trebuchet MS, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const b of G.bubbles) {
+    const e = b.ent, ex = e.door ? e.door.x : e.x, ey = e.door ? e.door.y - 10 : (e === player && player.rag ? player.rag.pts[0].y : e.y);
+    const ex2 = e === player && player.rag ? player.rag.pts[0].x : ex;
+    const s = toScreen(ex2, ey); const a = Math.min(1, (b.max - b.t) * 4, b.t * 10);
+    const pop = 1 + Math.max(0, .25 - b.t) * 1.6;
+    const tw = ctx.measureText(b.txt).width + 16, th = 24, bx = s.x + ox, by = s.y + oy - 34 * pop;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = b.col; rr(bx - tw / 2, by - th / 2, tw, th, 9); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx - 5, by + th / 2 - 1); ctx.lineTo(bx, by + th / 2 + 7); ctx.lineTo(bx + 5, by + th / 2 - 1); ctx.fill();
+    ctx.fillStyle = '#1b1b1b'; ctx.fillText(b.txt, bx, by + 1);
+  }
+  ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic';
+}
+function render() {
+  const { w, h, dpr } = view;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#3f7d3a'; ctx.fillRect(0, 0, w, h);
+  if (!G) return;
+  const sh = G.shake, ox = rand(-sh, sh), oy = rand(-sh, sh);
+  ctx.setTransform(dpr * cam.zoom, 0, 0, dpr * cam.zoom, dpr * (w / 2 + ox) - dpr * cam.zoom * cam.x, dpr * (h / 2 + oy) - dpr * cam.zoom * cam.y);
+  const hw = w / cam.zoom / 2 + 2, hh = h / cam.zoom / 2 + 2;
+  const sx = clamp(cam.x - hw, 0, W), sy = clamp(cam.y - hh, 0, H), sw = clamp(cam.x + hw, 0, W) - sx, shh = clamp(cam.y + hh, 0, H) - sy;
+  if (sw > 0 && shh > 0) ctx.drawImage(bg, sx, sy, sw, shh, sx, sy, sw, shh);
+  // Ziel-Markierungen
+  for (const d of G.dogs) {
+    if (d.state === 'wait' || (d.state === 'leash' && d.need <= 0)) {
+      const p = d.house.door, r = 26 + Math.sin(G.t * 5) * 4;
+      ctx.strokeStyle = d.col; ctx.lineWidth = 4; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+  for (const f of G.foods) drawFood(f);
+  for (const p of G.poops) drawPoop(p);
+  drawObstacles();
+  for (const c of G.critters) if (c.state !== 'fly') drawCritter(c);
+  for (const d of G.dogs) if (d.state !== 'leash') { drawDog(d); if (d.state === 'home') { ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('💤', d.x + 10, d.y - 12); } }
+  for (const p of G.peds) drawPed(p);
+  for (const d of G.dogs) if (d.state === 'leash') drawRope(d);
+  for (const k of G.knots) { const a = k.ra.p[k.ia]; if (!a) continue; ctx.fillStyle = '#3a2a1a'; circ(a.x, a.y, 5.5); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(a.x - 3, a.y - 3); ctx.lineTo(a.x + 3, a.y + 3); ctx.moveTo(a.x + 3, a.y - 3); ctx.lineTo(a.x - 3, a.y + 3); ctx.stroke(); }
+  for (const d of G.dogs) if (d.state === 'leash') {
+    drawDog(d);
+    const bw = 26, x = d.x - bw / 2, y = d.y - BREEDS[d.breed].size - 14;
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(x - 1, y - 1, bw + 2, 6);
+    ctx.fillStyle = d.need <= 0 ? '#7bff6b' : d.col; ctx.fillRect(x, y, bw * (1 - d.need / 100), 4);
+  }
+  drawPlayer();
+  for (const c of G.critters) if (c.state === 'fly') drawCritter(c);
+  // Partikel
+  for (const q of G.parts) {
+    const a = clamp(q.life / q.max, 0, 1); ctx.globalAlpha = a;
+    if (q.kind === 'text') { ctx.font = 'bold 20px Trebuchet MS, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#000'; ctx.fillText(q.txt, q.x + 1.5, q.y + 1.5); ctx.fillStyle = q.col; ctx.fillText(q.txt, q.x, q.y); }
+    else if (q.kind === 'heart' || q.kind === 'star') { ctx.fillStyle = q.col; ctx.font = (q.size * 3.5 | 0) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(q.kind === 'heart' ? '♥' : '★', q.x, q.y); }
+    else if (q.kind === 'feather') { ctx.fillStyle = q.col; ell(q.x, q.y, q.size * 1.6, q.size * .6, q.rot + q.life * 3); }
+    else { ctx.fillStyle = q.col; circ(q.x, q.y, q.size * (0.5 + a * .5)); }
+  }
+  ctx.globalAlpha = 1;
+  // Bildschirm-Raum
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawBubbles(ox, oy);
+  drawArrows();
+  drawHud();
+  if (joy && joy.moved) {
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 55, 0, 7); ctx.stroke();
+    const dx = joy.x - joy.sx, dy = joy.y - joy.sy, m = Math.min(55, Math.hypot(dx, dy)), a = Math.atan2(dy, dx);
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; circ(joy.sx + Math.cos(a) * m, joy.sy + Math.sin(a) * m, 22);
+  }
+}
+function drawArrows() {
+  const { w, h } = view, m = 34;
+  for (const d of G.dogs) {
+    let icon = null; if (d.state === 'wait') icon = BREEDS[d.breed].emoji; else if (d.state === 'leash' && d.need <= 0) icon = '🏠';
+    if (!icon) continue;
+    const s = toScreen(d.house.door.x, d.house.door.y);
+    if (s.x > m && s.x < w - m && s.y > 70 && s.y < h - m) { ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(icon, s.x, s.y - 34 + Math.sin(G.t * 4) * 3); continue; }
+    const cx = w / 2, cy = h / 2, dx = s.x - cx, dy = s.y - cy;
+    const t = Math.min((w / 2 - m) / Math.abs(dx || 1e-3), (h / 2 - m) / Math.abs(dy || 1e-3));
+    const ax = cx + dx * t, ay = clamp(cy + dy * t, 80, h - m), a = Math.atan2(dy, dx);
+    ctx.save(); ctx.translate(ax, ay); ctx.rotate(a); ctx.fillStyle = d.col; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-6, -12); ctx.lineTo(-6, 12); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.font = '18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(icon, ax - Math.cos(a) * 20, ay - Math.sin(a) * 20 + 6);
+  }
+}
+function bar(x, y, w, h, v, col, bgc) { ctx.fillStyle = bgc || 'rgba(0,0,0,.55)'; rr(x, y, w, h, h / 2); ctx.fill(); if (v > 0) { ctx.fillStyle = col; rr(x, y, Math.max(h, w * clamp(v, 0, 1)), h, h / 2); ctx.fill(); } }
+function hudText(t, x, y, size, col, align) { ctx.font = `bold ${size}px Trebuchet MS, sans-serif`; ctx.textAlign = align || 'left'; ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(t, x + 1.5, y + 1.5); ctx.fillStyle = col || '#fff'; ctx.fillText(t, x, y); }
+function drawHud() {
+  const { w, h } = view, small = w < 600;
+  // Uhr & Zeit
+  const tm = 8 * 60 + (G.t / G.dur) * 240, hh = Math.floor(tm / 60), mm = Math.floor(tm % 60);
+  const left = G.dur - G.t;
+  hudText(`Schicht ${save.shift} · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, w / 2, 24, small ? 15 : 19, left < 20 && G.t % 1 < .5 ? '#ff6b6b' : '#fff', 'center');
+  bar(w / 2 - 90, 32, 180, 7, 1 - G.t / G.dur, left < 20 ? '#ff6b6b' : '#ffd23f');
+  // Verheddert-O-Meter
+  const tv = G.tangle / 100, tc = tv < .5 ? '#7bd36b' : tv < .8 ? '#ffb703' : '#ff4d4d';
+  hudText('Verheddert-O-Meter', w / 2, 58, 12, '#fff', 'center');
+  bar(w / 2 - 90, 63, 180, 11, tv, tc);
+  const info = [];
+  if (G.knots.length) info.push('🪢 ' + G.knots.length);
+  if (G.wraps > 0.3) info.push('🌳 ' + G.wraps.toFixed(1));
+  const iy = small ? 120 : 90;
+  if (info.length) hudText(info.join('  '), w / 2, iy, 13, '#ffd27a', 'center');
+  if (tv > .8 && G.t % .5 < .25) hudText('GLEICH LIEGST DU!', w / 2, iy + 18, 16, '#ff4d4d', 'center');
+  // Geld & Vorräte (schmal: eigene Zeile unter dem Meter, damit nichts mit der Uhr kollidiert)
+  const net = G.pay.reduce((s, p) => s + p.base + p.tip, 0) - G.fines.reduce((s, f) => s + f.amt, 0);
+  const todayTxt = `heute ${net >= 0 ? '+' : ''}${euro(net)}`, todayCol = net >= 0 ? '#c8ffbe' : '#ffb4b4';
+  if (small) {
+    hudText(`💶 ${euro(save.money)}  🛍️ ${G.bags}  🦴 ${G.treats}`, 12, 98, 14, '#ffd27a', 'left');
+    hudText(todayTxt, w - 12, 98, 13, todayCol, 'right');
+  } else {
+    hudText(`💶 ${euro(save.money)}`, w - 64, 24, 18, '#ffd27a', 'right');
+    hudText(todayTxt, w - 64, 44, 13, todayCol, 'right');
+    hudText(`🛍️ ${G.bags}   🦴 ${G.treats}`, 120, 28, 15, '#fff', 'left');
+  }
+  // Hundeliste
+  const rows = G.dogs.length, rh = small ? 26 : 32, cw = small ? 150 : 210, y0 = h - 10 - rows * rh;
+  for (let i = 0; i < rows; i++) {
+    const d = G.dogs[i], y = y0 + i * rh;
+    ctx.fillStyle = 'rgba(15,25,12,.68)'; rr(8, y, cw, rh - 4, 8); ctx.fill();
+    ctx.fillStyle = d.col; rr(8, y, 6, rh - 4, 3); ctx.fill();
+    const face = d.happy > 75 ? '😄' : d.happy > 50 ? '🙂' : d.happy > 25 ? '😐' : '😠';
+    const st = d.state === 'wait' ? 'abholen' : d.state === 'home' ? '✔ zuhause' : d.need <= 0 ? '→ heimbringen' : '';
+    ctx.font = `${small ? 13 : 15}px sans-serif`; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
+    ctx.fillText(BREEDS[d.breed].emoji, 18, y + rh / 2 + 3);
+    hudText(small ? d.name.slice(0, 9) : `${d.name} (${BREEDS[d.breed].name})`, small ? 38 : 42, y + (small ? 11 : 13), small ? 10 : 12, '#fff');
+    if (d.state === 'leash' && d.need > 0) bar(small ? 38 : 42, y + (small ? 14 : 17), small ? 80 : 120, 6, 1 - d.need / 100, d.col);
+    else hudText(st, small ? 38 : 42, y + (small ? 21 : 25), small ? 10 : 11, d.state === 'home' ? '#7bff6b' : '#ffd27a');
+    ctx.font = `${small ? 14 : 17}px sans-serif`; ctx.textAlign = 'right'; ctx.fillText(d.state === 'home' ? '🏠' : face, 8 + cw - 6, y + rh / 2 + 3);
+  }
+  if (G.hintT > 0) {
+    ctx.globalAlpha = clamp(G.hintT, 0, 1);
+    hudText(small ? 'Ziehen = laufen · Tippe Haufen = eintüten' : 'WASD/Pfeile laufen · Leertaste: Haufen eintüten · Q: Leckerli · E halten: Entwirren · Zu Hundehäusern laufen = abholen', w / 2, h - 18 - (small ? rows * rh : 0), small ? 12 : 14, '#fff', 'center');
+    ctx.globalAlpha = 1;
+  }
+  if (paused) { ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 0, w, h); hudText('PAUSE', w / 2, h / 2, 40, '#fff', 'center'); hudText('Tippen oder P zum Weiterspielen', w / 2, h / 2 + 30, 15, '#fff', 'center'); }
+}
+
+// ================= Overlays =================
+const ov = document.getElementById('ov'), panel = document.getElementById('panel'), touchEl = document.getElementById('touch');
+function showOv(html) { panel.innerHTML = html; ov.classList.remove('hide'); touchEl.style.display = 'none'; }
+function hideOv() { ov.classList.add('hide'); touchEl.style.display = 'flex'; }
+function setPause(v) { if (mode !== 'play') return; paused = v; if (v) joy = null; }
+function showTitle() {
+  mode = 'title';
+  showOv(`<h1>🐕 Gassi-Chaos</h1><p><b>Hundesitter-Simulator</b></p>
+  <ul class="how">
+    <li>Lauf zu den markierten Häusern und hol die Hunde ab – bis zu <b>6 gleichzeitig</b> an der Leine.</li>
+    <li>Jeder Hund hat einen <b>Gassi-Bedarf</b>. Ist er gestillt, bring ihn heim → 💶.</li>
+    <li>Leinen sind echte Seile: Sie wickeln sich um Laternen, Bäume, Bänke und Passanten und <b>verknoten</b> sich miteinander.</li>
+    <li>Zu verheddert = du <b>fliegst auf die Nase</b>. Um Pfosten zurücklaufen, <b>E halten</b> (Entwirren) oder Leckerli (<b>Q</b>).</li>
+    <li>Haufen mit <b>Leertaste</b> / Antippen eintüten, sonst kassiert der Nachbar 25 €.</li>
+  </ul>
+  <p class="small">Steuerung: WASD/Pfeile · Touch/Maus: irgendwo ziehen = Joystick · P = Pause</p>
+  <p>Schicht <b>${save.shift}</b> · Kontostand <b>${euro(save.money)}</b> · Rekord-Verdienst <b>${euro(save.best)}</b></p>
+  <button id="go">${save.shift > 1 ? 'Weiter: Schicht ' + save.shift : 'Erste Schicht starten'}</button>
+  ${save.shift > 1 ? '<button class="alt" id="shopB">🛒 Laden</button><button class="alt" id="reset">Spielstand löschen</button>' : ''}`);
+  document.getElementById('go').onclick = showBrief;
+  const r = document.getElementById('reset'); if (r) r.onclick = () => { if (confirm('Wirklich den ganzen Spielstand löschen?')) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} save = loadSave(); showTitle(); } };
+  const s = document.getElementById('shopB'); if (s) s.onclick = () => showShop(null);
+}
+function showBrief() {
+  newShift(); mode = 'brief';
+  const cards = G.dogs.map(d => `<div class="dogc" style="border-color:${d.col}"><b>${BREEDS[d.breed].emoji} ${d.name}</b><br>${BREEDS[d.breed].name} · bei ${d.house.owner}<br><i>${BREEDS[d.breed].quirk}</i></div>`).join('');
+  showOv(`<h2>Schicht ${save.shift}: ${G.dogs.length} Hunde · 08:00–12:00</h2><div class="dogs">${cards}</div>
+  <p class="small">Tüten: ${G.bags} · Leckerli: ${G.treats} · Leinenlänge: ${leashLen()}</p><button id="go">Los geht's! 🐾</button>`);
+  document.getElementById('go').onclick = () => { hideOv(); mode = 'play'; paused = false; snd('powerup'); };
+}
+function endShift(allHome) {
+  G.ended = true; mode = 'result'; joy = null;
+  const earned = G.pay.reduce((s, p) => s + p.base, 0), tips = G.pay.reduce((s, p) => s + p.tip, 0);
+  const bonus = allHome ? Math.round((G.dur - G.t) * 0.25) : 0;
+  const lines = [];
+  for (const d of G.dogs) {
+    if (d.state === 'wait') G.fines.push({ reason: `${d.name} nie abgeholt`, amt: 15 });
+    else if (d.state === 'leash') G.fines.push({ reason: `${d.name} nicht heimgebracht`, amt: 25 });
+  }
+  const fines = G.fines.reduce((s, f) => s + f.amt, 0);
+  const net = earned + tips + bonus - fines;
+  save.money += net; save.shift++; if (net > 0) save.total += net; save.stats.poops += G.bagged;
+  if (net > save.best) { save.best = net; snd('powerup'); }
+  try { AC && AC.saveScore(KEY, save.best); } catch (e) {}
+  writeSave();
+  net >= 0 ? snd('coin') : snd('gameOver');
+  for (const p of G.pay) lines.push(`<div><span>${BREEDS[p.dog.breed].emoji} ${p.dog.name} (${p.dog.happy | 0}% glücklich)</span><span class="pos">+${euro(p.base)}${p.tip ? ' +' + p.tip + ' Tip' : ''}</span></div>`);
+  if (bonus) lines.push(`<div><span>⏱️ Früher Feierabend</span><span class="pos">+${euro(bonus)}</span></div>`);
+  const agg = {}; for (const f of G.fines) { agg[f.reason] = agg[f.reason] || { n: 0, amt: 0 }; agg[f.reason].n++; agg[f.reason].amt += f.amt; }
+  for (const k in agg) lines.push(`<div><span>${agg[k].n > 1 ? agg[k].n + '× ' : ''}${k}</span><span class="neg">−${euro(agg[k].amt)}</span></div>`);
+  const n = G.dogs.length;
+  const rating = net >= n * 38 ? '⭐⭐⭐ Hundeflüsterer! Die Besitzer streiten sich um dich.' : net >= n * 22 ? '⭐⭐ Solide Gassi-Arbeit.' : net > 0 ? '⭐ Naja. Die Hunde hatten Spaß. Du eher nicht.' : '💩 Die Nachbarschaft hat eine WhatsApp-Gruppe über dich gegründet.';
+  const stats = `Stürze: ${G.falls} · Haufen eingetütet: ${G.bagged} · Knoten am Ende: ${G.knots.length}`;
+  showShop(`<h2>${allHome ? 'Feierabend! 🎉' : 'Schichtende – 12:00 Uhr'}</h2><p>${rating}</p><div class="res">${lines.join('') || '<div><span>Nichts verdient.</span><span></span></div>'}
+  <div class="tot"><span>Schicht gesamt</span><span class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : ''}${euro(net)}</span></div></div><p class="small">${stats}</p>`);
+}
+function showShop(head) {
+  if (mode !== 'result') mode = 'shop';
+  const rows = Object.entries(UPG).map(([k, u]) => {
+    const lv = save.up[k], max = u.cost.length, c = u.cost[lv];
+    return `<div class="up"><div class="ic">${u.icon}</div><div class="tx"><b>${u.name}</b> <span class="lv">${lv}/${max}</span><br>${u.desc}</div>
+      ${lv >= max ? '<button disabled>MAX</button>' : `<button data-k="${k}" ${save.money < c ? 'disabled' : ''}>${euro(c)}</button>`}</div>`;
+  }).join('');
+  showOv(`${head || '<h2>🛒 Hundesitter-Laden</h2>'}<h2>Kontostand: ${euro(save.money)}</h2><div class="shop">${rows}</div>
+    <button id="next">Schicht ${save.shift} starten</button><button class="alt" id="menu">Menü</button>`);
+  panel.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => {
+    const k = b.dataset.k, c = UPG[k].cost[save.up[k]];
+    if (save.money < c) return;
+    save.money -= c; save.up[k]++; writeSave(); snd('powerup');
+    const keepHead = panel.querySelector('.res') ? panel.innerHTML.split('<h2>Kontostand')[0] : null;
+    showShop(keepHead);
+  });
+  document.getElementById('next').onclick = showBrief;
+  document.getElementById('menu').onclick = showTitle;
+}
+
+// ================= Loop =================
+function resize() {
+  view.w = innerWidth; view.h = innerHeight; view.dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(view.w * view.dpr); cv.height = Math.round(view.h * view.dpr);
+  cam.zoom = clamp(Math.min(view.w, view.h) / 620, 0.68, 1.3);
+}
+addEventListener('resize', resize);
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  if (mode === 'play' && !paused && G) { try { update(dt); } catch (e) { console.error(e); paused = true; } }
+  render();
+  requestAnimationFrame(frame);
+}
+buildMap(); renderBg(); resize();
+if (/[?&]selftest/.test(location.search)) runSelfTest();
+showTitle();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
