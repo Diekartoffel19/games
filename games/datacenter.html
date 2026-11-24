@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Datacenter Tycoon 3D: Racks, Kabel & Kühlung</title>
+<meta name="description" content="Baue dein eigenes Rechenzentrum in 3D: Server kaufen, Racks aufstellen, Strom- und Netzwerkkabel verlegen, Kühlung planen und alles upgraden.">
+<meta name="theme-color" content="#0a0f1c">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) { if (msg) document.getElementById('fallbackMsg').textContent = msg; fb.style.display = 'block'; }
+};
+window.addEventListener('error', function(e) { if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar')); });
+setTimeout(function() { if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).'); }, 12000);
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root { --ink:#e6f0ff; --accent:#38e1ff; --panel:rgba(10,18,34,.92); --good:#5dff9b; --warn:#ffb02e; --bad:#ff5d6c; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#0a0f1c; color:var(--ink); font-family:"Segoe UI",system-ui,sans-serif; }
+canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+.back { position:fixed; top:10px; left:12px; z-index:100; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; min-height:36px; display:inline-flex; align-items:center; }
+#muteBtn { position:fixed; top:10px; right:12px; z-index:100; font-size:18px; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.25); color:#fff; border-radius:10px; width:42px; height:38px; cursor:pointer; }
+#hud { position:fixed; top:8px; left:50%; transform:translateX(-50%); z-index:20; display:flex; flex-direction:column; align-items:center; gap:6px; width:min(780px, calc(100% - 150px)); pointer-events:none; }
+#top { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+.stat { background:var(--panel); border:1px solid rgba(56,225,255,.35); border-radius:10px; padding:4px 10px; font-weight:700; font-size:13px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.stat b { font-size:17px; color:#fff; }
+.stat.money b { color:#ffe066; font-size:20px; }
+.stat .neg { color:var(--bad); }
+.meter { display:inline-block; width:54px; height:7px; background:rgba(255,255,255,.12); border-radius:4px; overflow:hidden; vertical-align:middle; margin-left:4px; }
+.meter i { display:block; height:100%; background:var(--good); }
+#hint { background:rgba(56,225,255,.92); color:#04121c; font-weight:800; font-size:14px; padding:6px 14px; border-radius:10px; max-width:100%; text-align:center; }
+#event { background:rgba(255,60,80,.92); color:#fff; font-weight:900; font-size:15px; padding:7px 16px; border-radius:10px; display:none; animation:blink 1s infinite; }
+@keyframes blink { 50% { opacity:.65; } }
+#tools { position:fixed; bottom:10px; left:50%; transform:translateX(-50%); z-index:20; display:flex; gap:5px; background:var(--panel); padding:6px; border-radius:14px; border:1px solid rgba(56,225,255,.35); max-width:calc(100% - 16px); overflow-x:auto; }
+#tools button .k { position:absolute; top:2px; left:5px; font-size:9px; opacity:.55; }
+#tools button { position:relative; font:inherit; color:var(--ink); background:rgba(255,255,255,.06); border:2px solid transparent; border-radius:10px; min-width:62px; padding:4px 6px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:1px; flex:0 0 auto; }
+#tools button .ic { font-size:22px; line-height:1.1; }
+#tools button .nm { font-size:11px; font-weight:700; }
+#tools button .pr { font-size:10px; color:#ffe066; }
+#tools button.on { border-color:var(--accent); background:rgba(56,225,255,.2); }
+#tools button:hover { background:rgba(56,225,255,.12); }
+#tools .sep { width:1px; background:rgba(255,255,255,.15); margin:0 2px; flex:0 0 auto; }
+#info { position:fixed; right:10px; top:60px; z-index:20; width:250px; background:var(--panel); border:1px solid rgba(56,225,255,.35); border-radius:12px; padding:10px 12px; font-size:13px; display:none; max-height:calc(100% - 160px); overflow:auto; }
+#info h3 { margin:0 0 6px; font-size:16px; color:var(--accent); }
+#info .row { display:flex; justify-content:space-between; gap:8px; padding:1px 0; }
+#info .ok { color:var(--good); } #info .bad { color:var(--bad); } #info .warn { color:var(--warn); }
+#info .srv { display:flex; justify-content:space-between; align-items:center; gap:6px; padding:3px 0; border-top:1px solid rgba(255,255,255,.08); }
+.btn { font:inherit; font-weight:700; font-size:12px; color:#04121c; background:var(--accent); border:0; border-radius:8px; padding:5px 9px; cursor:pointer; }
+.btn:disabled { opacity:.4; cursor:default; }
+.btn.red { background:var(--bad); color:#fff; }
+.btn.wide { width:100%; margin-top:6px; padding:7px; }
+#tip { position:fixed; z-index:30; pointer-events:none; background:rgba(0,0,0,.8); border-radius:8px; padding:4px 8px; font-size:12px; display:none; white-space:nowrap; }
+.pop { position:fixed; z-index:18; pointer-events:none; font-weight:900; font-size:15px; color:#ffe066; text-shadow:0 2px 0 #000; transform:translate(-50%,-50%); animation:up 1.4s ease-out forwards; }
+@keyframes up { to { transform:translate(-50%,-260%); opacity:0; } }
+.big { position:fixed; left:50%; top:35%; z-index:40; pointer-events:none; font-weight:900; font-size:clamp(24px,5vw,44px); color:#ffe066; text-shadow:0 3px 0 #003a4a, 0 0 18px rgba(56,225,255,.7); transform:translate(-50%,-50%); animation:bigpop 2.4s ease-out forwards; text-align:center; }
+@keyframes bigpop { 0% { transform:translate(-50%,-50%) scale(.4); opacity:0; } 12% { transform:translate(-50%,-50%) scale(1.1); opacity:1; } 80% { opacity:1; } 100% { transform:translate(-50%,-70%); opacity:0; } }
+#toast { position:fixed; bottom:96px; left:50%; transform:translateX(-50%); z-index:30; background:rgba(255,93,108,.95); color:#fff; font-weight:800; padding:6px 14px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .25s; pointer-events:none; }
+#toast.on { opacity:1; } #toast.good { background:rgba(40,190,110,.95); }
+.ov { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:rgba(4,8,18,.7); padding:14px; overflow:auto; }
+.ov.hide { display:none; }
+.panel { background:var(--panel); border:2px solid var(--accent); border-radius:16px; padding:18px 22px; max-width:640px; width:100%; margin:auto; box-shadow:0 0 40px rgba(56,225,255,.25); }
+.panel h1 { margin:0; font-size:clamp(26px,6vw,40px); color:var(--accent); text-align:center; }
+.panel h2 { margin:0 0 10px; color:var(--accent); }
+.panel p, .panel li { font-size:14px; line-height:1.5; }
+.panel .btns { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
+.panel .btns .btn { font-size:16px; padding:10px 20px; }
+.upg { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid rgba(255,255,255,.1); }
+.upg .ic { font-size:26px; width:34px; text-align:center; }
+.upg .tx { flex:1; font-size:13px; }
+.upg .tx b { font-size:15px; }
+.upg .tx small { opacity:.75; }
+@media (max-width:700px) { #info { top:auto; bottom:92px; right:6px; width:210px; max-height:40%; } .stat { font-size:11px; } .stat b { font-size:14px; } #hint { font-size:12px; } #hud { width:calc(100% - 20px); top:52px; } }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<button id="muteBtn" title="Ton an/aus">🔊</button>
+<canvas id="c"></canvas>
+<div id="hud"><div id="top"></div><div id="hint"></div><div id="event"></div></div>
+<div id="info"><div id="infoStats"></div><div id="infoActs"></div></div>
+<div id="tools"></div>
+<div id="tip"></div>
+<div id="toast"></div>
+<div id="shop" class="ov hide"><div class="panel"><h2>⬆️ Upgrades</h2><div id="shopList"></div><div class="btns"><button class="btn" id="shopClose">Schließen</button><button class="btn red" id="shopMenu">Hauptmenü</button></div></div></div>
+<div id="menu" class="ov"><div class="panel">
+  <h1>🖥️ Datacenter Tycoon 3D</h1>
+  <p style="text-align:center;opacity:.85;margin-top:4px">Vom Garagen-Hoster zum Hyperscaler.</p>
+  <ul>
+    <li><b>Racks aufstellen</b> und <b>Server einbauen</b> – jeder laufende Server bringt Geld pro Sekunde.</li>
+    <li><b>Verkabeln:</b> 🔴 Stromkabel Rack/Switch/Klima → ⚡ PDU → 🏭 Hauptverteiler. 🔵 Netzkabel Rack → 🔀 Switch → 🌐 Uplink-Router.</li>
+    <li><b>Kühlung:</b> Volle Racks werden heiß. Ab 60 °C schalten sie ab – ❄️ Klimageräte in der Nähe aufstellen.</li>
+    <li><b>Engpässe:</b> PDUs und Hausanschluss haben kW-Grenzen, Kupferkabel nur 10 Gbit/s, der Uplink ist begrenzt.</li>
+    <li><b>Upgrades:</b> Server (CPU/RAM/GPU), Switch-Ports, PDU-Leistung, Glasfaser, Hallen-Erweiterung, USV, DDoS-Schutz …</li>
+  </ul>
+  <p style="font-size:12px;opacity:.75">Maus: Linksklick = bauen/auswählen · Ziehen = drehen · Rechts-/Mittelklick-Ziehen = verschieben · Mausrad = Zoom · WASD = Kamera · R = drehen · Tasten 1–9 = Werkzeuge · H = Wärmekarte · U = Upgrades · Esc = abbrechen. Touch: Tippen = bauen, Ziehen = drehen, zwei Finger = zoomen/verschieben.</p>
+  <div class="btns"><button class="btn" id="btnContinue">▶ Weiterspielen</button><button class="btn" id="btnNew">✨ Neues Rechenzentrum</button></div>
+</div></div>
+<div id="selftest" style="display:none;position:fixed;left:10px;bottom:90px;z-index:99;background:#000;color:#0f0;font:12px monospace;padding:8px;white-space:pre"></div>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#0a0f1c;color:#fff;z-index:99999;padding:30px;text-align:center;">
+  <h2>🖥️ Kernel Panic</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine konnte nicht geladen werden.</p>
+  <p><a href="../index.html" style="color:#38e1ff">Zurück zum Arcade</a></p>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const AC = window.ArcadeCore || null;
+const QS = new URLSearchParams(location.search);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const tone = (f, d, t, g) => { if (AC) AC.playTone(f, d, t, g); };
+const fmt = n => { n = Math.floor(n); return Math.abs(n) < 1e5 ? n.toLocaleString('de-DE') : (AC ? AC.formatNumber(n) : n.toLocaleString('de-DE')); };
+
+// ================= Balancing =================
+const SRV = [
+  { name: 'Basic 1U', short: 'Basic', cost: 300, kw: 0.4, heat: 1.0, inc: 5, bw: 1, col: 0x5d6675 },
+  { name: 'Pro 2U (CPU+RAM)', short: 'Pro', cost: 1600, kw: 0.7, heat: 1.6, inc: 20, bw: 2, col: 0x2f72c4 },
+  { name: 'GPU-Node', short: 'GPU', cost: 7000, kw: 1.6, heat: 3.4, inc: 75, bw: 5, col: 0x23b26d },
+];
+const SLOTS = 6;
+const DEV = {
+  rack:   { name: 'Server-Rack', icon: '🗄️', cost: 400, kw: 0.05, h: 2.0, desc: 'Hält 6 Server. Braucht Strom (PDU) und Netz (Switch).' },
+  sw:     { name: 'Switch', icon: '🔀', cost: 500, kw: 0.2, h: 1.1, ports: [4, 8, 16], up: [800, 2500], desc: 'Verbindet Racks mit dem Uplink-Router. Jedes Kabel belegt einen Port.' },
+  pdu:    { name: 'PDU', icon: '⚡', cost: 350, kw: 0, h: 1.5, cap: [4, 8, 16], up: [700, 2200], desc: 'Stromverteiler. Muss am Hauptverteiler hängen.' },
+  crac:   { name: 'Klimagerät', icon: '❄️', cost: 1200, kw: 1.2, h: 1.9, cool: [8, 14, 22], up: [1500, 4500], radius: 3.5, desc: 'Kühlt Racks im Umkreis von 3,5 Feldern.' },
+  router: { name: 'Uplink-Router', icon: '🌐', h: 2.0, fixed: true, kw: 0, desc: 'Deine Verbindung zum Internet.' },
+  main:   { name: 'Hauptverteiler', icon: '🏭', h: 2.1, fixed: true, kw: 0, desc: 'Hausanschluss für alle PDUs.' },
+};
+const CABLE = { pwr: { perTile: 8 }, cu: { perTile: 10, cap: 10, max: 12 }, fib: { perTile: 30, cap: 40, max: 99 } };
+const UPG = [
+  { id: 'hall', name: 'Hallen-Erweiterung', icon: '🏗️', vals: [[8, 6], [12, 9], [16, 12]], cost: [6000, 30000], f: v => v[0] + '×' + v[1] + ' Felder' },
+  { id: 'mainp', name: 'Hausanschluss', icon: '🏭', vals: [12, 30, 80, 200], cost: [2000, 9000, 40000], f: v => v + ' kW' },
+  { id: 'uplink', name: 'Uplink-Bandbreite', icon: '🌐', vals: [20, 60, 160, 400], cost: [2500, 12000, 50000], f: v => v + ' Gbit/s' },
+  { id: 'fiber', name: 'Glasfaser-Technik', icon: '🟧', vals: [0, 1], cost: [4000], f: v => v ? 'freigeschaltet' : 'gesperrt', d: 'Netzkabel mit 40 statt 10 Gbit/s, ohne Längenlimit (Taste F)' },
+  { id: 'eco', name: 'Strom-Vertrag', icon: '🌱', vals: [1, 0.8, 0.6], cost: [5000, 20000], f: v => Math.round(v * 100) + ' % Strompreis' },
+  { id: 'ups', name: 'USV + Notstrom-Diesel', icon: '🔋', vals: [0, 1], cost: [7000], f: v => v ? 'installiert' : 'keine', d: 'Überbrückt Stromausfälle (Diesel kostet doppelt)' },
+  { id: 'fw', name: 'DDoS-Schutz', icon: '🛡️', vals: [0, 1], cost: [9000], f: v => v ? 'aktiv' : 'keiner', d: 'Uplink bleibt bei Angriffen voll nutzbar' },
+];
+const UPGBY = Object.fromEntries(UPG.map(u => [u.id, u]));
+const POWER_PRICE = 1.0; // € pro kW und Sekunde
+const MILESTONES = [
+  { inc: 10, title: 'Garagen-Hoster', reward: 500 },
+  { inc: 50, title: 'Kleiner Webhoster', reward: 1500 },
+  { inc: 150, title: 'Colocation-Anbieter', reward: 4000 },
+  { inc: 500, title: 'Regionales Rechenzentrum', reward: 12000 },
+  { inc: 1500, title: 'Cloud-Anbieter', reward: 40000 },
+  { inc: 5000, title: 'Hyperscaler', reward: 100000 },
+];
+const EVENTS = {
+  ddos: { name: '🛡️ DDoS-Angriff! Uplink nur 25 %', dur: 25, prot: 'fw' },
+  blackout: { name: '⚡ Stromausfall im Netz!', dur: 15, prot: 'ups' },
+  heat: { name: '🌡️ Hitzewelle! Kühlung −40 %', dur: 45 },
+};
+const GW = 16, GH = 12; // volles Raster
+
+// ================= State =================
+const SAVE_KEY = 'datacenter_save';
+const defSave = () => ({ v: 1, money: 2500, earned: 0, nid: 3, ms: 0, up: { hall: 0, mainp: 0, uplink: 0, fiber: 0, eco: 0, ups: 0, fw: 0 },
+  objs: [{ id: 1, t: 'router', x: 0, z: 0, r: 0, lv: 0 }, { id: 2, t: 'main', x: 1, z: 0, r: 0, lv: 0 }], cables: [] });
+function loadSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); return s && s.v === 1 && Array.isArray(s.objs) ? s : null; } catch (e) { return null; } }
+function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S, (k, v) => k[0] === '_' ? undefined : v)); } catch (e) {} }
+let S = defSave();
+let BYID = new Map();
+const val = id => UPGBY[id].vals[S.up[id]];
+const hallW = () => val('hall')[0], hallH = () => val('hall')[1];
+const objAt = (x, z) => S.objs.find(o => o.x === x && o.z === z);
+const cablesOf = id => S.cables.filter(c => c.a === id || c.b === id);
+const other = (c, id) => BYID.get(c.a === id ? c.b : c.a);
+const rackKw = o => DEV.rack.kw + (o.hot ? 0.1 : 1) * o.srv.reduce((s, t) => s + SRV[t].kw, 0);
+const devKw = o => o.t === 'rack' ? rackKw(o) : (DEV[o.t].kw || 0);
+const ports = o => DEV.sw.ports[o.lv];
+const netCap = c => c.f ? CABLE.fib.cap : CABLE.cu.cap;
+const cableLen = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.z - b.z) + 1;
+function reindex() { BYID = new Map(S.objs.map(o => [o.id, o])); }
+
+// ================= Simulation =================
+let SIM = { gross: 0, cost: 0, net: 0, kw: 0, kwCap: 0, bw: 0, bwCap: 0, st: new Map() };
+let EVENT = null;
+function simulate(dt) {
+  const st = new Map();
+  for (const o of S.objs) st.set(o.id, { pwr: false, net: false, run: false, f: 0, load: 0, in: 0, out: 0, heat: 0, cool: 0, inc: 0, issue: '' });
+  const ev = EVENT ? EVENT.type : '';
+  const blackout = ev === 'blackout' && !S.up.ups;
+  const diesel = ev === 'blackout' && S.up.ups;
+  const adj = new Map(S.objs.map(o => [o.id, []]));
+  for (const c of S.cables) { if (!adj.has(c.a) || !adj.has(c.b)) continue; adj.get(c.a).push({ o: BYID.get(c.b), c }); adj.get(c.b).push({ o: BYID.get(c.a), c }); }
+  // --- Strom ---
+  const main = S.objs.find(o => o.t === 'main'), router = S.objs.find(o => o.t === 'router');
+  let mainLoad = 0;
+  const pdus = S.objs.filter(o => o.t === 'pdu');
+  for (const p of pdus) {
+    const s = st.get(p.id), es = adj.get(p.id).filter(e => e.c.k === 'pwr');
+    s.linked = es.some(e => e.o.t === 'main');
+    s.load = es.filter(e => e.o.t !== 'main').reduce((a, e) => a + devKw(e.o), 0);
+    if (s.linked) mainLoad += s.load;
+  }
+  const mainCap = val('mainp'), mainOk = !blackout && mainLoad <= mainCap + 1e-9;
+  const ms = st.get(main.id); ms.load = mainLoad; ms.pwr = mainOk;
+  if (!mainOk) ms.issue = blackout ? 'Stromausfall!' : 'Überlast – Hausanschluss zu schwach!';
+  for (const p of pdus) {
+    const s = st.get(p.id);
+    s.pwr = s.linked && mainOk && s.load <= DEV.pdu.cap[p.lv] + 1e-9;
+    if (!s.linked) s.issue = 'Nicht am Hauptverteiler';
+    else if (s.load > DEV.pdu.cap[p.lv] + 1e-9) s.issue = 'Sicherung raus – Überlast!';
+    else if (!mainOk) s.issue = 'Hauptverteiler aus';
+  }
+  st.get(router.id).pwr = true;
+  for (const o of S.objs) {
+    if (o.t !== 'rack' && o.t !== 'sw' && o.t !== 'crac') continue;
+    const e = adj.get(o.id).find(e => e.c.k === 'pwr');
+    const s = st.get(o.id); s.pwr = !!e && st.get(e.o.id).pwr;
+    if (!s.pwr) s.issue = e ? 'PDU ohne Strom' : 'Kein Stromkabel';
+  }
+  // --- Netzwerk: BFS über eingeschaltete Switches ---
+  const parent = new Map(), order = [], seen = new Set([router.id]), q = [router.id];
+  while (q.length) {
+    const id = q.shift();
+    for (const e of adj.get(id)) if (e.c.k === 'net' && e.o.t === 'sw' && !seen.has(e.o.id) && st.get(e.o.id).pwr) {
+      seen.add(e.o.id); parent.set(e.o.id, { p: id, c: e.c }); order.push(e.o.id); q.push(e.o.id);
+    }
+  }
+  for (const o of S.objs) if (o.t === 'sw') { const s = st.get(o.id); s.net = seen.has(o.id); if (s.pwr && !s.net) s.issue = 'Kein Weg zum Uplink-Router'; }
+  const racks = S.objs.filter(o => o.t === 'rack');
+  for (const o of racks) {
+    const s = st.get(o.id), e = adj.get(o.id).find(e => e.c.k === 'net');
+    s.net = !!e && seen.has(e.o.id); s.sw = e && e.o.id; s.link = e && e.c;
+    s.run = s.pwr && s.net && !o.hot && o.srv.length > 0;
+    s.demand = s.run ? o.srv.reduce((a, t) => a + SRV[t].bw, 0) : 0;
+    if (s.run) { s.eff = Math.min(s.demand, netCap(s.link)); st.get(s.sw).in += s.eff; }
+    if (!o.srv.length) s.issue = 'Leer – Server einbauen';
+    else if (o.hot) s.issue = 'Überhitzt – Notabschaltung!';
+    else if (s.pwr && !s.net) s.issue = e ? 'Switch ohne Uplink' : 'Kein Netzkabel';
+  }
+  let rIn = 0;
+  for (let i = order.length - 1; i >= 0; i--) {
+    const id = order[i], s = st.get(id), pr = parent.get(id);
+    s.out = Math.min(s.in, netCap(pr.c));
+    if (pr.p === router.id) rIn += s.out; else st.get(pr.p).in += s.out;
+  }
+  const bwCap = val('uplink') * (ev === 'ddos' && !S.up.fw ? 0.25 : 1);
+  const rF = rIn > 0 ? Math.min(rIn, bwCap) / rIn : 1;
+  for (const id of order) { const s = st.get(id), pr = parent.get(id); s.f = (s.in > 0 ? s.out / s.in : 1) * (pr.p === router.id ? rF : st.get(pr.p).f); }
+  let gross = 0;
+  for (const o of racks) {
+    const s = st.get(o.id);
+    if (!s.run) continue;
+    s.f = (s.eff / s.demand) * st.get(s.sw).f;
+    s.inc = o.srv.reduce((a, t) => a + SRV[t].inc, 0) * s.f;
+    gross += s.inc;
+    if (s.f < 0.95) s.issue = 'Bandbreite knapp (' + Math.round(s.f * 100) + ' %)';
+  }
+  // --- Wärme ---
+  for (const o of racks) { const s = st.get(o.id); s.heat = s.pwr && !o.hot ? o.srv.reduce((a, t) => a + SRV[t].heat, 0) * (s.run ? 1 : 0.4) : 0; }
+  for (const c of S.objs) {
+    if (c.t !== 'crac') continue;
+    const cs = st.get(c.id); if (!cs.pwr) continue;
+    const cap = DEV.crac.cool[c.lv] * (ev === 'heat' ? 0.6 : 1);
+    const near = racks.filter(r => Math.hypot(r.x - c.x, r.z - c.z) <= DEV.crac.radius);
+    const H = near.reduce((a, r) => a + st.get(r.id).heat, 0);
+    cs.load = Math.min(H, cap); cs.cap = cap;
+    for (const r of near) st.get(r.id).cool += st.get(r.id).heat * Math.min(1, H > 0 ? cap / H : 0);
+  }
+  for (const o of racks) {
+    const s = st.get(o.id), cool = Math.min(s.cool, s.heat);
+    const target = 22 + s.heat * 1.5 + (s.heat - cool) * 7 + (ev === 'heat' ? 4 : 0);
+    if (o.temp === undefined) o.temp = 22;
+    o.temp += (target - o.temp) * Math.min(1, dt * 0.35);
+    if (!o.hot && o.temp >= 60) { o.hot = true; alarm(o); }
+    else if (o.hot && o.temp < 45) o.hot = false;
+  }
+  // --- Kosten ---
+  let kw = 0;
+  for (const o of S.objs) if ((o.t === 'rack' || o.t === 'sw' || o.t === 'crac') && st.get(o.id).pwr) kw += devKw(o);
+  const cost = kw * POWER_PRICE * val('eco') * (diesel ? 2 : 1);
+  SIM = { gross, cost, net: gross - cost, kw: mainLoad, kwCap: mainCap, bw: Math.min(rIn, bwCap), bwCap, bwWant: rIn, st };
+}
+
+// ================= Three.js Szene =================
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0f1c);
+scene.fog = new THREE.Fog(0x0a0f1c, 28, 55);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x1a1a2a, 0.6));
+scene.add(new THREE.AmbientLight(0x405070, 0.35));
+const sun = new THREE.DirectionalLight(0xffffff, 0.7);
+sun.position.set(-5, 14, 9); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 40 });
+scene.add(sun);
+const cyan = new THREE.PointLight(0x38e1ff, 0.6, 18); cyan.position.set(-4, 3, -3); scene.add(cyan);
+function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+
+const wx = x => x - GW / 2 + 0.5, wz = z => z - GH / 2 + 0.5;
+function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; return t; }
+const floorTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = '#c8ced8'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#9aa3b2'; for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { g.beginPath(); g.arc(16 + i * 13.7, 16 + j * 13.7, 3, 0, 7); g.fill(); }
+  g.strokeStyle = '#6b7383'; g.lineWidth = 6; g.strokeRect(0, 0, w, h);
+});
+const labelCache = {};
+function labelTex(txt, bg, fg) {
+  const k = txt + bg; if (labelCache[k]) return labelCache[k];
+  return labelCache[k] = canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.font = '72px "Segoe UI Emoji","Apple Color Emoji",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = fg || '#fff'; g.fillText(txt, w / 2, h / 2 + 4);
+  });
+}
+const grilleTex = canvasTex(64, 128, (g, w, h) => { g.fillStyle = '#d9dee6'; g.fillRect(0, 0, w, h); g.fillStyle = '#7d8696'; for (let y = 6; y < h; y += 8) g.fillRect(6, y, w - 12, 4); });
+const stripeTex = canvasTex(128, 32, (g, w, h) => { g.fillStyle = '#ffcc00'; g.fillRect(0, 0, w, h); g.fillStyle = '#111'; for (let x = -32; x < w; x += 24) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 12, h); g.lineTo(x + 44, 0); g.lineTo(x + 32, 0); g.fill(); } });
+
+const M = {
+  rack: new THREE.MeshStandardMaterial({ color: 0x2b3343, metalness: 0.55, roughness: 0.45 }),
+  inset: new THREE.MeshStandardMaterial({ color: 0x07090d, roughness: 0.9 }),
+  cab: new THREE.MeshStandardMaterial({ color: 0x8a93a3, metalness: 0.4, roughness: 0.5 }),
+  white: new THREE.MeshStandardMaterial({ color: 0xdfe4ea, metalness: 0.2, roughness: 0.6 }),
+  grille: new THREE.MeshStandardMaterial({ map: grilleTex, roughness: 0.7 }),
+  stripes: new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.6 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x2a2f3a, metalness: 0.3, roughness: 0.6 }),
+  srv: SRV.map(s => new THREE.MeshStandardMaterial({ color: s.col, metalness: 0.5, roughness: 0.4 })),
+  wall: new THREE.MeshStandardMaterial({ color: 0x1d2536, roughness: 0.85 }),
+  strip: new THREE.MeshBasicMaterial({ color: 0x38e1ff }),
+  ghostOk: new THREE.MeshBasicMaterial({ color: 0x5dff9b, transparent: true, opacity: 0.35, depthWrite: false }),
+  ghostBad: new THREE.MeshBasicMaterial({ color: 0xff5d6c, transparent: true, opacity: 0.35, depthWrite: false }),
+  pwr: new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.5 }),
+  cu: new THREE.MeshStandardMaterial({ color: 0x2d8cf0, roughness: 0.5 }),
+  fib: new THREE.MeshStandardMaterial({ color: 0xffa020, emissive: 0xff7a00, emissiveIntensity: 0.6, roughness: 0.4 }),
+};
+// gemeinsame LED-Materialien, die per Frame flackern
+const LED = { on: [0, 1, 2, 3].map(() => new THREE.MeshBasicMaterial({ color: 0x5dff9b })), act: [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ color: 0x38e1ff })), red: new THREE.MeshBasicMaterial({ color: 0xff3040 }), off: new THREE.MeshBasicMaterial({ color: 0x252a33 }), amber: new THREE.MeshBasicMaterial({ color: 0xffb02e }) };
+
+// Boden, Wände
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const floor = new THREE.InstancedMesh(new THREE.BoxGeometry(0.97, 0.1, 0.97), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.8, metalness: 0.1 }), GW * GH);
+floor.receiveShadow = true;
+{ const m = new THREE.Matrix4(); for (let z = 0; z < GH; z++) for (let x = 0; x < GW; x++) { m.makeTranslation(wx(x), -0.05, wz(z)); floor.setMatrixAt(z * GW + x, m); floor.setColorAt(z * GW + x, new THREE.Color(1, 1, 1)); } }
+scene.add(floor);
+const under = new THREE.Mesh(new THREE.PlaneGeometry(GW + 6, GH + 6), new THREE.MeshStandardMaterial({ color: 0x05070c }));
+under.rotation.x = -Math.PI / 2; under.position.y = -0.11; scene.add(under);
+const walls = [];
+{
+  const back = new THREE.Group(), left = new THREE.Group();
+  box(back, GW + 0.4, 3.4, 0.2, M.wall, 0, 0, 0); box(back, GW, 0.05, 0.02, M.strip, 0, 0.9, 0.11, false);
+  back.position.set(0, 1.6, -GH / 2 - 0.1);
+  box(left, 0.2, 3.4, GH, M.wall, 0, 0, 0); box(left, 0.02, 0.05, GH, M.strip, 0.11, 0.9, 0, false);
+  left.position.set(-GW / 2 - 0.1, 1.6, 0);
+  scene.add(back, left); walls.push(back, left);
+}
+const hallLine = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffcc00 }));
+scene.add(hallLine);
+const COL = { free: new THREE.Color(0.62, 0.65, 0.7), locked: new THREE.Color(0.13, 0.14, 0.17), tmp: new THREE.Color() };
+let heatMode = false;
+function paintFloor() {
+  const W = hallW(), H = hallH();
+  for (let z = 0; z < GH; z++) for (let x = 0; x < GW; x++) {
+    let c = x < W && z < H ? COL.free : COL.locked;
+    if (heatMode && x < W && z < H) {
+      let t = 22;
+      for (const o of S.objs) if (o.t === 'rack') { const d = Math.hypot(o.x - x, o.z - z); t = Math.max(t, 22 + ((o.temp || 22) - 22) * clamp(1 - d / 2.5, 0, 1)); }
+      const k = clamp((t - 24) / 38, 0, 1);
+      c = COL.tmp.setHSL(0.6 - 0.6 * k, 0.85, 0.55);
+    }
+    floor.setColorAt(z * GW + x, c);
+  }
+  floor.instanceColor.needsUpdate = true;
+  const x0 = wx(0) - 0.5, z0 = wz(0) - 0.5, y = 0.02;
+  hallLine.geometry.setFromPoints([new THREE.Vector3(x0, y, z0), new THREE.Vector3(x0 + W, y, z0), new THREE.Vector3(x0 + W, y, z0 + H), new THREE.Vector3(x0, y, z0 + H)]);
+}
+
+// ================= Geräte-Meshes =================
+function box(g, w, h, d, mat, x, y, z, shadow = true) {
+  const m = new THREE.Mesh(boxGeo, mat); m.scale.set(w, h, d); m.position.set(x, y, z);
+  m.castShadow = shadow; m.receiveShadow = shadow; g.add(m); return m;
+}
+function plate(g, tex, w, h, x, y, z) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 })); m.position.set(x, y, z); g.add(m); return m; }
+const iconSprites = {};
+function iconMat(ic) { return iconSprites[ic] || (iconSprites[ic] = new THREE.SpriteMaterial({ map: canvasTex(96, 96, (g, w, h) => { g.fillStyle = 'rgba(0,0,0,.65)'; g.beginPath(); g.arc(48, 48, 44, 0, 7); g.fill(); g.font = '56px "Segoe UI Emoji","Apple Color Emoji",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ic, 48, 52); }), depthTest: false })); }
+const objRoot = new THREE.Group(); scene.add(objRoot);
+
+function buildMesh(o) {
+  if (o._g) objRoot.remove(o._g);
+  const g = new THREE.Group(), d = DEV[o.t];
+  o._leds = []; o._ports = []; o._fan = null;
+  if (o.t === 'rack') {
+    box(g, 0.82, 2.0, 0.96, M.rack, 0, 1.0, 0);
+    box(g, 0.7, 1.86, 0.02, M.inset, 0, 1.0, 0.481, false);
+    plate(g, grilleTex, 0.66, 1.8, 0, 1.0, -0.481).rotation.y = Math.PI; // Rückseite mit Lüftungsgitter
+    o.srv.forEach((t, i) => {
+      const y = 0.2 + i * 0.29, hh = t === 0 ? 0.2 : 0.25;
+      box(g, 0.68, hh, 0.05, M.srv[t], 0, y, 0.49, false);
+      if (t === 2) box(g, 0.5, 0.04, 0.02, LED.amber, 0.05, y - 0.07, 0.52, false);
+      for (let k = 0; k < (t + 2); k++) o._leds.push(box(g, 0.035, 0.035, 0.02, LED.off, -0.29 + k * 0.05, y + 0.05, 0.522, false));
+    });
+  } else if (o.t === 'sw') {
+    box(g, 0.82, 0.9, 0.96, M.rack, 0, 0.45, 0);
+    box(g, 0.8, 0.16, 0.9, M.dark, 0, 0.98, 0);
+    const n = ports(o);
+    for (let i = 0; i < n; i++) o._ports.push(box(g, 0.04, 0.04, 0.02, LED.off, -0.34 + (i % 8) * 0.095, 1.01 - Math.floor(i / 8) * 0.06 + (n > 8 ? 0.03 : 0), 0.455, false));
+    plate(g, labelTex('🔀', '#1a2a44'), 0.36, 0.36, 0, 0.5, 0.481);
+  } else if (o.t === 'pdu') {
+    box(g, 0.7, 1.5, 0.6, M.cab, 0, 0.75, 0);
+    plate(g, labelTex('⚡', '#ffcc00', '#111'), 0.4, 0.4, 0, 1.05, 0.301);
+    for (let i = 0; i <= o.lv; i++) o._leds.push(box(g, 0.05, 0.05, 0.02, LED.off, -0.15 + i * 0.15, 0.6, 0.31, false));
+  } else if (o.t === 'crac') {
+    box(g, 0.92, 1.9, 0.92, M.white, 0, 0.95, 0);
+    plate(g, grilleTex, 0.7, 1.3, 0, 0.8, 0.461);
+    box(g, 0.7, 0.04, 0.7, M.dark, 0, 1.92, 0);
+    const fan = new THREE.Group();
+    for (let i = 0; i < 4; i++) { const b = box(fan, 0.6, 0.02, 0.1, M.cab, 0, 0, 0, false); b.rotation.y = i * Math.PI / 4; }
+    fan.position.y = 1.95; g.add(fan); o._fan = fan;
+    for (let i = 0; i <= o.lv; i++) box(g, 0.08, 0.04, 0.02, LED.act[0], -0.2 + i * 0.12, 1.6, 0.465, false);
+  } else if (o.t === 'router') {
+    box(g, 0.82, 2.0, 0.96, M.rack, 0, 1.0, 0);
+    plate(g, labelTex('🌐', '#0d2a4a'), 0.5, 0.5, 0, 1.3, 0.481);
+    for (let i = 0; i < 8; i++) o._leds.push(box(g, 0.04, 0.04, 0.02, LED.off, -0.3 + i * 0.085, 0.8, 0.49, false));
+  } else if (o.t === 'main') {
+    box(g, 0.95, 2.1, 0.8, M.cab, 0, 1.05, 0);
+    plate(g, stripeTex, 0.9, 0.2, 0, 1.9, 0.401);
+    plate(g, labelTex('🏭', '#3a3f4a'), 0.5, 0.5, 0, 1.2, 0.401);
+  }
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), new THREE.MeshBasicMaterial({ color: 0x5dff9b }));
+  lamp.position.y = d.h + 0.08; g.add(lamp); o._lamp = lamp;
+  const sp = new THREE.Sprite(iconMat('⚡')); sp.scale.set(0.55, 0.55, 1); sp.position.y = d.h + 0.6; sp.visible = false; sp.renderOrder = 10; g.add(sp); o._icon = sp;
+  g.position.set(wx(o.x), 0, wz(o.z)); g.rotation.y = (o.r || 0) * Math.PI / 2;
+  g.userData.oid = o.id;
+  objRoot.add(g); o._g = g;
+}
+
+// Kabel: von Geräte-Oberkante hoch in die Trasse, rechtwinklig verlegt, wieder runter
+const cableRoot = new THREE.Group(); scene.add(cableRoot);
+function cablePath(a, b, k, id) {
+  const ha = DEV[a.t].h, hb = DEV[b.t].h, y = k === 'pwr' ? 2.45 : 2.7;
+  const off = ((id * 37) % 9 - 4) * 0.05;
+  const A = new THREE.Vector3(wx(a.x) + off, ha, wz(a.z) + off), B = new THREE.Vector3(wx(b.x) + off, hb, wz(b.z) + off);
+  const pts = [A, new THREE.Vector3(A.x, y, A.z), new THREE.Vector3(B.x, y, A.z), new THREE.Vector3(B.x, y, B.z), B];
+  const path = new THREE.CurvePath();
+  for (let i = 0; i < pts.length - 1; i++) if (pts[i].distanceToSquared(pts[i + 1]) > 1e-6) path.add(new THREE.LineCurve3(pts[i], pts[i + 1]));
+  return path;
+}
+function buildCable(c) {
+  if (c._m) cableRoot.remove(c._m);
+  const a = BYID.get(c.a), b = BYID.get(c.b); if (!a || !b) return;
+  const path = cablePath(a, b, c.k, c.id);
+  const m = new THREE.Mesh(new THREE.TubeGeometry(path, Math.max(8, path.curves.length * 6), c.k === 'pwr' ? 0.035 : 0.028, 5, false), c.k === 'pwr' ? M.pwr : c.f ? M.fib : M.cu);
+  m.castShadow = true; cableRoot.add(m); c._m = m;
+}
+function rebuildAll() {
+  objRoot.clear(); cableRoot.clear();
+  reindex();
+  for (const o of S.objs) { if (o.t === 'rack') o.srv = o.srv || []; buildMesh(o); }
+  for (const c of S.cables) buildCable(c);
+  paintFloor();
+}
+
+// Ghost, Kühlradius, Kabelvorschau
+const ghost = new THREE.Mesh(boxGeo, M.ghostOk); ghost.visible = false; scene.add(ghost);
+const ring = new THREE.Mesh(new THREE.RingGeometry(DEV.crac.radius - 0.06, DEV.crac.radius, 48), new THREE.MeshBasicMaterial({ color: 0x38e1ff, transparent: true, opacity: 0.6 }));
+ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; ring.visible = false; scene.add(ring);
+const preview = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.15, gapSize: 0.1 }));
+preview.visible = false; scene.add(preview);
+
+// ================= Visuelles Update =================
+function updateVisuals() {
+  for (const o of S.objs) {
+    const s = SIM.st.get(o.id); if (!s || !o._g) continue;
+    let ic = '', lamp = 0x5dff9b;
+    if (o.t === 'rack') {
+      const running = s.run;
+      o._leds.forEach((l, i) => l.material = !o.srv.length ? LED.off : o.hot ? LED.red : !s.pwr ? LED.off : running ? (i % 3 === 0 ? LED.act[i % 3] : LED.on[i % 4]) : LED.amber);
+      if (!o.srv.length) { ic = '💤'; lamp = 0x666666; }
+      else if (o.hot) { ic = '🔥'; lamp = 0xff3040; }
+      else if (!s.pwr) { ic = '🔌'; lamp = 0xff3040; }
+      else if (!s.net) { ic = '📡'; lamp = 0xffb02e; }
+      else if (s.f < 0.95) { ic = '🐢'; lamp = 0xffb02e; }
+      else if (o.temp > 45) { ic = '🌡️'; lamp = 0xffb02e; }
+    } else if (o.t === 'sw') {
+      const used = cablesOf(o.id).filter(c => c.k === 'net').length;
+      o._ports.forEach((p, i) => p.material = !s.pwr ? LED.off : i < used ? LED.on[i % 4] : LED.off);
+      if (!s.pwr) { ic = '🔌'; lamp = 0xff3040; } else if (!s.net) { ic = '📡'; lamp = 0xffb02e; } else if (s.f < 0.95) { ic = '🐢'; lamp = 0xffb02e; }
+    } else if (o.t === 'pdu') {
+      o._leds.forEach(l => l.material = s.pwr ? LED.on[0] : LED.red);
+      if (!s.linked) { ic = '🔌'; lamp = 0xff3040; } else if (!s.pwr) { ic = '💥'; lamp = 0xff3040; } else if (s.load > DEV.pdu.cap[o.lv] * 0.85) lamp = 0xffb02e;
+    } else if (o.t === 'crac') {
+      if (!s.pwr) { ic = '🔌'; lamp = 0xff3040; }
+    } else if (o.t === 'main') {
+      if (!s.pwr) { ic = '💥'; lamp = 0xff3040; } else if (s.load > SIM.kwCap * 0.85) lamp = 0xffb02e;
+    } else if (o.t === 'router') {
+      o._leds.forEach((l, i) => l.material = SIM.bw > 0 ? LED.act[i % 3] : LED.off);
+      if (SIM.bwWant > SIM.bwCap) { ic = '🐢'; lamp = 0xffb02e; }
+    }
+    o._lamp.material.color.setHex(lamp);
+    o._icon.visible = !!ic; if (ic) o._icon.material = iconMat(ic);
+  }
+  if (heatMode) paintFloor();
+}
+
+// ================= UI =================
+const TOOLS = [
+  { id: 'select', icon: '🖱️', name: 'Auswahl' },
+  { id: 'rack', icon: '🗄️', name: 'Rack', cost: DEV.rack.cost },
+  { id: 'srv', icon: '💾', name: 'Server', cost: SRV[0].cost },
+  { id: 'sw', icon: '🔀', name: 'Switch', cost: DEV.sw.cost },
+  { id: 'pdu', icon: '⚡', name: 'PDU', cost: DEV.pdu.cost },
+  { id: 'crac', icon: '❄️', name: 'Klima', cost: DEV.crac.cost },
+  { id: 'net', icon: '🔵', name: 'Netzkabel' },
+  { id: 'pwr', icon: '🔴', name: 'Stromkabel' },
+  { id: 'del', icon: '🗑️', name: 'Abreißen' },
+];
+let tool = 'select', placeRot = 0, cableFrom = null, selected = null, hover = null, useFiber = false, running = false;
+function renderTools() {
+  $('tools').innerHTML = TOOLS.map((t, i) => `<button data-tool="${t.id}" class="${tool === t.id ? 'on' : ''}" title="Taste ${i + 1}"><span class="k">${i + 1}</span><span class="ic">${t.id === 'net' && useFiber ? '🟠' : t.icon}</span><span class="nm">${t.id === 'net' && useFiber ? 'Glasfaser' : t.name}</span>${t.cost ? `<span class="pr">${fmt(t.cost)} €</span>` : ''}</button>`).join('')
+    + `<span class="sep"></span><button data-act="heat" class="${heatMode ? 'on' : ''}" title="Taste H"><span class="ic">🌡️</span><span class="nm">Wärme</span></button><button data-act="shop" title="Taste U"><span class="ic">⬆️</span><span class="nm">Upgrades</span></button>`;
+}
+$('tools').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tool) setTool(b.dataset.tool, b.dataset.tool === tool && tool === 'net'); // 2. Klick auf Netzkabel = Kupfer/Glasfaser
+  else if (b.dataset.act === 'heat') toggleHeat();
+  else if (b.dataset.act === 'shop') openShop();
+});
+function setTool(t, toggleFiber) {
+  if (toggleFiber && S.up.fiber) useFiber = !useFiber;
+  tool = t; cableFrom = null; preview.visible = false; renderTools(); updateHint(); updateGhost();
+}
+function toggleHeat() { heatMode = !heatMode; paintFloor(); renderTools(); }
+let toastT = 0;
+function toast(msg, good) { const t = $('toast'); t.textContent = msg; t.className = 'on' + (good ? ' good' : ''); clearTimeout(toastT); toastT = setTimeout(() => t.className = '', 1900); if (!good) tone(150, 0.15, 'square', 0.08); }
+function project(o, y) { const v = new THREE.Vector3(wx(o.x), y, wz(o.z)).project(camera); return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, ok: v.z < 1 }; }
+function popup(o, txt, col) {
+  const p = project(o, DEV[o.t].h + 0.3); if (!p.ok) return;
+  const el = document.createElement('div'); el.className = 'pop'; el.textContent = txt; if (col) el.style.color = col;
+  el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; document.body.appendChild(el); setTimeout(() => el.remove(), 1400);
+}
+function bigText(txt) { const el = document.createElement('div'); el.className = 'big'; el.innerHTML = txt; document.body.appendChild(el); setTimeout(() => el.remove(), 2400); }
+function alarm(o) { if (!running) return; tone(880, 0.12, 'square', 0.07); setTimeout(() => tone(660, 0.12, 'square', 0.07), 140); popup(o, '🔥 Überhitzt!', '#ff5d6c'); }
+
+function updateHUD() {
+  const kwP = SIM.kwCap ? SIM.kw / SIM.kwCap : 0, bwP = SIM.bwCap ? SIM.bwWant / SIM.bwCap : 0;
+  const mcol = p => p > 1 ? 'var(--bad)' : p > 0.85 ? 'var(--warn)' : 'var(--good)';
+  const ms = MILESTONES[S.ms];
+  $('top').innerHTML = `<div class="stat money">💰 <b class="${S.money < 0 ? 'neg' : ''}">${fmt(S.money)} €</b></div>`
+    + `<div class="stat">📈 <b class="${SIM.net < 0 ? 'neg' : ''}">${SIM.net >= 0 ? '+' : ''}${fmt(SIM.net)} €/s</b> <small style="opacity:.7">(${fmt(SIM.gross)} − ${fmt(SIM.cost)} Strom)</small></div>`
+    + `<div class="stat">🏭 ${SIM.kw.toFixed(1)}/${SIM.kwCap} kW<span class="meter"><i style="width:${Math.min(100, kwP * 100)}%;background:${mcol(kwP)}"></i></span></div>`
+    + `<div class="stat">🌐 ${Math.round(SIM.bwWant)}/${Math.round(SIM.bwCap)} Gbit/s<span class="meter"><i style="width:${Math.min(100, bwP * 100)}%;background:${mcol(bwP)}"></i></span></div>`
+    + `<div class="stat">🏆 ${S.ms ? MILESTONES[S.ms - 1].title : 'Startup'}${ms ? ` → ${fmt(Math.max(0, SIM.net))}/${fmt(ms.inc)} €/s` : ''}</div>`;
+  if (ms && SIM.net >= ms.inc) {
+    S.money += ms.reward; S.ms++;
+    bigText(`🏆 ${ms.title}!<br><span style="font-size:.5em">Bonus +${fmt(ms.reward)} €</span>`);
+    if (AC) AC.powerup();
+  }
+  updateInfo();
+}
+function nextHint() {
+  const has = t => S.objs.some(o => o.t === t), racks = S.objs.filter(o => o.t === 'rack');
+  const pwrLinked = o => cablesOf(o.id).some(c => c.k === 'pwr'), netLinked = o => cablesOf(o.id).some(c => c.k === 'net');
+  if (tool === 'net' || tool === 'pwr') {
+    const k = tool === 'net' ? (useFiber ? 'Glasfaser' : 'Kupfer') + '-Netzkabel' : 'Stromkabel';
+    return cableFrom ? `${k}: Jetzt das Ziel anklicken (Esc = abbrechen)` : `${k}: Erst ein Gerät anklicken, dann das Ziel. Gleiches Paar nochmal = Kabel entfernen. Esc/Rechtsklick = fertig.${tool === 'net' && S.up.fiber ? ' F = Kupfer/Glasfaser' : ''}`;
+  }
+  return '💡 ' + plainHint(racks, has, pwrLinked, netLinked);
+}
+function plainHint(racks, has, pwrLinked, netLinked) {
+  if (!racks.length) return 'Wähle 🗄️ Rack (Taste 2) und stelle es auf ein freies Feld.';
+  if (!racks.some(r => r.srv.length)) return 'Wähle 💾 Server (Taste 3) und klicke auf dein Rack, um Server einzubauen.';
+  if (!has('sw')) return 'Kaufe einen 🔀 Switch (Taste 4) – er verbindet Racks mit dem Internet.';
+  if (!has('pdu')) return 'Kaufe eine ⚡ PDU (Taste 5) für die Stromverteilung.';
+  if (!S.objs.some(o => o.t === 'pdu' && cablesOf(o.id).some(c => c.k === 'pwr' && other(c, o.id).t === 'main'))) return '🔴 Stromkabel (Taste 8): Klicke die PDU, dann den 🏭 Hauptverteiler.';
+  if (S.objs.some(o => (o.t === 'rack' || o.t === 'sw') && !pwrLinked(o))) return '🔴 Stromkabel (Taste 8): Verbinde Racks und Switches mit einer PDU.';
+  if (!S.objs.some(o => o.t === 'sw' && cablesOf(o.id).some(c => c.k === 'net' && other(c, o.id).t === 'router'))) return '🔵 Netzkabel (Taste 7): Klicke den Switch, dann den 🌐 Uplink-Router.';
+  if (racks.some(r => !netLinked(r))) return '🔵 Netzkabel (Taste 7): Verbinde jedes Rack mit einem Switch.';
+  if (racks.some(r => r.temp > 42) && !has('crac')) return 'Es wird heiß! Stelle ein ❄️ Klimagerät (Taste 6) neben die Racks und gib ihm Strom.';
+  const ms = MILESTONES[S.ms];
+  return ms ? `Ziel: ${fmt(ms.inc)} €/s Gewinn → „${ms.title}“ (+${fmt(ms.reward)} € Bonus)` : 'Du bist Hyperscaler! Optimiere weiter …';
+}
+function updateHint() { $('hint').textContent = nextHint(); }
+
+function statusLine(o) { const s = SIM.st.get(o.id); return s && s.issue ? s.issue : 'OK'; }
+function updateInfo() {
+  const o = selected && BYID.get(selected);
+  if (!o) { $('info').style.display = 'none'; return; }
+  $('info').style.display = 'block';
+  const s = SIM.st.get(o.id) || {}, d = DEV[o.t];
+  const row = (a, b, cls) => `<div class="row"><span>${a}</span><b class="${cls || ''}">${b}</b></div>`;
+  const yes = (v, a, b) => v ? `<span class="ok">✔ ${a || 'ja'}</span>` : `<span class="bad">✘ ${b || 'nein'}</span>`;
+  let h = `<h3>${d.icon} ${d.name}</h3>`, a = '';
+  const issue = statusLine(o);
+  h += row('Status', issue, issue === 'OK' ? 'ok' : 'warn');
+  if (o.t === 'rack') {
+    h += row('Strom', yes(s.pwr)) + row('Netz', yes(s.net)) + row('Temperatur', (o.temp || 22).toFixed(1) + ' °C', o.temp > 55 ? 'bad' : o.temp > 42 ? 'warn' : 'ok');
+    h += row('Verbrauch', rackKw(o).toFixed(2) + ' kW') + row('Bandbreite', (s.demand || 0) + ' Gbit/s' + (s.link ? ` (Kabel ${netCap(s.link)})` : ''));
+    h += row('Einnahmen', fmt(s.inc || 0) + ' €/s', 'ok') + row('Kühlung', (s.heat ? Math.round(Math.min(s.cool, s.heat) / s.heat * 100) : 100) + ' %');
+    a += `<div style="margin-top:6px;font-weight:700">Server (${o.srv.length}/${SLOTS})</div>`;
+    o.srv.forEach((t, i) => {
+      const n = SRV[t + 1], c = n ? Math.round(n.cost * 0.8) : 0;
+      a += `<div class="srv"><span>${t === 2 ? '🟩' : t === 1 ? '🟦' : '⬜'} ${SRV[t].name}<br><small style="opacity:.7">${SRV[t].inc} €/s · ${SRV[t].kw} kW</small></span>${n ? `<button class="btn" data-a="srvup" data-i="${i}" ${S.money < c ? 'disabled' : ''}>⬆ ${n.short} ${fmt(c)} €</button>` : '<small>max</small>'}</div>`;
+    });
+    if (o.srv.length < SLOTS) a += `<button class="btn wide" data-a="srvadd" ${S.money < SRV[0].cost ? 'disabled' : ''}>+ Basic-Server (${SRV[0].cost} €)</button>`;
+  } else if (o.t === 'sw') {
+    const used = cablesOf(o.id).filter(c => c.k === 'net').length;
+    h += row('Strom', yes(s.pwr)) + row('Uplink', yes(s.net)) + row('Ports', used + '/' + ports(o)) + row('Durchsatz', Math.round(s.out || 0) + ' Gbit/s');
+    if (d.ports[o.lv + 1]) a += upBtn(`⬆ ${d.ports[o.lv + 1]} Ports`, d.up[o.lv]);
+  } else if (o.t === 'pdu') {
+    h += row('Am Hauptverteiler', yes(s.linked)) + row('Last', (s.load || 0).toFixed(2) + ' / ' + d.cap[o.lv] + ' kW', s.load > d.cap[o.lv] ? 'bad' : '');
+    if (d.cap[o.lv + 1]) a += upBtn(`⬆ ${d.cap[o.lv + 1]} kW`, d.up[o.lv]);
+  } else if (o.t === 'crac') {
+    h += row('Strom', yes(s.pwr)) + row('Kühlleistung', d.cool[o.lv]) + row('Genutzt', (s.load || 0).toFixed(1) + ' / ' + (s.cap || d.cool[o.lv]).toFixed(1));
+    if (d.cool[o.lv + 1]) a += upBtn(`⬆ Kühlung ${d.cool[o.lv + 1]}`, d.up[o.lv]);
+  } else if (o.t === 'main') {
+    h += row('Last', SIM.kw.toFixed(1) + ' / ' + SIM.kwCap + ' kW') + '<small>Upgrade über ⬆️ Hausanschluss</small>';
+  } else if (o.t === 'router') {
+    h += row('Uplink', Math.round(SIM.bwWant) + ' / ' + Math.round(SIM.bwCap) + ' Gbit/s') + '<small>Upgrade über ⬆️ Uplink-Bandbreite</small>';
+  }
+  h += `<p style="font-size:11px;opacity:.7;margin:6px 0 0">${d.desc}</p>`;
+  if (!d.fixed) a += `<button class="btn wide red" data-a="del">🗑️ Abreißen (+${fmt(refund(o))} €)</button>`;
+  $('infoStats').innerHTML = h;
+  if ($('infoActs').dataset.h !== a) { $('infoActs').innerHTML = a; $('infoActs').dataset.h = a; }
+}
+function upBtn(label, cost) { return `<button class="btn wide" data-a="devup" ${S.money < cost ? 'disabled' : ''}>${label} (${fmt(cost)} €)</button>`; }
+$('infoActs').addEventListener('click', e => {
+  const b = e.target.closest('button'); const o = selected && BYID.get(selected); if (!b || !o) return;
+  if (b.dataset.a === 'srvadd') addServer(o);
+  else if (b.dataset.a === 'srvup') upgradeServer(o, +b.dataset.i);
+  else if (b.dataset.a === 'devup') upgradeDevice(o);
+  else if (b.dataset.a === 'del') demolish(o);
+});
+
+// ================= Aktionen =================
+function pay(cost) { if (S.money < cost) { toast(`Zu wenig Geld (${fmt(cost)} € nötig)`); return false; } S.money -= cost; if (AC) AC.coin(); return true; }
+function changed() { simulate(0); updateVisuals(); updateHUD(); updateHint(); }
+function refund(o) { return Math.floor((o.spent || 0) * 0.5); }
+function place(t, x, z) {
+  if (x >= hallW() || z >= hallH()) return toast('Gesperrter Bereich – Halle erweitern (⬆️ Upgrades)');
+  if (objAt(x, z)) return toast('Feld belegt');
+  if (!pay(DEV[t].cost)) return;
+  const o = { id: S.nid++, t, x, z, r: placeRot, lv: 0, spent: DEV[t].cost };
+  if (t === 'rack') { o.srv = []; o.temp = 22; }
+  S.objs.push(o); reindex(); buildMesh(o);
+  o._g.scale.set(1, 0.01, 1); o._grow = 0;
+  changed();
+}
+function addServer(o) {
+  if (o.srv.length >= SLOTS) return toast('Rack voll (6 Server)');
+  if (!pay(SRV[0].cost)) return;
+  o.srv.push(0); o.spent = (o.spent || 0) + SRV[0].cost; buildMesh(o); popup(o, '+ Server', '#38e1ff'); changed();
+}
+function upgradeServer(o, i) {
+  const n = SRV[o.srv[i] + 1]; if (!n) return;
+  const c = Math.round(n.cost * 0.8); if (!pay(c)) return;
+  o.srv[i]++; o.spent = (o.spent || 0) + c; buildMesh(o); popup(o, '⬆ ' + n.short, '#5dff9b'); if (AC) AC.powerup(); changed();
+}
+function upgradeDevice(o) {
+  const d = DEV[o.t], c = d.up && d.up[o.lv]; if (!c) return;
+  if (!pay(c)) return;
+  o.lv++; o.spent = (o.spent || 0) + c; buildMesh(o); popup(o, '⬆ Stufe ' + (o.lv + 1), '#5dff9b'); if (AC) AC.powerup(); changed();
+}
+function demolish(o) {
+  if (DEV[o.t].fixed) return toast('Kann nicht abgerissen werden');
+  let back = refund(o);
+  for (const c of cablesOf(o.id)) { back += Math.floor((c.spent || 0) * 0.5); cableRoot.remove(c._m); }
+  S.cables = S.cables.filter(c => c.a !== o.id && c.b !== o.id);
+  S.objs = S.objs.filter(x => x !== o); objRoot.remove(o._g); reindex();
+  S.money += back; if (selected === o.id) selected = null;
+  tone(220, 0.2, 'sawtooth', 0.08); toast(`Abgerissen: +${fmt(back)} €`, true); changed();
+}
+const PWR_OK = ['crac-pdu', 'main-pdu', 'pdu-rack', 'pdu-sw'], NET_OK = ['rack-sw', 'sw-sw', 'router-sw'];
+function cableError(a, b, k) {
+  const pair = [a.t, b.t].sort().join('-');
+  if (k === 'pwr' && !PWR_OK.includes(pair)) return 'Strom: Rack/Switch/Klima → PDU, PDU → Hauptverteiler';
+  if (k === 'net' && !NET_OK.includes(pair)) return 'Netz: Rack → Switch, Switch → Switch/Router';
+  for (const o of [a, b]) {
+    const cs = cablesOf(o.id).filter(c => c.k === k);
+    if (k === 'pwr' && o.t !== 'pdu' && o.t !== 'main' && cs.length) return DEV[o.t].name + ' hat schon ein Stromkabel';
+    if (k === 'pwr' && o.t === 'pdu' && (a.t === 'main' || b.t === 'main') && cs.some(c => other(c, o.id).t === 'main')) return 'PDU hängt schon am Hauptverteiler';
+    if (k === 'net' && o.t === 'rack' && cs.length) return 'Rack hat schon ein Netzkabel';
+    if (k === 'net' && o.t === 'sw' && cs.length >= ports(o)) return 'Switch hat keine freien Ports – upgraden!';
+  }
+  if (k === 'net' && !useFiber && cableLen(a, b) > CABLE.cu.max) return `Kupfer max. ${CABLE.cu.max} Felder – Glasfaser nötig`;
+  return '';
+}
+function cableClick(o) {
+  const k = tool;
+  if (!o) { cableFrom = null; preview.visible = false; updateHint(); return; }
+  if (!cableFrom) { cableFrom = o.id; tone(600, 0.05, 'sine', 0.06); updateHint(); return; }
+  if (o.id === cableFrom) { cableFrom = null; preview.visible = false; updateHint(); return; }
+  const a = BYID.get(cableFrom), b = o;
+  const ex = S.cables.find(c => c.k === k && ((c.a === a.id && c.b === b.id) || (c.a === b.id && c.b === a.id)));
+  if (ex) {
+    S.cables = S.cables.filter(c => c !== ex); cableRoot.remove(ex._m);
+    S.money += Math.floor((ex.spent || 0) * 0.5); tone(300, 0.1, 'triangle', 0.08); toast('Kabel entfernt', true);
+  } else {
+    const err = cableError(a, b, k); if (err) return toast(err);
+    const kind = k === 'pwr' ? 'pwr' : useFiber ? 'fib' : 'cu', cost = cableLen(a, b) * CABLE[kind].perTile;
+    if (!pay(cost)) return;
+    const c = { id: S.nid++, a: a.id, b: b.id, k, f: k === 'net' && useFiber ? 1 : 0, spent: cost };
+    S.cables.push(c); buildCable(c); tone(900, 0.06, 'sine', 0.07); setTimeout(() => tone(1200, 0.06, 'sine', 0.07), 70);
+  }
+  // Verteiler (PDU/Switch) bleibt aktiv, damit man schnell mehrere Racks anschließen kann
+  const hub = t => t === 'pdu' || t === 'sw';
+  cableFrom = hub(a.t) && !(b.t === 'main' || b.t === 'router') ? a.id : hub(b.t) && a.t !== 'pdu' && a.t !== 'sw' ? b.id : null;
+  preview.visible = false; changed();
+}
+function buyUpgrade(id) {
+  const u = UPGBY[id], c = u.cost[S.up[id]]; if (c === undefined) return;
+  if (!pay(c)) return;
+  S.up[id]++; if (AC) AC.powerup();
+  if (id === 'hall') { paintFloor(); bigText('🏗️ Halle erweitert!'); }
+  if (id === 'fiber') useFiber = true;
+  renderShop(); renderTools(); changed();
+}
+function renderShop() {
+  $('shopList').innerHTML = UPG.map(u => {
+    const lv = S.up[u.id], c = u.cost[lv], nx = u.vals[lv + 1];
+    return `<div class="upg"><span class="ic">${u.icon}</span><span class="tx"><b>${u.name}</b><br>${u.f(u.vals[lv])}${nx !== undefined ? ` → <span style="color:var(--good)">${u.f(nx)}</span>` : ' (max)'}${u.d ? `<br><small>${u.d}</small>` : ''}</span>${c !== undefined ? `<button class="btn" data-u="${u.id}" ${S.money < c ? 'disabled' : ''}>${fmt(c)} €</button>` : ''}</div>`;
+  }).join('');
+}
+$('shopList').addEventListener('click', e => { const b = e.target.closest('button[data-u]'); if (b) buyUpgrade(b.dataset.u); });
+function openShop() { renderShop(); $('shop').classList.remove('hide'); }
+$('shopClose').onclick = () => $('shop').classList.add('hide');
+$('shopMenu').onclick = () => { $('shop').classList.add('hide'); showMenu(); };
+
+// ================= Events =================
+let eventTimer = 120;
+function tickEvents(dt) {
+  if (EVENT) {
+    EVENT.t -= dt;
+    $('event').textContent = EVENTS[EVENT.type].name + (EVENTS[EVENT.type].prot && S.up[EVENTS[EVENT.type].prot] ? ' – abgewehrt ✔' : '') + ` (${Math.ceil(EVENT.t)} s)`;
+    if (EVENT.t <= 0) { EVENT = null; $('event').style.display = 'none'; changed(); }
+    return;
+  }
+  if (S.earned < 3000) return;
+  eventTimer -= dt;
+  if (eventTimer <= 0) {
+    const keys = Object.keys(EVENTS), type = keys[Math.floor(Math.random() * keys.length)];
+    EVENT = { type, t: EVENTS[type].dur }; eventTimer = 90 + Math.random() * 120;
+    $('event').style.display = 'block'; tone(440, 0.3, 'sawtooth', 0.08); setTimeout(() => tone(330, 0.4, 'sawtooth', 0.08), 300);
+    changed();
+  }
+}
+
+// ================= Eingabe & Kamera =================
+const cam = { tx: -1, tz: 0, az: 0.75, pol: 0.9, dist: 17 };
+function updateCam() {
+  cam.pol = clamp(cam.pol, 0.25, 1.35); cam.dist = clamp(cam.dist, 5, 34);
+  cam.tx = clamp(cam.tx, -GW / 2, GW / 2); cam.tz = clamp(cam.tz, -GH / 2, GH / 2);
+  camera.position.set(cam.tx + cam.dist * Math.sin(cam.pol) * Math.sin(cam.az), cam.dist * Math.cos(cam.pol), cam.tz + cam.dist * Math.sin(cam.pol) * Math.cos(cam.az));
+  camera.lookAt(cam.tx, 0.6, cam.tz);
+  walls[0].visible = camera.position.z > -GH / 2; walls[1].visible = camera.position.x > -GW / 2;
+}
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), tmpV = new THREE.Vector3();
+function pick(cx, cy) {
+  ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(objRoot.children, true).filter(h => !h.object.isSprite);
+  if (hits.length) { let m = hits[0].object; while (m && m.userData.oid === undefined) m = m.parent; const o = m && BYID.get(m.userData.oid); if (o) return { x: o.x, z: o.z, o }; }
+  if (ray.ray.intersectPlane(floorPlane, tmpV)) {
+    const x = Math.floor(tmpV.x + GW / 2), z = Math.floor(tmpV.z + GH / 2);
+    if (x >= 0 && z >= 0 && x < GW && z < GH) return { x, z, o: objAt(x, z) };
+  }
+  return null;
+}
+function updateGhost() {
+  const isDev = DEV[tool] && !DEV[tool].fixed;
+  ghost.visible = !!(isDev && hover && !hover.o);
+  if (ghost.visible) {
+    const h = DEV[tool].h, ok = hover.x < hallW() && hover.z < hallH() && S.money >= DEV[tool].cost;
+    ghost.material = ok ? M.ghostOk : M.ghostBad;
+    ghost.scale.set(0.85, h, 0.85); ghost.position.set(wx(hover.x), h / 2, wz(hover.z));
+  }
+  const ro = tool === 'crac' && hover && !hover.o ? hover : (hover && hover.o && hover.o.t === 'crac') ? hover.o : (selected && BYID.get(selected) && BYID.get(selected).t === 'crac') ? BYID.get(selected) : null;
+  ring.visible = !!ro; if (ro) ring.position.set(wx(ro.x), 0.03, wz(ro.z));
+  canvas.style.cursor = tool === 'del' ? 'not-allowed' : hover && hover.o ? 'pointer' : 'default';
+  if (cableFrom && hover) {
+    const a = BYID.get(cableFrom); if (!a) return;
+    const path = cablePath(a, hover.o || { t: 'rack', x: hover.x, z: hover.z }, tool, 0);
+    preview.geometry.setFromPoints(path.getSpacedPoints(30)); preview.computeLineDistances();
+    preview.material.color.setHex(tool === 'pwr' ? 0xff5d6c : useFiber ? 0xffa020 : 0x38e1ff); preview.visible = true;
+  }
+}
+function showTip(cx, cy) {
+  const t = $('tip');
+  if (!hover || !hover.o) { t.style.display = 'none'; return; }
+  const o = hover.o, s = statusLine(o);
+  t.innerHTML = `${DEV[o.t].icon} <b>${DEV[o.t].name}</b>${o.t === 'rack' ? ` (${o.srv.length}/${SLOTS})` : ''} · <span style="color:${s === 'OK' ? '#5dff9b' : '#ffb02e'}">${s}</span>`;
+  t.style.display = 'block'; t.style.left = (cx + 14) + 'px'; t.style.top = (cy + 14) + 'px';
+}
+function clickAt(p) {
+  if (!running) return;
+  if (tool === 'select') { selected = p && p.o ? p.o.id : null; $('infoActs').dataset.h = ''; updateInfo(); updateGhost(); if (p && p.o) tone(700, 0.04, 'sine', 0.05); return; }
+  if (tool === 'net' || tool === 'pwr') return cableClick(p && p.o);
+  if (!p) return;
+  if (tool === 'del') { if (p.o) demolish(p.o); return; }
+  if (tool === 'srv') { if (p.o && p.o.t === 'rack') { addServer(p.o); selected = p.o.id; } else toast('Server nur in Racks einbauen'); return; }
+  if (DEV[tool]) { if (p.o) { selected = p.o.id; updateInfo(); } else place(tool, p.x, p.z); }
+}
+const ptrs = new Map(); let drag = null, pinch = null;
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; drag = null; return; }
+  drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, btn: e.button, moved: false, pan: e.button === 1 || e.button === 2 || e.shiftKey };
+});
+canvas.addEventListener('pointermove', e => {
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    cam.dist *= pinch.d / Math.max(10, d); panBy(mx - pinch.mx, my - pinch.my);
+    pinch = { d, mx, my }; return;
+  }
+  if (drag) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6) drag.moved = true;
+    if (drag.moved) { if (drag.pan) panBy(dx, dy); else { cam.az -= dx * 0.006; cam.pol -= dy * 0.005; } }
+    drag.x = e.clientX; drag.y = e.clientY;
+  }
+  if (e.pointerType === 'mouse' || !drag) { hover = pick(e.clientX, e.clientY); updateGhost(); showTip(e.clientX, e.clientY); }
+});
+canvas.addEventListener('pointerup', e => {
+  ptrs.delete(e.pointerId);
+  if (pinch) { if (ptrs.size < 2) pinch = null; drag = null; return; }
+  if (drag && !drag.moved && drag.btn === 0) { const p = pick(e.clientX, e.clientY); hover = p; clickAt(p); updateGhost(); }
+  else if (drag && !drag.moved && drag.btn === 2) setTool('select');
+  drag = null;
+});
+canvas.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); drag = null; pinch = null; });
+canvas.addEventListener('wheel', e => { e.preventDefault(); cam.dist *= e.deltaY > 0 ? 1.1 : 0.9; }, { passive: false });
+function panBy(dx, dy) {
+  const k = cam.dist * 0.0016, s = Math.sin(cam.az), c = Math.cos(cam.az);
+  cam.tx -= (dx * c + dy * s) * k; cam.tz -= (-dx * s + dy * c) * k;
+}
+const keys = {};
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  keys[e.key.toLowerCase()] = true;
+  if (!running) return;
+  const n = +e.key; if (n >= 1 && n <= TOOLS.length) setTool(TOOLS[n - 1].id);
+  const k = e.key.toLowerCase();
+  if (k === 'escape') { if (cableFrom) { cableFrom = null; preview.visible = false; updateHint(); } else { setTool('select'); selected = null; updateInfo(); } }
+  if (k === 'r') { placeRot = (placeRot + 1) % 4; const o = selected && BYID.get(selected); if (o && tool === 'select') { o.r = (o.r + 1) % 4; o._g.rotation.y = o.r * Math.PI / 2; } }
+  if (k === 'h') toggleHeat();
+  if (k === 'u') $('shop').classList.contains('hide') ? openShop() : $('shop').classList.add('hide');
+  if (k === 'f' && S.up.fiber) { useFiber = !useFiber; renderTools(); updateHint(); }
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+function keyPan(dt) {
+  const v = 260 * dt; let dx = 0, dy = 0;
+  if (keys.w || keys.arrowup) dy += v; if (keys.s || keys.arrowdown) dy -= v;
+  if (keys.a || keys.arrowleft) dx += v; if (keys.d || keys.arrowright) dx -= v;
+  if (keys.q) cam.az += dt * 1.5; if (keys.e) cam.az -= dt * 1.5;
+  if (dx || dy) panBy(dx, dy);
+}
+
+// ================= Menü & Loop =================
+function showMenu() { running = false; $('menu').classList.remove('hide'); $('btnContinue').style.display = loadSave() ? '' : 'none'; }
+function start(fresh) {
+  if (fresh) { const had = loadSave(); if (had && had.earned > 500 && !confirm('Bestehendes Rechenzentrum überschreiben?')) return; S = defSave(); }
+  else S = loadSave() || defSave();
+  EVENT = null; $('event').style.display = 'none'; selected = null; cableFrom = null; useFiber = !!S.up.fiber && useFiber;
+  rebuildAll(); simulate(0); updateVisuals(); renderTools(); updateHUD(); updateHint();
+  Object.assign(cam, { tx: wx(hallW() / 2) - 0.5, tz: wz(hallH() / 2) - 0.5, dist: 6 + hallW() * 0.9 });
+  $('menu').classList.add('hide'); running = true; writeSave();
+}
+$('btnContinue').onclick = () => start(false);
+$('btnNew').onclick = () => start(true);
+$('muteBtn').onclick = () => { const m = AC ? AC.toggleMute() : false; $('muteBtn').textContent = m ? '🔇' : '🔊'; };
+if (AC && AC.isMuted()) $('muteBtn').textContent = '🔇';
+addEventListener('beforeunload', () => { if (running) writeSave(); });
+
+let last = performance.now(), simAcc = 0, saveAcc = 0, popAcc = 0, ledAcc = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (running) {
+    S.money += SIM.net * dt; if (SIM.net > 0) S.earned += SIM.net * dt;
+    simAcc += dt; saveAcc += dt; popAcc += dt;
+    if (simAcc >= 0.25) { simulate(simAcc); simAcc = 0; updateVisuals(); updateHUD(); updateHint(); }
+    if (saveAcc > 5) { saveAcc = 0; writeSave(); }
+    if (popAcc > 2.5) {
+      popAcc = 0;
+      const act = S.objs.filter(o => o.t === 'rack' && SIM.st.get(o.id) && SIM.st.get(o.id).inc > 0);
+      if (act.length) { const o = act[Math.floor(Math.random() * act.length)]; popup(o, '+' + fmt(SIM.st.get(o.id).inc * 2.5) + ' €'); }
+    }
+    tickEvents(dt);
+  }
+  // LED-Flackern
+  ledAcc += dt;
+  if (ledAcc > 0.08) { ledAcc = 0; for (const m of LED.on) if (Math.random() < 0.3) m.color.setHex(Math.random() < 0.7 ? 0x5dff9b : 0x1d5a35); for (const m of LED.act) if (Math.random() < 0.5) m.color.setHex(Math.random() < 0.5 ? 0x38e1ff : 0x0b3040); }
+  for (const o of S.objs) {
+    if (o._grow !== undefined) { o._grow = Math.min(1, o._grow + dt * 4); const k = o._grow; o._g.scale.set(1, 1 - Math.pow(1 - k, 3) * 0.99 + Math.sin(k * Math.PI) * 0.12, 1); if (k >= 1) { o._g.scale.set(1, 1, 1); delete o._grow; } }
+    if (o._fan && SIM.st.get(o.id) && SIM.st.get(o.id).pwr) o._fan.rotation.y += dt * 12;
+    if (o._icon && o._icon.visible) o._icon.position.y = DEV[o.t].h + 0.6 + Math.sin(now / 250 + o.id) * 0.06;
+  }
+  keyPan(dt); updateCam();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+// Selbsttest der Simulation (?test=1)
+function selfTest() {
+  const keep = S, out = [], ok = (c, m) => out.push((c ? 'OK   ' : 'FAIL ') + m);
+  S = defSave();
+  S.objs.push({ id: 10, t: 'rack', x: 3, z: 3, r: 0, lv: 0, srv: [0, 0] }, { id: 11, t: 'sw', x: 4, z: 3, r: 0, lv: 0 }, { id: 12, t: 'pdu', x: 5, z: 3, r: 0, lv: 0 });
+  S.cables.push({ id: 20, a: 10, b: 11, k: 'net' }, { id: 21, a: 11, b: 1, k: 'net' }, { id: 22, a: 10, b: 12, k: 'pwr' }, { id: 23, a: 11, b: 12, k: 'pwr' }, { id: 24, a: 12, b: 2, k: 'pwr' });
+  reindex(); simulate(0);
+  ok(SIM.st.get(10).run && Math.abs(SIM.gross - 10) < 1e-6, 'verkabeltes Rack mit 2 Basic verdient 10 €/s');
+  ok(Math.abs(SIM.cost - (0.05 + 0.8 + 0.2) * POWER_PRICE) < 1e-6, 'Stromkosten = kW × Preis');
+  S.objs[2].srv = [2, 2, 2]; S.objs[4].lv = 2; reindex(); simulate(0);
+  ok(Math.abs(SIM.st.get(10).f - 10 / 15) < 1e-6, 'Kupferkabel drosselt 15 Gbit/s auf 10');
+  S.objs[4].lv = 0; simulate(0);
+  ok(!SIM.st.get(12).pwr && !SIM.st.get(10).run, 'PDU 4 kW mit 5 kW Last löst aus');
+  S.objs[2].srv = [0]; S.cables = S.cables.filter(c => c.id !== 21); reindex(); simulate(0);
+  ok(!SIM.st.get(10).net && SIM.gross === 0, 'ohne Uplink kein Einkommen');
+  S.cables.push({ id: 21, a: 11, b: 1, k: 'net' }); S.objs[2].srv = [0, 0, 0, 0, 0, 0]; reindex();
+  for (let i = 0; i < 200; i++) simulate(0.25);
+  ok(S.objs[2].hot || S.objs[2].temp > 55, 'volles Rack ohne Kühlung überhitzt');
+  S = keep; reindex();
+  const el = $('selftest'); el.style.display = 'block'; el.textContent = out.join('\n'); console.log(out.join('\n'));
+}
+
+// ?demo=1: gebaute Beispielhalle für Screenshots/Tests
+function demoLayout() {
+  S.money = 1e6; S.up.hall = 1; S.up.fiber = 1; S.up.mainp = 2; S.up.uplink = 2;
+  const add = (t, x, z, extra) => { place(t, x, z); const o = objAt(x, z); Object.assign(o, extra); buildMesh(o); return o; };
+  const pdu = add('pdu', 3, 0, { lv: 2 }), sw = add('sw', 4, 0, { lv: 2 }), crac = add('crac', 5, 3, { lv: 2 });
+  const link = (a, b, k) => { tool = k; cableFrom = a.id; cableClick(b); };
+  link(pdu, BYID.get(2), 'pwr'); useFiber = true; link(sw, BYID.get(1), 'net'); useFiber = false; link(sw, pdu, 'pwr'); link(crac, pdu, 'pwr');
+  for (let i = 0; i < 6; i++) { const r = add('rack', 2 + i, 2, { srv: [0, 0, 1, 1, i % 3 ? 2 : 0].slice(0, 2 + i % 4), r: 0 }); link(r, pdu, 'pwr'); useFiber = i > 3; link(r, sw, 'net'); }
+  const r2 = add('rack', 3, 5, { srv: [0, 0, 0, 0, 0, 0], r: 2 }); link(r2, sw, 'net');
+  S.money = 25000; setTool('select'); paintFloor(); changed();
+}
+
+function boot() {
+  appStarted = true; $('fallbackError').style.display = 'none';
+  if (QS.get('test')) selfTest();
+  rebuildAll(); simulate(0); renderTools(); updateCam();
+  if (QS.get('demo')) { start(false); demoLayout(); } else showMenu();
+  requestAnimationFrame(frame);
+}
+boot();
+</script>
+</body>
+</html>
