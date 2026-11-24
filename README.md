@@ -25,6 +25,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/stair_yeet.html`](games/stair_yeet.html) — *Office Yeet: Ragdoll Dismount*
   * [`games/cannon_sheep.html`](games/cannon_sheep.html) — *Cannon Sheep Weitenrekord*
 * **Strategie & Simulation:**
+  * [`games/amtsschimmel.html`](games/amtsschimmel.html) — *Amtsschimmel: Behörden-Simulator (Sachbearbeiter im Bürgeramt: absurde Anträge per Drag & Lupe gegen täglich absurdere Dienstvorschriften prüfen und GENEHMIGT / ABGELEHNT / FORMULAR FEHLT stempeln; Kaffee-, Wut- & Aktenstapel-Leisten, Mittagspause, Drucker-Stau, Fax-Eilerlasse, Kuchengeld & Behördenprüfung, Rügen vom Amtsleiter, Karriereleiter Praktikant → Amtsleiter mit Freischaltungen, Autosave)*
   * [`games/boersenhai.html`](games/boersenhai.html) — *Börsenhai: Trading-Terminal (Aktien, ETFs, BX10-Index, Anleihen-ETF, Gold, Silber, Öl, Krypto & Devisen mit simulierten Kursen handeln: Kerzen-, Heikin-Ashi- & Liniencharts in 6 Zeiteinheiten mit Zoom/Pan, SMA/EMA/Bollinger/Volumen/RSI; Long & Short mit Hebel und Margin-Call, Markt-/Limit-/Stop-Orders, Stop-Loss, Take-Profit & Trailing-Stop per Chart-Drag, Black-Scholes-Optionen (Call/Put), Spread, Gebühren & Übernacht-Finanzierung, Nachrichten & Wirtschaftskalender mit Quartalszahlen und EZB-Entscheiden, Autosave)*
   * [`games/hexfront.html`](games/hexfront.html) — *HEXFRONT: Tactical Warfare (Rundenbasierte Hex-Strategie)*
   * [`games/propaganda.html`](games/propaganda.html) — *Wähl Mich! — Propaganda Simulator*

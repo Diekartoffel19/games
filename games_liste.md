@@ -223,9 +223,9 @@ Diese 5 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von eine
 
 ---
 
-## 🚫 Warum 56 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
+## 🚫 Warum 57 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
 
-Die restlichen 56 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
+Die restlichen 57 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
 
 1. **Reine Gitter- & Zahlenspiele (Grid Classics & Terminal Roguelikes):**
    - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`), Bubble Fusion (`games/bubblefusion.html`)*  
@@ -234,8 +234,8 @@ Die restlichen 56 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
    - *Spire of Cards, Backpack Gladiator, Grundriss (Raum-Drafting-Roguelike, `games/grundriss.html`)*  
    *Begründung:* Inventarverwaltung und Kartenstapel benötigen saubere 2D-GUIs mit Tooltips und Hover-Zuständen. 3D-Karten verlangsamen das schnelle Lesen.
 3. **Finanz-, Strategie- & Text-Simulationen:**
-   - *Börsenhai: Trading-Terminal (`games/boersenhai.html`), Wähl Mich! (Propaganda), El Patrón, Kiez Simulator*  
-   *Begründung:* Diese Spiele basieren auf Diagrammen, Zeitreihen, Dialogbäumen und Menüentscheidungen. Ein 3D-Canvas böte keinerlei spielmechanischen Nutzen.
+   - *Börsenhai: Trading-Terminal (`games/boersenhai.html`), Amtsschimmel: Behörden-Simulator (`games/amtsschimmel.html`), Wähl Mich! (Propaganda), El Patrón, Kiez Simulator*  
+   *Begründung:* Diese Spiele basieren auf Diagrammen, Zeitreihen, Dialogbäumen, Formularen und Menüentscheidungen. Ein 3D-Canvas böte keinerlei spielmechanischen Nutzen.
 4. **Zelluläre Automaten & Pixel-Physik:**
    - *Pixel Alchemy (Sandbox), Game of Life*  
    *Begründung:* Partikelsimulationen mit fallendem Sand, Wasser und Feuer leben von der schnellen 2D-Zellmatrix. In 3D (Voxel-Physik) sinkt die Partikelanzahl von Millionen auf wenige Tausend bei extremem Rechenaufwand.
