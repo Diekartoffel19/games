@@ -299,7 +299,8 @@ const ArcadeCore = (() => {
     'spickalarm': 'spickalarm_best',
     'liegenkrieg': 'liegenkrieg_best',
     'boersenhai': 'boersenhai_best',
-    'grillmeister': 'grillmeister_best'
+    'grillmeister': 'grillmeister_best',
+    'amtsschimmel': 'amtsschimmel_best'
   };
 
   function getScore(gameKey) {

@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Amtsschimmel: Behörden-Simulator</title>
+<meta name="description" content="Du bist Sachbearbeiter im Bürgeramt Amtshausen: Prüfe absurde Anträge gegen immer absurdere Dienstvorschriften, stemple GENEHMIGT, ABGELEHNT oder FORMULAR FEHLT – und überlebe Kaffeemangel, Drucker-Stau und die Warteschlange.">
+<meta name="theme-color" content="#2f3a33">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<link rel="stylesheet" href="../style.css">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+:root { --wall:#d9d2bd; --ink:#2a2a24; --paper:#fbf8ef; --hud:#2f3a33; --g:#1f9a3a; --r:#c42b23; --y:#d08a0c; }
+html, body { height:100%; overflow:hidden; }
+body { margin:0; padding:0; text-align:left; background:var(--wall); color:var(--ink); font-family:"Segoe UI",system-ui,sans-serif;
+  display:flex; flex-direction:column; height:100dvh; min-height:0; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
+.back { position:fixed; top:7px; left:8px; background:#1d2520; color:#fff; border-color:#ffffff33; min-height:34px; padding:6px 12px; }
+button { font:inherit; cursor:pointer; touch-action:manipulation; }
+
+/* HUD */
+#hud { background:var(--hud); color:#f3efe2; display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; padding:5px 10px 5px 92px; font-size:13px; min-height:48px; }
+.hb { display:flex; flex-direction:column; line-height:1.15; }
+.hb small { opacity:.65; font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
+#clock { font:700 22px "Courier New",monospace; color:#ffe9a8; }
+.meter { width:88px; }
+.bar { height:8px; background:#0006; border-radius:4px; overflow:hidden; margin-top:2px; }
+.bar i { display:block; height:100%; width:50%; transition:width .25s, background .25s; }
+#mCoffee i { background:#c8a26a; } #mAnger i { background:#e2553f; } #mStack i { background:#8fb3d9; }
+#rugen { letter-spacing:2px; }
+#mute { margin-left:auto; background:#ffffff18; color:#fff; border:1px solid #ffffff33; border-radius:8px; padding:4px 10px; }
+
+/* Layout */
+#main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(210px,24%) 1fr 172px; gap:8px; padding:8px; }
+#schalter { background:linear-gradient(#cfc6ab,#bfb597); border-radius:10px; display:flex; flex-direction:column; overflow:hidden; border:3px solid #9c9273; min-height:0; }
+#window { position:relative; flex:0 0 auto; height:200px; background:linear-gradient(#b8d3df 0 58%, #9aa98f 58%); border-bottom:8px solid #7d6a4a; display:flex; align-items:flex-end; justify-content:center; overflow:hidden; }
+#window .sign { position:absolute; top:6px; left:50%; transform:translateX(-50%); background:#234; color:#fff; font:700 11px "Courier New",monospace; padding:2px 8px; border-radius:3px; white-space:nowrap; }
+#citizen { font-size:86px; line-height:1; transition:transform .55s ease, opacity .55s; transform:translateX(-170%); opacity:0; margin-bottom:-6px; }
+#citizen.in { transform:none; opacity:1; }
+#citizen.out { transform:translateX(170%); opacity:0; }
+#citizen.angry { animation:shake .3s 3; }
+#pruefer { position:absolute; right:6px; bottom:4px; font-size:34px; display:none; text-align:center; }
+#pruefer b { display:block; font-size:10px; background:#b02; color:#fff; border-radius:4px; padding:0 3px; }
+#side { flex:1; min-height:0; display:flex; flex-direction:column; padding:6px; gap:6px; }
+#bubble { background:#fff; border-radius:12px; padding:7px 10px; font-size:13px; line-height:1.35; box-shadow:0 2px 0 #0003; min-height:3.2em; position:relative; }
+#bubble:empty { visibility:hidden; }
+#bubble i { color:#666; }
+#cinfo { font-size:11.5px; color:#3a3424; line-height:1.3; }
+#cinfo b { color:#000; }
+#queuebox { flex:1; min-height:40px; position:relative; background:#0000000d; border-radius:8px; padding:4px 6px; overflow:hidden; }
+#queuebox small { font-size:10px; text-transform:uppercase; letter-spacing:.05em; opacity:.65; }
+#queue { display:flex; flex-wrap:wrap; gap:1px; font-size:26px; line-height:1.1; }
+#queue.mad span { display:inline-block; animation:shake .4s infinite; }
+.rant { position:absolute; background:#fff; border:2px solid #c42b23; color:#811; font-size:11px; font-weight:700; padding:3px 7px; border-radius:10px; max-width:85%; pointer-events:none; animation:rant 2.8s forwards; z-index:5; }
+@keyframes rant { 0% { opacity:0; transform:translateY(8px) scale(.8); } 10%,80% { opacity:1; transform:none; } 100% { opacity:0; transform:translateY(-12px); } }
+@keyframes shake { 0%,100% { transform:translateX(0); } 25% { transform:translateX(-3px) rotate(-3deg); } 75% { transform:translateX(3px) rotate(3deg); } }
+
+/* Desk */
+#desk { position:relative; overflow:hidden; border-radius:10px; border:3px solid #5a3b1e; touch-action:none; min-height:0; font-size:clamp(10px,1.12vw,14px);
+  background: repeating-linear-gradient(92deg,#0000 0 22px,#00000010 22px 24px,#0000 24px 61px), linear-gradient(#9a6a3c,#87592f); }
+body.tired #desk > .paper, body.tired #desk > .printer { filter:blur(1.3px); }
+.deskhint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:#fff8; font-size:1.4em; font-weight:700; pointer-events:none; padding:20px; }
+.paper { position:absolute; background:var(--paper); color:#222; border-radius:3px; box-shadow:0 2px 0 #0002,0 4px 10px #0005; padding:.6em .75em; cursor:grab; touch-action:none; line-height:1.3; }
+.paper.drag { cursor:grabbing; box-shadow:0 12px 26px #0007; }
+.paper.zoom { z-index:9001 !important; box-shadow:0 12px 30px #000a !important; cursor:zoom-out; }
+#desk.zooming::before { content:''; position:absolute; inset:0; background:#0008; z-index:9000; pointer-events:none; }
+.paper.enter { animation:pin .35s ease-out; }
+.paper.leave { transition:transform .45s ease-in, opacity .45s; transform:translateY(-140%) rotate(-8deg); opacity:0; }
+@keyframes pin { from { opacity:0; transform:translateY(-50px) rotate(6deg); } to { opacity:1; transform:none; } }
+.fine { font-size:.62em; color:#555; margin-top:.35em; }
+.fine b { color:#222; }
+.ausweis { width:17em; background:linear-gradient(135deg,#e3eef5,#f6e7ee); border-radius:.6em; border:1px solid #9ab; }
+.aw-h { font-weight:800; font-size:.8em; letter-spacing:.08em; color:#2b4a6a; display:flex; justify-content:space-between; gap:.5em; }
+.aw-h span { font-weight:400; letter-spacing:0; font-size:.85em; color:#557; }
+.aw-b { display:flex; gap:.6em; margin-top:.35em; align-items:center; }
+.aw-ph { font-size:2.6em; background:#fff8; border:1px solid #9ab; border-radius:.15em; width:1.4em; text-align:center; line-height:1.3; }
+.aw-f small, .row small { display:block; font-size:.62em; color:#667; text-transform:uppercase; letter-spacing:.04em; }
+.aw-f b { display:block; font-size:.95em; }
+.antrag { width:15em; min-height:19.5em; background:repeating-linear-gradient(#0000 0 1.45em,#a8c4dd55 1.45em calc(1.45em + 1px)),var(--paper); }
+.antrag.quer { width:22em; min-height:13.5em; }
+.antrag.c2 { box-shadow:.35em .35em 0 -1px #ebe4d0,.35em .35em 0 0 #0002,0 4px 10px #0005; }
+.antrag.c3 { box-shadow:.35em .35em 0 -1px #ebe4d0,.35em .35em 0 0 #0002,.7em .7em 0 -1px #e2dac2,.7em .7em 0 0 #0002,0 4px 10px #0005; }
+.an-h { display:flex; justify-content:space-between; align-items:baseline; border-bottom:2px solid #333; padding-bottom:.15em; }
+.an-h b { font:900 1.25em "Courier New",monospace; }
+.an-t { font-weight:700; margin:.35em 0 .45em; font-size:.92em; }
+.row { margin:.25em 0; }
+.row span { font-family:"Courier New",monospace; font-weight:700; font-size:1.02em; }
+.sigrow { margin-top:.6em; border-top:1px solid #888; padding-top:.1em; position:relative; min-height:2.2em; }
+.sigrow small { font-size:.6em; color:#667; }
+.sig { font:italic 1.4em "Segoe Script","Brush Script MT","Comic Sans MS",cursive; display:block; transform:rotate(-4deg); margin-top:-.2em; }
+.vst { position:absolute; right:1.4em; bottom:3.4em; width:6.4em; height:6.4em; border-radius:50%; border:.3em solid; display:flex; align-items:center; justify-content:center; text-align:center; font:800 .5em/1.15 "Courier New",monospace; transform:rotate(14deg); opacity:.8; }
+.marke { width:5.2em; text-align:center; background:#fff3c4; border:.25em dotted #c99f2e; padding:.25em; }
+.mk-v { font:900 1.2em "Courier New",monospace; }
+.mk-m { font-size:1.7em; line-height:1.1; }
+.doc2 { width:13em; font-size:.92em; }
+.doc2 h4 { margin:0 0 .3em; font-size:1em; letter-spacing:.04em; }
+.doc2 p { margin:0; font-size:.82em; }
+.bestaetigung { background:#eef7ea; } .bestbest { background:#e5f3df; border:2px double #6a9a5a; }
+.langname { background:#f2ecff; } .tiermarke { background:#ffe9d6; width:9em; text-align:center; }
+.fax { width:15em; background:#f4f4f0; font-family:"Courier New",monospace; border-top:.5em solid #ccc; }
+.fax .x { position:absolute; right:.3em; top:.1em; cursor:pointer; font-weight:900; padding:.2em .4em; }
+.stain::after { content:''; position:absolute; width:4.2em; height:4.2em; border-radius:50%; border:.5em solid #7b4a1f66; right:.3em; bottom:.4em; pointer-events:none; box-shadow:inset 0 0 0 .25em #7b4a1f22; }
+.imprint { position:absolute; left:50%; top:46%; transform:translate(-50%,-50%) rotate(-13deg); border:.22em solid; border-radius:.3em; padding:.1em .45em; font:900 1.45em "Courier New",monospace; white-space:nowrap; opacity:.88; mix-blend-mode:multiply; pointer-events:none; animation:ink .18s ease-out; z-index:3; }
+@keyframes ink { from { transform:translate(-50%,-50%) rotate(-13deg) scale(1.5); opacity:0; } }
+.miss { position:absolute; font:900 1.1em "Courier New",monospace; border:.2em solid; padding:.1em .4em; opacity:.8; pointer-events:none; transform:rotate(25deg); }
+#rubber { position:absolute; width:5.5em; height:6.5em; margin:-6.5em 0 0 -2.75em; pointer-events:none; z-index:9500; display:none; }
+#rubber .hd { width:2.2em; height:2.6em; margin:0 auto; background:radial-gradient(circle at 35% 30%,#c98a54,#6b3f1e); border-radius:1em 1em .4em .4em; }
+#rubber .st { width:1em; height:1.4em; margin:0 auto; background:#5a3b1e; }
+#rubber .bs { height:2.2em; border-radius:.3em; background:#333; border-bottom:.5em solid var(--c); }
+#rubber.go { display:block; animation:stamp var(--d) ease-in-out; }
+@keyframes stamp { 0% { transform:translateY(-260%) scale(1.3); } 55% { transform:translateY(0) scale(1); } 65% { transform:translateY(4%) scale(1.04,.94); } 100% { transform:translateY(-260%) scale(1.3); } }
+.printer { position:absolute; right:10px; top:10px; z-index:5000; background:#e6e6e0; border:3px solid #555; border-radius:10px; padding:6px 10px; text-align:center; cursor:pointer; font-weight:800; color:#a11; box-shadow:0 4px 0 #0005; touch-action:none; }
+.printer .pi { font-size:2.4em; display:block; line-height:1; }
+.printer.shake { animation:shake .25s; }
+.kuchen { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:5001; background:#fff; color:#222; border:3px solid #b07a2c; border-radius:12px; padding:12px 14px; width:min(320px,92%); text-align:center; box-shadow:0 10px 30px #0008; font-size:14px; }
+.kuchen .big { font-size:40px; }
+.kuchen button { margin:6px 4px 0; padding:8px 12px; border-radius:8px; border:0; font-weight:800; color:#fff; background:#2f6f3f; }
+.kuchen button.no { background:#8a3a2a; }
+
+/* Tools */
+#tools { display:flex; flex-direction:column; gap:6px; min-height:0; overflow:auto; }
+.tb { border:0; border-radius:10px; padding:9px 8px; font-weight:800; font-size:14px; color:#fff; background:#4c5a50; box-shadow:0 4px 0 #0005; text-align:center; line-height:1.15; }
+.tb:active:not(:disabled) { transform:translateY(3px); box-shadow:0 1px 0 #0005; }
+.tb:disabled { opacity:.45; cursor:not-allowed; }
+.tb small { display:block; font-size:10px; font-weight:600; opacity:.8; }
+.tb.on { outline:3px solid #ffe9a8; }
+#bNext { background:#2c5d8a; } #bNext.pulse { animation:pulse 1s infinite; }
+@keyframes pulse { 50% { box-shadow:0 4px 0 #0005,0 0 0 6px #ffe9a877; } }
+#bG { background:var(--g); font-size:15px; } #bA { background:var(--r); font-size:15px; } #bF { background:var(--y); font-size:15px; }
+
+/* Toasts, overlays, drawer */
+#toasts { position:fixed; top:54px; left:50%; transform:translateX(-50%); z-index:700; display:flex; flex-direction:column; gap:6px; width:min(460px,94vw); pointer-events:none; }
+.toast { background:#fffdf5; color:#222; border-left:6px solid #4c5a50; border-radius:8px; padding:8px 12px; box-shadow:0 6px 18px #0005; font-size:14px; animation:tin .25s; }
+.toast.boss { border-color:#c42b23; } .toast.good { border-color:#1f9a3a; } .toast.warn { border-color:#d08a0c; }
+.toast b { display:block; }
+@keyframes tin { from { opacity:0; transform:translateY(-10px); } }
+.fl { position:fixed; z-index:720; font-weight:900; font-size:22px; pointer-events:none; text-shadow:0 2px 0 #fff; animation:fl 1.2s forwards; }
+@keyframes fl { to { transform:translateY(-50px); opacity:0; } }
+#ov { position:fixed; inset:0; background:#000a; display:none; align-items:center; justify-content:center; z-index:1000; padding:14px; }
+#ov.show { display:flex; }
+.dlg { background:var(--paper); color:#222; border-radius:12px; max-width:580px; width:100%; max-height:92vh; overflow:auto; padding:18px 20px; border:4px solid #9c9273; box-shadow:0 10px 40px #000a; }
+.dlg h1 { font-size:clamp(1.4rem,4.5vw,2rem); margin:0 0 4px; color:#222; }
+.dlg h2 { font-size:1.15rem; margin:12px 0 4px; }
+.dlg p, .dlg li { line-height:1.45; font-size:14.5px; }
+.dlg ul { padding-left:20px; margin:6px 0; }
+.dlg .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.dlg .btns button { border:0; border-radius:10px; padding:11px 18px; font-weight:800; font-size:16px; color:#fff; background:#2f6f3f; box-shadow:0 4px 0 #0004; }
+.dlg .btns button.sec { background:#6b6550; }
+.new { background:#ffe36b; border-radius:4px; padding:0 4px; font-size:11px; font-weight:800; margin-right:4px; }
+.stats { display:grid; grid-template-columns:1fr auto; gap:2px 14px; font-size:14.5px; margin:8px 0; }
+.stats b { text-align:right; }
+.prog { height:10px; background:#0002; border-radius:5px; overflow:hidden; } .prog i { display:block; height:100%; background:#2f6f3f; }
+#drawer { position:fixed; top:52px; right:8px; bottom:8px; width:min(400px,96vw); z-index:600; background:var(--paper); color:#222; border:3px solid #9c9273; border-radius:12px; box-shadow:0 10px 40px #0008; transform:translateX(110%); transition:transform .25s; overflow:auto; padding:12px 14px; font-size:13.5px; }
+#drawer.open { transform:none; }
+#drawer h3 { margin:6px 0; }
+#drawer ol { padding-left:20px; margin:4px 0; } #drawer li { margin:3px 0; line-height:1.35; }
+#drawer table { width:100%; border-collapse:collapse; font-size:12.5px; }
+#drawer td { border-bottom:1px solid #0002; padding:3px 2px; } #drawer td:nth-child(2) { font:700 12px "Courier New",monospace; white-space:nowrap; } #drawer td:last-child { text-align:right; white-space:nowrap; }
+#drawer .close { float:right; border:0; background:#4c5a50; color:#fff; border-radius:8px; padding:4px 10px; font-weight:800; }
+#selftest { white-space:pre-wrap; font:12px monospace; text-align:left; }
+
+@media (max-width:760px) {
+  #hud { padding-left:84px; font-size:11px; gap:3px 9px; }
+  #clock { font-size:17px; } .meter { width:58px; } .hb small { font-size:9px; }
+  #main { grid-template-columns:1fr; grid-template-rows:132px 1fr auto; gap:5px; padding:5px; }
+  #window .sign { font-size:8px; padding:1px 4px; }
+  #side { overflow:hidden; }
+  #bubble { flex:1 1 auto; overflow:auto; }
+  #cinfo { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 0 auto; }
+  #queuebox { flex:0 0 34px; min-height:0; }
+  #schalter { flex-direction:row; }
+  #window { height:auto; width:34%; border-bottom:0; border-right:6px solid #7d6a4a; }
+  #citizen { font-size:54px; }
+  #side { padding:4px; gap:3px; }
+  #bubble { font-size:11.5px; padding:4px 7px; min-height:0; }
+  #cinfo { font-size:10px; }
+  #queue { font-size:17px; }
+  #desk { font-size:9.5px; }
+  #tools { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+  .tb { padding:7px 3px; font-size:12px; } .tb small { display:none; }
+  #bG, #bA, #bF { font-size:12px; }
+  #toasts { top:auto; bottom:110px; }
+}
+</style>
+</head>
+<body>
+<a class="back" href="../index.html">← Hub</a>
+<div id="hud">
+  <div class="hb"><small>Uhrzeit</small><span id="clock">08:00</span></div>
+  <div class="hb"><small>Dienst</small><span id="dayinfo">Tag 1</span></div>
+  <div class="hb"><small>Rang</small><span id="rank">Praktikant</span></div>
+  <div class="hb"><small>Rügen</small><span id="rugen">▫▫▫</span></div>
+  <div class="hb meter" id="mCoffee"><small>☕ Kaffee</small><div class="bar"><i></i></div></div>
+  <div class="hb meter" id="mAnger"><small>😡 Wut</small><div class="bar"><i></i></div></div>
+  <div class="hb meter" id="mStack"><small>🗂️ Akten</small><div class="bar"><i></i></div></div>
+  <button id="mute" title="Ton an/aus">🔊</button>
+</div>
+<div id="main">
+  <div id="schalter">
+    <div id="window"><div class="sign">SCHALTER 3 · BÜRGERAMT</div><div id="citizen"></div><div id="pruefer">🕵️<b>PRÜFER ×2</b></div></div>
+    <div id="side">
+      <div id="bubble"></div>
+      <div id="cinfo"></div>
+      <div id="queuebox"><small id="qlabel">Wartende: 0</small><div id="queue"></div></div>
+    </div>
+  </div>
+  <div id="desk"><div class="deskhint" id="deskhint">Schalter offen.<br>🔔 „Nächster!“ rufen</div><div id="rubber"><div class="hd"></div><div class="st"></div><div class="bs"></div></div></div>
+  <div id="tools">
+    <button class="tb" id="bNext">🔔 Nächster!<small>Taste N</small></button>
+    <button class="tb" id="bG">✅ GENEHMIGT<small>Taste 1</small></button>
+    <button class="tb" id="bA">❌ ABGELEHNT<small>Taste 2</small></button>
+    <button class="tb" id="bF">📋 FORMULAR FEHLT<small>Taste 3</small></button>
+    <button class="tb" id="bRules">📜 Vorschriften<small>Taste R</small></button>
+    <button class="tb" id="bLupe">🔍 Lupe<small>Taste L · oder Doppeltipp</small></button>
+    <button class="tb" id="bCoffee">☕ Kaffee<small>Taste K</small></button>
+    <button class="tb" id="bAblage">🗄️ Ablage<small>Taste A</small></button>
+  </div>
+</div>
+<div id="toasts"></div>
+<div id="drawer"></div>
+<div id="ov"><div class="dlg" id="dlg"></div></div>
+
+<script>
+'use strict';
+// ================= Helpers =================
+const AC = window.ArcadeCore || null;
+function snd(name, ...a) { try { if (AC && AC[name]) AC[name](...a); } catch (e) {} }
+function tone(f, d, t, g) { snd('playTone', f, d, t, g); }
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const ri = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const pad = n => String(n).padStart(2, '0');
+const DAY_MS = 864e5;
+const mkDate = (y, m, d) => Math.round(Date.UTC(y, m, d) / DAY_MS);
+const START = mkDate(2025, 5, 2); // Montag, 02.06.2025
+const WD = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
+function fmt(n) { const t = new Date(n * DAY_MS); return pad(t.getUTCDate()) + '.' + pad(t.getUTCMonth() + 1) + '.' + t.getUTCFullYear(); }
+function md(n) { const t = new Date(n * DAY_MS); return t.getUTCMonth() * 100 + t.getUTCDate(); }
+function dayInfo(day) { const i = day - 1; return { today: START + Math.floor(i / 5) * 7 + (i % 5), wd: i % 5 }; }
+const LEAP = [1944, 1952, 1960, 1968, 1972, 1976, 1984, 1988, 1992, 1996, 2000, 2004, 2008];
+const LEAP_PET = [2012, 2016, 2020, 2024];
+
+// ================= Data =================
+const REQS = [
+  { title: 'Gartenzwerg-Aufstellgenehmigung', form: 'G-7', fee: 12 },
+  { title: 'Antrag auf ein Antragsformular', form: 'A-0', fee: 5 },
+  { title: 'Führerschein Klasse B für Hund', form: 'F-9T', fee: 30, sp: 'hund' },
+  { title: 'Ufo-Parkausweis (Anwohner)', form: 'P-42', fee: 42 },
+  { title: 'Umzug des Wohnzimmers ins Badezimmer', form: 'U-3b', fee: 18 },
+  { title: 'Lärmschutz gegen Vogelgezwitscher', form: 'L-17', fee: 9 },
+  { title: 'Anmeldung eines Haustier-Steins', form: 'H-1', fee: 3 },
+  { title: 'Zweitwohnsitz im Baumhaus', form: 'B-5', fee: 15 },
+  { title: 'Bescheinigung über eine fehlende Bescheinigung', form: 'N-404', fee: 7 },
+  { title: 'Wahlrecht für Katze', form: 'W-8K', fee: 0, sp: 'katze' },
+  { title: 'Erlaubnis zum öffentlichen Gähnen', form: 'G-0815', fee: 6 },
+  { title: 'Sondergenehmigung Socken in Sandalen', form: 'S-11', fee: 11 },
+  { title: 'Verlängerung des Wochenendes', form: 'V-2', fee: 24 },
+  { title: 'Baugenehmigung für eine Sandburg', form: 'S-4', fee: 8 },
+  { title: 'Umbenennung des Montags', form: 'M-1', fee: 20 },
+  { title: 'Kindergeld für Hund', form: 'K-9', fee: 0, sp: 'hund' },
+  { title: 'Parkerlaubnis für ein Einhorn', form: 'E-1', fee: 13 },
+  { title: 'Halteverbot für Tauben', form: 'T-6', fee: 4 },
+  { title: 'Angelschein für die Badewanne', form: 'A-12', fee: 10 },
+  { title: 'Ruhestörung durch zu lautes Schweigen', form: 'R-0', fee: 2 },
+  { title: 'Katze möchte Bürgermeisterin werden', form: 'B-9K', fee: 25, sp: 'katze' },
+];
+const RULES = [
+  { id: 'ausweis', base: 1, text: 'Ausweis ist Pflicht. Fehlt er → <b>Formular fehlt</b>. Abgelaufen (Gültig-bis vor heute) → <b>Abgelehnt</b>.' },
+  { id: 'form', base: 1, text: 'Formularnummer muss zum Anliegen passen (siehe Formularverzeichnis). Falsches oder kein Formular → <b>Formular fehlt</b>.' },
+  { id: 'name', base: 1, text: 'Name auf dem Antrag muss <b>exakt</b> dem Ausweis entsprechen.' },
+  { id: 'sig', base: 1, text: 'Ohne Unterschrift kein Antrag.' },
+  { id: 'fee', base: 1, text: 'Gebührenmarken müssen <b>exakt</b> die Gebühr ergeben. Zu wenig: abgelehnt. Zu viel: Bestechungsversuch, abgelehnt!' },
+  { id: 'blau', text: 'Unterschriften nur in <b>Blau</b>. Schwarz ist Trauer, Rot ist Lehrer, Grün ist Förster.' },
+  { id: 'bestbest', text: 'Kein Antrag ohne <b>Bestätigung</b> – und ohne <b>Bestätigung der Bestätigung</b>. Fehlt eine → Formular fehlt.' },
+  { id: 'format', text: 'Anträge <b>dienstags nur im Querformat</b>, an allen anderen Tagen nur im Hochformat.' },
+  { id: 'stempel', text: 'Jeder Antrag braucht einen <b>grünen</b> Vorstempel vom Ordnungsamt. Fehlt er → Formular fehlt. Andere Farbe → abgelehnt.' },
+  { id: 'kaffee', text: 'Dokumente mit <b>Kaffeeflecken</b> sind ungültig. (Gilt nicht für unsere eigenen Akten.)' },
+  { id: 'geburtstag', text: 'Wer <b>heute Geburtstag</b> hat, wird aus Pietätsgründen nicht bearbeitet → abgelehnt.' },
+  { id: 'langname', text: 'Nachnamen mit <b>mehr als 10 Buchstaben</b> brauchen das Langnamen-Zusatzblatt L-10. Fehlt es → Formular fehlt.' },
+  { id: 'dreizehn', text: 'Ausweisnummern, die auf <b>13</b> enden, sind aus Aberglaubensgründen abzulehnen.' },
+  { id: 'adler', text: 'Nur Gebührenmarken mit <b>Adler</b> 🦅. Enten und Eulen sind keine Hoheitszeichen.' },
+  { id: 'tier', text: 'Tiere als Antragsteller brauchen eine <b>Tiermarke</b>. Fehlt sie → Formular fehlt.' },
+  { id: 'datum', text: 'Antragsdatum höchstens <b>3 Tage</b> alt und nicht in der Zukunft.' },
+  { id: 'durchschlag', text: 'Anträge nur in <b>dreifacher Ausfertigung</b> (Exemplare: 3). Weniger → Formular fehlt.' },
+];
+const DAY_RULES = RULES.filter(r => !r.base);
+const FIRST = ['Hildegard', 'Klaus', 'Uwe', 'Gisela', 'Jürgen', 'Sabine', 'Horst', 'Ingrid', 'Detlef', 'Waltraud', 'Kevin', 'Chantal', 'Bernd', 'Ute', 'Dieter', 'Renate', 'Ralf', 'Heike', 'Manfred', 'Brigitte', 'Torsten', 'Jacqueline', 'Gerd', 'Ursula', 'Lothar', 'Mandy', 'Rüdiger', 'Elfriede', 'Sven', 'Doris', 'Gundula', 'Olaf'];
+const LAST_SHORT = ['Müller', 'Meier', 'Schmidt', 'Huber', 'Wagner', 'Becker', 'Krause', 'Schulz', 'Klein', 'Wolf', 'Braun', 'Vogel', 'Fuchs', 'Keller', 'Lange', 'Hahn', 'Busch', 'Kuhn', 'Lehmann', 'Zimmer', 'Pohl', 'Seidel'];
+const LAST_LONG = ['Schwarzenberger', 'Hinterhuberbauer', 'Kleinschmidtmann', 'Oberniederhuber', 'Pfannkuchenbäcker', 'Zwiebelschneider', 'Kartoffelacker', 'Bratwurstgriller', 'Sauerkrautschmidt', 'Gartenzaunlackierer', 'Mittagsschläfer'];
+const PETS = { hund: ['Bello', 'Rex', 'Fiffi', 'Waldi', 'Hasso', 'Bobby', 'Lumpi', 'Wuffi'], katze: ['Mieze', 'Minka', 'Schnurri', 'Felix', 'Tiger', 'Mausi', 'Pfötchen'] };
+const EMO = { mensch: ['👴', '👵', '👨', '👩', '🧔', '👱‍♀️', '🧑‍🦰', '👨‍🦳', '👩‍🦱', '🧓', '👨‍🔧', '👩‍🍳', '🧑‍🎤', '🤠', '👩‍🌾', '🧑‍🚀', '👷', '🧑‍🍼', '🧛'], hund: ['🐶', '🐕'], katze: ['🐱', '🐈'] };
+const INKS = ['blau', 'schwarz', 'rot', 'grün'];
+const INK_CSS = { blau: '#1a3fd0', schwarz: '#151515', rot: '#c0201b', grün: '#1f8a3a', lila: '#7b3fb0' };
+const MOTIF = { adler: '🦅', ente: '🦆', eule: '🦉' };
+const GREET = ['Guten Tag!', 'Moin.', 'Grüß Gott!', 'Tach.', 'Hallo, ich war zuerst da!', 'Endlich! Ich warte seit drei Wochen.', 'Servus.', 'Na, auch schon wach?', 'Schönen guten Morgen – oder ist schon Mittag?', 'Ich hab eine Nummer gezogen: 4711.', 'Entschuldigung, sind Sie zuständig?'];
+const ASK = ['Ich hätte gern {r}.', 'Ich komme wegen {r}.', 'Es geht um {r}. Ganz dringend!', 'Mein Anwalt sagt, ich brauche {r}.', 'Meine Schwiegermutter schickt mich. Wegen {r}.', '{r}. Bitte. Heute noch.', 'Ich möchte {r} beantragen. Online ging nicht, das Fax war besetzt.', 'Man sagte mir, Sie sind für {r} zuständig.', 'Kurze Frage: {r}. Dauert nur fünf Minuten.'];
+const EXCUSE = ['Die Unterlagen sind leicht feucht, war im Regen.', 'Ich hab alles dreimal kopiert, sicher ist sicher.', 'Mein Wellensittich hat beim Ausfüllen geholfen.', 'Das Foto ist von 1983, aber ich sehe noch genauso aus.', 'Ich hab einen Termin – für nächstes Jahr, aber trotzdem.', 'Bitte schnell, mein Parkschein läuft ab.', 'Ich kenne übrigens Ihren Chef. Vom Kegeln.', 'Die Gebührenmarken hab ich vom Flohmarkt.', 'Das Formular lag beim Bäcker aus.', 'Ich hab alles ausgefüllt. Glaube ich.'];
+const RETURN = ['Da bin ich wieder! Diesmal mit allem.', 'Ich hab\'s! Bitte nicht wieder wegschicken.', 'Zimmer 0815 war im Keller. Hinter dem Heizungsraum. Egal – hier!', 'Drei Ämter später: Bitteschön.', 'Ich bin\'s wieder. Ja, genau der.'];
+const REACT = {
+  G: ['Juhu! Endlich!', 'Ich werde Sie meiner Oma empfehlen.', 'Das war ja… fast schnell!', 'Ich rahme mir den Bescheid ein.', 'Ein Wunder! Ich ruf die Kirche an.', 'Danke! Ich nenne mein Kind nach Ihnen.', 'Herrlich. Und das ohne Bestechung!'],
+  A: ['Das ist ja unerhört!', 'Ich kenne den Bürgermeister!', 'Ich zahle hier Steuern!', 'Das schreibe ich in meine Online-Bewertung!', 'Ich will Ihren Vorgesetzten sprechen!', 'Dann wandere ich eben aus! Nach Hintertupfingen!', 'Das hat ein Nachspiel – mit Leserbrief!'],
+  F: ['Und wo bekomme ich das?', 'Das sagt man mir JETZT?', 'Na gut, ich komme wieder. Mit Zelt.', 'Zimmer 0815? Das gibt es doch gar nicht!', 'Ich hol’s. Aber ich bin enttäuscht.', 'Mein drittes Mal diese Woche…']
+};
+const CLERK_F = ['Zimmer 0815, Keller, links. Ziehen Sie eine Nummer.', 'Da fehlt was. Was genau, steht im Merkblatt. Das Merkblatt gibt’s in Zimmer 0815.', 'Kommen Sie mit den vollständigen Unterlagen wieder.'];
+const RANTS = ['Ich warte hier seit 1987!', 'Geht\'s da vorne auch schneller?', 'Mein Parkschein läuft ab!', 'Ich hab Rechte!', 'Typisch Amt!', 'Hallo?! Eingeschlafen?', 'Ich nehm schon mal ’ne Nummer für meine Enkel.', 'Mein Joghurt läuft gleich ab!', 'Ich bin Steuerzahler!', 'Ich ruf die Zeitung an!', 'Ich hab Urlaub genommen dafür!', 'Wer hat hier Vorfahrt?!', 'Wuff! (wütend)', 'Das dauert ja länger als der Flughafenbau!', 'Ich möchte meine Lebenszeit zurück!'];
+const BOSS = 'Amtsleiter Dr. Pingelig';
+const BOSS_RUGE = ['In mein Büro! Sofort!', 'So wird das nichts mit der Verbeamtung!', 'Haben Sie die Dienstvorschrift überhaupt gelesen?', 'Ich bin zutiefst enttäuscht. Und ich bin selten tief.', 'Das kommt in Ihre Personalakte. In ROT.', 'Ich mache dafür extra einen Aktenvermerk!'];
+const PRAISE = ['Dr. Pingelig nickt anerkennend. Fast.', 'Vorbildlich. Ich lege das ab unter „Vorbildlich“.', 'Weiter so – aber nicht zu schnell, sonst erwartet man das.'];
+const KOLLEGEN = ['Kollege Brösel', 'Kollegin Krümel-Schulze', 'Herr Sahnehäubchen aus Zimmer 3b', 'Frau Streusel vom Meldeamt'];
+const RANKS = [{ n: 'Praktikant', p: 0, e: '🧑‍🎓' }, { n: 'Sachbearbeiter', p: 150, e: '🧑‍💼' }, { n: 'Oberamtsrat', p: 450, e: '👨‍💼' }, { n: 'Amtsleiter', p: 900, e: '👑' }];
+const UNLOCKS = [
+  { id: 'turbo', n: 'Turbo-Stempel', p: 150, d: 'Stempelt mehr als doppelt so schnell.' },
+  { id: 'becher', n: 'Zweiter Kaffeebecher', p: 300, d: 'Kaffee reicht doppelt so lange.' },
+  { id: 'ablage', n: 'Ablagesystem', p: 450, d: 'Aktenstapel fasst 16 statt 8, Ablegen geht blitzschnell.' },
+  { id: 'gold', n: 'Goldener Stempel', p: 900, d: '×1,5 Beförderungspunkte. Glänzt.' },
+];
+
+// ================= Rules engine =================
+const doc = (c, t) => c.docs.find(d => d.type === t);
+const hasDoc = (c, t) => c.docs.some(d => d.type === t);
+function rulesFor(day, extra = []) {
+  return new Set([...RULES.filter(r => r.base).map(r => r.id), ...DAY_RULES.slice(0, Math.max(0, day - 1)).map(r => r.id), ...extra]);
+}
+function makeCtx(day, extra) { const d = dayInfo(day); return { day, today: d.today, wd: d.wd, rules: rulesFor(day, extra) }; }
+
+// Ground truth: any missing paper → F, else any violation → A, else G.
+function validate(c, x) {
+  const R = x.rules, F = [], A = [];
+  const au = doc(c, 'ausweis'), an = doc(c, 'antrag'), mk = c.docs.filter(d => d.type === 'marke');
+  if (!au) F.push('Kein Ausweis vorgelegt');
+  if (!an) F.push('Kein Antragsformular dabei');
+  else if (an.form !== c.req.form) F.push(`Falsches Formular (${an.form} statt ${c.req.form})`);
+  if (au && au.expiry < x.today) A.push('Ausweis abgelaufen');
+  if (au && an && an.name !== au.name) A.push('Name auf dem Antrag passt nicht zum Ausweis');
+  if (an && !an.sig) A.push('Unterschrift fehlt');
+  const sum = mk.reduce((s, m) => s + m.value, 0);
+  if (sum < c.req.fee) A.push(`Gebühr zu niedrig (${sum} € statt ${c.req.fee} €)`);
+  else if (sum > c.req.fee) A.push(`Zu viel Gebühr (${sum} € statt ${c.req.fee} €) – Bestechungsversuch`);
+  if (R.has('blau') && an && an.sig && an.sig !== 'blau') A.push(`Unterschrift in ${an.sig} statt blau`);
+  if (R.has('bestbest')) {
+    if (!hasDoc(c, 'bestaetigung')) F.push('Bestätigung fehlt');
+    if (!hasDoc(c, 'bestbest')) F.push('Bestätigung der Bestätigung fehlt');
+  }
+  if (R.has('format') && an && an.orient !== (x.wd === 1 ? 'quer' : 'hoch')) A.push(`Falsches Papierformat für ${WD[x.wd]}`);
+  if (R.has('stempel') && an) {
+    if (!an.stamp) F.push('Grüner Vorstempel fehlt');
+    else if (an.stamp !== 'grün') A.push(`Vorstempel ${an.stamp} statt grün`);
+  }
+  if (R.has('kaffee') && c.docs.some(d => d.stain)) A.push('Kaffeefleck auf einem Dokument');
+  if (R.has('geburtstag') && au && md(au.birth) === md(x.today)) A.push('Hat heute Geburtstag');
+  if (R.has('langname') && au && au.last.length > 10 && !hasDoc(c, 'langname')) F.push('Langnamen-Zusatzblatt L-10 fehlt');
+  if (R.has('dreizehn') && au && au.nr.endsWith('13')) A.push('Ausweisnummer endet auf 13');
+  if (R.has('adler') && mk.some(m => m.motif !== 'adler')) A.push('Gebührenmarke ohne Adler');
+  if (R.has('tier') && c.citizen.sp !== 'mensch' && !hasDoc(c, 'tiermarke')) F.push('Tiermarke fehlt');
+  if (R.has('datum') && an && (an.date > x.today || an.date < x.today - 3)) A.push(an.date > x.today ? 'Antragsdatum liegt in der Zukunft' : 'Antragsdatum älter als 3 Tage');
+  if (R.has('durchschlag') && an && an.copies < 3) F.push('Durchschläge fehlen');
+  return { v: F.length ? 'F' : A.length ? 'A' : 'G', reasons: F.length ? F : A };
+}
+
+function remove(c, t) { const i = c.docs.findIndex(d => d.type === t); if (i >= 0) c.docs.splice(i, 1); }
+function typo(s) {
+  for (let t = 0; t < 40; t++) {
+    const i = ri(1, s.length - 2), m = ri(0, 3);
+    if (s[i] === ' ' || s[i - 1] === ' ' || s[i + 1] === ' ') continue;
+    let r;
+    if (m === 0) r = s.slice(0, i) + s.slice(i + 1);
+    else if (m === 1) r = s.slice(0, i) + s[i] + s.slice(i);
+    else if (m === 2) r = s.slice(0, i - 1) + s[i] + s[i - 1] + s.slice(i + 1);
+    else if ('aeiouäöü'.includes(s[i])) r = s.slice(0, i) + pick('aeiouy'.split('').filter(v => v !== s[i])) + s.slice(i + 1);
+    if (r && r !== s) return r;
+  }
+  return s + 'h';
+}
+// Each flaw breaks exactly one rule; apply() returns the verdict kind it causes.
+const FLAWS = [
+  { id: 'noAusweis', rule: 'ausweis', w: 0.6, apply: c => { remove(c, 'ausweis'); return 'F'; } },
+  { id: 'expired', rule: 'ausweis', apply: (c, x) => { const a = doc(c, 'ausweis'); if (a) a.expiry = x.today - ri(1, 600); return 'A'; } },
+  { id: 'noAntrag', rule: 'form', w: 0.3, apply: c => { remove(c, 'antrag'); return 'F'; } },
+  { id: 'wrongForm', rule: 'form', apply: c => { const a = doc(c, 'antrag'); if (a) { const o = pick(REQS.filter(r => r.form !== c.req.form)); a.form = o.form; a.formTitle = o.title; } return 'F'; } },
+  { id: 'typo', rule: 'name', w: 1.3, apply: c => { const a = doc(c, 'antrag'); if (a) a.name = typo(a.name); return 'A'; } },
+  { id: 'unsigned', rule: 'sig', apply: c => { const a = doc(c, 'antrag'); if (a) a.sig = null; return 'A'; } },
+  { id: 'fee', rule: 'fee', w: 1.2, apply: c => {
+    const m = c.docs.filter(d => d.type === 'marke');
+    if (m.length && Math.random() < 0.55) c.docs.splice(c.docs.indexOf(pick(m)), 1);
+    else c.docs.push({ type: 'marke', value: pick([1, 2, 5]), motif: 'adler' });
+    return 'A'; } },
+  { id: 'notBlue', rule: 'blau', apply: c => { const a = doc(c, 'antrag'); if (a && a.sig) a.sig = pick(['schwarz', 'rot', 'grün']); return 'A'; } },
+  { id: 'noBest', rule: 'bestbest', apply: c => { const r = ri(0, 2); if (r !== 1) remove(c, 'bestaetigung'); if (r !== 0) remove(c, 'bestbest'); return 'F'; } },
+  { id: 'format', rule: 'format', apply: c => { const a = doc(c, 'antrag'); if (a) a.orient = a.orient === 'quer' ? 'hoch' : 'quer'; return 'A'; } },
+  { id: 'stamp', rule: 'stempel', apply: c => {
+    const a = doc(c, 'antrag'); if (!a) return 'F';
+    if (Math.random() < 0.5) { a.stamp = null; return 'F'; }
+    a.stamp = pick(['rot', 'lila', 'blau']); return 'A'; } },
+  { id: 'stain', rule: 'kaffee', apply: c => { if (c.docs.length) pick(c.docs).stain = true; return 'A'; } },
+  { id: 'birthday', rule: 'geburtstag', apply: (c, x) => { const a = doc(c, 'ausweis'); if (a) { const t = new Date(x.today * DAY_MS); a.birth = mkDate(pick(a.sp === 'mensch' ? LEAP : LEAP_PET), t.getUTCMonth(), t.getUTCDate()); } return 'A'; } },
+  { id: 'noLangname', rule: 'langname', hint: 'long', apply: c => { remove(c, 'langname'); return 'F'; } },
+  { id: 'thirteen', rule: 'dreizehn', apply: c => { const a = doc(c, 'ausweis'); if (a) a.nr = a.nr.slice(0, -2) + '13'; return 'A'; } },
+  { id: 'duck', rule: 'adler', hint: 'fee', apply: c => { const m = c.docs.filter(d => d.type === 'marke'); if (m.length) pick(m).motif = pick(['ente', 'eule']); return 'A'; } },
+  { id: 'noTiermarke', rule: 'tier', hint: 'animal', apply: c => { remove(c, 'tiermarke'); return 'F'; } },
+  { id: 'badDate', rule: 'datum', apply: (c, x) => { const a = doc(c, 'antrag'); if (a) a.date = Math.random() < 0.4 ? x.today + ri(1, 40) : x.today - ri(4, 90); return 'A'; } },
+  { id: 'copies', rule: 'durchschlag', apply: c => { const a = doc(c, 'antrag'); if (a) a.copies = ri(1, 2); return 'F'; } },
+];
+function wpick(arr) { let s = arr.reduce((a, f) => a + (f.w || 1), 0) * Math.random(); for (const f of arr) { s -= f.w || 1; if (s <= 0) return f; } return arr[arr.length - 1]; }
+function splitFee(fee) { const out = []; let rem = fee; while (rem > 0) { const v = pick([1, 2, 5, 10, 20].filter(v => v <= rem).slice(-2)); out.push(v); rem -= v; } return out; }
+function newCitizen(req, long, x) {
+  const sp = req.sp || 'mensch';
+  const last = pick(long || Math.random() < 0.25 ? LAST_LONG : LAST_SHORT);
+  const first = sp === 'mensch' ? pick(FIRST) : pick(PETS[sp]);
+  let birth = mkDate(pick(sp === 'mensch' ? LEAP : LEAP_PET), ri(0, 11), ri(1, 28));
+  if (md(birth) === md(x.today)) birth += 1;
+  let nr; do { nr = 'L' + String(ri(10000000, 99999999)); } while (nr.endsWith('13'));
+  return { first, last, name: first + ' ' + last, sp, emoji: pick(EMO[sp]), birth, nr };
+}
+// Builds a fully valid case for x, then applies flaws. intended = verdict the flaws should cause.
+function genCase(x, o = {}) {
+  const R = x.rules, cit = o.citizen;
+  const n = o.nFlaws != null ? o.nFlaws : (Math.random() < (o.citizen ? 0.7 : Math.max(0.34, 0.5 - x.day * 0.02)) ? 0 : (x.day >= 4 && Math.random() < 0.2 ? 2 : 1));
+  const compat = f => !cit || ((f.hint !== 'long' || cit.last.length > 10) && (f.hint !== 'animal' || cit.sp !== 'mensch') && (f.hint !== 'fee' || o.req.fee > 0));
+  let avail = FLAWS.filter(f => R.has(f.rule) && compat(f));
+  const flaws = o.force ? o.force.map(id => FLAWS.find(f => f.id === id)) : [];
+  while (!o.force && flaws.length < n && avail.length) { const f = wpick(avail); flaws.push(f); avail = avail.filter(a => a !== f); }
+  const hints = new Set(flaws.map(f => f.hint));
+  let req = o.req;
+  if (!req) {
+    let pool = REQS.filter(r => (!hints.has('animal') || r.sp) && (!hints.has('fee') || r.fee > 0));
+    if (!hints.has('animal') && Math.random() < 0.8) pool = pool.filter(r => !r.sp);
+    req = pick(pool);
+  }
+  const cz = cit || newCitizen(req, hints.has('long'), x);
+  const c = { req, citizen: cz, docs: [] }, D = c.docs;
+  D.push({ type: 'ausweis', name: cz.name, last: cz.last, sp: cz.sp, photo: cz.emoji, birth: cz.birth, expiry: x.today + ri(0, 3000), nr: cz.nr });
+  D.push({ type: 'antrag', form: req.form, formTitle: req.title, name: cz.name,
+    date: x.today - (R.has('datum') ? ri(0, 3) : ri(0, 40)),
+    sig: R.has('blau') ? 'blau' : pick(INKS),
+    orient: R.has('format') ? (x.wd === 1 ? 'quer' : 'hoch') : pick(['hoch', 'quer']),
+    stamp: R.has('stempel') ? 'grün' : pick([null, null, 'grün', 'rot', 'lila']),
+    copies: R.has('durchschlag') ? 3 : ri(1, 3) });
+  for (const v of splitFee(req.fee)) D.push({ type: 'marke', value: v, motif: R.has('adler') ? 'adler' : pick(['adler', 'adler', 'ente', 'eule']) });
+  if (R.has('bestbest') || Math.random() < 0.15) D.push({ type: 'bestaetigung' });
+  if (R.has('bestbest') || Math.random() < 0.15) D.push({ type: 'bestbest' });
+  if ((R.has('langname') && cz.last.length > 10) || Math.random() < 0.08) D.push({ type: 'langname', name: cz.last });
+  if (cz.sp !== 'mensch' && (R.has('tier') || Math.random() < 0.4)) D.push({ type: 'tiermarke', name: cz.first, nr: ri(1000, 9999) });
+  if (!R.has('kaffee') && Math.random() < 0.2) pick(D).stain = true;
+  const kinds = flaws.map(f => f.apply(c, x));
+  return { c, flaws: flaws.map(f => f.id), intended: kinds.includes('F') ? 'F' : kinds.length ? 'A' : 'G' };
+}
+
+// ================= Self-test (?selftest) =================
+function selftest() {
+  const log = []; let fails = 0, n = 0;
+  const check = (cond, msg) => { n++; if (!cond) { fails++; if (fails < 25) log.push('FAIL: ' + msg); } console.assert(cond, msg); };
+  LAST_SHORT.forEach(l => check(l.length <= 10, 'short name too long: ' + l));
+  LAST_LONG.forEach(l => check(l.length > 10, 'long name too short: ' + l));
+  for (let f = 0; f <= 60; f++) check(splitFee(f).reduce((a, b) => a + b, 0) === f, 'splitFee ' + f);
+  for (let i = 0; i < 500; i++) { const s = pick(FIRST) + ' ' + pick(LAST_SHORT.concat(LAST_LONG)); check(typo(s) !== s, 'typo unchanged ' + s); }
+  const allX = d => ({ ...makeCtx(d), rules: new Set(RULES.map(r => r.id)) });
+  // each flaw on its own, all rules active, every weekday
+  for (const f of FLAWS) for (let i = 0; i < 300; i++) {
+    const x = allX(ri(1, 30)); const g = genCase(x, { force: [f.id] }); const r = validate(g.c, x);
+    check(r.v === g.intended, `single ${f.id} day${x.day}: want ${g.intended} got ${r.v} (${r.reasons.join('; ')})`);
+  }
+  // random days/rules/flaw counts, including returning citizens and fax extras
+  for (let i = 0; i < 20000; i++) {
+    const day = ri(1, 25), extra = Math.random() < 0.3 ? [pick(DAY_RULES).id] : [];
+    const x = makeCtx(day, extra);
+    let g = genCase(x, { nFlaws: ri(0, 2) });
+    if (Math.random() < 0.3) g = genCase(x, { citizen: g.c.citizen, req: g.c.req, nFlaws: ri(0, 2) });
+    const r = validate(g.c, x);
+    check(r.v === g.intended, `day${day} [${g.flaws}] want ${g.intended} got ${r.v} (${r.reasons.join('; ')})`);
+    if (g.intended === 'G') check(r.reasons.length === 0, 'valid case has reasons');
+  }
+  // default generator (as used in play) never errors and gives a sane verdict mix
+  const mix = { G: 0, A: 0, F: 0 };
+  for (let i = 0; i < 3000; i++) { const x = makeCtx(ri(1, 20)); const g = genCase(x); const r = validate(g.c, x); mix[r.v]++; check(r.v === g.intended, 'default gen ' + g.flaws); }
+  check(mix.G > 600 && mix.A > 600 && mix.F > 200, 'verdict mix ' + JSON.stringify(mix));
+  check(dayInfo(2).wd === 1 && fmt(dayInfo(6).today) === '09.06.2025', 'calendar');
+  log.unshift(`${fails ? 'SELFTEST FAIL' : 'SELFTEST PASS'}: ${n - fails}/${n} Checks · Verteilung ${JSON.stringify(mix)}`);
+  return { fails, n, text: log.join('\n') };
+}
+
+// ================= Save =================
+const SAVE_KEY = 'amtsschimmel_save_v1';
+function loadSave() {
+  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.v === 1) return s; } catch (e) {}
+  return { v: 1, day: 1, points: 0, cases: 0, correct: 0, unlocked: [] };
+}
+let S = loadSave();
+function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
+const has = id => S.unlocked.includes(id);
+const rankOf = p => RANKS.filter(r => p >= r.p).pop();
+
+// ================= DOM refs =================
+const desk = $('desk'), rubber = $('rubber'), citizenEl = $('citizen'), bubble = $('bubble');
+let G = null; // per-day state
+let Z = 10;
+
+// ================= Rendering docs =================
+function docHTML(d) {
+  switch (d.type) {
+    case 'ausweis': return `<div class="aw-h">${d.sp === 'mensch' ? 'PERSONALAUSWEIS' : 'TIERAUSWEIS'}<span>Gemeinde Amtshausen</span></div>
+      <div class="aw-b"><div class="aw-ph">${d.photo}</div><div class="aw-f"><small>Name</small><b>${d.name}</b><small>Geburtsdatum</small><b>${fmt(d.birth)}</b></div></div>
+      <div class="fine">Gültig bis <b>${fmt(d.expiry)}</b> · Nr. <b>${d.nr}</b></div>`;
+    case 'antrag': return `<div class="an-h"><span>Formular</span><b>${d.form}</b></div>
+      <div class="an-t">Antrag: ${d.formTitle}</div>
+      <div class="row"><small>Antragsteller/in</small><span>${d.name}</span></div>
+      <div class="row"><small>Datum</small><span>${fmt(d.date)}</span></div>
+      <div class="sigrow">${d.sig ? `<span class="sig" style="color:${INK_CSS[d.sig]}">${d.name.split(' ').pop()}</span>` : '<span class="sig">&nbsp;</span>'}<small>Unterschrift</small></div>
+      ${d.stamp ? `<div class="vst" style="color:${INK_CSS[d.stamp]};border-color:${INK_CSS[d.stamp]}">ORDNUNGS<br>AMT<br>✔</div>` : ''}
+      <div class="fine">Exemplare: <b>${d.copies}</b> · ${d.orient === 'quer' ? 'Querformat' : 'Hochformat'}</div>`;
+    case 'marke': return `<div class="mk-v">${d.value} €</div><div class="mk-m">${MOTIF[d.motif]}</div><div class="fine">Gebührenmarke</div>`;
+    case 'bestaetigung': return '<h4>BESTÄTIGUNG</h4><p>Hiermit wird bestätigt, dass ein Antrag gestellt werden wird.</p><div class="fine">Az. 4/7-B · gez. i.A.</div>';
+    case 'bestbest': return '<h4>BESTÄTIGUNG DER BESTÄTIGUNG</h4><p>Hiermit wird bestätigt, dass die Bestätigung bestätigt wurde.</p><div class="fine">Az. 4/7-BB · gez. i.V. i.A.</div>';
+    case 'langname': return `<h4>ZUSATZBLATT L-10</h4><p>Langnamen-Erklärung: Der Nachname „${d.name}“ ist lang. Sehr lang.</p>`;
+    case 'tiermarke': return `<h4>🐾 TIERMARKE</h4><p><b>${d.name}</b><br>Nr. ${d.nr}</p>`;
+  }
+  return '';
+}
+function addPaper(cls, html, x, y) {
+  const el = document.createElement('div');
+  el.className = 'paper enter ' + cls;
+  el.innerHTML = html;
+  desk.appendChild(el);
+  const W = desk.clientWidth, H = desk.clientHeight;
+  el.style.left = Math.max(2, Math.min(W - el.offsetWidth - 2, x - el.offsetWidth / 2)) + 'px';
+  el.style.top = Math.max(2, Math.min(H - el.offsetHeight - 2, y - el.offsetHeight / 2)) + 'px';
+  el.style.zIndex = ++Z;
+  return el;
+}
+function presentDocs(c) {
+  clearCasePapers(false);
+  Z = 100;
+  const W = desk.clientWidth, H = desk.clientHeight;
+  const order = c.docs.slice().sort((a, b) => (b.type === 'antrag') - (a.type === 'antrag'));
+  order.forEach((d, i) => {
+    let x, y;
+    if (d.type === 'antrag') { x = W * 0.55 + rnd(-20, 20); y = H * 0.48 + rnd(-15, 15); }
+    else if (d.type === 'ausweis') { x = W * 0.24 + rnd(-15, 15); y = H * 0.3 + rnd(-15, 15); }
+    else if (d.type === 'marke') { x = rnd(W * 0.08, W * 0.4); y = rnd(H * 0.6, H * 0.92); }
+    else { x = rnd(W * 0.12, W * 0.88); y = rnd(H * 0.12, H * 0.9); }
+    const el = addPaper('case ' + d.type + (d.type === 'antrag' ? ` ${d.orient} c${d.copies}` : '') + (['bestaetigung', 'bestbest', 'langname', 'tiermarke'].includes(d.type) ? ' doc2' : '') + (d.stain ? ' stain' : ''), docHTML(d), x, y);
+    el.style.animationDelay = (i * 0.05) + 's';
+    if (d.type === 'antrag') el.dataset.antrag = '1';
+  });
+  $('deskhint').style.display = 'none';
+  snd('pop', 0.8);
+}
+function clearCasePapers(animate) {
+  unzoom();
+  desk.querySelectorAll('.paper.case').forEach(el => {
+    if (!animate) { el.remove(); return; }
+    el.classList.add('leave');
+    setTimeout(() => el.remove(), 480);
+  });
+}
+
+// ================= Drag / zoom =================
+let drag = null, zoomed = null, lupe = false, lastTap = { el: null, t: 0 };
+desk.addEventListener('pointerdown', e => {
+  const pr = e.target.closest('.printer');
+  if (pr) { e.preventDefault(); shakePrinter(pr); return; }
+  if (e.target.closest('.kuchen')) return;
+  if (e.target.closest('.x')) { const p = e.target.closest('.paper'); if (p) { if (zoomed === p) zoomed = null; p.remove(); snd('pop', 1.4); } return; }
+  const p = e.target.closest('.paper');
+  if (!p) { unzoom(); return; }
+  e.preventDefault();
+  p.style.zIndex = ++Z;
+  drag = { p, id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: p.offsetLeft, oy: p.offsetTop, moved: false };
+  try { p.setPointerCapture(e.pointerId); } catch (err) {}
+});
+desk.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id || drag.p === zoomed) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+  drag.moved = true; drag.p.classList.add('drag');
+  const W = desk.clientWidth, H = desk.clientHeight, p = drag.p;
+  p.style.left = Math.max(-p.offsetWidth * 0.6, Math.min(W - p.offsetWidth * 0.4, drag.ox + dx)) + 'px';
+  p.style.top = Math.max(-p.offsetHeight * 0.6, Math.min(H - p.offsetHeight * 0.4, drag.oy + dy)) + 'px';
+});
+function endDrag(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  const p = drag.p, moved = drag.moved;
+  p.classList.remove('drag');
+  drag = null;
+  if (moved) { snd('playTone', 900, 0.03, 'triangle', 0.05); return; }
+  const now = performance.now();
+  if (lupe || zoomed === p || (lastTap.el === p && now - lastTap.t < 380)) { toggleZoom(p); lastTap = { el: null, t: 0 }; }
+  else lastTap = { el: p, t: now };
+}
+desk.addEventListener('pointerup', endDrag);
+desk.addEventListener('pointercancel', endDrag);
+function toggleZoom(p) {
+  if (zoomed === p) { unzoom(); return; }
+  unzoom();
+  zoomed = p;
+  p.dataset.ox = p.style.left; p.dataset.oy = p.style.top;
+  const W = desk.clientWidth, H = desk.clientHeight;
+  const s = Math.max(1.1, Math.min(2.2, (W * 0.94) / p.offsetWidth, (H * 0.94) / p.offsetHeight));
+  p.style.fontSize = s + 'em';
+  p.classList.add('zoom'); desk.classList.add('zooming');
+  p.style.left = Math.max(2, (W - p.offsetWidth) / 2) + 'px';
+  p.style.top = Math.max(2, (H - p.offsetHeight) / 2) + 'px';
+  tone(1400, 0.05, 'sine', 0.06);
+}
+function unzoom() {
+  if (!zoomed) return;
+  const p = zoomed; zoomed = null;
+  p.classList.remove('zoom'); desk.classList.remove('zooming'); p.style.fontSize = '';
+  p.style.left = p.dataset.ox; p.style.top = p.dataset.oy;
+}
+
+// ================= UI helpers =================
+function toast(html, kind = '', ms = 3200) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.innerHTML = html;
+  const box = $('toasts'); box.appendChild(t);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => t.remove(), ms);
+}
+function floatText(txt, color, el) {
+  const r = (el || citizenEl).getBoundingClientRect();
+  const f = document.createElement('div');
+  f.className = 'fl'; f.textContent = txt; f.style.color = color;
+  f.style.left = (r.left + r.width / 2 - 20) + 'px'; f.style.top = (r.top + 10) + 'px';
+  document.body.appendChild(f); setTimeout(() => f.remove(), 1200);
+}
+function say(html) { bubble.innerHTML = html; }
+function showOv(html) { $('dlg').innerHTML = html; $('ov').classList.add('show'); $('dlg').scrollTop = 0; }
+function hideOv() { $('ov').classList.remove('show'); }
+function stackCap() { return has('ablage') ? 16 : 8; }
+function setBar(id, v, warn) { const i = $(id).querySelector('i'); i.style.width = Math.max(0, Math.min(100, v)) + '%'; i.style.background = warn ? '#e2553f' : ''; }
+function hud() {
+  if (!G) return;
+  const m = Math.floor(G.clock);
+  $('clock').textContent = pad(Math.floor(m / 60)) + ':' + pad(m % 60);
+  $('dayinfo').textContent = `Tag ${G.ctx.day} · ${WD[G.ctx.wd].slice(0, 2)} ${fmt(G.ctx.today)}`;
+  const rk = rankOf(S.points);
+  $('rank').textContent = `${rk.e} ${rk.n} · ${S.points}${G.dayPts >= 0 ? '+' : ''}${G.dayPts}`;
+  $('rugen').textContent = '⚠️'.repeat(G.rugen) + '▫'.repeat(Math.max(0, 3 - G.rugen));
+  setBar('mCoffee', G.coffee, G.coffee < 20);
+  setBar('mAnger', G.anger);
+  setBar('mStack', G.stack / stackCap() * 100, G.stack >= stackCap());
+  document.body.classList.toggle('tired', G.coffee < 20);
+  const busy = G.stamping || G.busy > 0;
+  const caseReady = !!(G.cur && G.cur.shown);
+  $('bNext').disabled = !!G.cur || !G.queue.length || G.over;
+  $('bNext').classList.toggle('pulse', !G.cur && G.queue.length > 0);
+  ['bG', 'bA', 'bF'].forEach(id => { $(id).disabled = !caseReady || busy; });
+  if (G.jam > 0) $('bG').disabled = true;
+  $('bCoffee').innerHTML = G.brew > 0 ? '☕ brüht…<small>' + G.brew.toFixed(1) + ' s</small>' : '☕ Kaffee<small>Taste K</small>';
+  $('bAblage').innerHTML = G.busy > 0 ? '🗄️ lege ab…<small>' + G.busy.toFixed(1) + ' s</small>' : `🗄️ Ablage<small>${G.stack}/${stackCap()} · Taste A</small>`;
+  $('bLupe').classList.toggle('on', lupe);
+  $('pruefer').style.display = G.pruef > 0 ? 'block' : 'none';
+}
+function renderQueue() {
+  $('queue').innerHTML = G.queue.map(q => `<span title="${q.g.c.citizen.name}">${q.g.c.citizen.emoji}</span>`).join('');
+  $('qlabel').textContent = `Wartende: ${G.queue.length}` + (G.away.length ? ` · unterwegs zu Zimmer 0815: ${G.away.length}` : '');
+}
+function rant() {
+  const box = $('queuebox'), r = document.createElement('div');
+  r.className = 'rant'; r.textContent = pick(RANTS);
+  r.style.left = rnd(2, 30) + '%'; r.style.top = rnd(18, 55) + '%';
+  box.appendChild(r); setTimeout(() => r.remove(), 2800);
+}
+function rulesDrawer() {
+  const fresh = new Set(DAY_RULES.slice(0, Math.max(0, G.ctx.day - 1)).slice(-1).map(r => r.id).concat(G.extra));
+  const rules = RULES.filter(r => G.ctx.rules.has(r.id));
+  $('drawer').innerHTML = `<button class="close" id="dClose">✕</button><h3>📜 Dienstvorschriften</h3>
+    <div style="font-size:12px;opacity:.75">Heute: ${WD[G.ctx.wd]}, ${fmt(G.ctx.today)}. Fehlt etwas → FORMULAR FEHLT (hat Vorrang). Sonst bei jedem Verstoß → ABGELEHNT.</div>
+    <ol>${rules.map(r => `<li>${fresh.has(r.id) ? '<span class="new">NEU</span>' : ''}${r.text}</li>`).join('')}</ol>
+    <h3>📇 Formularverzeichnis</h3>
+    <table>${REQS.map(r => `<tr><td>${r.title}</td><td>${r.form}</td><td>${r.fee ? r.fee + ' €' : 'frei'}</td></tr>`).join('')}</table>`;
+  $('dClose').onclick = () => $('drawer').classList.remove('open');
+}
+function toggleRules() { if (!G) return; rulesDrawer(); $('drawer').classList.toggle('open'); snd('pop', 1.2); }
+
+// ================= Day flow =================
+function startDay() {
+  const ctx = makeCtx(S.day);
+  G = { ctx, extra: [], clock: 480, lunch: false, queue: [], away: [], cur: null, coffee: 100, anger: 0, stack: 0, rugen: 0, dayPts: 0,
+    ok: 0, bad: 0, nextSpawn: 2, nextEvent: S.day === 1 ? 55 : rnd(30, 45), nextRant: 3, t: 0, jam: 0, pruef: 0, brew: 0, busy: 0,
+    stamping: false, over: false, paused: true };
+  for (let i = 0; i < 2; i++) G.queue.push({ g: genCase(ctx) });
+  clearCasePapers(false);
+  desk.querySelectorAll('.paper, .printer, .kuchen').forEach(e => e.remove());
+  $('deskhint').style.display = '';
+  citizenEl.className = ''; citizenEl.textContent = ''; say(''); $('cinfo').textContent = '';
+  renderQueue(); hud();
+  const newRule = S.day > 1 && S.day - 2 < DAY_RULES.length ? DAY_RULES[S.day - 2] : null;
+  const rules = RULES.filter(r => ctx.rules.has(r.id));
+  showOv(`<h1>📋 Dienstbesprechung – Tag ${S.day}</h1>
+    <p><b>${WD[ctx.wd]}, ${fmt(ctx.today)}</b> · ${rankOf(S.points).e} ${rankOf(S.points).n}</p>
+    <p><i>${BOSS}:</i> „${newRule ? 'Ab heute gilt zusätzlich eine neue Vorschrift. Lesen! Verinnerlichen! Abheften!' : (S.day === 1 ? 'Willkommen im Bürgeramt Amtshausen. Hier ist Ihr Stempel. Verlieren Sie ihn nicht, er ist inventarisiert.' : 'Keine neuen Vorschriften heute. Verdächtig.')}“</p>
+    <ol>${rules.map(r => `<li>${newRule && r.id === newRule.id ? '<span class="new">NEU</span>' : ''}${r.text}</li>`).join('')}</ol>
+    <p style="font-size:13px;opacity:.8">Vergleiche Anliegen ↔ Formularverzeichnis, Ausweis ↔ Antrag, Gebühr ↔ Marken. Dokumente ziehen, Doppeltipp oder 🔍 Lupe zum Vergrößern. Dienstschluss 16:00, Mittagspause 12:00.</p>
+    <div class="btns"><button id="goDay">🏢 Dienst antreten</button></div>`);
+  $('goDay').onclick = () => { hideOv(); G.paused = false; snd('powerup'); };
+}
+function spawn() {
+  if (G.queue.length >= 12) return;
+  G.queue.push({ g: genCase(G.ctx) });
+  renderQueue();
+}
+function callNext() {
+  if (!G || G.paused || G.over) return;
+  if (G.cur) { toast('Erst den aktuellen Fall erledigen!', 'warn', 1800); return; }
+  if (!G.queue.length) return;
+  const q = G.queue.shift();
+  G.cur = { g: q.g, ret: !!q.ret, shown: false, start: G.t };
+  renderQueue();
+  tone(1320, 0.18, 'sine', 0.13); setTimeout(() => tone(990, 0.3, 'sine', 0.13), 130);
+  const cz = q.g.c.citizen, title = q.g.c.req.title;
+  citizenEl.textContent = cz.emoji;
+  citizenEl.className = ''; void citizenEl.offsetWidth; citizenEl.className = 'in';
+  let txt = (q.ret ? pick(RETURN) : pick(GREET)) + ' ' + pick(ASK).replace('{r}', '„' + title + '“') + (Math.random() < 0.45 ? ' ' + pick(EXCUSE) : '');
+  if (cz.sp === 'hund') txt = `Wuff! Wuff wuff. <i>(Herrchen übersetzt: ${txt})</i>`;
+  if (cz.sp === 'katze') txt = `Miau. <i>(Frauchen übersetzt: ${txt})</i>`;
+  say(txt);
+  $('cinfo').innerHTML = `<b>${cz.name}</b> · Anliegen: <b>${title}</b>`;
+  const g0 = G;
+  setTimeout(() => { if (G === g0 && G.cur && !G.over) { presentDocs(G.cur.g.c); G.cur.shown = true; G.cur.start = G.t; hud(); } }, 650);
+  hud();
+}
+function stamp(v) {
+  if (!G || G.paused || G.over || !G.cur || !G.cur.shown || G.stamping) return;
+  if (G.busy > 0) { toast('Sie legen gerade ab. Multitasking ist nicht vorgesehen (Vorschrift 12b).', 'warn', 2000); return; }
+  if (G.stack >= stackCap()) { toast('🗂️ <b>Aktenstapel voll!</b> Erst ablegen (Taste A).', 'warn', 2200); snd('hit'); return; }
+  if (v === 'G' && G.jam > 0) { toast('🖨️ <b>Drucker-Stau!</b> Ohne Bescheid keine Genehmigung. Drucker rütteln!', 'warn', 2200); return; }
+  unzoom();
+  G.stamping = true; hud();
+  const dur = has('turbo') ? 0.28 : 0.65;
+  const target = desk.querySelector('.paper.case[data-antrag]') || desk.querySelector('.paper.case');
+  const color = v === 'G' ? '#1f9a3a' : v === 'A' ? '#c42b23' : '#d08a0c';
+  const miss = G.coffee < 20 && Math.random() < 0.3;
+  const dr = desk.getBoundingClientRect();
+  let cx = desk.clientWidth / 2, cy = desk.clientHeight / 2;
+  if (target) { const r = target.getBoundingClientRect(); cx = r.left - dr.left + r.width / 2; cy = r.top - dr.top + r.height * 0.46; }
+  if (miss) { cx += rnd(-1, 1) > 0 ? 120 : -120; cy += rnd(-60, 60); }
+  rubber.style.setProperty('--c', color); rubber.style.setProperty('--d', dur + 's');
+  rubber.style.left = cx + 'px';
+  rubber.style.top = cy + 'px';
+  rubber.classList.remove('go'); void rubber.offsetWidth; rubber.classList.add('go');
+  const g0 = G;
+  setTimeout(() => {
+    if (G !== g0) return;
+    snd('hit'); tone(70, 0.18, 'square', 0.18);
+    const label = v === 'G' ? 'GENEHMIGT' : v === 'A' ? 'ABGELEHNT' : 'FORMULAR FEHLT';
+    if (miss) {
+      const m = document.createElement('div'); m.className = 'miss'; m.textContent = label; m.style.color = color; m.style.borderColor = color;
+      m.style.left = (cx - 50) + 'px'; m.style.top = cy + 'px'; desk.appendChild(m); setTimeout(() => m.remove(), 1500);
+    } else if (target) {
+      const im = document.createElement('div'); im.className = 'imprint'; im.textContent = label; im.style.color = color; im.style.borderColor = color;
+      target.appendChild(im);
+    }
+  }, dur * 550);
+  setTimeout(() => {
+    if (G !== g0) return;
+    rubber.classList.remove('go');
+    G.stamping = false;
+    if (G.over) return;
+    if (miss) { toast('☕ <b>Daneben gestempelt!</b> Zu wenig Kaffee – die Hand zittert.', 'warn', 2000); hud(); return; }
+    resolve(v);
+  }, dur * 1000);
+}
+function resolve(v) {
+  const cur = G.cur, c = cur.g.c, res = validate(c, G.ctx);
+  const correct = v === res.v;
+  const mult = (G.pruef > 0 ? 2 : 1) * (has('gold') ? 1.5 : 1);
+  const names = { G: 'GENEHMIGT', A: 'ABGELEHNT', F: 'FORMULAR FEHLT' };
+  S.cases++;
+  if (correct) {
+    const fast = G.t - cur.start < 12;
+    const pts = Math.round((10 + (fast ? 5 : 0)) * mult);
+    G.dayPts += pts; G.ok++; S.correct++;
+    snd('coin'); floatText('+' + pts + (fast ? ' ⚡' : ''), '#1f7a30');
+    if (Math.random() < 0.12) toast('👔 ' + pick(PRAISE), 'good', 2200);
+  } else {
+    const pen = Math.round(10 * mult);
+    G.dayPts -= pen; G.bad++;
+    floatText('−' + pen, '#c42b23');
+    const why = res.v === 'G' ? 'Der Antrag war einwandfrei!' : res.reasons.join(', ') + '.';
+    ruge(`Sie haben ${names[v]} gestempelt – richtig wäre <b>${names[res.v]}</b>. ${why}`);
+  }
+  if (G.pruef > 0) G.pruef--;
+  G.stack++;
+  G.anger = Math.max(0, G.anger - 7);
+  const react = v === 'F' ? '<i>Sie: ' + pick(CLERK_F) + '</i><br>„' + pick(REACT.F) + '“' : '„' + pick(REACT[v]) + '“';
+  say(react);
+  if (v === 'A') citizenEl.classList.add('angry');
+  if (v === 'F') G.away.push({ citizen: c.citizen, req: c.req, at: G.t + rnd(25, 50) });
+  const g0 = G;
+  setTimeout(() => {
+    if (G !== g0) return;
+    clearCasePapers(true);
+    citizenEl.className = 'out';
+    G.cur = null;
+    if (!G.over) { setTimeout(() => { if (G === g0 && !G.cur) { say(''); $('cinfo').textContent = ''; if (!desk.querySelector('.paper.case')) $('deskhint').style.display = ''; } }, 600); }
+    renderQueue(); hud();
+  }, 1100);
+  hud();
+}
+function ruge(text) {
+  if (!G || G.over) return;
+  G.rugen++;
+  toast(`<b>👔 Rüge von ${BOSS} (${G.rugen}/3)</b>${pick(BOSS_RUGE)} ${text}`, 'boss', 5200);
+  tone(180, 0.35, 'sawtooth', 0.12);
+  hud();
+  if (G.rugen >= 3) { const g0 = G; G.over = true; setTimeout(() => { if (G === g0) endDay(false); }, 1600); }
+}
+function lunch() {
+  G.lunch = true; G.paused = true;
+  showOv(`<h1>🥪 Mittagspause!</h1><p>12:00 Uhr. Das Schild „Bin gleich zurück“ steht. Laut Dienstvorschrift 1a ist die Mittagspause <b>verpflichtend</b> – auch für Ihren Stempel.</p>
+    <p>Die Warteschlange findet das weniger lustig. Ihr Kaffee wird währenddessen nachgefüllt.</p><div class="btns"><button id="endLunch" disabled>⏳ 3…</button></div>`);
+  snd('powerup');
+  let n = 3; const b = $('endLunch');
+  const iv = setInterval(() => { n--; if (n > 0) b.textContent = '⏳ ' + n + '…'; else { clearInterval(iv); b.disabled = false; b.textContent = '🏢 Zurück an den Schalter (12:30)'; } }, 1000);
+  b.onclick = () => { hideOv(); G.clock = 750; G.coffee = 100; G.anger = Math.min(95, G.anger + 15); G.paused = false; for (let i = 0; i < 2; i++) spawn(); hud(); };
+}
+function endDay(success) {
+  G.over = true; G.paused = true;
+  $('drawer').classList.remove('open');
+  rubber.classList.remove('go');
+  const before = S.points, rk0 = rankOf(before);
+  let html;
+  if (success) {
+    S.points += Math.max(0, G.dayPts);
+    S.day++;
+    const fresh = UNLOCKS.filter(u => S.points >= u.p && !S.unlocked.includes(u.id));
+    fresh.forEach(u => S.unlocked.push(u.id));
+    save();
+    if ((Number(AC && AC.getScore('amtsschimmel')) || 0) < S.points) snd('saveScore', 'amtsschimmel', S.points);
+    const rk = rankOf(S.points), nxt = RANKS.find(r => r.p > S.points);
+    const nextRule = DAY_RULES[S.day - 2];
+    html = `<h1>🕓 Feierabend!</h1><p>16:00 Uhr – der Griffel fällt. ${G.queue.length ? `Die ${G.queue.length} Wartenden werden gebeten, morgen wiederzukommen. Sie nehmen es gefasst. Nein, tun sie nicht.` : 'Die Schlange ist leer. Ein historischer Moment.'}</p>
+      <div class="stats"><span>Richtig bearbeitet</span><b>${G.ok}</b><span>Fehlentscheidungen</span><b>${G.bad}</b><span>Rügen</span><b>${G.rugen}/3</b><span>Beförderungspunkte heute</span><b>${G.dayPts >= 0 ? '+' : ''}${G.dayPts}${G.dayPts < 0 ? ' (zählt als 0)' : ''}</b><span>Gesamt</span><b>${S.points}</b></div>
+      <p>${rk.e} <b>${rk.n}</b>${rk !== rk0 ? ' – <b>BEFÖRDERT!</b> 🎉' : ''}</p>
+      ${nxt ? `<div class="prog"><i style="width:${(S.points - rk.p) / (nxt.p - rk.p) * 100}%"></i></div><p style="font-size:13px">Noch ${nxt.p - S.points} Punkte bis ${nxt.e} ${nxt.n}</p>` : '<p>Sie sind Amtsleiter. Ab jetzt rügen Sie sich selbst.</p>'}
+      ${fresh.length ? '<h2>🎁 Neu freigeschaltet</h2><ul>' + fresh.map(u => `<li><b>${u.n}</b> – ${u.d}</li>`).join('') + '</ul>' : ''}
+      ${nextRule ? `<p style="font-size:13px">📨 Gerücht aus dem Flur: Morgen kommt eine neue Vorschrift…</p>` : '<p style="font-size:13px">Alle Vorschriften sind in Kraft. Ab jetzt wird nur noch die Schlange länger.</p>'}
+      <div class="btns"><button id="nextDay">☀️ Nächster Arbeitstag</button><button class="sec" id="toMenu">Menü</button></div>`;
+    snd(fresh.length || rk !== rk0 ? 'powerup' : 'coin');
+  } else {
+    save();
+    html = `<h1>📂 Disziplinarverfahren!</h1><p>Drei Rügen an einem Tag. ${BOSS} versetzt Sie für den Rest des Tages ins Kellerarchiv zum Sortieren von Büroklammern nach Biegung.</p>
+      <div class="stats"><span>Richtig</span><b>${G.ok}</b><span>Falsch</span><b>${G.bad}</b><span>Punkte heute</span><b>verfallen</b></div>
+      <p>Morgen dürfen Sie den Tag wiederholen. Also heute. Nochmal.</p>
+      <div class="btns"><button id="nextDay">🔁 Tag ${S.day} wiederholen</button><button class="sec" id="toMenu">Menü</button></div>`;
+    snd('gameOver');
+  }
+  showOv(html);
+  $('nextDay').onclick = () => { hideOv(); startDay(); };
+  $('toMenu').onclick = menu;
+}
+
+// ================= Events =================
+function triggerEvent() {
+  const opts = ['fax', 'kuchen'];
+  if (!G.jam) opts.push('drucker', 'drucker');
+  if (G.ctx.day >= 2 && !G.pruef) opts.push('pruefung');
+  const e = pick(opts);
+  if (e === 'drucker') {
+    G.jam = 5;
+    const p = document.createElement('div'); p.className = 'printer'; p.innerHTML = '<span class="pi">🖨️</span>STAU! Rütteln (5)';
+    desk.appendChild(p);
+    toast('🖨️ <b>Drucker-Stau!</b> Keine Bescheide → GENEHMIGT gesperrt. Drucker 5× antippen!', 'warn', 3500);
+    snd('hit');
+  } else if (e === 'fax') {
+    const next = DAY_RULES.find(r => !G.ctx.rules.has(r.id));
+    tone(1600, 0.12, 'square', 0.06); setTimeout(() => tone(1200, 0.12, 'square', 0.06), 160); setTimeout(() => tone(1600, 0.2, 'square', 0.06), 320);
+    if (next) {
+      G.extra.push(next.id); G.ctx.rules.add(next.id);
+      addPaper('fax', `<span class="x" title="abheften">✕</span><b>FAX – EILERLASS</b><br>Ab sofort gilt:<br>${next.text}<div class="fine">Absender: Landesbehörde für Vorschriftenwesen</div>`, desk.clientWidth * 0.75, desk.clientHeight * 0.25);
+      toast('📠 <b>Fax: Eilerlass!</b> Eine neue Vorschrift gilt ab SOFORT (siehe 📜).', 'warn', 4000);
+      if ($('drawer').classList.contains('open')) rulesDrawer();
+    } else {
+      addPaper('fax', '<span class="x" title="abheften">✕</span><b>FAX</b><br>Sensationelle Kaffeefahrt! Heizdecken zum Sonderpreis! Nur heute!<div class="fine">Bitte nicht zurückfaxen.</div>', desk.clientWidth * 0.75, desk.clientHeight * 0.25);
+      toast('📠 Fax eingegangen. Werbung. Wie immer.', '', 2500);
+    }
+  } else if (e === 'kuchen') {
+    const k = pick(KOLLEGEN), who = pick(['Frau Schmidt aus der Poststelle', 'den Hausmeister', 'den Kopierer (10 Jahre im Dienst)', 'Herrn Dr. Pingelig']);
+    const box = document.createElement('div'); box.className = 'kuchen';
+    box.innerHTML = `<div class="big">🎂</div><b>${k}</b> steckt den Kopf herein: „Wir sammeln für ${who}. Fünf Euro für den Kuchen?“
+      <div><button class="yes">💶 Na gut (−5 Pkt.)</button><button class="no">🙅 Bin auf Diät</button></div>`;
+    desk.appendChild(box);
+    const g0 = G;
+    const close = () => { box.remove(); };
+    box.querySelector('.yes').onclick = () => { close(); if (G !== g0) return; G.dayPts -= 5; G.coffee = 100; toast(`🎂 ${k} bringt Ihnen zum Dank einen frischen Kaffee. ☕ voll!`, 'good'); snd('coin'); hud(); };
+    box.querySelector('.no').onclick = () => {
+      close(); if (G !== g0) return;
+      if (Math.random() < 0.35) ruge(`${k} hat Sie wegen „mangelnder Kollegialität beim Kuchengeld“ gemeldet.`);
+      else toast(`${k} schaut Sie enttäuscht an und geht. Sie bekommen kein Stück.`, '', 2500);
+    };
+    setTimeout(() => { if (G === g0 && box.isConnected) { close(); toast(`${k} ist beleidigt abgezogen.`, '', 2000); } }, 14000);
+    snd('pop');
+  } else {
+    G.pruef = 3;
+    toast('🕵️ <b>Behördenprüfung!</b> Die nächsten 3 Fälle zählen doppelt – Punkte UND Abzüge.', 'warn', 3800);
+    snd('powerup');
+    if (G.stack > stackCap() / 2) setTimeout(() => ruge('Der Prüfer bemängelt Ihren Aktenstapel. „Das ist kein Schreibtisch, das ist ein Biotop.“'), 800);
+  }
+  hud();
+}
+function shakePrinter(pr) {
+  if (!G || G.paused || G.jam <= 0) return;
+  G.jam--;
+  pr.classList.remove('shake'); void pr.offsetWidth; pr.classList.add('shake');
+  snd('hit'); tone(200 + G.jam * 60, 0.08, 'square', 0.08);
+  if (G.jam <= 0) { pr.remove(); toast('🖨️ Drucker läuft wieder. Er hasst Sie trotzdem.', 'good', 2200); snd('jump'); }
+  else pr.innerHTML = `<span class="pi">🖨️</span>STAU! Rütteln (${G.jam})`;
+  hud();
+}
+function coffee() {
+  if (!G || G.paused || G.over || G.brew > 0) return;
+  if (G.coffee > 90) { toast('☕ Becher ist noch voll. Noch voller geht nur mit Antrag.', '', 1600); return; }
+  G.brew = 1.8; snd('pop', 0.6); hud();
+}
+function ablage() {
+  if (!G || G.paused || G.over || G.busy > 0 || G.stamping) return;
+  if (!G.stack) { toast('🗄️ Nichts abzulegen. Verdächtig effizient.', '', 1500); return; }
+  G.busy = has('ablage') ? 0.5 : 2.2; snd('jump'); hud();
+}
+
+// ================= Main loop =================
+let last = performance.now(), hudT = 0;
+function loop(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (G && !G.paused && !G.over) {
+    G.t += dt;
+    G.clock += dt * 2;
+    if (!G.lunch && G.clock >= 720) { G.clock = 720; lunch(); }
+    else if (G.clock >= 960) { G.clock = 960; endDay(true); }
+    else {
+      G.coffee = Math.max(0, G.coffee - dt * (has('becher') ? 0.65 : 1.3));
+      G.anger = Math.min(100, G.anger + dt * (G.queue.length * 0.32 + (!G.cur && G.queue.length ? 1.2 : 0)));
+      if (G.anger >= 100) { G.anger = 55; snd('explosion'); ruge('Tumult im Wartebereich! Jemand hat den Nummernautomaten umgeworfen.'); }
+      if ((G.nextSpawn -= dt) <= 0) { spawn(); G.nextSpawn = Math.max(3.2, 9 - G.ctx.day * 0.45) * rnd(0.6, 1.4); }
+      for (let i = G.away.length - 1; i >= 0; i--) if (G.t >= G.away[i].at) {
+        const a = G.away.splice(i, 1)[0];
+        if (G.queue.length < 12) { G.queue.push({ g: genCase(G.ctx, { citizen: a.citizen, req: a.req }), ret: true }); }
+        renderQueue();
+      }
+      if ((G.nextRant -= dt) <= 0) { G.nextRant = rnd(2.5, 5.5) * (1.4 - G.anger / 100); if (G.anger > 35 && G.queue.length) rant(); }
+      $('queue').classList.toggle('mad', G.anger > 70);
+      if (G.t >= G.nextEvent) { G.nextEvent = G.t + rnd(32, 55); triggerEvent(); }
+      if (G.brew > 0 && (G.brew -= dt) <= 0) { G.brew = 0; G.coffee = 100; snd('pop', 1.2); snd('pop', 1.5); toast('☕ Kaffee nachgefüllt. Das Leben hat wieder Sinn.', 'good', 1500); }
+      if (G.busy > 0 && (G.busy -= dt) <= 0) { G.busy = 0; G.stack = 0; snd('coin'); toast('🗄️ Alles abgeheftet. Unter „Sonstiges“.', 'good', 1500); }
+    }
+    if ((hudT += dt) > 0.1) { hudT = 0; hud(); }
+  }
+  requestAnimationFrame(loop);
+}
+
+// ================= Menu / pause =================
+function pause(on) {
+  if (!G || G.over || $('ov').classList.contains('show') && !G.pauseOv) return;
+  if (on && !G.paused) {
+    G.paused = true; G.pauseOv = true;
+    showOv('<h1>⏸ Pause</h1><p>Sie sind „kurz zu Tisch“. Die Uhr steht – ausnahmsweise.</p><div class="btns"><button id="resume">▶ Weiter</button><button class="sec" id="toMenu">Menü (Tag abbrechen)</button></div>');
+    $('resume').onclick = () => pause(false);
+    $('toMenu').onclick = menu;
+  } else if (!on && G.pauseOv) { G.pauseOv = false; G.paused = false; hideOv(); }
+}
+function menu() {
+  if (G) { G.over = true; G.paused = true; }
+  $('drawer').classList.remove('open');
+  const rk = rankOf(S.points);
+  showOv(`<h1>🐴 Amtsschimmel</h1><p style="margin-top:0"><b>Behörden-Simulator</b> · Bürgeramt Amtshausen, Schalter 3</p>
+    <p>Sie sind ${S.day === 1 && !S.points ? 'neu hier' : `${rk.e} <b>${rk.n}</b> mit ${S.points} Beförderungspunkten (Tag ${S.day})`}. Bürger kommen mit absurden Anliegen und einem Stapel Papier. Prüfen Sie alles gegen die <b>Dienstvorschriften</b>, die jeden Tag absurder werden – und stempeln Sie:</p>
+    <ul><li>✅ <b>GENEHMIGT</b> – alles korrekt.</li><li>❌ <b>ABGELEHNT</b> – irgendein Verstoß (falscher Name, abgelaufen, falsche Gebühr…).</li><li>📋 <b>FORMULAR FEHLT</b> – etwas fehlt oder falsches Formular. Hat Vorrang! Der Bürger kommt später wieder.</li></ul>
+    <p>Fehler = Rüge vom Amtsleiter (3 Rügen = Tag verloren). Halten Sie den ☕ Kaffee oben (sonst zittert die Hand), die 😡 Schlange ruhig und den 🗂️ Aktenstapel klein. Achtung: Drucker-Stau, Faxe mit Eilerlassen, Kuchengeld und Prüfer.</p>
+    <p style="font-size:13px;opacity:.8">Tasten: 1/2/3 Stempel · N Nächster · R Vorschriften · L Lupe · K Kaffee · A Ablage · P Pause</p>
+    <div class="btns"><button id="play">🏢 ${S.day > 1 ? `Weiter mit Tag ${S.day}` : 'Ersten Arbeitstag beginnen'}</button>${S.day > 1 || S.points ? '<button class="sec" id="reset">Neu anfangen</button>' : ''}</div>`);
+  $('play').onclick = () => { hideOv(); startDay(); };
+  if ($('reset')) $('reset').onclick = () => { if (confirm('Spielstand wirklich löschen? Ihre Personalakte wird geschreddert.')) { S = { v: 1, day: 1, points: 0, cases: 0, correct: 0, unlocked: [] }; save(); menu(); } };
+}
+
+// ================= Input =================
+$('bNext').onclick = callNext;
+$('bG').onclick = () => stamp('G');
+$('bA').onclick = () => stamp('A');
+$('bF').onclick = () => stamp('F');
+$('bRules').onclick = toggleRules;
+$('bLupe').onclick = () => { lupe = !lupe; if (!lupe) unzoom(); toast(lupe ? '🔍 Lupe an: Dokument antippen zum Vergrößern.' : '🔍 Lupe aus.', '', 1400); hud(); };
+$('bCoffee').onclick = coffee;
+$('bAblage').onclick = ablage;
+function updMute() { $('mute').textContent = AC && AC.isMuted() ? '🔇' : '🔊'; }
+$('mute').onclick = () => { if (AC) AC.toggleMute(); updMute(); };
+updMute();
+window.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === 'p' || k === 'escape') { if ($('drawer').classList.contains('open') && k === 'escape') { $('drawer').classList.remove('open'); return; } pause(!(G && G.paused)); return; }
+  if (!G || G.paused || G.over) return;
+  if (k === '1') stamp('G'); else if (k === '2') stamp('A'); else if (k === '3') stamp('F');
+  else if (k === 'n' || k === ' ') { e.preventDefault(); callNext(); }
+  else if (k === 'r') toggleRules();
+  else if (k === 'l') $('bLupe').click();
+  else if (k === 'k') coffee();
+  else if (k === 'a') ablage();
+});
+// keep papers reachable after rotation / resize
+window.addEventListener('resize', () => {
+  unzoom();
+  const W = desk.clientWidth, H = desk.clientHeight;
+  desk.querySelectorAll('.paper').forEach(p => {
+    p.style.left = Math.max(2, Math.min(W - p.offsetWidth - 2, p.offsetLeft)) + 'px';
+    p.style.top = Math.max(2, Math.min(H - p.offsetHeight - 2, p.offsetTop)) + 'px';
+  });
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) pause(true); });
+
+// ================= Boot =================
+if (new URLSearchParams(location.search).has('selftest')) {
+  const r = selftest();
+  document.title = r.fails ? 'SELFTEST FAIL' : 'SELFTEST PASS';
+  showOv(`<h1>🧪 Selbsttest</h1><pre id="selftest">${r.text}</pre><div class="btns"><button onclick="location.search=''">Zum Spiel</button></div>`);
+  console.log(r.text);
+} else {
+  menu();
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
