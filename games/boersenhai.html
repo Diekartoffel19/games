@@ -157,7 +157,7 @@ table { border-collapse:collapse; width:100%; }
 #eqCanvas { display:block; width:calc(100% - 16px); height:150px; margin:0 8px 8px; background:#0c111a; border:1px solid var(--line); border-radius:7px; }
 
 /* Toasts & Modal */
-#toasts { position:fixed; left:12px; bottom:12px; display:flex; flex-direction:column; gap:6px; z-index:50; pointer-events:none; max-width:min(380px,calc(100vw - 24px)); }
+#toasts { position:fixed; left:12px; bottom:12px; display:flex; flex-direction:column; gap:6px; z-index:80; pointer-events:none; max-width:min(380px,calc(100vw - 24px)); }
 .toast { background:#1a2333; border:1px solid var(--line); border-left:4px solid var(--blue); border-radius:8px; padding:8px 11px; box-shadow:0 6px 20px #0008; animation:tin .2s ease; }
 .toast.ok { border-left-color:var(--up); } .toast.err { border-left-color:var(--down); } .toast.warn { border-left-color:var(--acc); }
 @keyframes tin { from { transform:translateY(8px); opacity:0; } to { transform:none; opacity:1; } }
@@ -1297,6 +1297,7 @@ function stopLive() {
   clearTimeout(LIVE.wsTimer); clearInterval(LIVE.pollTimer);
   for (const k of LIVE_RESET) LIVE[k] = {};
   LIVE.retry = 0; LIVE.pauseUntil = 0; LIVE.wsState = 'aus';
+  LIVE.gen = (LIVE.gen || 0) + 1;   // macht laufende Start-Meldung ungültig
   $('btnKey').style.borderColor = '';
 }
 function startLive() {
@@ -1308,6 +1309,15 @@ function startLive() {
   const t = Date.now();
   LIVE.init = Promise.all(Object.keys(LIVE_SYMS).map(s => { LIVE.next[s] = t + REST_MIN; return fetchQuote(s, key); }));
   LIVE.pollTimer = setInterval(pollOne, POLL_MS);
+  // Rückmeldung nach jedem Start (auch beim Laden eines Spielstands), ob die API geantwortet hat
+  const g = LIVE.gen;
+  LIVE.init.then(() => { if (LIVE.gen === g) liveReport(); });
+}
+function liveReport() {
+  const got = Object.keys(LIVE.px), miss = Object.keys(LIVE_SYMS).filter(s => !LIVE.px[s]);
+  if (got.length) toast('✓ Finnhub-API verbunden – Live-Kurse: ' + got.join(', ') + (miss.length ? ' · simuliert: ' + miss.join(', ') : ''), 'ok', 6000);
+  else if (Date.now() < LIVE.pauseUntil) toast('⚠ Finnhub-Limit erreicht – Live-Kurse folgen in ca. 1 min, bis dahin simuliert.', 'warn', 8000);
+  else toast('✗ Finnhub-API nicht erreichbar oder keine Kurse (Key/Internet prüfen). Es wird simuliert.', 'err', 8000);
 }
 // Startkurse für ein neues Spiel: nur fehlende Symbole per REST holen (max. 7 Requests)
 async function fetchLivePrices() {
@@ -1315,9 +1325,6 @@ async function fetchLivePrices() {
   if (!key) return {};
   await LIVE.init;
   await Promise.all(Object.keys(LIVE_SYMS).filter(s => !LIVE.px[s] && !LIVE.dead[s]).map(s => fetchQuote(s, key)));
-  const got = Object.keys(LIVE.px), miss = Object.keys(LIVE_SYMS).filter(s => !LIVE.px[s]);
-  if (got.length) toast('Live-Kurse: ' + got.join(', ') + (miss.length ? ' · simuliert: ' + miss.join(', ') : ''), 'ok', 6000);
-  else toast('Finnhub: keine Kurse erhalten (Key prüfen). Es wird simuliert.', 'err', 6000);
   return Object.assign({}, LIVE.px);
 }
 function liveStatusHtml() {
