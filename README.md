@@ -58,6 +58,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/superhot.html`](games/superhot.html) — *SUPERHOT 2D (Time moves only when you move)*
   * [`games/buckshot.html`](games/buckshot.html) — *Buckshot Roulette*
 * **Racing & 3D:**
+  * [`games/schrottkiste.html`](games/schrottkiste.html) — *Schrottkiste: Pixel-Rallye (2D-Seitenansicht im Pixel-Look mit Matter.js-Physik: nur Gas & Rückwärts vom Start ins Ziel, in der Luft kippt man das Auto damit; Rampen & Schanzen, Loopings, Wippen, Wackelbrücken, Kistenstapel, Fässer & Abrissbirnen; 6 Autos (Käfer, Pickup, Rennwagen, Monstertruck, Kleinbus, Jeep) mit eigener Physik zum Freischalten, 12 Level in 4 Themen, Bestzeiten im localStorage, Touch-Pedale)*
   * [`games/gischtjagd.html`](games/gischtjagd.html) — *Gischtjagd 3D (Rennboot-Grand-Prix: Drift-Turbo, Nitro, Schanzen, 3 Strecken, 5 KI-Gegner)*
   * [`games/lokfuehrer.html`](games/lokfuehrer.html) — *ICE-Lokführer 3D: Bitte zurückbleiben! (Führerstand-Simulation, Spline-Gleise, Sifa, Bahnsteighalte & Verspätungen)*
   * [`games/stadiumrush.html`](games/stadiumrush.html) — *Stadium Rush (Polytrack & Trackmania 3D-Zeitfahren, 68 Strecken A01–P68 in 5 Saisons, LAN-Multiplayer)*
