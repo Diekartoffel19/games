@@ -19,3 +19,7 @@
   - `games_liste.md`
   - `README.md`
 - **Verification**: Verify games by serving locally (e.g., `python -m http.server 8000` or `npx serve .`) and testing interaction in browser.
+
+## Tool Delegation
+- **agy (Gemini)**: Agents other than Gemini/Antigravity should, when possible, delegate tasks where Gemini is stronger to the Antigravity CLI: `agy -p "<prompt>"` (non-interactive). Examples: image/sprite/texture generation, analysing screenshots or visual output, very large-context reads across many files, Google-grounded web research. Review agy's output before using it.
+- **Blender**: Before creating or editing 3D models, textures or scenes, ask the user whether Blender (Blender MCP) should be used. Do not start Blender without confirmation.
