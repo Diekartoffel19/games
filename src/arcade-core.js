@@ -300,7 +300,8 @@ const ArcadeCore = (() => {
     'liegenkrieg': 'liegenkrieg_best',
     'boersenhai': 'boersenhai_best',
     'grillmeister': 'grillmeister_best',
-    'amtsschimmel': 'amtsschimmel_best'
+    'amtsschimmel': 'amtsschimmel_best',
+    'gassichaos': 'gassichaos_best'
   };
 
   function getScore(gameKey) {

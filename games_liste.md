@@ -223,9 +223,9 @@ Diese 5 Spiele sind aktuell in 2D umgesetzt, profitieren jedoch **enorm von eine
 
 ---
 
-## 🚫 Warum 57 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
+## 🚫 Warum 59 Spiele bewusst in 2D bleiben (Entfernungs-Begründung)
 
-Die restlichen 57 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
+Die restlichen 59 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-Konvertierung dem Gameplay schaden würde oder keinen Sinn ergibt:
 
 1. **Reine Gitter- & Zahlenspiele (Grid Classics & Terminal Roguelikes):**
    - *2048, Tetris, Snake, Breakout, Doodle Jump, Frogger, Memory Match, HEAP//BREACH (`games/heapbreach.html`), Bubble Fusion (`games/bubblefusion.html`)*  
@@ -262,3 +262,7 @@ Die restlichen 57 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 11. **2.5D-Grill-Simulation mit Hitzefeld:**
    - *Grillmeister: Nachbarschafts-BBQ (`games/grillmeister.html`)*  
    *Begründung:* Die schräge Draufsicht auf den Rost ist die Spielmechanik: Glut-Verteilung, Hitzezonen, Stichflammen, Grillgut und alle Gäste müssen gleichzeitig im Blick bleiben, und Ziehen/Antippen/Wenden funktioniert per Maus und Touch ohne Kamerasteuerung. Das Hitzefeld (Gauß-Summe über verschiebbare Kohlen) und die Garstufe je Seite werden in 2D-Rostkoordinaten simuliert; eine 3D-Kamera brächte nur Verdeckung.
+
+12. **Top-Down-Seilphysik-Simulation:**
+   - *Gassi-Chaos: Hundesitter-Simulator (`games/gassichaos.html`)*  
+   *Begründung:* Der Witz entsteht aus der Draufsicht: Bis zu sechs Verlet-Leinen wickeln sich sichtbar um Laternen, Bäume und Passanten und kreuzen sich zu Knoten – das muss man auf einen Blick überblicken, um rechtzeitig zurückzulaufen oder zu entwirren. Eine 3D-Kamera würde Leinen, Hunde und Hindernisse gegenseitig verdecken, und die Wicklungs-Erkennung (Umlaufwinkel um Hindernisse) ist ohnehin eine reine 2D-Rechnung.
