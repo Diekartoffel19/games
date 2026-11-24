@@ -301,7 +301,8 @@ const ArcadeCore = (() => {
     'boersenhai': 'boersenhai_best',
     'grillmeister': 'grillmeister_best',
     'amtsschimmel': 'amtsschimmel_best',
-    'gassichaos': 'gassichaos_best'
+    'gassichaos': 'gassichaos_best',
+    'winterdienst': 'winterdienst_best'
   };
 
   function getScore(gameKey) {

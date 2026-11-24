@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Winterdienst 3D: Räumpflicht ab 5:30</title>
+<meta name="description" content="Kommunaler Räumdienst im Morgengrauen: Mit schwenkbarem Schild die Straße bis 7:00 Uhr freiräumen, Schnee legal auf Grünstreifen ablegen, Glatteis streuen – und bloß keine Nachbarautos zuschieben.">
+<meta name="theme-color" content="#0b1430">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<link rel="stylesheet" href="../style.css">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root { --ink:#0b1430; --paper:#eef4ff; --accent:#ff8a1f; --panel:rgba(10,18,40,.9); --good:#7be08a; --bad:#ff7b6b; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b1430; color:var(--paper); font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; text-align:left; min-height:0; }
+canvas#c { position:fixed; inset:0; width:100%; height:100%; max-width:none; margin:0; border:0; border-radius:0; display:block; touch-action:none; background:#0b1430; }
+.back { position:fixed; top:10px; left:12px; z-index:100; }
+#muteBtn { position:fixed; top:10px; right:12px; z-index:100; font-size:18px; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.25); color:#fff; border-radius:10px; width:42px; height:38px; cursor:pointer; }
+.hide { display:none !important; }
+#hud { position:fixed; inset:0; pointer-events:none; z-index:20; }
+#clockBox { position:absolute; top:8px; left:50%; transform:translateX(-50%); text-align:center; background:var(--panel); border:2px solid var(--accent); border-radius:14px; padding:4px 18px 7px; min-width:190px; box-shadow:0 4px 0 rgba(0,0,0,.35); }
+#clock { font-size:34px; font-weight:900; letter-spacing:1px; font-variant-numeric:tabular-nums; color:#ffd9a8; line-height:1.1; }
+#clock.late { color:#ff8f7b; animation:blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity:.55; } }
+#clockSub { font-size:11px; opacity:.8; text-transform:uppercase; letter-spacing:1px; }
+.tbar { height:5px; background:rgba(255,255,255,.15); border-radius:3px; margin-top:4px; overflow:hidden; }
+.tbar i, .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg,#ffb35a,#ff6a1f); border-radius:3px; }
+#stats { position:absolute; top:56px; left:12px; width:205px; background:var(--panel); border-left:4px solid var(--accent); border-radius:10px; padding:8px 11px; font-size:13px; box-shadow:0 4px 0 rgba(0,0,0,.3); }
+#stats .dname { font-weight:900; color:#ffd27a; font-size:14px; margin-bottom:4px; }
+#stats .row { display:flex; justify-content:space-between; padding:2px 0; }
+#stats .row b { font-variant-numeric:tabular-nums; }
+#stats .row.sub { font-size:11px; color:inherit; opacity:.8; padding:0; margin:0; line-height:1.35; }
+.bar { height:8px; background:rgba(255,255,255,.13); border-radius:4px; overflow:hidden; margin:2px 0 5px; }
+#bClear { background:linear-gradient(90deg,#5fd1ff,#7be08a); }
+#gauge { position:absolute; bottom:14px; left:50%; transform:translateX(-50%); display:flex; gap:12px; align-items:center; background:var(--panel); border:2px solid rgba(255,138,31,.7); border-radius:14px; padding:8px 14px; box-shadow:0 4px 0 rgba(0,0,0,.35); }
+.gp { position:relative; width:62px; height:70px; }
+.gp .body { position:absolute; left:20px; top:28px; width:22px; height:36px; background:#ff8a1f; border-radius:4px; }
+.gp .cab { position:absolute; left:22px; top:40px; width:18px; height:14px; background:#22324f; border-radius:2px; }
+#gBlade { position:absolute; left:4px; top:14px; width:54px; height:7px; background:#ffd43b; border-radius:3px; border:1px solid #000; }
+#gArrow { position:absolute; top:2px; font-size:16px; color:#cfe6ff; }
+.gcol { width:150px; font-size:12px; line-height:1.35; }
+.gcol .lab { display:flex; justify-content:space-between; }
+#bLoad { background:linear-gradient(90deg,#d8e6ff,#fff); }
+#bLoad.over { background:linear-gradient(90deg,#ffb35a,#ff4d3a); }
+#bSalt { background:linear-gradient(90deg,#c9b9a0,#f0e6d2); }
+#mode { font-size:11px; color:#ffd27a; min-height:14px; }
+#warn { position:absolute; top:110px; left:50%; transform:translateX(-50%); font-size:28px; font-weight:900; color:#9fe3ff; text-shadow:0 0 12px #2aa8ff, 0 3px 0 #000; opacity:0; transition:opacity .2s; }
+#warn.on { opacity:1; }
+#toasts { position:absolute; top:62px; right:12px; width:min(330px,60vw); display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+.toast { background:var(--panel); border-left:4px solid var(--accent); border-radius:8px; padding:6px 10px; font-size:13px; animation:tin .25s ease-out; box-shadow:0 3px 0 rgba(0,0,0,.3); }
+.toast.bad { border-color:var(--bad); }
+.toast.good { border-color:var(--good); }
+@keyframes tin { from { transform:translateX(30px); opacity:0; } }
+#help { position:absolute; top:96px; transition:opacity 1s; left:50%; transform:translateX(-50%); font-size:12px; opacity:.85; white-space:nowrap; background:rgba(10,18,40,.75); padding:4px 10px; border-radius:10px; }
+#bubbles { position:fixed; inset:0; pointer-events:none; z-index:18; }
+.bubble { position:absolute; transform:translate(-50%,-100%); background:#fff; color:#1b1b1b; font-weight:800; font-size:12px; padding:5px 9px; border-radius:12px; max-width:190px; opacity:.93; text-align:center; box-shadow:0 3px 0 rgba(0,0,0,.35); border:2px solid #222; }
+.bubble::after { content:""; position:absolute; left:50%; bottom:-11px; margin-left:-8px; border:8px solid transparent; border-top-color:#222; border-bottom:0; }
+.bubble small { display:block; font-weight:600; font-size:11px; color:#a0442a; }
+#touch { position:fixed; inset:auto 0 0 0; height:0; z-index:30; display:none; }
+#touch.on { display:block; }
+#joy { position:fixed; left:18px; bottom:22px; width:130px; height:130px; border-radius:50%; background:rgba(10,18,40,.45); border:2px solid rgba(255,255,255,.3); touch-action:none; }
+#knob { position:absolute; left:40px; top:40px; width:50px; height:50px; border-radius:50%; background:rgba(255,138,31,.8); border:2px solid #fff; }
+#tright { position:fixed; right:12px; bottom:18px; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+#tright .tb { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; max-width:240px; }
+#tright button { font:inherit; font-weight:800; font-size:14px; color:#fff; background:rgba(10,18,40,.75); border:2px solid rgba(255,255,255,.35); border-radius:12px; padding:9px 10px; min-width:64px; min-height:44px; touch-action:none; }
+#tright button.on { background:rgba(255,138,31,.85); }
+#angSlider { width:200px; accent-color:#ff8a1f; }
+.ov { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:rgba(4,8,22,.55); padding:14px; overflow:auto; }
+.ov.hide { display:none; }
+.panel { background:var(--panel); border:3px solid var(--accent); border-radius:18px; padding:18px 22px; max-width:680px; width:100%; margin:auto; box-shadow:0 10px 0 rgba(0,0,0,.35); text-align:center; backdrop-filter:blur(4px); }
+.panel h1 { margin:0 0 2px; font-size:clamp(26px,6vw,42px); color:#ffd9a8; letter-spacing:-.5px; }
+.panel h2 { margin:6px 0 10px; font-size:21px; color:#ffd27a; }
+.panel p { margin:6px 0; line-height:1.42; color:#e3ecff; }
+.panel .small { font-size:13px; opacity:.8; }
+.panel button { font:inherit; font-weight:800; font-size:18px; color:#fff; background:linear-gradient(#ffa04a,#e2640d); border:0; border-radius:12px; padding:11px 24px; margin:8px 4px 0; cursor:pointer; box-shadow:0 4px 0 #8a3a05; }
+.panel button:active { transform:translateY(3px); box-shadow:0 1px 0 #8a3a05; }
+.panel button.alt { background:linear-gradient(#4b5d86,#2f3d5e); box-shadow:0 4px 0 #161f33; font-size:15px; }
+.panel button:disabled { opacity:.4; cursor:default; }
+.dlist { display:grid; gap:7px; margin:12px 0; text-align:left; }
+.dist { display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.07); border-radius:12px; padding:8px 12px; cursor:pointer; border:2px solid transparent; }
+.dist:hover { border-color:var(--accent); }
+.dist.locked { opacity:.45; cursor:default; }
+.dist .n { font-size:22px; font-weight:900; color:#ffd27a; width:26px; }
+.dist .t { flex:1; } .dist .t b { font-size:16px; } .dist .t div { font-size:12px; opacity:.75; }
+.dist .go { font-weight:900; color:#fff; background:var(--accent); border-radius:8px; padding:3px 9px; font-size:13px; }
+.dist.locked .go { display:none; }
+.dist .st { font-size:18px; letter-spacing:2px; color:#ffd43b; white-space:nowrap; }
+.res { text-align:left; margin:8px auto; max-width:460px; font-size:15px; }
+.res div { display:flex; justify-content:space-between; gap:10px; padding:3px 0; border-bottom:1px dashed rgba(255,255,255,.14); }
+.res .neg { color:var(--bad); } .res .pos { color:var(--good); }
+.res .tot { font-weight:900; font-size:18px; border-bottom:0; padding-top:6px; }
+.stars { font-size:44px; color:#ffd43b; letter-spacing:6px; text-shadow:0 3px 0 #7a4a00; }
+.stars .off { color:rgba(255,255,255,.18); text-shadow:none; }
+.shop { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:8px; margin:10px 0; text-align:left; }
+.up { background:rgba(255,255,255,.07); border-radius:10px; padding:8px 10px; display:flex; gap:10px; align-items:center; font-size:13px; }
+.up .ic { font-size:28px; } .up .tx { flex:1; } .up .tx b { font-size:15px; }
+.up button { font-size:14px; padding:7px 10px; margin:0; white-space:nowrap; }
+.up.own { outline:2px solid var(--good); }
+ul.how { text-align:left; margin:8px auto; max-width:500px; padding-left:20px; line-height:1.5; font-size:14px; }
+.kbd { display:inline-block; background:#fff2; border:1px solid #fff5; border-radius:5px; padding:0 5px; font-size:12px; font-weight:800; }
+#selftest { position:fixed; left:12px; bottom:12px; z-index:200; background:#000c; color:#7f7; font:12px monospace; padding:6px 10px; border-radius:6px; display:none; white-space:pre; }
+@media (max-width:640px) {
+  #stats { top:auto; bottom:170px; width:170px; font-size:12px; }
+  #gauge { bottom:auto; top:74px; transform:translateX(-50%) scale(.85); }
+  #help { display:none; }
+  #toasts { top:auto; bottom:170px; right:12px; width:min(300px,46vw); }
+  #clock { font-size:26px; }
+}
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<button id="muteBtn" title="Ton an/aus">🔊</button>
+<canvas id="c"></canvas>
+<div id="bubbles"></div>
+<div id="hud" class="hide">
+  <div id="clockBox"><div id="clock">05:30</div><div id="clockSub">Räumpflicht bis 07:00</div><div class="tbar"><i id="tfill"></i></div></div>
+  <div id="stats">
+    <div class="dname" id="dname">–</div>
+    <div class="row"><span>Geräumt</span><b id="sClear">0 %</b></div><div class="bar"><i id="bClear"></i></div>
+    <div class="row sub"><span>Straße · Gehweg</span><b id="sSplit">–</b></div>
+    <div class="row sub"><span>Glatteis Gehweg</span><b id="sIce">–</b></div>
+    <div class="row"><span>Legal abgelegt</span><b id="sLegal">–</b></div>
+    <div class="row"><span>😠 Beschwerden</span><b id="sComp">0</b></div>
+    <div class="row"><span>💶 Bußgelder</span><b id="sFine">0 €</b></div>
+  </div>
+  <div id="gauge">
+    <div class="gp"><span id="gArrow"></span><div id="gBlade"></div><div class="body"></div><div class="cab"></div></div>
+    <div class="gcol">
+      <div class="lab"><span>Schild</span><b id="gAng">0°</b></div>
+      <div class="lab"><span>Ladung</span><b id="gLoad"></b></div><div class="bar"><i id="bLoad"></i></div>
+      <div class="lab"><span>Salz</span><b id="gSalt"></b></div><div class="bar"><i id="bSalt"></i></div>
+      <div id="mode"></div>
+    </div>
+  </div>
+  <div id="warn">⚠ GLATTEIS!</div>
+  <div id="toasts"></div>
+  <div id="help"><span class="kbd">WASD</span> fahren · <span class="kbd">Q</span>/<span class="kbd">E</span> Schild schwenken · <span class="kbd">Leertaste</span> Salz · <span class="kbd">C</span> Kamera · <span class="kbd">F</span> Fräse · <span class="kbd">Enter</span> Fertig melden</div>
+</div>
+<div id="touch">
+  <div id="joy"><div id="knob"></div></div>
+  <div id="tright">
+    <input type="range" id="angSlider" min="-35" max="35" step="1" value="0" aria-label="Schildwinkel">
+    <div class="tb"><button id="tSalt">🧂 Salz</button><button id="tBlow">🌀 Fräse</button><button id="tCam">🎥</button><button id="tDone">✅</button><button id="tPause">⏸</button></div>
+  </div>
+</div>
+<div id="ov" class="ov"><div class="panel" id="panel"></div></div>
+<div id="selftest"></div>
+<div id="errlog" hidden></div>
+<script>
+'use strict';
+const errlog = document.getElementById('errlog');
+window.addEventListener('error', e => { errlog.textContent += (e.message || e) + ' @' + (e.lineno || '') + '\n'; });
+const AC = window.ArcadeCore || null;
+const snd = (name, ...a) => { try { if (AC && AC[name]) AC[name](...a); } catch (e) {} };
+const SAVE_KEY = 'winterdienst_save';
+const Q = new URLSearchParams(location.search);
+const DEG = Math.PI / 180;
+
+// ================= Mathe =================
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const wrapA = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+function mulberry32(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+let R = mulberry32(1);
+const rand = (a, b) => a + R() * (b - a);
+const pick = a => a[(R() * a.length) | 0];
+const hexC = h => new THREE.Color(h);
+
+// ================= Speicherstand =================
+function loadSave() {
+  const def = { budget: 0, stars: [0, 0, 0, 0, 0], up: {} };
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (s && Array.isArray(s.stars)) return { budget: Math.max(0, +s.budget || 0), stars: def.stars.map((v, i) => clamp(+s.stars[i] || 0, 0, 3)), up: Object.assign({}, s.up) };
+  } catch (e) {}
+  return def;
+}
+let save = loadSave();
+function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+const has = k => !!save.up[k] || Q.get('up') === 'all';
+let P = {};
+function refreshParams() {
+  P = {
+    bladeW: has('hyd') ? 3.0 : 2.4, angSpd: has('hyd') ? 150 : 70, cap: has('hyd') ? 1.3 : 0.9,
+    iceGrip: has('chains') ? 0.55 : 0.14, saltMax: has('salt') ? 140 : 50, saltR: has('salt') ? 2.1 : 1.25,
+    blower: has('blower'), led: has('led')
+  };
+}
+refreshParams();
+
+const UPGRADES = [
+  { id: 'hyd', ic: '🔧', name: 'Hydraulik-Schild', price: 260, desc: 'Breiteres Schild (3,0 m), doppelt so schnelles Schwenken, 45 % mehr Ladung.' },
+  { id: 'chains', ic: '⛓️', name: 'Schneeketten', price: 200, desc: 'Viermal mehr Grip auf Glatteis. Kein Pirouetten-Ballett mehr.' },
+  { id: 'salt', ic: '🧂', name: 'Salzstreuer XL', price: 160, desc: 'Fast dreifacher Salztank und breiterer Streuteller.' },
+  { id: 'blower', ic: '🌀', name: 'Schneefräsen-Aufsatz', price: 480, desc: 'Taste F: schleudert den Schnee ~10 m weit zur Schild-Seite – über Zäune aufs Feld.' },
+  { id: 'led', ic: '💡', name: 'LED-Scheinwerfer', price: 180, desc: 'Hellerer Lichtkegel, der verstecktes Glatteis sichtbar macht.' }
+];
+
+// ================= Bezirke =================
+const LEVELS = [
+  { name: 'Rosenweg', sub: 'Reihenhaus-Gehweg', seed: 11, roadW: 5.6, depth: 0.14, snow: 0.00006, ice: 3, roadCars: [1], carN: 3, driveP: 0.5, slope: 0, field: false, storm: 0,
+    intro: 'Reihenhaussiedlung, 14 cm Neuschnee. Hinter jeder Gardine steht ein Rentner mit Stoppuhr. Straße und Gehwege frei, Schnee auf die Grünstreifen mit den orangen Stangen.' },
+  { name: 'Lindenallee', sub: 'Zugeparkt bis zum letzten Meter', seed: 23, roadW: 7.0, depth: 0.18, snow: 0.0001, ice: 4, roadCars: [-1, 1], carN: 9, driveP: 0.7, slope: 0, field: false, storm: 0,
+    intro: 'Autos links, Autos rechts, Einfahrten dazwischen. Jedes Auto gehört jemandem, der um 6:15 los muss. Wer ein Auto einmauert, bekommt Besuch im Bademantel.' },
+  { name: 'Schulstraße', sub: 'Blitzeis-Gasse', seed: 37, roadW: 6.4, depth: 0.15, snow: 0.0001, ice: 13, roadCars: [1], carN: 5, driveP: 0.5, slope: 0, field: false, storm: 0,
+    intro: 'Gestern Tauwetter, heute Nacht Frost: Unter dem Schnee lauert Blitzeis. Gehwege salzen (Leertaste), bevor um 7:30 die Grundschüler kommen. Salznachschub am Haufen beim Start.' },
+  { name: 'Am Kartoffelacker', sub: 'Feldrand mit Zaun', seed: 41, roadW: 6.8, depth: 0.27, snow: 0.00015, ice: 6, roadCars: [-1], carN: 5, driveP: 0.6, slope: 0, field: true, storm: 0,
+    intro: '27 cm Pappschnee. Auf der Feldseite gibt es keinen Grünstreifen – der Schnee muss über den Zaun aufs Feld. Mit der Schneefräse (Werkstatt) ein Vergnügen, ohne sie Handarbeit am Zaun.' },
+  { name: 'Bergstraße', sub: 'Steile Bergstraße im Schneesturm', seed: 59, roadW: 6.4, depth: 0.22, snow: 0.00026, ice: 9, roadCars: [-1, 1], carN: 6, driveP: 0.6, slope: 0.1, field: false, storm: 1,
+    intro: 'Zehn Prozent Steigung, Schneesturm, Glatteis. Was du oben liegen lässt, ist um 7 wieder zugeschneit. Wer hier rutscht, rutscht bis zur Bäckerei.' }
+];
+const LEVEL_SECONDS = 210;
+const NAMES = ['Herr Krause', 'Frau Schmidtke', 'Dr. Wiesel', 'Familie Özdemir', 'Herr Pohl', 'Frau Brandt', 'Opa Heinz', 'Frau Kowalski', 'Herr Lehmann', 'Frau Dörfler', 'Herr Yilmaz', 'Frau Nowak', 'Herr Bauer', 'Frau Hinz', 'Herr Kunz', 'Frau Gerlach'];
+const LINES = {
+  4: ['Meine Einfahrt! Ich muss um sechs zur Schicht!', 'Hallo?! Hier ist eine AUSFAHRT!', 'Das schieb ICH jetzt bestimmt nicht weg!', 'Ich hab die Einfahrt gestern erst gefegt!'],
+  5: ['MEIN AUTO! Wie soll ich da rauskommen?!', 'Den Wagen hab ich gestern waschen lassen!', 'Man sieht ja das Kennzeichen nicht mehr!', 'Das ist ein Leasingwagen, junger Mann!'],
+  6: ['Ich komm nicht mehr aus dem Haus!', 'Die Haustür! Der Paketbote kommt doch!', 'Soll ich jetzt aus dem Fenster klettern?!'],
+  8: ['Schnee an MEINER Hauswand?!', 'Das ist Sachbeschädigung!'],
+  bin: ['Meine Tonne! Heute ist Abholung!', 'Die Biotonne! Jetzt liegt alles im Schnee!'],
+  mail: ['Der Briefkasten war von 1987!', 'Mein Briefkasten! Da kommt die Zeitung rein!'],
+  dent: ['DELLE! Das zahlt die Stadt!', 'Haben Sie überhaupt einen Führerschein?!'],
+  near: ['Sind Sie wahnsinnig?! Fast im Bademantel überfahren!', 'Ich ruf die Polizei! Und das Ordnungsamt!'],
+  early: ['Um halb sechs?! Ich hab Nachtschicht gehabt!', 'Früher hat man das mit der Schippe gemacht!', 'Ich schreib an die Zeitung!']
+};
+const FINES = { 4: 20, 5: 40, 6: 25, 8: 30, bin: 15, mail: 25, dent: 60, near: 80 };
+const KIND_LABEL = { 4: 'Einfahrt', 5: 'Auto', 6: 'Hauseingang', 8: 'Hauswand', bin: 'Mülltonne', mail: 'Briefkasten', dent: 'Delle', near: 'Beinahe-Unfall' };
+
+// ================= Schneeraster =================
+const CS = 0.32, CS2 = CS * CS, GW = 128, GH = 256, NC = GW * GH;
+const GWID = (GW - 1) * CS, GLEN = (GH - 1) * CS, X0 = -GWID / 2, Z0 = -GLEN / 2;
+const Z_YARD = 0, Z_ROAD = 1, Z_WALK = 2, Z_VERGE = 3, Z_DRIVE = 4, Z_CAR = 5, Z_DOOR = 6, Z_FIELD = 7, Z_HOUSE = 8, Z_END = 9, Z_FENCE = 10;
+const ILLEGAL = [0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0];
+const LEGAL = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
+const GCOL = [[0.2, 0.24, 0.17], [0.11, 0.115, 0.13], [0.34, 0.34, 0.37], [0.24, 0.29, 0.17], [0.3, 0.27, 0.25], [0.11, 0.115, 0.13], [0.42, 0.33, 0.25], [0.3, 0.24, 0.16], [0.2, 0.2, 0.2], [0.13, 0.135, 0.15], [0.2, 0.24, 0.17]];
+const H = new Float32Array(NC), G = new Float32Array(NC), ICE = new Float32Array(NC), SALT = new Float32Array(NC), GLOW = new Float32Array(NC), NOISE = new Float32Array(NC);
+const ZN = new Uint8Array(NC), REV = new Uint8Array(NC), OW = new Int16Array(NC);
+const zoneNet = new Float64Array(12);
+const ownEx = new Float64Array(64), ownNext = new Float64Array(64), ownKind = new Uint8Array(64);
+let targets = new Int32Array(0);
+const toC = x => Math.round((x - X0) / CS), toR = z => Math.round((z - Z0) / CS);
+const cellX = c => X0 + c * CS, cellZ = r => Z0 + r * CS;
+function idxAt(x, z) { const c = clamp(toC(x), 0, GW - 1), r = clamp(toR(z), 0, GH - 1); return r * GW + c; }
+const gAt = (x, z) => G[idxAt(x, z)];
+
+// all snow height changes from gameplay go through here: keeps zone/owner bookkeeping exact
+function addH(i, dh) {
+  H[i] += dh;
+  const z = ZN[i]; zoneNet[z] += dh;
+  const o = OW[i]; if (o >= 0 && ILLEGAL[z]) { ownEx[o] += dh * CS2; if (dh > 0 && (FINES[z] || 0) >= (FINES[ownKind[o]] || 0)) ownKind[o] = z; }
+}
+let dR0 = 1e9, dR1 = -1;
+function markDirty(a, b) { if (a < dR0) dR0 = Math.max(0, a); if (b > dR1) dR1 = Math.min(GH - 1, b); }
+const TALUS = 0.3;
+function relax(c0, r0, rad, iters) {
+  const ca = Math.max(1, c0 - rad), cb = Math.min(GW - 2, c0 + rad), ra = Math.max(1, r0 - rad), rb = Math.min(GH - 2, r0 + rad);
+  for (let it = 0; it < iters; it++) {
+    for (let r = ra; r <= rb; r++) for (let c = ca; c <= cb; c++) {
+      const i = r * GW + c; if (ZN[i] === Z_HOUSE || H[i] <= 0) continue;
+      let si = G[i] + H[i];
+      for (let k = 0; k < 4; k++) {
+        const j = k === 0 ? i - 1 : k === 1 ? i + 1 : k === 2 ? i - GW : i + GW;
+        if (ZN[j] === Z_HOUSE) continue;
+        const diff = si - G[j] - H[j];
+        if (diff > TALUS) { const m = Math.min(H[i], (diff - TALUS) * 0.5); if (m > 0) { addH(i, -m); addH(j, m); si -= m; } }
+      }
+    }
+  }
+}
+function deposit(x, z, vol, spread) {
+  const Rr = spread || 1;
+  const c0 = clamp(toC(x), Rr + 1, GW - Rr - 2), r0 = clamp(toR(z), Rr + 1, GH - Rr - 2);
+  let ws = 0;
+  for (let dr = -Rr; dr <= Rr; dr++) for (let dc = -Rr; dc <= Rr; dc++) if (ZN[(r0 + dr) * GW + c0 + dc] !== Z_HOUSE) ws += (Rr + 1 - Math.abs(dr)) * (Rr + 1 - Math.abs(dc));
+  const hv = vol / CS2;
+  if (ws <= 0) addH(r0 * GW + c0, hv);
+  else for (let dr = -Rr; dr <= Rr; dr++) for (let dc = -Rr; dc <= Rr; dc++) {
+    const i = (r0 + dr) * GW + c0 + dc; if (ZN[i] === Z_HOUSE) continue;
+    addH(i, hv * (Rr + 1 - Math.abs(dr)) * (Rr + 1 - Math.abs(dc)) / ws);
+  }
+  relax(c0, r0, Rr + 2, 2);
+  markDirty(r0 - Rr - 3, r0 + Rr + 3);
+}
+function totalSnow() { let s = 0; for (let i = 0; i < NC; i++) s += H[i]; return s * CS2; }
+
+// ================= Three.js Grundgerüst =================
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0d1838, 0.022);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 900);
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+
+const skyU = { top: { value: hexC('#03061a') }, hor: { value: hexC('#0d1838') }, bot: { value: hexC('#05070f') }, sunDir: { value: new THREE.Vector3(0.3, 0, 1).normalize() }, sunCol: { value: hexC('#ff9a50') }, sunAmt: { value: 0 } };
+const sky = new THREE.Mesh(new THREE.SphereGeometry(450, 24, 14), new THREE.ShaderMaterial({
+  uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
+  vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: 'uniform vec3 top; uniform vec3 hor; uniform vec3 bot; uniform vec3 sunCol; uniform vec3 sunDir; uniform float sunAmt; varying vec3 vP;' +
+    'void main(){ float h = vP.y; vec3 c = h > 0.0 ? mix(hor, top, pow(clamp(h*1.4,0.0,1.0), 0.6)) : mix(hor, bot, clamp(-h*5.0,0.0,1.0));' +
+    'float s = max(dot(vP, normalize(sunDir)), 0.0); c += sunCol * (pow(s, 6.0) * 0.55 + pow(s, 300.0) * 2.0) * sunAmt; gl_FragColor = vec4(c, 1.0); }'
+}));
+sky.renderOrder = -1; scene.add(sky);
+const starGeo = new THREE.BufferGeometry(); {
+  const a = new Float32Array(500 * 3);
+  for (let i = 0; i < 500; i++) { const th = Math.random() * Math.PI * 2, ph = Math.acos(Math.random() * 0.9 + 0.1); a[i * 3] = Math.sin(ph) * Math.cos(th) * 420; a[i * 3 + 1] = Math.cos(ph) * 420; a[i * 3 + 2] = Math.sin(ph) * Math.sin(th) * 420; }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(a, 3));
+}
+const starMat = new THREE.PointsMaterial({ color: 0xcfe0ff, size: 1.6, sizeAttenuation: false, transparent: true, fog: false, depthWrite: false });
+const stars = new THREE.Points(starGeo, starMat); sky.add(stars);
+
+const hemi = new THREE.HemisphereLight(0x5468a8, 0x1a2030, 0.5); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0x8ea8ff, 0.3); sun.position.set(-20, 40, 30); scene.add(sun);
+
+const MATS = {};
+function mat(color, o) { const k = color + (o ? JSON.stringify(o) : ''); return MATS[k] || (MATS[k] = new THREE.MeshStandardMaterial(Object.assign({ color, flatShading: true, roughness: 0.82, metalness: 0 }, o || {}))); }
+const BOXG = new THREE.BoxGeometry(1, 1, 1);
+function box(w, h, d, color, x, y, z, parent, o) { const m = new THREE.Mesh(BOXG, color.isMaterial ? color : mat(color, o)); m.scale.set(w, h, d); m.position.set(x, y, z); parent.add(m); return m; }
+const GEOS = {};
+function cylG(rt, rb, h, seg) { const k = [rt, rb, h, seg].join(); return GEOS[k] || (GEOS[k] = new THREE.CylinderGeometry(rt, rb, h, seg)); }
+function cyl(rt, rb, h, seg, color, x, y, z, parent, o) { const m = new THREE.Mesh(cylG(rt, rb, h, seg), color.isMaterial ? color : mat(color, o)); m.position.set(x, y, z); parent.add(m); return m; }
+function coneG(r, h, seg) { const k = 'c' + [r, h, seg].join(); return GEOS[k] || (GEOS[k] = new THREE.ConeGeometry(r, h, seg)); }
+const SNOWM = mat('#e4ecf7', { roughness: 0.9 });
+const WIN_LIT = mat('#ffd27a', { emissive: '#ffb04a', emissiveIntensity: 1.0 });
+const WIN_DARK = mat('#18223a', { roughness: 0.3, metalness: 0.2 });
+
+// --- Schnee-Heightfield-Mesh ---
+const fieldGeo = new THREE.PlaneGeometry(GWID, GLEN, GW - 1, GH - 1);
+fieldGeo.rotateX(-Math.PI / 2); // Vertex r*GW+c liegt danach bei x=X0+c*CS, z=Z0+r*CS
+fieldGeo.deleteAttribute('uv');
+const posA = fieldGeo.attributes.position; posA.setUsage(THREE.DynamicDrawUsage);
+const colA = new THREE.BufferAttribute(new Float32Array(NC * 3), 3); colA.setUsage(THREE.DynamicDrawUsage); fieldGeo.setAttribute('color', colA);
+const glowA = new THREE.BufferAttribute(GLOW, 1); fieldGeo.setAttribute('glow', glowA);
+const lampU = { value: 1 };
+const fieldMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85, metalness: 0 });
+fieldMat.onBeforeCompile = sh => {
+  sh.uniforms.uLamp = lampU;
+  sh.vertexShader = 'attribute float glow;\nvarying float vGlow;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;');
+  sh.fragmentShader = 'varying float vGlow;\nuniform float uLamp;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.68, 0.36) * vGlow * uLamp * diffuseColor.rgb;');
+};
+const fieldMesh = new THREE.Mesh(fieldGeo, fieldMat); fieldMesh.frustumCulled = false; scene.add(fieldMesh);
+let overlay = false;
+function writeVert(i, pa, ca) {
+  const h = H[i];
+  const c = i % GW, l = c > 0 ? i - 1 : i, rr = c < GW - 1 ? i + 1 : i, u = i >= GW ? i - GW : i, d = i < NC - GW ? i + GW : i;
+  const hs = h * 0.25 + (H[l] + H[rr] + H[u] + H[d]) * 0.125 + (H[l >= GW ? l - GW : l] + H[rr >= GW ? rr - GW : rr] + H[l < NC - GW ? l + GW : l] + H[rr < NC - GW ? rr + GW : rr]) * 0.0625; // 3x3-Glättung nur für die Darstellung, Simulation bleibt exakt
+  pa[i * 3 + 1] = G[i] + hs + (hs > 0.03 ? NOISE[i] * 0.025 * Math.min(1, hs * 6) : 0);
+  const z = ZN[i], gc = GCOL[z];
+  const t = h <= 0.004 ? 0 : h >= 0.07 ? 1 : (h - 0.004) / 0.066;
+  const n = 1 + NOISE[i] * 0.04;
+  let r = gc[0] + (0.84 * n - gc[0]) * t, g = gc[1] + (0.88 * n - gc[1]) * t, b = gc[2] + (0.97 * n - gc[2]) * t;
+  if (h < 0.06) {
+    const e = 1 - t;
+    if (REV[i] && ICE[i] > 0.04) { const k = Math.min(1, ICE[i]) * 0.85 * e; r += (0.38 - r) * k; g += (0.68 - g) * k; b += (1.0 - b) * k; }
+    if (SALT[i] > 0.03) { const k = Math.min(0.55, SALT[i] * 0.45) * e; r += (0.62 - r) * k; g += (0.56 - g) * k; b += (0.5 - b) * k; }
+  }
+  if (!overlay && LEGAL[z]) { g += 0.035; r -= 0.02; } // dezenter Grünschimmer: hier darf Schnee hin
+  if (overlay) {
+    if (LEGAL[z]) { r = r * 0.55 + 0.08; g = g * 0.55 + 0.42; b = b * 0.55 + 0.1; }
+    else if (ILLEGAL[z]) { r = r * 0.55 + 0.45; g = g * 0.55 + 0.05; b = b * 0.55 + 0.05; }
+  }
+  ca[i * 3] = r; ca[i * 3 + 1] = g; ca[i * 3 + 2] = b;
+}
+function flush() {
+  if (dR1 < dR0) return;
+  dR0 = Math.max(0, dR0 - 1); dR1 = Math.min(GH - 1, dR1 + 1);
+  const pa = posA.array, ca = colA.array;
+  for (let r = dR0; r <= dR1; r++) for (let c = 0, i = r * GW; c < GW; c++, i++) writeVert(i, pa, ca);
+  posA.updateRange.offset = colA.updateRange.offset = dR0 * GW * 3;
+  posA.updateRange.count = colA.updateRange.count = (dR1 - dR0 + 1) * GW * 3;
+  posA.needsUpdate = colA.needsUpdate = true;
+  dR0 = 1e9; dR1 = -1;
+}
+
+// --- Außenbereich ---
+const outerGeo = new THREE.PlaneGeometry(500, 500, 50, 50); outerGeo.rotateX(-Math.PI / 2);
+const outer = new THREE.Mesh(outerGeo, mat('#cdd6e6', { roughness: 0.95 })); scene.add(outer);
+function shapeOuter(slope) {
+  const p = outerGeo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i);
+    const inside = Math.abs(x) < GWID / 2 - 0.5 && Math.abs(z) < GLEN / 2 - 0.5;
+    p.setY(i, inside ? -3 : 0.3 + slope * clamp(z, -60, 60) + (Math.abs(x) > 30 ? Math.sin(x * 0.07) * Math.sin(z * 0.05) * 1.5 : 0));
+  }
+  p.needsUpdate = true;
+}
+
+const dotTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 32; const x = cv.getContext('2d'); const g = x.createRadialGradient(16, 16, 0, 16, 16, 16); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.55, 'rgba(255,255,255,0.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(cv); })();
+// --- Partikel (Spritzer, Salz, Fräse) ---
+const PN = 1400;
+const pPos = new Float32Array(PN * 3), pVel = new Float32Array(PN * 3), pLife = new Float32Array(PN), pCol = new Float32Array(PN * 3);
+for (let i = 0; i < PN; i++) pPos[i * 3 + 1] = -100;
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3).setUsage(THREE.DynamicDrawUsage));
+const pts = new THREE.Points(pGeo, new THREE.PointsMaterial({ size: 0.16, map: dotTex, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false }));
+pts.frustumCulled = false; scene.add(pts);
+let pHead = 0;
+function spawnP(x, y, z, vx, vy, vz, life, r, g, b) {
+  const i = pHead; pHead = (pHead + 1) % PN;
+  pPos[i * 3] = x; pPos[i * 3 + 1] = y; pPos[i * 3 + 2] = z; pVel[i * 3] = vx; pVel[i * 3 + 1] = vy; pVel[i * 3 + 2] = vz; pLife[i] = life;
+  pCol[i * 3] = r; pCol[i * 3 + 1] = g; pCol[i * 3 + 2] = b;
+}
+function updateParticles(dt) {
+  for (let i = 0; i < PN; i++) {
+    if (pLife[i] <= 0) continue;
+    pLife[i] -= dt;
+    if (pLife[i] <= 0) { pPos[i * 3 + 1] = -100; continue; }
+    pVel[i * 3 + 1] -= 9 * dt;
+    pPos[i * 3] += pVel[i * 3] * dt; pPos[i * 3 + 1] += pVel[i * 3 + 1] * dt; pPos[i * 3 + 2] += pVel[i * 3 + 2] * dt;
+  }
+  pGeo.attributes.position.needsUpdate = true; pGeo.attributes.color.needsUpdate = true;
+}
+// --- Schneefall ---
+const SN = 2600;
+const sfPos = new Float32Array(SN * 3), sfSpd = new Float32Array(SN);
+for (let i = 0; i < SN; i++) { sfPos[i * 3] = (Math.random() - 0.5) * 50; sfPos[i * 3 + 1] = Math.random() * 24; sfPos[i * 3 + 2] = (Math.random() - 0.5) * 50; sfSpd[i] = 0.8 + Math.random() * 0.9; }
+const sfGeo = new THREE.BufferGeometry(); sfGeo.setAttribute('position', new THREE.BufferAttribute(sfPos, 3).setUsage(THREE.DynamicDrawUsage));
+const snowfall = new THREE.Points(sfGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.13, map: dotTex, transparent: true, opacity: 0.9, depthWrite: false }));
+snowfall.frustumCulled = false; scene.add(snowfall);
+
+// ================= Räumfahrzeug =================
+const plowG = new THREE.Group(); scene.add(plowG);
+const ORANGE = mat('#ff7d12', { emissive: '#7a2c00', emissiveIntensity: 0.55, roughness: 0.55 });
+box(1.7, 0.5, 3.3, ORANGE, 0, 0.75, -0.2, plowG);
+box(1.76, 0.18, 3.4, '#2a2a2e', 0, 0.48, -0.2, plowG);
+box(1.5, 0.62, 1.25, ORANGE, 0, 1.25, 0.85, plowG);
+box(1.56, 1.1, 1.45, ORANGE, 0, 1.5, -0.65, plowG);
+box(1.6, 0.55, 1.3, mat('#1a2a44', { roughness: 0.2, metalness: 0.4 }), 0, 1.72, -0.6, plowG);
+box(1.62, 0.12, 1.52, '#e9eef5', 0, 2.1, -0.65, plowG);
+box(0.04, 0.12, 3.0, '#ffffff', 0.86, 0.85, -0.2, plowG);
+box(0.04, 0.12, 3.0, '#ffffff', -0.86, 0.85, -0.2, plowG);
+const wheels = [];
+for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+  const w = cyl(0.46, 0.46, 0.36, 10, '#1d1d22', sx * 0.88, 0.46, sz * 1.15 - 0.2, plowG); w.rotation.z = Math.PI / 2; wheels.push(w);
+  cyl(0.24, 0.24, 0.38, 6, '#9aa0aa', sx * 0.88, 0.46, sz * 1.15 - 0.2, plowG).rotation.z = Math.PI / 2;
+}
+const headMat = mat('#fff8e0', { emissive: '#fff1c8', emissiveIntensity: 1.2 });
+box(0.3, 0.16, 0.06, headMat, 0.5, 1.28, 1.49, plowG); box(0.3, 0.16, 0.06, headMat, -0.5, 1.28, 1.49, plowG);
+box(0.25, 0.12, 0.05, mat('#ff2a1a', { emissive: '#ff2010', emissiveIntensity: 0.9 }), 0.6, 0.85, -1.87, plowG);
+box(0.25, 0.12, 0.05, mat('#ff2a1a', { emissive: '#ff2010', emissiveIntensity: 0.9 }), -0.6, 0.85, -1.87, plowG);
+// Salzstreuer hinten
+box(1.1, 0.55, 0.7, '#5d6470', 0, 1.15, -1.75, plowG);
+const spinner = cyl(0.32, 0.32, 0.05, 8, '#3a3f48', 0, 0.62, -2.0, plowG);
+// Rundumleuchte
+const beaconBase = cyl(0.14, 0.16, 0.18, 8, mat('#ffa020', { emissive: '#ff8a00', emissiveIntensity: 1.4 }), 0, 2.25, -0.65, plowG);
+const beaconRot = new THREE.Group(); beaconRot.position.set(0, 2.27, -0.65); plowG.add(beaconRot);
+box(0.04, 0.12, 0.3, mat('#ffd080', { emissive: '#ffcc66', emissiveIntensity: 2 }), 0.1, 0, 0, beaconRot);
+const beaconLight = new THREE.PointLight(0xff8a1a, 1, 11, 2); beaconLight.position.set(0, 2.8, -0.55); plowG.add(beaconLight);
+const head = new THREE.SpotLight(0xfff1d6, 1.6, 36, 0.55, 0.5, 1.2); head.position.set(0, 1.4, 1.5); plowG.add(head);
+const headTarget = new THREE.Object3D(); headTarget.position.set(0, -0.5, 12); plowG.add(headTarget); head.target = headTarget;
+// Schubrahmen + Schild
+box(0.14, 0.14, 0.9, '#2a2a2e', 0.5, 0.55, 1.6, plowG); box(0.14, 0.14, 0.9, '#2a2a2e', -0.5, 0.55, 1.6, plowG);
+const bladePivot = new THREE.Group(); bladePivot.position.set(0, 0, 2.05); plowG.add(bladePivot);
+const bladeG = new THREE.CylinderGeometry(0.5, 0.5, 1, 12, 1, true, Math.PI / 2, Math.PI * 0.85); bladeG.rotateZ(Math.PI / 2);
+const bladeMesh = new THREE.Mesh(bladeG, mat('#ffc61a', { side: THREE.DoubleSide, metalness: 0.3, roughness: 0.5 })); bladeMesh.position.set(0, 0.52, 0.18); bladePivot.add(bladeMesh);
+const stripeTex = (() => { const cv = document.createElement('canvas'); cv.width = 128; cv.height = 16; const x = cv.getContext('2d'); x.fillStyle = '#ffd400'; x.fillRect(0, 0, 128, 16); x.fillStyle = '#111'; for (let i = -16; i < 128; i += 16) { x.beginPath(); x.moveTo(i, 16); x.lineTo(i + 8, 16); x.lineTo(i + 16, 0); x.lineTo(i + 8, 0); x.fill(); } const t = new THREE.CanvasTexture(cv); t.wrapS = THREE.RepeatWrapping; t.repeat.set(3, 1); return t; })();
+const bladeTop = box(1, 0.12, 0.08, new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.6, emissive: '#3a3000', emissiveMap: stripeTex }), 0, 1.06, -0.03, bladePivot);
+const sideL = box(0.05, 0.95, 0.5, '#2a2a2e', 0, 0.52, 0.08, bladePivot), sideR = box(0.05, 0.95, 0.5, '#2a2a2e', 0, 0.52, 0.08, bladePivot);
+const moundG = new THREE.SphereGeometry(1, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+const mound = new THREE.Mesh(moundG, SNOWM); bladePivot.add(mound);
+const chute = new THREE.Group(); chute.position.set(0, 1.05, -0.15); bladePivot.add(chute);
+cyl(0.16, 0.18, 0.9, 8, '#d92a1a', 0, 0.45, 0, chute);
+box(0.34, 0.12, 0.6, '#d92a1a', 0, 0.92, 0.22, chute).rotation.x = -0.4;
+function setBladeWidth(w) {
+  bladeMesh.scale.x = w; bladeTop.scale.x = w; stripeTex.repeat.set(w * 1.3, 1);
+  sideL.position.x = w / 2; sideR.position.x = -w / 2;
+}
+
+// ================= Spielzustand =================
+let state = 'menu', levelIdx = 0, L = LEVELS[0];
+const plow = { x: 0, z: -36, th: 0, vx: 0, vz: 0, w: 0, alpha: 0, aTarget: 0, load: 0, salt: 50, blower: false, chuteSide: 1, pitch: 0, roll: 0, y: 0 };
+let gameTime = 0, clockMin = 330, camMode = 0, shake = 0;
+let comps = 0, fines = 0, collectedTotal = 0, cleared = 0, iceWarn = 0, shownIceTip = false;
+let levelGroup = new THREE.Group(); scene.add(levelGroup);
+let obs = [], houses = [], neighbors = [], saltSet = new Set();
+let tSnow = 0, tSalt = 0, tLed = 0, tStat = 0, tComp = 0, tHud = 0, warned15 = false;
+const saltPile = { x: 0, z: 0 };
+let auto = null;
+const input = { thr: 0, steer: 0, salt: false, joyX: 0, joyY: 0, touchSalt: false };
+const fx = () => Math.sin(plow.th), fz = () => Math.cos(plow.th);
+
+// ================= Level-Aufbau =================
+function paint(xa, xb, za, zb, zone, owner) {
+  const c0 = Math.max(0, Math.ceil((Math.min(xa, xb) - X0) / CS)), c1 = Math.min(GW - 1, Math.floor((Math.max(xa, xb) - X0) / CS));
+  const r0 = Math.max(0, Math.ceil((Math.min(za, zb) - Z0) / CS)), r1 = Math.min(GH - 1, Math.floor((Math.max(za, zb) - Z0) / CS));
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) { const i = r * GW + c; ZN[i] = zone; OW[i] = owner === undefined ? -1 : owner; }
+}
+function makeHouse(hs) {
+  const g = new THREE.Group(), depth = 8, w = 7.2, hh = 5.4;
+  g.position.set(hs.s * (hs.front + depth / 2), gAt(hs.s * hs.front, hs.zc) - 0.02, hs.zc);
+  levelGroup.add(g);
+  const wall = pick(['#c9b79a', '#b98d6e', '#d8cfc0', '#9fb0b8', '#c4a7a0', '#b3a77d', '#d6c3a0']);
+  box(depth, hh, w, wall, 0, hh / 2, 0, g);
+  const roof = new THREE.Mesh(GEOS.roof || (GEOS.roof = (() => { const r = new THREE.CylinderGeometry(4.97, 4.97, w + 0.5, 3, 1); r.rotateX(-Math.PI / 2); return r; })()), SNOWM);
+  roof.scale.y = 0.5; roof.position.y = hh + 4.97 * 0.25; g.add(roof);
+  box(0.6, 1.6, 0.6, '#7a4a3a', -hs.s * 1.5, hh + 1.6, 2, g);
+  const fx0 = -hs.s * (depth / 2 + 0.05);
+  hs.windows = [];
+  for (const fy of [1.5, 3.9]) for (const wz of [-2.2, 2.2]) {
+    if (fy < 2 && wz > 0) continue;
+    hs.windows.push(box(0.08, 1.05, 1.2, R() < 0.25 ? WIN_LIT : WIN_DARK, fx0, fy, wz, g));
+  }
+  box(0.1, 2.1, 1.0, '#5a3522', fx0, 1.05, 1.8, g);
+  box(0.12, 0.2, 0.2, mat('#ffe2a0', { emissive: '#ffcf70', emissiveIntensity: 1.2 }), fx0 - hs.s * 0.05, 2.35, 1.8, g);
+  box(0.3, 0.12, 1.4, '#888', fx0 - hs.s * 0.2, 0.06, 1.8, g);
+  if (hs.drive) {
+    box(0.1, 2.3, 2.6, '#6c7078', fx0, 1.15, -1.8, g);
+    box(0.06, 0.5, 1.2, mat('#d42020', { emissive: '#5a0000', emissiveIntensity: 0.6 }), fx0 - hs.s * 0.06, 2.6, -1.8, g);
+    box(0.07, 0.16, 1.0, '#ffffff', fx0 - hs.s * 0.07, 2.6, -1.8, g);
+  }
+  obs.push({ k: 'b', x: hs.s * (hs.front + depth / 2), z: hs.zc, hx: depth / 2, hz: w / 2, type: 'house' });
+}
+function makeCar(x, z, alongZ, owner) {
+  const g = new THREE.Group(); g.position.set(x, gAt(x, z), z); if (!alongZ) g.rotation.y = Math.PI / 2; levelGroup.add(g);
+  const col = pick(['#8a1c1c', '#1d3f7a', '#c9c9c9', '#2b2b2b', '#2f5a3a', '#d0b24a', '#5a5f6a']);
+  box(1.8, 0.62, 4.2, col, 0, 0.6, 0, g, { metalness: 0.3, roughness: 0.5 });
+  box(1.6, 0.55, 2.1, '#1a2333', 0, 1.18, -0.25, g, { metalness: 0.4, roughness: 0.3 });
+  box(1.66, 0.2, 2.0, SNOWM, 0, 1.53, -0.25, g);
+  box(1.74, 0.14, 1.2, SNOWM, 0, 0.98, 1.45, g);
+  box(1.74, 0.12, 0.8, SNOWM, 0, 0.97, -1.75, g);
+  for (const sx of [-0.85, 0.85]) for (const sz of [-1.35, 1.35]) box(0.26, 0.56, 0.56, '#151515', sx, 0.3, sz, g);
+  box(0.5, 0.12, 0.04, mat('#ffe9b0', { emissive: '#665533', emissiveIntensity: 0.5 }), 0.55, 0.65, 2.11, g);
+  box(0.5, 0.12, 0.04, mat('#ffe9b0', { emissive: '#665533', emissiveIntensity: 0.5 }), -0.55, 0.65, 2.11, g);
+  const hx = alongZ ? 0.95 : 2.15, hz = alongZ ? 2.15 : 0.95;
+  paint(x - hx, x + hx, z - hz, z + hz, Z_CAR, owner);
+  obs.push({ k: 'b', x, z, hx, hz, type: 'car', owner, cd: 0 });
+}
+function makeLamp(x, z) {
+  const g = new THREE.Group(); g.position.set(x, gAt(x, z), z); levelGroup.add(g);
+  cyl(0.07, 0.1, 5, 6, '#3a3f4a', 0, 2.5, 0, g);
+  const dir = x > 0 ? -1 : 1;
+  box(1.1, 0.08, 0.08, '#3a3f4a', dir * 0.5, 4.95, 0, g);
+  box(0.5, 0.14, 0.3, mat('#fff0c8', { emissive: '#ffcf80', emissiveIntensity: 1.6 }), dir * 1.0, 4.88, 0, g);
+  obs.push({ k: 'c', x, z, r: 0.18, type: 'lamp' });
+  const lx = x + dir * 1.0;
+  for (let r = toR(z) - 22; r <= toR(z) + 22; r++) for (let c = toC(lx) - 22; c <= toC(lx) + 22; c++) {
+    if (r < 0 || c < 0 || r >= GH || c >= GW) continue;
+    const d2 = (cellX(c) - lx) ** 2 + (cellZ(r) - z) ** 2;
+    GLOW[r * GW + c] = Math.min(0.9, GLOW[r * GW + c] + 0.75 * Math.exp(-d2 / (2 * 2.6 * 2.6)));
+  }
+}
+function makeBin(x, z, owner) {
+  const g = new THREE.Group(); g.position.set(x, gAt(x, z), z); levelGroup.add(g);
+  const col = pick(['#3a4048', '#2a4f8a', '#6b4a2a', '#c9a21a']);
+  box(0.58, 0.95, 0.68, col, 0, 0.48, 0, g); box(0.62, 0.08, 0.74, col, 0, 0.99, 0, g); box(0.56, 0.1, 0.66, SNOWM, 0, 1.07, 0, g);
+  obs.push({ k: 'c', x, z, r: 0.36, type: 'bin', owner, mesh: g, alive: true, tip: 0 });
+}
+function makeMailbox(x, z, owner) {
+  const g = new THREE.Group(); g.position.set(x, gAt(x, z), z); levelGroup.add(g);
+  cyl(0.05, 0.05, 1.0, 5, '#333', 0, 0.5, 0, g);
+  box(0.36, 0.42, 0.5, '#2f6b4a', 0, 1.15, 0, g); box(0.38, 0.08, 0.52, SNOWM, 0, 1.4, 0, g);
+  obs.push({ k: 'c', x, z, r: 0.25, type: 'mail', owner, mesh: g, alive: true, tip: 0 });
+}
+function makeTree(x, z, s, collide) {
+  const g = new THREE.Group(); g.position.set(x, (Math.abs(x) < GWID / 2 && Math.abs(z) < GLEN / 2 ? gAt(x, z) : 0.3 + L.slope * clamp(z, -60, 60)), z); g.scale.setScalar(s); levelGroup.add(g);
+  cyl(0.15, 0.2, 1.2, 5, '#4a3424', 0, 0.6, 0, g);
+  const tm = mat('#1f3d2c');
+  for (let k = 0; k < 3; k++) {
+    const c = new THREE.Mesh(coneG(1.5 - k * 0.4, 1.7, 7), tm); c.position.y = 1.6 + k * 1.05; g.add(c);
+    const sc = new THREE.Mesh(coneG(1.0 - k * 0.28, 0.7, 7), SNOWM); sc.position.y = 2.15 + k * 1.05; g.add(sc);
+  }
+  if (collide) obs.push({ k: 'c', x, z, r: 0.35 * s, type: 'tree' });
+}
+
+function buildLevel(idx) {
+  levelIdx = idx; L = LEVELS[idx]; R = mulberry32(L.seed);
+  scene.remove(levelGroup); levelGroup = new THREE.Group(); scene.add(levelGroup);
+  obs = []; houses = []; neighbors = []; saltSet = new Set();
+  H.fill(0); G.fill(0); ICE.fill(0); SALT.fill(0); GLOW.fill(0); ZN.fill(Z_YARD); REV.fill(0); OW.fill(-1);
+  zoneNet.fill(0); ownEx.fill(0); ownNext.fill(0.2); ownKind.fill(0);
+  const rw = L.roadW / 2, zEnd = 34;
+  const sides = [-1, 1];
+  const geo = {};
+  for (const s of sides) {
+    const fieldSide = L.field && s === 1;
+    const walk0 = fieldSide ? rw : rw + 1.3, walk1 = walk0 + 2.0;
+    geo[s] = { fieldSide, walk0, walk1, front: walk1 + 5 };
+    if (!fieldSide) paint(s * rw, s * walk0, -zEnd, zEnd, Z_VERGE);
+    paint(s * walk0, s * walk1, -zEnd, zEnd, Z_WALK);
+    if (fieldSide) { paint(s * (walk1 + 0.05), s * (walk1 + 0.5), -GLEN, GLEN, Z_FENCE); paint(s * (walk1 + 0.5), s * 30, -GLEN, GLEN, Z_FIELD); }
+  }
+  paint(-rw, rw, -GLEN, GLEN, Z_ROAD);
+  for (const sg of [-1, 1]) paint(-(Math.max(geo[-1].walk1, geo[1].walk1) + 1), Math.max(geo[-1].walk1, geo[1].walk1) + 1 - (L.field ? 0 : 0), sg * zEnd, sg * GLEN, Z_END);
+  if (L.field) paint(geo[1].walk1 + 0.05, 30, -GLEN, GLEN, Z_FENCE), paint(geo[1].walk1 + 0.5, 30, -GLEN, GLEN, Z_FIELD);
+  // Häuser
+  let hid = 0;
+  for (const s of sides) {
+    if (geo[s].fieldSide) continue;
+    const { walk1, front } = geo[s];
+    for (let zc = -29.4; zc <= 29.5; zc += 8.4) {
+      const hs = { id: hid++, s, zc, front, drive: R() < L.driveP, name: NAMES[(hid * 7 + idx * 3) % NAMES.length] };
+      paint(s * front, s * (front + 8), zc - 3.6, zc + 3.6, Z_HOUSE, hs.id);
+      paint(s * walk1, s * front, zc + 1.2, zc + 2.4, Z_DOOR, hs.id);
+      if (hs.drive) {
+        paint(s * rw, s * (rw + 1.3), zc - 3.2, zc - 0.4, Z_DRIVE, hs.id);
+        paint(s * walk1, s * front, zc - 3.2, zc - 0.4, Z_DRIVE, hs.id);
+      }
+      houses.push(hs);
+    }
+  }
+  // Boden
+  for (let r = 0; r < GH; r++) for (let c = 0; c < GW; c++) {
+    const i = r * GW + c, z = ZN[i], x = cellX(c), zz = cellZ(r);
+    G[i] = (z === Z_ROAD || z === Z_END ? 0 : 0.12) + L.slope * zz;
+    NOISE[i] = Math.sin(x * 1.7 + Math.sin(zz * 0.9) * 2) * 0.5 + Math.sin(zz * 2.3 + x * 0.6) * 0.35 + Math.sin(x * 4.1 - zz * 3.3) * 0.15;
+  }
+  for (const hs of houses) makeHouse(hs);
+  const bolM = mat('#e02020', { emissive: '#600000', emissiveIntensity: 0.7 });
+  for (const hs of houses) if (hs.drive) for (const bz of [hs.zc - 3.3, hs.zc - 0.3]) { // rot-weiße Pfosten markieren Einfahrten (tabu)
+    const bx = hs.s * (rw + 0.65), g = gAt(bx, bz);
+    cyl(0.07, 0.07, 0.9, 6, bolM, bx, g + 0.45, bz, levelGroup); cyl(0.075, 0.075, 0.14, 6, '#ffffff', bx, g + 0.7, bz, levelGroup);
+  }
+  // Autos
+  const usedZ = [];
+  for (const hs of houses) if (hs.drive && R() < 0.55) { makeCar(hs.s * (geo[hs.s].walk1 + 2.6), hs.zc - 1.8, false, hs.id); }
+  const nearestHouse = (s, z) => { let best = null, bd = 1e9; for (const hs of houses) { const d = Math.abs(hs.zc - z) + (hs.s === s ? 0 : 3); if (d < bd) { bd = d; best = hs; } } return best ? best.id : -1; };
+  let tries = 0, placed = 0;
+  while (placed < L.carN && tries++ < 400) {
+    const s = pick(L.roadCars), z = rand(-30, 30);
+    if (usedZ.some(u => Math.abs(u.z - z) < (u.s === s ? 6.2 : 8))) continue; // gegenüber versetzt: Schild passt immer durch
+    if (houses.some(hs => hs.s === s && hs.drive && Math.abs(hs.zc - 1.8 - z) < 4)) continue;
+    usedZ.push({ s, z }); placed++;
+    makeCar(s * (rw - 1.0), z, true, nearestHouse(s, z));
+  }
+  // Briefkästen, Tonnen, Bäume
+  for (const hs of houses) {
+    const { walk1 } = geo[hs.s];
+    if (R() < 0.65) { makeBin(hs.s * (walk1 + 0.65), hs.zc + 0.0, hs.id); if (R() < 0.6) makeBin(hs.s * (walk1 + 0.65), hs.zc + 0.75, hs.id); }
+    makeMailbox(hs.s * (walk1 + 0.6), hs.zc + 2.95, hs.id);
+    if (R() < 0.5 && !(hs.drive)) makeTree(hs.s * (walk1 + 3), hs.zc - 1.8, rand(0.6, 0.85), true);
+    hs.door = { x: hs.s * (hs.front - 0.4), z: hs.zc + 1.8 };
+    hs.yell = { x: hs.s * (walk1 + 0.7), z: hs.zc + 1.8 };
+    neighbors.push({ hs, state: 'in', mesh: null, t: 0, text: '', bubble: null, x: hs.door.x, z: hs.door.z, hitCd: 0 });
+  }
+  // Laternen + Schneestangen
+  let lampSide = -1;
+  for (let z = -30; z <= 30; z += 12) {
+    const s = lampSide; lampSide = -lampSide;
+    makeLamp(geo[s].fieldSide ? s * (geo[s].walk1 - 0.2) : s * (rw + 0.65), z);
+  }
+  const poleM = mat('#ff6a10', { emissive: '#661f00', emissiveIntensity: 0.6 });
+  const poleN = []; for (const s of sides) { if (geo[s].fieldSide) continue; for (let z = -33; z <= 33; z += 4.2) { const i = idxAt(s * (rw + 1.15), z); if (ZN[i] === Z_VERGE) poleN.push([s * (rw + 1.15), z]); } }
+  const poles = new THREE.InstancedMesh(cylG(0.035, 0.035, 1.5, 5), poleM, poleN.length);
+  const m4 = new THREE.Matrix4();
+  poleN.forEach((p, k) => { m4.makeTranslation(p[0], gAt(p[0], p[1]) + 0.75, p[1]); poles.setMatrixAt(k, m4); });
+  levelGroup.add(poles);
+  // Zaun + Feld
+  if (L.field) {
+    const fxp = geo[1].walk1 + 0.28;
+    for (let z = -40; z <= 40; z += 2) cyl(0.06, 0.06, 1.2, 5, '#6b4f33', fxp, gAt(fxp, z) + 0.6, z, levelGroup);
+    for (const y of [0.55, 1.0]) box(0.06, 0.1, 82, '#7a5a3a', fxp, 0.12 + y, 0, levelGroup);
+    obs.push({ k: 'b', x: fxp, z: 0, hx: 0.12, hz: 42, type: 'fence' });
+    const sg = new THREE.Group(); sg.position.set(fxp + 0.6, 0.12, -31); levelGroup.add(sg);
+    cyl(0.05, 0.05, 1.6, 5, '#6b4f33', 0, 0.8, 0, sg);
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const x2 = cv.getContext('2d');
+    x2.fillStyle = '#1f6b3a'; x2.fillRect(0, 0, 256, 128); x2.fillStyle = '#fff'; x2.font = 'bold 34px sans-serif'; x2.textAlign = 'center'; x2.fillText('SCHNEE-', 128, 52); x2.fillText('ABLAGE ✔', 128, 96);
+    const sm = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.7), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(cv), side: THREE.DoubleSide })); sm.position.y = 1.7; sm.rotation.y = -Math.PI / 2; sg.add(sm);
+    for (let k = 0; k < 6; k++) makeTree(rand(14, 19), rand(-30, 30), rand(0.7, 1.0), false);
+  }
+  // Querstraßen-Häuser als Horizont
+  for (const ez of [-1, 1]) for (let k = -3; k <= 3; k++) {
+    const g = new THREE.Group(), hx = k * 9 + rand(-1, 1), hz = ez * rand(50, 54); g.position.set(hx, 0.3 + L.slope * clamp(hz, -60, 60), hz); levelGroup.add(g);
+    const hh = rand(5, 9); box(7.5, hh, 7, pick(['#8f8778', '#7d8a90', '#9a8070']), 0, hh / 2, 0, g);
+    const rf = new THREE.Mesh(GEOS.roof, SNOWM); rf.rotation.y = Math.PI / 2; rf.scale.set(1, 0.5, 1); rf.position.y = hh + 1.2; g.add(rf);
+    for (let w = 0; w < 3; w++) box(0.9, 0.9, 0.1, R() < 0.35 ? WIN_LIT : WIN_DARK, -2.4 + w * 2.4, hh * 0.6, -ez * 3.55, g);
+  }
+  // Ferne Bäume
+  for (let k = 0; k < 46; k++) {
+    const a = k / 46 * Math.PI * 2, rr = rand(0, 1);
+    const x = Math.cos(a) * (24 + rr * 25), z = Math.sin(a) * (46 + rr * 20);
+    if (Math.abs(x) < 22 && Math.abs(z) < 42) continue;
+    makeTree(x, z, rand(1.0, 1.8), false);
+  }
+  shapeOuter(L.slope);
+  // Salzhaufen
+  saltPile.x = -(rw + 2.2); saltPile.z = -37.5;
+  { const sp = new THREE.Mesh(coneG(1.3, 1.1, 8), mat('#b5a58e')); sp.position.set(saltPile.x, gAt(saltPile.x, saltPile.z) + 0.5, saltPile.z); levelGroup.add(sp);
+    const sc = new THREE.Mesh(coneG(0.7, 0.5, 8), mat('#d8d2c8')); sc.position.set(saltPile.x, gAt(saltPile.x, saltPile.z) + 0.95, saltPile.z); levelGroup.add(sc); }
+  // Schnee
+  for (let r = 0; r < GH; r++) for (let c = 0; c < GW; c++) {
+    const i = r * GW + c, z = ZN[i], x = cellX(c);
+    if (z === Z_HOUSE) continue;
+    let h = L.depth * (0.92 + NOISE[i] * 0.12);
+    if (z === Z_CAR) h = 0.03;
+    if (z === Z_DRIVE || z === Z_DOOR) h *= 0.3; // von Anwohnern geschippt: dunkle Lücken = tabu
+    if (z === Z_ROAD && Math.abs(Math.abs(x) - 1.1) < 0.35) h *= 0.55; // Reifenspuren
+    H[i] = h;
+  }
+  // Glatteis
+  for (let k = 0; k < L.ice; k++) {
+    const onWalk = R() < 0.55, s = pick(sides);
+    const cxp = onWalk ? s * (geo[s].walk0 + 1) : rand(-rw + 0.8, rw - 0.8), czp = rand(-31, 31);
+    const ax = onWalk ? rand(0.9, 1.4) : rand(1.0, 2.0), az = rand(1.6, 3.6);
+    for (let r = toR(czp - az); r <= toR(czp + az); r++) for (let c = toC(cxp - ax); c <= toC(cxp + ax); c++) {
+      const i = r * GW + c, zz = ZN[i];
+      if (zz !== Z_ROAD && zz !== Z_WALK && zz !== Z_END && zz !== Z_DRIVE) continue;
+      const d = ((cellX(c) - cxp) / ax) ** 2 + ((cellZ(r) - czp) / az) ** 2;
+      if (d < 1) ICE[i] = Math.max(ICE[i], Math.min(1, (1 - d) * 3));
+    }
+  }
+  const tl = [];
+  for (let r = 0; r < GH; r++) { if (Math.abs(cellZ(r)) >= zEnd) continue; for (let c = 0; c < GW; c++) { const i = r * GW + c; if (ZN[i] === Z_ROAD || ZN[i] === Z_WALK) tl.push(i); } }
+  targets = Int32Array.from(tl);
+  glowA.needsUpdate = true;
+  markDirty(0, GH - 1); flush();
+  // Plow-Reset
+  Object.assign(plow, { x: 0, z: -37, th: 0, vx: 0, vz: 0, w: 0, alpha: 0, aTarget: 0, load: 0, salt: P.saltMax, blower: false, pitch: 0, roll: 0 });
+  gameTime = 0; clockMin = 330; comps = 0; fines = 0; collectedTotal = 0; cleared = 0; iceWarn = 0; warned15 = false; shownIceTip = false;
+  tSnow = tSalt = tLed = tStat = tComp = 0;
+  document.getElementById('bubbles').innerHTML = '';
+  scene.fog.density = L.storm ? 0.03 : 0.017;
+  snowfall.geometry.setDrawRange(0, L.storm ? SN : 1300);
+  setBladeWidth(P.bladeW); chute.visible = P.blower;
+  head.intensity = P.led ? 2.8 : 1.6; head.color.set(P.led ? 0xe6f2ff : 0xfff1d6); head.angle = P.led ? 0.66 : 0.55;
+  computeStats();
+  placeCamera(true);
+}
+
+// ================= Kollision =================
+function collide(dt) {
+  const f = [fx(), fz()], rgt = [-f[1], f[0]];
+  const a = plow.alpha * DEG, ca = Math.cos(a), sa = Math.sin(a);
+  const ux = ca * rgt[0] - sa * f[0], uz = ca * rgt[1] - sa * f[1];
+  const bx = plow.x + f[0] * 2.15, bz = plow.z + f[1] * 2.15, hw = P.bladeW / 2;
+  const cols = [[plow.x - f[0] * 1.0, plow.z - f[1] * 1.0, 0.95], [plow.x + f[0] * 0.7, plow.z + f[1] * 0.7, 0.92], [bx, bz, 0.3], [bx + ux * hw, bz + uz * hw, 0.22], [bx - ux * hw, bz - uz * hw, 0.22], [bx + ux * hw * 0.5, bz + uz * hw * 0.5, 0.25], [bx - ux * hw * 0.5, bz - uz * hw * 0.5, 0.25]];
+  const spd = Math.hypot(plow.vx, plow.vz);
+  for (const o of obs) {
+    if (o.alive === false) continue;
+    if (Math.abs(o.x - plow.x) > (o.hx || 0) + 6 || Math.abs(o.z - plow.z) > (o.hz || 0) + 6) continue;
+    for (const cc of cols) {
+      let nx, nz, pen;
+      if (o.k === 'c') { const dx = cc[0] - o.x, dz = cc[1] - o.z, d = Math.hypot(dx, dz); pen = cc[2] + o.r - d; if (pen <= 0) continue; nx = d > 1e-6 ? dx / d : 1; nz = d > 1e-6 ? dz / d : 0; }
+      else {
+        const qx = clamp(cc[0], o.x - o.hx, o.x + o.hx), qz = clamp(cc[1], o.z - o.hz, o.z + o.hz);
+        const dx = cc[0] - qx, dz = cc[1] - qz, d = Math.hypot(dx, dz);
+        if (d >= cc[2]) continue;
+        if (d > 1e-6) { nx = dx / d; nz = dz / d; pen = cc[2] - d; }
+        else { const px = o.hx - Math.abs(cc[0] - o.x), pz = o.hz - Math.abs(cc[1] - o.z); if (px < pz) { nx = Math.sign(cc[0] - o.x) || 1; nz = 0; pen = px + cc[2]; } else { nx = 0; nz = Math.sign(cc[1] - o.z) || 1; pen = pz + cc[2]; } }
+      }
+      const imp = -(plow.vx * nx + plow.vz * nz);
+      if ((o.type === 'bin' || o.type === 'mail') && spd > 1.4) { knock(o, nx, nz); break; }
+      if (o.type === 'nb') { hitNeighbor(o.nb); }
+      plow.x += nx * pen; plow.z += nz * pen;
+      for (const c2 of cols) { c2[0] += nx * pen; c2[1] += nz * pen; } // Kollider mitschieben, sonst Mehrfach-Push
+      if (imp > 0) {
+        plow.vx += nx * imp * 1.25; plow.vz += nz * imp * 1.25;
+        if (imp > 1.2) { snd('hit'); shake = Math.min(0.6, shake + imp * 0.08); }
+        if (o.type === 'car' && imp > 1.4 && o.cd <= 0) { o.cd = 3; complain(o.owner, 'dent'); }
+      }
+    }
+  }
+  const mx = GWID / 2 - 1.5, mz = GLEN / 2 - 1.5;
+  if (Math.abs(plow.x) > mx) { plow.x = Math.sign(plow.x) * mx; plow.vx *= -0.3; }
+  if (Math.abs(plow.z) > mz) { plow.z = Math.sign(plow.z) * mz; plow.vz *= -0.3; }
+}
+function knock(o, nx, nz) {
+  o.alive = false; o.tipDir = [-nx, -nz]; snd('hit'); shake = Math.min(0.5, shake + 0.2);
+  for (let k = 0; k < 12; k++) spawnP(o.x, 1, o.z, rand(-2, 2), rand(1, 3), rand(-2, 2), 0.8, 0.9, 0.93, 1);
+  complain(o.owner, o.type);
+}
+
+// ================= Nachbarn =================
+function makeNeighborMesh(nb) {
+  const g = new THREE.Group(); levelGroup.add(g);
+  const robe = pick(['#f2a6c8', '#8fb8e8', '#c9a6f2', '#e8d28f', '#a8e0c0', '#e89a8f']);
+  cyl(0.26, 0.38, 1.15, 7, robe, 0, 0.72, 0, g);
+  cyl(0.275, 0.29, 0.09, 7, '#ffffff', 0, 0.92, 0, g);
+  cyl(0.2, 0.26, 0.28, 7, robe, 0, 1.4, 0, g);
+  const headM = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), mat('#f0c8a0')); headM.position.y = 1.72; g.add(headM);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.21, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), mat(pick(['#d8d8d8', '#5a3a22', '#2a2a2a', '#c8a060']))); hair.position.y = 1.76; g.add(hair);
+  if (R() < 0.4) { const cap = new THREE.Mesh(coneG(0.2, 0.5, 7), mat('#c0262a')); cap.position.y = 2.05; cap.rotation.z = 0.4; g.add(cap); }
+  const arms = [];
+  for (const sx of [-1, 1]) { const p = new THREE.Group(); p.position.set(sx * 0.32, 1.42, 0); g.add(p); box(0.13, 0.62, 0.13, robe, 0, -0.3, 0, p); box(0.12, 0.12, 0.12, '#f0c8a0', 0, -0.62, 0, p); arms.push(p); }
+  for (const sx of [-0.12, 0.12]) box(0.16, 0.1, 0.3, '#ffb6d0', sx, 0.06, 0.04, g);
+  nb.mesh = g; nb.arms = arms; g.visible = false;
+  const b = document.createElement('div'); b.className = 'bubble hide'; document.getElementById('bubbles').appendChild(b); nb.bubble = b;
+  nb.ob = { k: 'c', x: 0, z: 0, r: 0.35, type: 'nb', nb, alive: false };
+  obs.push(nb.ob);
+}
+let bubbleSeq = 0; const compKinds = {};
+function complain(owner, kind) {
+  const nb = neighbors.find(n => n.hs.id === owner) || neighbors[0];
+  if (!nb) return;
+  const fine = FINES[kind] || 20;
+  comps++; fines += fine; compKinds[kind] = (compKinds[kind] || 0) + 1;
+  const line = pick(LINES[kind] || LINES.early);
+  toast(`😠 ${nb.hs.name}: ${KIND_LABEL[kind] || 'Beschwerde'} – <b>−${fine} €</b>`, 'bad');
+  snd('playTone', 140, 0.25, 'sawtooth', 0.12);
+  if (!nb.mesh) makeNeighborMesh(nb);
+  if (nb.state === 'in') { nb.x = nb.hs.door.x; nb.z = nb.hs.door.z; }
+  nb.bOrder = ++bubbleSeq;
+  nb.state = 'out'; nb.t = 0; nb.text = line; nb.kindLabel = KIND_LABEL[kind] || '';
+  nb.bubble.innerHTML = `${line}<small>${nb.hs.name} · −${fine} €</small>`;
+  for (const w of nb.hs.windows || []) w.material = WIN_LIT;
+}
+function hitNeighbor(nb) {
+  if (nb.hitCd > 0) return;
+  nb.hitCd = 4; complain(nb.hs.id, 'near');
+  const dx = nb.x - plow.x, dz = nb.z - plow.z, d = Math.hypot(dx, dz) || 1;
+  nb.x += dx / d * 1.2; nb.z += dz / d * 1.2;
+}
+function updateNeighbors(dt) {
+  for (const nb of neighbors) {
+    if (!nb.mesh) continue;
+    nb.hitCd -= dt;
+    const g = nb.mesh;
+    if (nb.state === 'in') { g.visible = false; nb.ob.alive = false; nb.bubble.classList.add('hide'); continue; }
+    g.visible = true; nb.ob.alive = true;
+    const tgt = nb.state === 'back' ? nb.hs.door : nb.hs.yell;
+    const dx = tgt.x - nb.x, dz = tgt.z - nb.z, d = Math.hypot(dx, dz);
+    nb.t += dt;
+    let face = Math.atan2(plow.x - nb.x, plow.z - nb.z);
+    if (nb.state !== 'yell' && d > 0.05) {
+      const st = Math.min(d, 1.7 * dt); nb.x += dx / d * st; nb.z += dz / d * st; face = Math.atan2(dx, dz);
+      nb.arms[0].rotation.x = Math.sin(nb.t * 9) * 0.6; nb.arms[1].rotation.x = -Math.sin(nb.t * 9) * 0.6;
+      if (d <= 1.7 * dt + 0.01) { if (nb.state === 'out') { nb.state = 'yell'; nb.t = 0; } else { nb.state = 'in'; } }
+    } else if (nb.state === 'yell') {
+      nb.arms[1].rotation.x = -2.6 + Math.sin(nb.t * 14) * 0.35; nb.arms[0].rotation.x = -0.4 + Math.sin(nb.t * 3) * 0.3;
+      if (nb.t > 4.5) { nb.state = 'back'; nb.t = 0; }
+    }
+    g.rotation.y = face;
+    g.position.set(nb.x, gAt(nb.x, nb.z) + Math.abs(Math.sin(nb.t * 9)) * 0.05, nb.z);
+    nb.ob.x = nb.x; nb.ob.z = nb.z;
+    if ((nb.state === 'out' || (nb.state === 'yell' && nb.t < 3.2)) && nb.bOrder >= bubbleSeq - 1 && Math.hypot(nb.x - plow.x, nb.z - plow.z) < 32) {
+      const v = new THREE.Vector3(nb.x, g.position.y + 2.3, nb.z).project(camera);
+      if (v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2) {
+        nb.bubble.classList.remove('hide');
+        nb.bubble.style.left = ((v.x + 1) / 2 * innerWidth) + 'px'; nb.bubble.style.top = ((1 - v.y) / 2 * innerHeight) + 'px';
+      } else nb.bubble.classList.add('hide');
+    } else nb.bubble.classList.add('hide');
+  }
+}
+
+// ================= Simulation =================
+let lastCollect = 0, lastSpill = 0, onIce = 0, skidAmt = 0, spinAmt = 0;
+function iceUnder() {
+  const f0 = fx(), f1 = fz(), r0 = -f1, r1 = f0;
+  let n = 0;
+  for (const a of [-0.85, 0.85]) for (const b of [-1.35, 0.95]) {
+    const x = plow.x + r0 * a + f0 * b, z = plow.z + r1 * a + f1 * b, i = idxAt(x, z);
+    if (ICE[i] > 0.25 && H[i] < 0.1) {
+      n++;
+      if (!REV[i]) { const c = toC(x), r = toR(z); for (let dr = -3; dr <= 3; dr++) for (let dc = -3; dc <= 3; dc++) { const j = clamp(r + dr, 0, GH - 1) * GW + clamp(c + dc, 0, GW - 1); if (ICE[j] > 0) REV[j] = 1; } markDirty(r - 3, r + 3); }
+    }
+  }
+  return n / 4;
+}
+function physics(dt) {
+  const f0 = fx(), f1 = fz(), r0 = -f1, r1 = f0;
+  let vf = plow.vx * f0 + plow.vz * f1, vl = plow.vx * r0 + plow.vz * r1;
+  onIce = iceUnder();
+  const grip = lerp(1, P.iceGrip, onIce) * (H[idxAt(plow.x, plow.z)] > 0.2 ? 0.85 : 1);
+  const loadR = plow.load / P.cap;
+  const spdMul = 1 / (1 + 1.5 * Math.max(0, loadR - 0.5));
+  const thr = clamp(input.thr, -1, 1), steer = clamp(input.steer, -1, 1);
+  if (L.slope) { const gz = -9.81 * L.slope * 0.8; vf += gz * f1 * dt; vl += gz * r1 * dt; } // vor dem Bremsen, damit Haftreibung hält
+  let acc = 0;
+  spinAmt = 0;
+  if (thr > 0.05) acc = vf < -0.3 ? 10 * thr * grip : 6.5 * thr * Math.min(1, grip * 1.8) * spdMul;
+  else if (thr < -0.05) acc = vf > 0.3 ? 10 * thr * grip : 4.2 * thr * Math.min(1, grip * 1.8);
+  else acc = -Math.sign(vf) * Math.min(Math.abs(vf) / dt, 2.6 * grip);
+  if (Math.abs(thr) > 0.1 && grip < 0.45) spinAmt = Math.abs(thr);
+  vf += acc * dt;
+  vf -= vf * (0.25 + 0.6 * Math.max(0, loadR - 0.3) + Math.min(1.5, Math.max(0, H[idxAt(plow.x, plow.z)] - 0.25) * 3)) * dt; // Ladung und tiefe Wälle bremsen
+  const maxF = 9.5 * spdMul;
+  if (vf > maxF) vf = lerp(vf, maxF, 1 - Math.exp(-dt * 4));
+  if (vf < -4.5) vf = lerp(vf, -4.5, 1 - Math.exp(-dt * 4));
+  vl *= Math.exp(-dt * 12 * grip);
+  skidAmt = Math.abs(vl);
+  const auth = clamp(Math.abs(vf) / 2.5, 0, 1) * Math.sign(vf);
+  const tw = -steer * 1.3 * auth * (1 - 0.3 * clamp(Math.abs(vf) / 9, 0, 1));
+  plow.w = lerp(plow.w, tw, 1 - Math.exp(-dt * (1.5 + 10 * grip)));
+  plow.th += plow.w * dt;
+  plow.vx = f0 * vf + r0 * vl; plow.vz = f1 * vf + r1 * vl;
+  plow.x += plow.vx * dt; plow.z += plow.vz * dt;
+  return vf;
+}
+function bladeStep(dt, vf) {
+  const f0 = fx(), f1 = fz(), r0 = -f1, r1 = f0, hw = P.bladeW / 2;
+  const a = plow.alpha * DEG, ca = Math.cos(a), sa = Math.sin(a);
+  const ux = ca * r0 - sa * f0, uz = ca * r1 - sa * f1; // zum rechten Schildende
+  const nx = sa * r0 + ca * f0, nz = sa * r1 + ca * f1; // Schild-Normale nach vorn
+  const bx = plow.x + f0 * 2.2, bz = plow.z + f1 * 2.2;
+  let col = 0;
+  if (vf > 0.05) {
+    const reach = 0.3 + vf * dt * 1.3;
+    const ex = Math.abs(ux) * hw + Math.abs(nx) * reach + 0.3, ez = Math.abs(uz) * hw + Math.abs(nz) * reach + 0.3;
+    const c0 = Math.max(0, toC(bx - ex)), c1 = Math.min(GW - 1, toC(bx + ex)), ra = Math.max(0, toR(bz - ez)), rb = Math.min(GH - 1, toR(bz + ez));
+    for (let r = ra; r <= rb; r++) for (let c = c0; c <= c1; c++) {
+      const i = r * GW + c, h = H[i]; if (h <= 0.0015) continue;
+      const dx = cellX(c) - bx, dz = cellZ(r) - bz, s = dx * ux + dz * uz, t = dx * nx + dz * nz;
+      if (Math.abs(s) <= hw && t >= -0.2 && t <= reach) { addH(i, -h); col += h; }
+    }
+    if (col > 0) { col *= CS2; plow.load += col; collectedTotal += col; markDirty(ra, rb); }
+  }
+  lastCollect = col / dt;
+  // Ausfließen am nachlaufenden Schildende (Masse bleibt erhalten)
+  const side = plow.alpha > 3 ? 1 : plow.alpha < -3 ? -1 : 0;
+  if (side) plow.chuteSide = side;
+  const angF = Math.abs(plow.alpha) / 35;
+  let rate = vf > 0.05 ? plow.load * (0.1 + 4.4 * angF) : 0; // nur in Fahrt fließt Schnee seitlich ab
+  if (plow.load > P.cap) rate += (plow.load - P.cap) * 6;
+  if (plow.blower) rate = plow.load * 7 + 0.4;
+  let spill = Math.min(plow.load, rate * dt);
+  if (vf < -0.4 && plow.load > 0.001) { // rückwärts: Haufen bleibt vorm Schild liegen
+    const drop = plow.load * Math.min(1, dt * 5);
+    for (const s of [-0.6, 0, 0.6]) deposit(bx + nx * 0.5 + ux * s * hw, bz + nz * 0.5 + uz * s * hw, drop / 3, 1);
+    plow.load -= drop; spill = 0;
+  }
+  lastSpill = spill / dt;
+  if (spill > 1e-6) {
+    plow.load -= spill;
+    if (plow.blower) {
+      const sd = plow.chuteSide, dist = 9.5 + Math.sin(gameTime * 3.1) * 1.2;
+      const lx = bx + sd * ux * (hw + dist) + f0 * 1.2, lz = bz + sd * uz * (hw + dist) + f1 * 1.2;
+      deposit(lx, lz, spill, 2);
+      const cx0 = bx + sd * ux * 0.3, cz0 = bz + sd * uz * 0.3, cy = plow.y + 1.9;
+      for (let k = 0; k < Math.min(8, 1 + spill * 60); k++) { const T = 0.9; spawnP(cx0, cy, cz0, (lx - cx0) / T + rand(-0.6, 0.6) + plow.vx, (gAt(lx, lz) - cy) / T + 4.5 * T + rand(-0.4, 0.4), (lz - cz0) / T + rand(-0.6, 0.6) + plow.vz, T, 0.92, 0.95, 1); }
+    } else if (side) {
+      const ex = bx + side * ux * (hw + 0.65) - nx * 0.3, ez = bz + side * uz * (hw + 0.65) - nz * 0.3;
+      deposit(ex, ez, spill, 1);
+      for (let k = 0; k < Math.min(6, spill * 50); k++) spawnP(ex - side * ux * rand(0, 0.8) + rand(-0.3, 0.3), plow.y + rand(0.3, 0.9), ez - side * uz * rand(0, 0.8) + rand(-0.3, 0.3), side * ux * rand(1, 3) + plow.vx * 0.5, rand(1, 3.2), side * uz * rand(1, 3) + plow.vz * 0.5, 0.7, 0.9, 0.94, 1);
+    } else {
+      for (const sd of [-1, 1]) deposit(bx + sd * ux * (hw + 0.45) - nx * 0.2, bz + sd * uz * (hw + 0.45) - nz * 0.2, spill / 2, 1);
+    }
+  }
+  // Spritzer vorm Schild
+  if (lastCollect > 0.05) {
+    const n = Math.min(5, lastCollect * 3);
+    for (let k = 0; k < n; k++) { const s = rand(-hw, hw); spawnP(bx + ux * s + nx * 0.4, plow.y + 0.6, bz + uz * s + nz * 0.4, nx * vf * 0.8 + rand(-0.5, 0.5), rand(1.5, 3.5), nz * vf * 0.8 + rand(-0.5, 0.5), 0.6, 0.93, 0.96, 1); }
+  }
+}
+function saltStep(dt) {
+  const want = input.salt || input.touchSalt;
+  if (Math.hypot(plow.x - saltPile.x, plow.z - saltPile.z) < 3.2 && plow.salt < P.saltMax) { plow.salt = Math.min(P.saltMax, plow.salt + dt * 40); if (plow.salt >= P.saltMax) toast('🧂 Salztank voll', 'good'); }
+  if (!want || plow.salt <= 0) return false;
+  plow.salt = Math.max(0, plow.salt - dt * 6);
+  const f0 = fx(), f1 = fz(), sx = plow.x - f0 * 2.4, sz = plow.z - f1 * 2.4, rr = P.saltR;
+  const c0 = toC(sx), r0 = toR(sz), k = Math.ceil(rr / CS);
+  for (let r = r0 - k; r <= r0 + k; r++) for (let c = c0 - k; c <= c0 + k; c++) {
+    if (r < 0 || c < 0 || r >= GH || c >= GW) continue;
+    if ((cellX(c) - sx) ** 2 + (cellZ(r) - sz) ** 2 > rr * rr) continue;
+    const i = r * GW + c; SALT[i] = Math.min(1.5, SALT[i] + dt * 3); if (ICE[i] > 0) REV[i] = 1; saltSet.add(i);
+  }
+  markDirty(r0 - k, r0 + k);
+  for (let n = 0; n < 2; n++) { const a = plow.th + Math.PI + rand(-1.1, 1.1); spawnP(plow.x - f0 * 2.0, plow.y + 0.6, plow.z - f1 * 2.0, Math.sin(a) * rand(2, 4) + plow.vx, rand(0.5, 1.5), Math.cos(a) * rand(2, 4) + plow.vz, 0.5, 0.85, 0.45, 0.15); }
+  if (plow.salt <= 0) toast('🧂 Salz leer! Nachfüllen am Salzhaufen beim Start.', 'bad');
+  return true;
+}
+function iceStep(dt) {
+  let ra = 1e9, rb = -1;
+  for (const i of saltSet) {
+    if (ICE[i] > 0) ICE[i] = Math.max(0, ICE[i] - dt * 0.6 * Math.min(1, SALT[i]));
+    SALT[i] -= dt * 0.008;
+    if (SALT[i] <= 0.03) { SALT[i] = 0; saltSet.delete(i); }
+    const r = (i / GW) | 0; if (r < ra) ra = r; if (r > rb) rb = r;
+  }
+  if (rb >= 0) markDirty(ra, rb);
+}
+function revealStep() {
+  const dawn = clockMin > 405;
+  if (!P.led && !dawn) return;
+  const f0 = fx(), f1 = fz(), r0 = -f1, r1 = f0;
+  const cx0 = plow.x + f0 * 8, cz0 = plow.z + f1 * 8, rad = Math.ceil(10 / CS);
+  const c0 = toC(cx0), rr0 = toR(cz0); let ra = 1e9, rb = -1;
+  for (let r = Math.max(0, rr0 - rad); r <= Math.min(GH - 1, rr0 + rad); r++) for (let c = Math.max(0, c0 - rad); c <= Math.min(GW - 1, c0 + rad); c++) {
+    const i = r * GW + c; if (ICE[i] <= 0.04 || REV[i]) continue;
+    const dx = cellX(c) - plow.x, dz = cellZ(r) - plow.z, d = dx * f0 + dz * f1, l = Math.abs(dx * r0 + dz * r1);
+    if (dawn ? (dx * dx + dz * dz < 100) : (d > 1 && d < 17 && l < d * 0.6 + 1)) { REV[i] = 1; if (r < ra) ra = r; if (r > rb) rb = r; }
+  }
+  if (rb >= 0) markDirty(ra, rb);
+}
+function snowfallStep(dt) {
+  const add = L.snow * dt;
+  for (let i = 0; i < NC; i++) if (ZN[i] !== Z_HOUSE) H[i] += add;
+  markDirty(0, GH - 1);
+}
+let legalPct = -1, dumpedVol = 0, clearSplit = [0, 0], walkIceM2 = 0;
+function computeStats() {
+  let n = 0, nr = 0, cr = 0, cw = 0, ice = 0;
+  for (let k = 0; k < targets.length; k++) { const i = targets[k], ok = H[i] < 0.03, road = ZN[i] === Z_ROAD; if (ok) n++; if (road) { nr++; if (ok) cr++; } else { if (ok) cw++; if (ICE[i] > 0.3) ice++; } }
+  cleared = targets.length ? n / targets.length : 0;
+  clearSplit = [nr ? cr / nr : 0, targets.length - nr ? cw / (targets.length - nr) : 0]; walkIceM2 = ice * CS2;
+  const legal = Math.max(0, zoneNet[Z_VERGE] + zoneNet[Z_FIELD]) * CS2;
+  const ill = Math.max(0, zoneNet[Z_DRIVE] + zoneNet[Z_CAR] + zoneNet[Z_DOOR] + zoneNet[Z_HOUSE]) * CS2;
+  const yard = Math.max(0, zoneNet[Z_YARD] + zoneNet[Z_FENCE] + zoneNet[Z_END]) * CS2;
+  dumpedVol = legal + ill + yard;
+  legalPct = dumpedVol > 0.3 ? legal / dumpedVol : -1;
+}
+function update(dt) {
+  if (state !== 'play') return;
+  gameTime += dt; clockMin = 330 + gameTime * 90 / LEVEL_SECONDS;
+  if (auto) autopilot(dt);
+  else {
+    const k = keys;
+    input.thr = ((k.KeyW || k.ArrowUp) ? 1 : 0) - ((k.KeyS || k.ArrowDown) ? 1 : 0) + input.joyY;
+    input.steer = ((k.KeyD || k.ArrowRight) ? 1 : 0) - ((k.KeyA || k.ArrowLeft) ? 1 : 0) + input.joyX;
+    input.salt = !!k.Space;
+    const ad = ((k.KeyE) ? 1 : 0) - ((k.KeyQ) ? 1 : 0);
+    if (ad) { plow.aTarget = clamp(plow.aTarget + ad * P.angSpd * dt, -35, 35); slider.value = plow.aTarget; }
+  }
+  const da = plow.aTarget - plow.alpha; plow.alpha += clamp(da, -P.angSpd * dt, P.angSpd * dt);
+  const vf = physics(dt);
+  collide(dt);
+  for (const o of obs) if (o.cd > 0) o.cd -= dt;
+  bladeStep(dt, vf);
+  const salting = saltStep(dt);
+  if ((tSalt += dt) > 0.2) { iceStep(tSalt); tSalt = 0; }
+  if ((tLed += dt) > 0.25) { tLed = 0; revealStep(); }
+  if ((tSnow += dt) > 1.5) { snowfallStep(tSnow); tSnow = 0; }
+  if ((tComp += dt) > 0.25) {
+    tComp = 0;
+    for (const nb of neighbors) { const o = nb.hs.id; if (ownEx[o] > ownNext[o]) { ownNext[o] = ownEx[o] + 0.35; complain(o, ownKind[o] || 4); } }
+  }
+  if ((tStat += dt) > 0.5) { tStat = 0; computeStats(); }
+  if (onIce > 0 && (skidAmt > 1.2 || spinAmt > 0.3)) {
+    iceWarn = 1.2;
+    if (!shownIceTip) { shownIceTip = true; toast('🧊 Glatteis (jetzt blau markiert)! Mit <b>Leertaste</b> salzen – das Eis taut weg.', 'bad'); }
+  }
+  iceWarn -= dt;
+  updateNeighbors(dt);
+  if (!warned15 && clockMin >= 405) { warned15 = true; toast('⏰ Noch 15 Minuten bis 7:00!', 'bad'); snd('playTone', 880, 0.2, 'square', 0.08); }
+  engineSet(Math.abs(input.thr), Math.hypot(plow.vx, plow.vz), Math.min(0.5, lastCollect * 0.6 + lastSpill * 0.4), salting ? 0.1 : 0, onIce > 0 ? Math.min(0.12, skidAmt * 0.05 + spinAmt * 0.08) : 0, plow.blower && plow.load > 0.01 ? 0.25 : plow.blower ? 0.08 : 0);
+  if (clockMin >= 420) endLevel(false);
+}
+
+// ================= Autopilot (Demo / Selbsttest) =================
+function autopilot(dt) {
+  const rw = L.roadW / 2;
+  if (!auto.lanes) {
+    const hw = P.bladeW / 2, lx = s => L.roadCars.includes(s) ? rw - 1.95 - hw - 0.15 : rw - 0.9;
+    const lanes = [{ x: lx(1), d: 1, sx: 1 }, { x: -lx(-1), d: -1, sx: -1 }, { x: 0.6, d: 1, sx: 1 }, { x: -0.6, d: -1, sx: -1 }];
+    const w = L.field ? rw + 1.0 : rw + 2.3;
+    lanes.push({ x: w, d: 1, sx: L.field ? 1 : -1 }, { x: -(rw + 2.3), d: -1, sx: 1 });
+    auto.lanes = lanes; auto.li = 0;
+  }
+  const ln = auto.lanes[auto.li % auto.lanes.length];
+  if (ln.d * plow.z > 35) auto.li++;
+  let tx = ln.x; const tz = plow.z + ln.d * 6, hw = P.bladeW / 2;
+  let near = null, nd = 1e9;
+  for (const o of obs) { const dz = (o.z - plow.z) * ln.d; if (o.type === 'car' && o.hz > o.hx && dz > -3.5 && dz < 8 && dz < nd && Math.abs(o.x - tx) < o.hx + hw + 0.25) { near = o; nd = dz; } }
+  if (near) tx = near.x - Math.sign(near.x) * (near.hx + hw + 0.35);
+  const want = Math.atan2(tx - plow.x, tz - plow.z);
+  const diff = wrapA(want - plow.th);
+  input.steer = clamp(-diff * 2.5, -1, 1);
+  input.thr = Math.abs(diff) > 1 ? 0.55 : 0.75;
+  const rx = -fz();
+  plow.aTarget = rx * ln.sx > 0 ? 30 : -30;
+  if (Math.abs(diff) > 0.6) plow.aTarget = 0;
+  input.salt = onIce > 0 || (auto.salt && plow.salt > 0 && Math.abs(Math.abs(plow.x) - rw - 2.3) < 0.5);
+  if (P.blower && L.field) plow.blower = plow.x > rw - 1.5;
+}
+
+// ================= Ende & Wertung =================
+function endLevel(early) {
+  if (state !== 'play') return;
+  state = 'result'; engineStop(); computeStats();
+  const minutesLeft = early ? Math.max(0, Math.floor(420 - clockMin)) : 0;
+  const lp = legalPct < 0 ? 1 : legalPct;
+  let iceM2 = 0; for (let k = 0; k < targets.length; k++) { const i = targets[k]; if (ZN[i] === Z_WALK && ICE[i] > 0.3) iceM2 += CS2; }
+  const icePen = Math.min(80, Math.round(iceM2 * 3));
+  let st = 0;
+  if (cleared >= 0.6) st = 1;
+  if (cleared >= 0.8 && comps <= 2 && lp >= 0.5) st = 2;
+  if (cleared >= 0.92 && comps === 0 && lp >= 0.7 && iceM2 < 6) st = 3;
+  const bonus = cleared >= 0.9 ? minutesLeft * 2 : 0;
+  const wage = Math.round(60 + cleared * 260 + lp * 60 + st * 30 + bonus);
+  const total = st >= 1 ? Math.max(30, wage - fines - icePen) : wage - fines - icePen; // Tarifvertrag: mit Stern nie unter 30 €
+  const prev = save.stars[levelIdx];
+  save.stars[levelIdx] = Math.max(prev, st);
+  save.budget = Math.max(0, save.budget + total);
+  writeSave();
+  const sum = save.stars.reduce((a, b) => a + b, 0);
+  if (AC && AC.saveScore) { const b = +(AC.getScore('winterdienst') || 0); if (sum > b) AC.saveScore('winterdienst', sum); }
+  st >= 1 ? snd('powerup') : snd('gameOver');
+  const tubs = Math.round(collectedTotal / 0.15);
+  const starHtml = [0, 1, 2].map(k => k < st ? '★' : '<span class="off">★</span>').join('');
+  const verdict = st === 3 ? 'Vorbildlich! Der Bürgermeister twittert ein Foto von dir.' : st === 2 ? 'Solide Arbeit. Nur ein paar Nachbarn schreiben Leserbriefe.' : st === 1 ? 'Geräumt ist geräumt. Irgendwie.' : 'Die Straße ist ein Gletscher. Das Ordnungsamt ruft an.';
+  panel(`<h2>${early ? '✅ Fertig gemeldet' : '⏰ 7:00 Uhr'} – ${L.name}</h2>
+    <div class="stars">${starHtml}</div><p>${verdict}</p>
+    <div class="res">
+      <div><span>Geräumt (Straße + Gehweg)</span><b>${Math.round(cleared * 100)} %</b></div>
+      <div><span>Schnee legal abgelegt</span><b>${legalPct < 0 ? '–' : Math.round(legalPct * 100) + ' %'}</b></div>
+      <div><span>Bewegter Schnee</span><b>${collectedTotal.toFixed(1)} m³ (≈ ${tubs} Badewannen)</b></div>
+      <div><span>Beschwerden</span><b>${comps}</b></div>
+      <div class="pos"><span>Lohn${bonus ? ` (inkl. ${bonus} € Frühbonus)` : ''}</span><b>+${wage} €</b></div>
+      <div class="neg"><span>Bußgelder</span><b>−${fines} €</b></div>
+      <div class="${icePen ? 'neg' : ''}"><span>Glatteis auf Gehweg (${iceM2.toFixed(0)} m²)</span><b>${icePen ? '−' + icePen : 0} €</b></div>
+      <div class="tot"><span>Saldo der Schicht${st >= 1 && total === 30 ? ' (Tarif-Minimum)' : ''}</span><b class="${total >= 0 ? 'pos' : 'neg'}">${total >= 0 ? '+' : '−'}${Math.abs(total)} €</b></div>
+      <div><span>Haushalt Bauhof (min. 0 €)</span><b>${save.budget} €</b></div>
+    </div>
+    <button id="bNext">${st >= 1 && levelIdx < 4 ? 'Nächster Bezirk ▶' : 'Nochmal'}</button>
+    <button class="alt" id="bShop">🔧 Werkstatt</button><button class="alt" id="bMenu">Bezirke</button>`);
+  document.getElementById('bNext').onclick = () => { if (st >= 1 && levelIdx < 4) showBrief(levelIdx + 1); else showBrief(levelIdx); };
+  document.getElementById('bShop').onclick = () => showShop(() => showMenu());
+  document.getElementById('bMenu').onclick = showMenu;
+  document.getElementById('hud').classList.add('hide');
+}
+
+// ================= UI =================
+const ov = document.getElementById('ov'), pnl = document.getElementById('panel');
+function panel(html) { pnl.innerHTML = html; ov.classList.remove('hide'); }
+function hidePanel() { ov.classList.add('hide'); }
+function toast(msg, cls) {
+  const box = document.getElementById('toasts');
+  const d = document.createElement('div'); d.className = 'toast ' + (cls || ''); d.innerHTML = msg; box.appendChild(d);
+  while (box.children.length > 4) box.removeChild(box.firstChild);
+  setTimeout(() => d.remove(), 3200);
+}
+const unlocked = i => i === 0 || save.stars[i - 1] >= 1 || Q.get('up') === 'all';
+function showMenu() {
+  state = 'menu'; engineStop(); document.getElementById('hud').classList.add('hide'); document.getElementById('bubbles').innerHTML = '';
+  if (levelIdx !== 0 || !neighbors.length) buildLevel(0);
+  const rows = LEVELS.map((l, i) => `<div class="dist ${unlocked(i) ? '' : 'locked'}" data-i="${i}"><span class="n">${i + 1}</span><span class="t"><b>${l.name}</b><div>${l.sub}</div></span><span class="st">${unlocked(i) ? '★'.repeat(save.stars[i]) + '<span style="opacity:.2">' + '★'.repeat(3 - save.stars[i]) + '</span>' : '🔒'}</span><span class="go">Start ▶</span></div>`).join('');
+  panel(`<h1>❄️ Winterdienst 3D</h1><p class="small" style="letter-spacing:2px;text-transform:uppercase">Räumpflicht ab 5:30</p>
+    <p>Die Stadt hat dich um 5:28 aus dem Bett geklingelt. Bis <b>7:00 Uhr</b> muss die Straße frei sein – ohne die Autos, Einfahrten und Haustüren der Nachbarn unter Schneewällen zu begraben.</p>
+    <div class="dlist">${rows}</div>
+    <p class="small">Haushalt: <b>${save.budget} €</b></p>
+    <button class="alt" id="bShop">🔧 Werkstatt</button><button class="alt" id="bHow">📋 Dienstanweisung</button>`);
+  pnl.querySelectorAll('.dist').forEach(d => d.onclick = () => { const i = +d.dataset.i; if (unlocked(i)) showBrief(i); });
+  document.getElementById('bShop').onclick = () => showShop(showMenu);
+  document.getElementById('bHow').onclick = showHow;
+}
+function showHow() {
+  panel(`<h2>📋 Dienstanweisung Winterdienst</h2><ul class="how">
+    <li><b>Fahren:</b> <span class="kbd">WASD</span>/Pfeile oder Joystick. <b>Schild schwenken:</b> <span class="kbd">Q</span>/<span class="kbd">E</span>, Mausrad oder Schieber (±35°).</li>
+    <li>Das Schild sammelt den Schnee und lässt ihn am <b>nachlaufenden Ende</b> seitlich herausfließen. Schräg gestellt = Schnee wandert zur Seite und baut einen Wall. Gerade = Haufen vor dem Schild, der beim Rückwärtsfahren liegen bleibt.</li>
+    <li>Schnee verschwindet nie. Zu viel Ladung bremst dich aus.</li>
+    <li><b>Legal:</b> Grünstreifen (orange Stangen) und das Feld hinter dem Zaun. <b>Verboten:</b> Autos, Einfahrten, Hauseingänge – sonst kommt der Nachbar im Bademantel.</li>
+    <li><b>Glatteis</b> ist unsichtbar, bis du draufrutschst. Entdecktes Eis schimmert <b style="color:#7fc4ff">blau</b>. <span class="kbd">Leertaste</span> streut Salz hinter dem Fahrzeug. Nachfüllen am Salzhaufen beim Start.</li>
+    <li><span class="kbd">C</span> Kamera (Verfolger / Räumplan von oben mit Zonen-Farben: grün = Ablage erlaubt, rot = verboten). <span class="kbd">F</span> Schneefräse (Upgrade). <span class="kbd">Enter</span> fertig melden (Frühbonus ab 90 %).</li>
+  </ul><button id="bBack">Verstanden</button>`);
+  document.getElementById('bBack').onclick = showMenu;
+}
+function showShop(back) {
+  const items = UPGRADES.map(u => `<div class="up ${save.up[u.id] ? 'own' : ''}"><span class="ic">${u.ic}</span><span class="tx"><b>${u.name}</b><br>${u.desc}</span>${save.up[u.id] ? '<b style="color:var(--good)">✔</b>' : `<button data-u="${u.id}" ${save.budget < u.price ? 'disabled' : ''}>${u.price} €</button>`}</div>`).join('');
+  panel(`<h2>🔧 Werkstatt des Bauhofs</h2><p>Haushalt: <b>${save.budget} €</b> – der Kämmerer schaut skeptisch.</p><div class="shop">${items}</div><button id="bBack">Zurück</button>`);
+  pnl.querySelectorAll('[data-u]').forEach(b => b.onclick = () => {
+    const u = UPGRADES.find(x => x.id === b.dataset.u);
+    if (save.budget >= u.price && !save.up[u.id]) { save.budget -= u.price; save.up[u.id] = true; writeSave(); refreshParams(); snd('coin'); showShop(back); }
+  });
+  document.getElementById('bBack').onclick = back;
+}
+function showBrief(i) {
+  refreshParams(); buildLevel(i); state = 'brief';
+  document.getElementById('hud').classList.add('hide');
+  const l = LEVELS[i];
+  panel(`<h2>Bezirk ${i + 1}: ${l.name}</h2><p class="small">${l.sub}</p><p>${l.intro}</p>
+    <p class="small">Schneehöhe ${Math.round(l.depth * 100)} cm · ${l.storm ? 'Schneesturm' : 'leichter Schneefall'} · ${l.slope ? 'Steigung 10 %' : 'flach'}${P.blower ? ' · Fräse: F' : ''}</p>
+    <button id="bGo">Motor an! 🚜</button><button class="alt" id="bBack">Zurück</button>`);
+  document.getElementById('bGo').onclick = startPlay;
+  document.getElementById('bBack').onclick = showMenu;
+}
+function startPlay() {
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // Leertaste/Enter sollen keinen Button mehr auslösen
+  hidePanel(); state = 'play'; document.getElementById('hud').classList.remove('hide');
+  document.getElementById('dname').textContent = `${levelIdx + 1}. ${L.name}`;
+  slider.value = 0; engineStart(); snd('jump');
+  setTimeout(() => { if (state === 'play') toast('Tipp: Schild mit <b>Q/E</b> schräg stellen – der Schnee fließt zur Seite auf den Grünstreifen.', 'good'); }, 1200);
+}
+function pauseGame() {
+  if (state !== 'play') return;
+  state = 'pause'; engineSet(0, 0, 0, 0, 0, 0); if (Eng.on) Eng.master.gain.setTargetAtTime(0, Eng.ctx.currentTime, 0.05);
+  panel(`<h2>⏸ Kaffeepause</h2><p>Die Uhr steht. Der Schnee nicht – naja, eigentlich schon.</p><button id="bRes">Weiter</button><button class="alt" id="bQuit">Schicht abbrechen</button>`);
+  document.getElementById('bRes').onclick = () => { document.activeElement.blur(); hidePanel(); state = 'play'; };
+  document.getElementById('bQuit').onclick = showMenu;
+}
+function updateHud() {
+  const m = Math.min(420, clockMin), hh = Math.floor(m / 60), mm = Math.floor(m % 60);
+  const ck = document.getElementById('clock'); ck.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  ck.classList.toggle('late', m >= 405);
+  document.getElementById('tfill').style.width = ((m - 330) / 90 * 100) + '%';
+  document.getElementById('sClear').textContent = Math.round(cleared * 100) + ' %';
+  document.getElementById('sSplit').textContent = Math.round(clearSplit[0] * 100) + ' % · ' + Math.round(clearSplit[1] * 100) + ' %';
+  document.getElementById('sIce').textContent = walkIceM2 < 0.5 ? '✔ frei' : '≈ ' + Math.round(walkIceM2) + ' m²';
+  document.getElementById('bClear').style.width = (cleared * 100) + '%';
+  document.getElementById('sLegal').textContent = legalPct < 0 ? '–' : Math.round(legalPct * 100) + ' %';
+  document.getElementById('sLegal').style.color = legalPct < 0 ? '' : legalPct > 0.7 ? 'var(--good)' : legalPct > 0.45 ? '#ffd27a' : 'var(--bad)';
+  document.getElementById('sComp').textContent = comps;
+  document.getElementById('sFine').textContent = fines + ' €';
+  document.getElementById('gBlade').style.transform = `rotate(${plow.alpha}deg)`;
+  document.getElementById('gAng').textContent = (plow.alpha > 0 ? '+' : '') + Math.round(plow.alpha) + '°';
+  const ar = document.getElementById('gArrow'); ar.textContent = plow.blower ? (plow.chuteSide > 0 ? '⇉' : '⇇') : plow.alpha > 3 ? '❄→' : plow.alpha < -3 ? '←❄' : '▲';
+  ar.style.left = plow.alpha > 3 || (plow.blower && plow.chuteSide > 0) ? '38px' : plow.alpha < -3 || plow.blower ? '0px' : '24px';
+  const lr = plow.load / P.cap; const bl = document.getElementById('bLoad'); bl.style.width = Math.min(100, lr * 100) + '%'; bl.classList.toggle('over', lr > 0.8);
+  document.getElementById('gLoad').textContent = plow.load.toFixed(2) + ' m³';
+  document.getElementById('bSalt').style.width = (plow.salt / P.saltMax * 100) + '%';
+  document.getElementById('gSalt').textContent = Math.round(plow.salt) + ' kg';
+  document.getElementById('mode').textContent = plow.blower ? '🌀 FRÄSE AKTIV' : lr > 1 ? '⚠ Schild überladen!' : camMode ? '🗺 Räumplan' : '';
+  document.getElementById('warn').classList.toggle('on', iceWarn > 0);
+  document.getElementById('help').style.opacity = gameTime > 30 ? 0 : 0.6;
+  document.getElementById('tBlow').style.display = P.blower ? '' : 'none';
+  document.getElementById('tBlow').classList.toggle('on', plow.blower);
+}
+
+// ================= Kamera & Render =================
+let camTh = 0; const camLook = new THREE.Vector3();
+function placeCamera(snap, dt) {
+  const t = snap ? 1 : 1 - Math.exp(-(dt || 0.016) * 3.5);
+  if (state === 'menu' || state === 'brief') {
+    const a = performance.now() * 0.00006;
+    camera.position.set(Math.sin(a) * 2.5, 7 + L.slope * -36, -38 + Math.cos(a * 1.3) * 2);
+    camera.lookAt(0, L.slope * -14, -14);
+    return;
+  }
+  camTh = snap ? plow.th : camTh + wrapA(plow.th - camTh) * (1 - Math.exp(-(dt || 0.016) * 2.5));
+  const f0 = Math.sin(camTh), f1 = Math.cos(camTh);
+  let px, py, pz, lx, ly, lz;
+  if (camMode === 0) { px = plow.x - f0 * 7.6; py = plow.y + 8.6; pz = plow.z - f1 * 7.6; lx = plow.x + f0 * 7.5; ly = plow.y; lz = plow.z + f1 * 7.5; }
+  else { px = plow.x; py = plow.y + 68; pz = plow.z - 10; lx = plow.x; ly = plow.y; lz = plow.z + 1; }
+  scene.fog.density = camMode ? 0.008 : L.storm ? 0.03 : 0.017;
+  const fov = camMode ? 30 : camera.aspect < 0.8 ? 80 : 60; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  if (snap) { camera.position.set(px, py, pz); camLook.set(lx, ly, lz); }
+  else { camera.position.x += (px - camera.position.x) * t; camera.position.y += (py - camera.position.y) * t; camera.position.z += (pz - camera.position.z) * t; camLook.x += (lx - camLook.x) * t; camLook.y += (ly - camLook.y) * t; camLook.z += (lz - camLook.z) * t; }
+  if (shake > 0) { camera.position.x += rand(-shake, shake) * 0.3; camera.position.y += rand(-shake, shake) * 0.3; }
+  camera.lookAt(camLook);
+}
+const SKYK = [[0, '#03061a', '#101c40', '#05070f'], [0.45, '#0a1638', '#2c3266', '#0a0d1a'], [0.78, '#24447e', '#9a6080', '#141a2a'], [1, '#4f86c6', '#ffb070', '#2a2f3a']];
+const cA = new THREE.Color(), cB = new THREE.Color();
+function skyAt(p, k) { let i = 0; while (i < SKYK.length - 2 && p > SKYK[i + 1][0]) i++; const t = clamp((p - SKYK[i][0]) / (SKYK[i + 1][0] - SKYK[i][0]), 0, 1); return cA.set(SKYK[i][k]).lerp(cB.set(SKYK[i + 1][k]), t).clone(); }
+function updateWorld(dt, now) {
+  const p = state === 'menu' || state === 'brief' ? 0.25 : clamp((clockMin - 330) / 90, 0, 1);
+  skyU.top.value.copy(skyAt(p, 1)); skyU.hor.value.copy(skyAt(p, 2)); skyU.bot.value.copy(skyAt(p, 3));
+  skyU.sunAmt.value = smooth(0.55, 1, p);
+  skyU.sunDir.value.set(0.35, -0.08 + p * 0.16, 1).normalize();
+  starMat.opacity = clamp(1 - p * 1.4, 0, 1);
+  const fogC = skyAt(p, 2).lerp(skyAt(p, 1), 0.45).multiplyScalar(L.storm ? 1.25 : 1);
+  scene.fog.color.copy(fogC);
+  hemi.intensity = lerp(0.5, 0.95, p); hemi.color.set('#5a70b0').lerp(cB.set('#d0dcff'), p); hemi.groundColor.set('#34405e').lerp(cB.set('#7a7a88'), p);
+  sun.intensity = lerp(0.25, 0.85, p * p); sun.color.set('#8ea8ff').lerp(cB.set('#ffc890'), smooth(0.5, 1, p));
+  sun.position.set(lerp(-25, 30, p), lerp(45, 18, p), lerp(-15, 60, p));
+  lampU.value = 1 - smooth(0.85, 0.98, p);
+  // Fahrzeug
+  plow.y = (gAt(plow.x, plow.z) + gAt(plow.x + Math.sin(plow.th) * 1.3, plow.z + Math.cos(plow.th) * 1.3)) / 2;
+  const f0 = Math.sin(plow.th), f1 = Math.cos(plow.th), r0 = -f1, r1 = f0;
+  const hF = gAt(plow.x + f0 * 1.5, plow.z + f1 * 1.5), hB = gAt(plow.x - f0 * 1.5, plow.z - f1 * 1.5);
+  const hL = gAt(plow.x - r0 * 0.9, plow.z - r1 * 0.9), hR = gAt(plow.x + r0 * 0.9, plow.z + r1 * 0.9);
+  const k = 1 - Math.exp(-dt * 10);
+  plow.pitch += (Math.atan2(hF - hB, 3) - plow.pitch) * k; plow.roll += (Math.atan2(hL - hR, 1.8) - plow.roll) * k;
+  plowG.position.set(plow.x, plow.y, plow.z); plowG.rotation.set(-plow.pitch, plow.th, plow.roll, 'YXZ');
+  bladePivot.rotation.y = -plow.alpha * DEG;
+  const spd = Math.hypot(plow.vx, plow.vz);
+  const vfw = plow.vx * f0 + plow.vz * f1;
+  for (const w of wheels) w.rotation.x += (vfw + spinAmt * 8) * dt / 0.46;
+  spinner.rotation.y += dt * ((input.salt || input.touchSalt) && plow.salt > 0 ? 25 : 0);
+  const lr = clamp(Math.sqrt(plow.load / P.cap), 0, 1.4);
+  mound.visible = plow.load > 0.015;
+  const hw = P.bladeW / 2, side = plow.alpha > 3 ? 1 : plow.alpha < -3 ? -1 : 0;
+  mound.scale.set(hw * (0.55 + 0.35 * lr), 0.62 * lr + 0.05, 0.45 + 0.35 * lr);
+  mound.position.set(-side * hw * 0.25 * Math.abs(plow.alpha) / 35, 0, 0.5 + 0.2 * lr);
+  chute.rotation.y = plow.chuteSide > 0 ? -Math.PI / 2 : Math.PI / 2;
+  beaconRot.rotation.y += dt * 9;
+  beaconLight.intensity = state === 'play' || state === 'menu' || state === 'brief' ? 0.35 + 1.6 * Math.pow(Math.max(0, Math.sin(now * 0.009)), 4) : 0.4;
+  // Mülltonnen kippen
+  for (const o of obs) if (o.alive === false && o.mesh && o.tip < 1) { o.tip = Math.min(1, o.tip + dt * 4); o.mesh.rotation.x = o.tipDir[1] * o.tip * 1.45; o.mesh.rotation.z = -o.tipDir[0] * o.tip * 1.45; }
+  // Schneefall um die Kamera
+  const cp = camera.position, wind = L.storm ? 3.5 : 0.4, n = L.storm ? SN : 1300;
+  for (let i = 0; i < n; i++) {
+    let x = sfPos[i * 3] + wind * dt + Math.sin(now * 0.001 + i) * 0.2 * dt, y = sfPos[i * 3 + 1] - sfSpd[i] * dt * (L.storm ? 2.2 : 1), z = sfPos[i * 3 + 2];
+    if (y < cp.y - 12) y += 24; if (y > cp.y + 12) y -= 24;
+    if (x < cp.x - 25) x += 50; if (x > cp.x + 25) x -= 50;
+    if (z < cp.z - 25) z += 50; if (z > cp.z + 25) z -= 50;
+    sfPos[i * 3] = x; sfPos[i * 3 + 1] = y; sfPos[i * 3 + 2] = z;
+  }
+  sfGeo.attributes.position.needsUpdate = true;
+  sky.position.copy(cp);
+  updateParticles(dt);
+  if (shake > 0) shake = Math.max(0, shake - dt * 1.5);
+  if (state === 'play' && lastCollect > 0.3) shake = Math.max(shake, Math.min(0.15, lastCollect * 0.05));
+}
+
+// ================= Audio-Motor =================
+const Eng = { on: false };
+function engineStart() {
+  if (Eng.on) return;
+  const ctx = AC && AC.getAudioContext ? AC.getAudioContext() : null; if (!ctx) return;
+  try {
+    const master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 300; lp.connect(master);
+    const eg = ctx.createGain(); eg.gain.value = 0.35; eg.connect(lp);
+    const o1 = ctx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 38; o1.connect(eg);
+    const o2 = ctx.createOscillator(); o2.type = 'square'; o2.frequency.value = 19; const g2 = ctx.createGain(); g2.gain.value = 0.3; o2.connect(g2); g2.connect(eg);
+    const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const mk = (type, f, q) => { const src = ctx.createBufferSource(); src.buffer = nb; src.loop = true; const bf = ctx.createBiquadFilter(); bf.type = type; bf.frequency.value = f; bf.Q.value = q; const g = ctx.createGain(); g.gain.value = 0; src.connect(bf); bf.connect(g); g.connect(master); src.start(); return { src, g }; };
+    const scrape = mk('bandpass', 480, 0.6), salt = mk('highpass', 3800, 0.5), skid = mk('bandpass', 1400, 9), blow = mk('bandpass', 950, 1.4);
+    o1.start(); o2.start();
+    Object.assign(Eng, { on: true, ctx, master, lp, o1, o2, scrape, salt, skid, blow });
+  } catch (e) { Eng.on = false; }
+}
+function engineSet(thr, spd, scr, sl, sk, bl) {
+  if (!Eng.on) return;
+  const t = Eng.ctx.currentTime, f = 34 + spd * 4 + thr * 16;
+  Eng.master.gain.setTargetAtTime(AC.isMuted() ? 0 : 0.5, t, 0.1);
+  Eng.o1.frequency.setTargetAtTime(f, t, 0.08); Eng.o2.frequency.setTargetAtTime(f / 2.01, t, 0.08);
+  Eng.lp.frequency.setTargetAtTime(200 + thr * 300 + spd * 25, t, 0.1);
+  Eng.scrape.g.gain.setTargetAtTime(scr, t, 0.06); Eng.salt.g.gain.setTargetAtTime(sl, t, 0.05);
+  Eng.skid.g.gain.setTargetAtTime(sk, t, 0.05); Eng.blow.g.gain.setTargetAtTime(bl, t, 0.1);
+}
+function engineStop() {
+  if (!Eng.on) return;
+  try { const t = Eng.ctx.currentTime; Eng.master.gain.setTargetAtTime(0, t, 0.05); [Eng.o1, Eng.o2, Eng.scrape.src, Eng.salt.src, Eng.skid.src, Eng.blow.src].forEach(n => n.stop(t + 0.3)); } catch (e) {}
+  Eng.on = false;
+}
+
+// ================= Eingabe =================
+const keys = {};
+addEventListener('keydown', e => {
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  if (e.repeat) return;
+  if (e.code === 'Enter') e.preventDefault();
+  if (state === 'play') {
+    if (e.code === 'KeyC') setCam(1 - camMode);
+    if (e.code === 'KeyF') toggleBlower();
+    if (e.code === 'Enter') confirmDone();
+    if (e.code === 'Escape' || e.code === 'KeyP') pauseGame();
+  } else if (state === 'pause' && (e.code === 'Escape' || e.code === 'KeyP')) { hidePanel(); state = 'play'; }
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.joyX = input.joyY = 0; input.touchSalt = false; });
+canvas.addEventListener('wheel', e => { if (state === 'play') { e.preventDefault(); plow.aTarget = clamp(plow.aTarget + (e.deltaY > 0 ? 5 : -5), -35, 35); slider.value = plow.aTarget; } }, { passive: false });
+function setCam(m) { camMode = m; overlay = m === 1; markDirty(0, GH - 1); }
+function toggleBlower() { if (!P.blower) { toast('🌀 Schneefräse gibt es in der Werkstatt.'); return; } plow.blower = !plow.blower; snd('pop', plow.blower ? 1.4 : 0.8); }
+function confirmDone() {
+  if (cleared < 0.6) { toast('Erst mindestens 60 % räumen, sonst gibt’s Ärger vom Bauhof.', 'bad'); return; }
+  endLevel(true);
+}
+const slider = document.getElementById('angSlider');
+slider.addEventListener('input', () => { plow.aTarget = +slider.value; });
+const touchEl = document.getElementById('touch');
+function enableTouch() { touchEl.classList.add('on'); }
+if (matchMedia('(pointer: coarse)').matches) enableTouch();
+addEventListener('touchstart', enableTouch, { once: true, passive: true });
+const joy = document.getElementById('joy'), knob = document.getElementById('knob');
+let joyId = null;
+function joyMove(e) {
+  const r = joy.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  let dx = (e.clientX - cx) / (r.width / 2), dy = (e.clientY - cy) / (r.height / 2); const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; }
+  input.joyX = dx; input.joyY = -dy; knob.style.transform = `translate(${dx * 40}px,${dy * 40}px)`;
+}
+joy.addEventListener('pointerdown', e => { joyId = e.pointerId; joy.setPointerCapture(e.pointerId); joyMove(e); });
+joy.addEventListener('pointermove', e => { if (e.pointerId === joyId) joyMove(e); });
+const joyEnd = e => { if (e.pointerId !== joyId) return; joyId = null; input.joyX = input.joyY = 0; knob.style.transform = ''; };
+joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
+const tSaltBtn = document.getElementById('tSalt');
+tSaltBtn.addEventListener('pointerdown', () => { input.touchSalt = true; tSaltBtn.classList.add('on'); });
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) tSaltBtn.addEventListener(ev, () => { input.touchSalt = false; tSaltBtn.classList.remove('on'); });
+document.getElementById('tBlow').onclick = toggleBlower;
+document.getElementById('tCam').onclick = () => setCam(1 - camMode);
+document.getElementById('tDone').onclick = () => { if (state === 'play') confirmDone(); };
+document.getElementById('tPause').onclick = pauseGame;
+const muteBtn = document.getElementById('muteBtn');
+const syncMute = () => { muteBtn.textContent = AC && AC.isMuted() ? '🔇' : '🔊'; };
+muteBtn.onclick = () => { if (AC) AC.toggleMute(); syncMute(); }; syncMute();
+
+// ================= Hauptschleife =================
+let last = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (dt <= 0) return;
+  if (state === 'play') { const n = dt > 0.025 ? 2 : 1; for (let k = 0; k < n; k++) update(dt / n); }
+  updateWorld(dt, now);
+  placeCamera(false, dt);
+  flush();
+  if (state === 'play' && (tHud += dt) > 0.1) { tHud = 0; updateHud(); }
+  renderer.render(scene, camera);
+}
+
+// ================= Selbsttest (?selftest=1): Massenerhaltung =================
+function selfTest() {
+  buildLevel(0); L = Object.assign({}, L, { snow: 0 }); state = 'play'; auto = {};
+  const v0 = totalSnow() + plow.load;
+  for (let k = 0; k < 600; k++) update(1 / 30);
+  const v1 = totalSnow() + plow.load;
+  const ok = Math.abs(v1 - v0) < 1e-3 * v0 && collectedTotal > 5 && cleared > 0.05;
+  const msg = `SELFTEST ${ok ? 'PASS' : 'FAIL'}: Schnee vorher ${v0.toFixed(4)} m³, nachher ${v1.toFixed(4)} m³, bewegt ${collectedTotal.toFixed(2)} m³, geräumt ${(cleared * 100).toFixed(1)} %`;
+  const el = document.getElementById('selftest'); el.style.display = 'block'; el.textContent = msg; console.log(msg);
+  auto = null; showMenu();
+}
+
+// ================= Start =================
+buildLevel(0);
+if (Q.get('selftest')) selfTest();
+else if (Q.get('demo')) {
+  const li = clamp((+Q.get('level') || 1) - 1, 0, 4);
+  buildLevel(li); startPlay(); auto = { salt: true };
+  if (Q.get('cam') === 'top') setCam(1);
+  const ff = +Q.get('ff') || 0;
+  for (let k = 0; k < ff * 30; k++) update(1 / 30);
+  placeCamera(true);
+  if (Q.get('dbg')) { const el = document.getElementById('selftest'); el.style.display = 'block'; el.textContent = `t=${gameTime.toFixed(0)}s cleared=${(cleared * 100).toFixed(1)}% legal=${(legalPct * 100).toFixed(0)}% kinds=${JSON.stringify(compKinds)} moved=${collectedTotal.toFixed(1)} plow=${plow.x.toFixed(1)},${plow.z.toFixed(1)} th=${plow.th.toFixed(2)} v=${Math.hypot(plow.vx, plow.vz).toFixed(2)} load=${plow.load.toFixed(2)} li=${auto && auto.li}`; }
+  if (Q.get('manual')) auto = null;
+  if (Q.get('end')) endLevel(true);
+} else if (Q.get('shop')) { save.budget = Math.max(save.budget, 500); showShop(showMenu); }
+else showMenu();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
