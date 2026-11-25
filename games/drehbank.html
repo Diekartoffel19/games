@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Dreh- & Fräs-Werkstatt: Zerspanungs-Simulator</title>
+<meta name="description" content="CNC-Werkstatt im Browser: Rohling, Material und Maße aussuchen, an der Drehbank auf Ziel-Durchmesser abdrehen (Zustellung, Oberflächengüte, Ausschuss-Risiko) und anschließend eine Nut fräsen. Qualitätskontrolle mit Mikrometer und Highscore.">
+<meta name="theme-color" content="#14181d">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<link rel="stylesheet" href="../style.css">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<style>
+:root{
+  --panel:rgba(16,19,23,.94); --edge:rgba(255,255,255,.14);
+  --ink:#eef2f6; --dim:#9aa6b2; --accent:#ffb020; --good:#4fd37a; --warn:#ffd24a; --bad:#ff5b52; --blue:#5cc0ff;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0d1013;color:var(--ink);
+  font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;}
+canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;background:#0d1013;}
+.btn{background:#1b2027;border:1px solid var(--edge);color:var(--ink);border-radius:10px;
+  padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;transition:background .12s,border-color .12s;}
+.btn:hover{background:#242b34;}
+.btn.primary{background:var(--accent);color:#1a1205;border-color:transparent;}
+.btn.primary:hover{filter:brightness(1.08);}
+.btn.ghost{background:rgba(20,24,29,.82);}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+#back{position:fixed;top:10px;left:12px;z-index:60;}
+#mute{position:fixed;top:10px;right:12px;z-index:60;width:42px;height:38px;font-size:18px;
+  display:flex;align-items:center;justify-content:center;}
+.hide{display:none !important;}
+
+/* overlays */
+.overlay{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
+  padding:16px;background:rgba(8,10,13,.72);backdrop-filter:blur(3px);}
+.card{width:min(560px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--edge);
+  border-radius:16px;padding:20px 20px 18px;box-shadow:0 18px 60px rgba(0,0,0,.55);}
+.card h1{margin:0 0 2px;font-size:22px;letter-spacing:.3px;}
+.card h2{margin:0 0 14px;font-size:22px;}
+.sub{color:var(--dim);font-size:13.5px;margin:0 0 16px;line-height:1.5;}
+.row{margin:0 0 15px;}
+.row > .lab{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;margin-bottom:7px;}
+.lab b{font-size:15px;color:var(--accent);}
+input[type=range]{width:100%;accent-color:var(--accent);height:26px;cursor:pointer;}
+.mats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:4px;}
+.mat{border:1px solid var(--edge);border-radius:12px;padding:11px 8px;text-align:center;cursor:pointer;background:#141922;transition:.12s;}
+.mat:hover{background:#1b222d;}
+.mat.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+.mat .swatch{height:26px;border-radius:7px;margin-bottom:7px;border:1px solid rgba(255,255,255,.18);}
+.mat .mn{font-weight:800;font-size:14px;}
+.mat .md{font-size:11px;color:var(--dim);margin-top:2px;}
+.acts{display:flex;gap:10px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap;}
+.kv{display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.1);}
+.kv:last-child{border-bottom:0;}
+.kv b{font-variant-numeric:tabular-nums;}
+.big{font-size:40px;font-weight:900;text-align:center;margin:6px 0 2px;}
+.grade{font-size:62px;font-weight:900;text-align:center;line-height:1;margin:4px 0 8px;}
+.tips{font-size:12.5px;color:var(--dim);line-height:1.55;margin-top:10px;background:rgba(255,255,255,.04);
+  border:1px solid var(--edge);border-radius:10px;padding:10px 12px;}
+.tips b{color:var(--ink);}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<button id="back" class="btn ghost" onclick="location.href='../index.html'">← Hub</button>
+<button id="mute" class="btn ghost" aria-label="Ton">🔊</button>
+
+<!-- SETUP -->
+<div class="overlay" id="setup">
+  <div class="card">
+    <h1>⚙️ Dreh- &amp; Fräs-Werkstatt</h1>
+    <p class="sub">Rohling einspannen, Material und Maße aussuchen, dann an der Drehbank auf die
+      Ziel-Durchmesser abdrehen und zum Schluss die Nut fräsen. Leichte Späne = feine Oberfläche,
+      zu tief zustellen = Rattermarken und Ausschuss. Nicht unter das Zielmaß drehen!</p>
+
+    <div class="row">
+      <div class="lab"><span>Material</span></div>
+      <div class="mats" id="mats"></div>
+    </div>
+    <div class="row">
+      <div class="lab"><span>Rohling-Durchmesser Ø</span><b id="vDia">40 mm</b></div>
+      <input type="range" id="sDia" min="26" max="60" step="2" value="40">
+    </div>
+    <div class="row">
+      <div class="lab"><span>Rohling-Länge</span><b id="vLen">90 mm</b></div>
+      <input type="range" id="sLen" min="60" max="130" step="5" value="90">
+    </div>
+    <div class="tips" id="setupHint"></div>
+    <div class="acts" style="margin-top:14px;">
+      <button class="btn primary" id="startBtn">Einspannen &amp; Starten →</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESULT -->
+<div class="overlay hide" id="result">
+  <div class="card">
+    <h2 id="rTitle">Qualitätskontrolle</h2>
+    <div class="grade" id="rGrade">A</div>
+    <div class="big" id="rScore">0</div>
+    <div id="rKv"></div>
+    <div class="tips" id="rTip"></div>
+    <div class="acts" style="margin-top:16px;">
+      <button class="btn ghost" id="rMenu">Neuer Auftrag</button>
+      <button class="btn primary" id="rNext">Nächster Auftrag →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function(){
+const AC = window.ArcadeCore || {playTone(){},saveScore(){},getScore(){return 0;},isMuted(){return false;},toggleMute(){}};
+const KEY='drehbank';
+
+/* ---------- canvas ---------- */
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1;
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=window.innerWidth;H=window.innerHeight;
+  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize);resize();
+
+/* ---------- mute ---------- */
+const muteBtn=document.getElementById('mute');
+function syncMute(){muteBtn.textContent=AC.isMuted&&AC.isMuted()?'🔇':'🔊';}
+muteBtn.onclick=()=>{if(AC.toggleMute)AC.toggleMute();syncMute();};syncMute();
+
+/* ---------- materials ---------- */
+const MATERIALS=[
+  {id:'alu', name:'Aluminium', desc:'weich · schnell', c1:'#d8dde2', c2:'#9aa2ab', hard:1.0,  safe:3.0, spark:'#eaf2ff'},
+  {id:'messing', name:'Messing', desc:'mittel', c1:'#e7c768', c2:'#b2873a', hard:1.5, safe:2.2, spark:'#ffe9a8'},
+  {id:'stahl', name:'Stahl', desc:'hart · langsam', c1:'#c3ccd6', c2:'#6c7784', hard:2.4, safe:1.5, spark:'#ffd38a'},
+];
+let selMat=MATERIALS[0];
+
+/* ---------- setup UI ---------- */
+const matsEl=document.getElementById('mats');
+MATERIALS.forEach(m=>{
+  const d=document.createElement('div');d.className='mat'+(m===selMat?' sel':'');
+  d.innerHTML=`<div class="swatch" style="background:linear-gradient(180deg,${m.c1},${m.c2})"></div>
+    <div class="mn">${m.name}</div><div class="md">${m.desc}</div>`;
+  d.onclick=()=>{selMat=m;[...matsEl.children].forEach(c=>c.classList.remove('sel'));d.classList.add('sel');beep(520,.05);updSetupHint();};
+  matsEl.appendChild(d);
+});
+const sDia=document.getElementById('sDia'),sLen=document.getElementById('sLen');
+const vDia=document.getElementById('vDia'),vLen=document.getElementById('vLen');
+function updSetupHint(){
+  vDia.textContent=sDia.value+' mm';vLen.textContent=sLen.value+' mm';
+  document.getElementById('setupHint').innerHTML=
+    `<b>Auftrag #${level}</b> · Zielteil wird aus dem Rohling gefertigt. Je größer der Rohling, desto mehr Material musst du abtragen — zu klein gewählt und das Zielmaß passt nicht mehr hinein. Toleranz: <b>±${TOL.toFixed(1)} mm</b>.`;
+}
+sDia.oninput=updSetupHint;sLen.oninput=updSetupHint;
+
+/* ---------- game constants ---------- */
+const N=220;            // stations along length
+const TOL_BASE=0.7;
+let TOL=TOL_BASE;
+let level=1;
+
+/* ---------- part state ---------- */
+let partLen=90, stockR=20;              // mm (radius)
+let radius=new Float32Array(N);         // current radius at station
+let targetR=new Float32Array(N);        // target radius (lathe)
+let mill=new Float32Array(N);           // milled slot depth from top
+let millTarget=new Float32Array(N);     // target slot depth
+let scrap=new Uint8Array(N);            // ruined stations (undercut / miswork)
+let slotA=0, slotB=0, slotDepth=0;      // milling slot region
+let mat=selMat;
+
+/* ---------- machine / mode ---------- */
+let mode='lathe';        // 'lathe' | 'mill'
+let spindle=true;
+let quality=1.0;         // surface quality 0..1
+let removed=0;           // mm^2 removed (chips) for flavor
+let sparks=[];
+let spinPhase=0;
+let engaged=false, pointer={x:0,y:0,down:false};
+
+/* ---------- helpers ---------- */
+function beep(f,d,t,g){if(!AC.isMuted||!AC.isMuted())AC.playTone(f,d||.05,t||'square',g||0.05);}
+function clamp(v,a,b){return v<a?a:v>b?b:v;}
+
+/* ---------- order generation ---------- */
+function genOrder(){
+  mat=selMat;
+  stockR=parseInt(sDia.value,10)/2;
+  partLen=parseInt(sLen.value,10);
+  TOL=Math.max(0.4, TOL_BASE - (level-1)*0.06);
+
+  // target profile: descending stepped shaft that fits inside the stock
+  const rMax=stockR-(1.6+Math.random()*1.4);
+  const nseg=3+Math.min(2,Math.floor(level/2));
+  const rs=[];
+  let r=rMax;
+  for(let s=0;s<nseg;s++){
+    rs.push(r);
+    r=Math.max(stockR*0.30, r-(rMax*(0.14+Math.random()*0.17)));
+  }
+  // assign segments across length
+  for(let i=0;i<N;i++){
+    const f=i/(N-1);
+    let seg=Math.min(nseg-1,Math.floor(f*nseg));
+    targetR[i]=rs[seg];
+  }
+  // chamfer at free end (last ~5%)
+  const cEnd=rs[nseg-1]*0.6;
+  for(let i=Math.floor(N*0.955);i<N;i++){
+    const t=(i-N*0.955)/(N-N*0.955);
+    targetR[i]=rs[nseg-1]*(1-t)+cEnd*t;
+  }
+  // groove for higher levels
+  if(level>=2){
+    const gc=0.40+Math.random()*0.25, gw=0.025;
+    const a=Math.floor((gc-gw)*N), b=Math.floor((gc+gw)*N);
+    const gr=targetR[a]*0.62;
+    for(let i=a;i<=b;i++) targetR[i]=Math.min(targetR[i],gr);
+  }
+
+  // milling slot (keyway) on top of a mid section
+  const sc=0.30+Math.random()*0.30, sw=0.07+Math.random()*0.04;
+  slotA=Math.floor((sc-sw)*N); slotB=Math.floor((sc+sw)*N);
+  slotDepth=Math.max(3, targetR[Math.floor(sc*N)]*0.45);
+  mill.fill(0); millTarget.fill(0);
+  for(let i=slotA;i<=slotB;i++) millTarget[i]=slotDepth;
+
+  // init stock
+  for(let i=0;i<N;i++){radius[i]=stockR;scrap[i]=0;}
+  quality=1.0;removed=0;sparks.length=0;mode='lathe';spindle=true;
+}
+
+/* ---------- cutting engine ---------- */
+let toolZ=0, toolX=stockR;   // machine coords of tool tip
+function cut(dt){
+  if(!pointer.down||!spindle) return;
+  const rate=(1.7/mat.hard)*dt*60;      // mm per step scaled
+  const half=mode==='lathe'?3:Math.max(3,(slotB-slotA)*0.5+2);
+  const ci=Math.round(toolZ/partLen*(N-1));
+  const h=Math.round(half/partLen*N);
+  let didCut=false;
+  if(mode==='lathe'){
+    for(let i=Math.max(0,ci-h);i<=Math.min(N-1,ci+h);i++){
+      const surf=radius[i];
+      if(surf>toolX+0.001){
+        const commanded=surf-toolX;
+        const d=Math.min(rate*0.14,commanded);
+        radius[i]-=d;didCut=true;
+        // quality penalty for aggressive depth of cut
+        if(commanded>mat.safe) quality=clamp(quality-(commanded-mat.safe)*0.0016*dt*60,0,1);
+        // undercut below target => scrap
+        if(radius[i]<targetR[i]-TOL){scrap[i]=1;quality=clamp(quality-0.004,0,1);}
+        removed+=d;
+        if(Math.random()<(commanded>mat.safe?0.6:0.22)) addSpark(i,commanded>mat.safe);
+      }
+    }
+  }else{
+    millCut(rate,dt,ci,h);didCut=true;
+  }
+  if(didCut&&Math.random()<0.25) beep(90+Math.random()*40,.03,'sawtooth',0.03);
+}
+let millSet=0; // desired mill depth from pointer
+function millCut(rate,dt,ci,h){
+  if(!pointer.down||!spindle) return;
+  for(let i=Math.max(0,ci-h);i<=Math.min(N-1,ci+h);i++){
+    if(mill[i]<millSet-0.001){
+      const commanded=millSet-mill[i];
+      const d=Math.min(rate*0.14,commanded);
+      mill[i]+=d;
+      if(commanded>mat.safe) quality=clamp(quality-(commanded-mat.safe)*0.0016*dt*60,0,1);
+      // milling outside the slot, or past slot depth+tol => scrap
+      if(millTarget[i]<=0 && mill[i]>TOL){scrap[i]=1;quality=clamp(quality-0.006,0,1);}
+      if(millTarget[i]>0 && mill[i]>millTarget[i]+TOL){scrap[i]=1;quality=clamp(quality-0.004,0,1);}
+      removed+=d;
+      if(Math.random()<(commanded>mat.safe?0.6:0.2)) addSpark(i,commanded>mat.safe,true);
+    }
+  }
+}
+function addSpark(i,hot,top){
+  const z=i/(N-1)*partLen;
+  const px=WA.x+z/partLen*WA.w;
+  const py=top?(centerY-radius[i]*SCALE):(centerY+radius[i]*SCALE);
+  const dir=top?-1:1;
+  sparks.push({x:px,y:py,vx:(Math.random()-.5)*2.4,vy:dir*(1.2+Math.random()*2.6)*(top?1:1),
+    life:1,hot:hot});
+}
+
+/* ---------- layout mapping ---------- */
+let WA={x:0,y:0,w:0,h:0}, centerY=0, SCALE=1;
+function layout(){
+  const top=96, bot=128;
+  WA.x=Math.max(24,W*0.06); WA.w=W-WA.x*2;
+  WA.y=top; WA.h=H-top-bot;
+  centerY=WA.y+WA.h*0.44;
+  SCALE=Math.min((centerY-WA.y-26)/stockR,(WA.y+WA.h-centerY-80)/stockR,(WA.h*0.33)/stockR);
+}
+
+/* ---------- pointer ---------- */
+function onMove(px,py){
+  pointer.x=px;pointer.y=py;
+  const z=clamp((px-WA.x)/WA.w,0,1)*partLen;
+  toolZ=z;
+  const i=clamp(Math.round(z/partLen*(N-1)),0,N-1);
+  if(mode==='lathe'){
+    toolX=clamp((py-centerY)/SCALE,0,stockR);
+  }else{
+    // depth measured below the turned top surface at this station
+    const topY=centerY-radius[i]*SCALE;
+    millSet=clamp((py-topY)/SCALE,0,radius[i]);
+  }
+}
+function evtPos(e){const r=cv.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};}
+function inWork(p){return p.y>WA.y-10 && p.y<WA.y+WA.h+40;}
+cv.addEventListener('pointerdown',e=>{
+  if(running){const p=evtPos(e);if(inWork(p)){pointer.down=true;onMove(p.x,p.y);if(AC.getAudioContext)AC.getAudioContext();}}
+});
+cv.addEventListener('pointermove',e=>{if(running){const p=evtPos(e);onMove(p.x,p.y);}});
+window.addEventListener('pointerup',()=>{pointer.down=false;});
+cv.addEventListener('pointerleave',()=>{pointer.down=false;});
+
+/* ---------- on-canvas buttons ---------- */
+let uiBtns=[]; // {x,y,w,h,label,fn,kind}
+function hitUI(p){for(const b of uiBtns){if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h){b.fn();return true;}}return false;}
+cv.addEventListener('pointerdown',e=>{if(!running)return;const p=evtPos(e);if(p.y>WA.y+WA.h+4){if(hitUI(p)){e.stopPropagation();}}},true);
+
+/* ---------- scoring ---------- */
+function evalPart(){
+  let good=0,over=0,under=0,bad=0,millGood=0,millTot=0,millBad=0;
+  for(let i=0;i<N;i++){
+    if(scrap[i]){bad++;continue;}
+    const diff=radius[i]-targetR[i];
+    if(diff>TOL) over++; else if(diff<-TOL) under++; else good++;
+    if(millTarget[i]>0){millTot++;const md=Math.abs(mill[i]-millTarget[i]);if(md<=TOL&&!scrap[i])millGood++;}
+    else if(mill[i]>TOL){millBad++;}
+  }
+  const dimAcc=good/N;
+  const millAcc=millTot? millGood/millTot : 1;
+  const scrapRate=(bad+millBad)/N;
+  const acc=dimAcc*0.62+millAcc*0.23+quality*0.15;
+  return {dimAcc,millAcc,quality,scrapRate,acc,over,under,bad,good};
+}
+
+/* ---------- flow ---------- */
+let running=false, lastT=0;
+document.getElementById('startBtn').onclick=()=>{startOrder();};
+function startOrder(){
+  genOrder();layout();
+  document.getElementById('setup').classList.add('hide');
+  document.getElementById('result').classList.add('hide');
+  running=true;mode='lathe';lastT=performance.now();
+  beep(300,.08,'sawtooth',0.05);
+}
+function toMill(){
+  mode='mill';pointer.down=false;quality=clamp(quality+0.0,0,1);
+  beep(420,.08,'square',0.05);
+}
+function finish(){
+  running=false;pointer.down=false;
+  const r=evalPart();
+  const base=Math.round(r.acc*1000)*level;
+  const bonus=Math.round(r.quality*200);
+  const penalty=Math.round(r.scrapRate*600);
+  const score=Math.max(0,base+bonus-penalty);
+  const total=(AC.getScore?AC.getScore(KEY):0)+score;
+  if(AC.saveScore)AC.saveScore(KEY,total);
+  const grade=r.acc>0.93&&r.scrapRate<0.03?'A+':r.acc>0.86?'A':r.acc>0.74?'B':r.acc>0.6?'C':'D';
+  showResult(r,score,grade);
+}
+function showResult(r,score,grade){
+  const ov=document.getElementById('result');ov.classList.remove('hide');
+  document.getElementById('rGrade').textContent=grade;
+  const gc=grade.startsWith('A')?'var(--good)':grade==='B'?'var(--warn)':'var(--bad)';
+  document.getElementById('rGrade').style.color=gc;
+  document.getElementById('rScore').textContent='+'+score+' Pkt';
+  document.getElementById('rKv').innerHTML=
+    `<div class="kv"><span>Maß-Genauigkeit (Drehen)</span><b>${(r.dimAcc*100).toFixed(1)} %</b></div>
+     <div class="kv"><span>Nut-Genauigkeit (Fräsen)</span><b>${(r.millAcc*100).toFixed(1)} %</b></div>
+     <div class="kv"><span>Oberflächengüte</span><b>${(r.quality*100).toFixed(0)} %</b></div>
+     <div class="kv"><span>Ausschuss</span><b style="color:${r.scrapRate>0.05?'var(--bad)':'var(--ink)'}">${(r.scrapRate*100).toFixed(1)} %</b></div>
+     <div class="kv"><span>Gesamtpunkte</span><b>${AC.getScore?AC.getScore(KEY):score}</b></div>`;
+  let tip;
+  if(r.scrapRate>0.05) tip='<b>Zu aggressiv zugestellt.</b> Nimm flachere Späne – halte das Werkzeug dicht an der Oberfläche statt tief ins Material zu stoßen.';
+  else if(r.over>r.good*0.25) tip='<b>Noch Übermaß.</b> Da steht noch Material über dem Zielmaß – weiter abdrehen bis alles grün ist.';
+  else if(r.under>N*0.05) tip='<b>Untermaß.</b> Unter das Zielmaß gedreht lässt sich nicht reparieren. Vorsichtiger an die Toleranz herantasten.';
+  else tip='<b>Saubere Arbeit!</b> Größerer Auftrag = engere Toleranz und mehr Features. Weiter so.';
+  document.getElementById('rTip').innerHTML=tip;
+  beep(grade.startsWith('A')?660:330,.16,'triangle',0.06);
+}
+document.getElementById('rNext').onclick=()=>{level++;document.getElementById('result').classList.add('hide');document.getElementById('setup').classList.remove('hide');updSetupHint();};
+document.getElementById('rMenu').onclick=()=>{document.getElementById('result').classList.add('hide');document.getElementById('setup').classList.remove('hide');updSetupHint();};
+
+/* ---------- rendering ---------- */
+function draw(now){
+  const dt=Math.min(0.05,(now-lastT)/1000)||0;lastT=now;
+  ctx.clearRect(0,0,W,H);
+  // background grid
+  ctx.fillStyle='#0d1013';ctx.fillRect(0,0,W,H);
+  drawBgGrid();
+  if(running){
+    layout();
+    if(spindle) spinPhase+=dt*(14/mat.hard);
+    cut(dt);
+    updateSparks(dt);
+    if(mode==='lathe') drawLathe(); else drawMill();
+    drawHUD();drawBottomBar();
+  }
+  requestAnimationFrame(draw);
+}
+function drawBgGrid(){
+  ctx.save();ctx.strokeStyle='rgba(255,255,255,.03)';ctx.lineWidth=1;
+  for(let x=0;x<W;x+=46){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=46){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.restore();
+}
+function zPx(z){return WA.x+z/partLen*WA.w;}
+function metalGrad(y0,y1){const g=ctx.createLinearGradient(0,y0,0,y1);g.addColorStop(0,mat.c1);g.addColorStop(.5,mat.c2);g.addColorStop(1,mat.c1);return g;}
+
+function drawLathe(){
+  // chuck (left)
+  const chW=Math.min(60,WA.w*0.07);
+  ctx.save();
+  ctx.fillStyle='#2a2f37';ctx.strokeStyle='#454c57';ctx.lineWidth=2;
+  const chTop=centerY-stockR*SCALE-16, chH=(stockR*SCALE+16)*2;
+  ctx.fillRect(WA.x-chW-6,chTop,chW,chH);ctx.strokeRect(WA.x-chW-6,chTop,chW,chH);
+  ctx.fillStyle='#1b1f25';
+  for(let k=-1;k<=1;k++)ctx.fillRect(WA.x-chW-6,centerY+k*12*SCALE/2-3,chW,4);
+  ctx.restore();
+
+  // axis
+  ctx.strokeStyle='rgba(255,255,255,.14)';ctx.setLineDash([7,8]);ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(WA.x-chW,centerY);ctx.lineTo(WA.x+WA.w+8,centerY);ctx.stroke();ctx.setLineDash([]);
+
+  // part body (filled)
+  ctx.fillStyle=metalGrad(centerY-stockR*SCALE,centerY+stockR*SCALE);
+  ctx.beginPath();
+  ctx.moveTo(zPx(0),centerY-radius[0]*SCALE);
+  for(let i=1;i<N;i++)ctx.lineTo(zPx(i/(N-1)*partLen),centerY-radius[i]*SCALE);
+  for(let i=N-1;i>=0;i--)ctx.lineTo(zPx(i/(N-1)*partLen),centerY+radius[i]*SCALE);
+  ctx.closePath();ctx.fill();
+
+  // spinning hatch
+  ctx.save();ctx.clip();
+  ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1.4;
+  const sp=((spinPhase*40)%26);
+  for(let x=WA.x-26+sp;x<WA.x+WA.w;x+=26){ctx.beginPath();ctx.moveTo(x,centerY-stockR*SCALE);ctx.lineTo(x,centerY+stockR*SCALE);ctx.stroke();}
+  ctx.strokeStyle='rgba(0,0,0,.14)';
+  for(let x=WA.x-26+sp+13;x<WA.x+WA.w;x+=26){ctx.beginPath();ctx.moveTo(x,centerY-stockR*SCALE);ctx.lineTo(x,centerY+stockR*SCALE);ctx.stroke();}
+  ctx.restore();
+
+  // "still to remove" tint: between target surface and current surface
+  ctx.save();ctx.fillStyle='rgba(255,120,60,.16)';
+  ctx.beginPath();
+  for(let i=0;i<N;i++){const x=zPx(i/(N-1)*partLen);i?ctx.lineTo(x,centerY-radius[i]*SCALE):ctx.moveTo(x,centerY-radius[i]*SCALE);}
+  for(let i=N-1;i>=0;i--){const x=zPx(i/(N-1)*partLen);ctx.lineTo(x,centerY-Math.min(radius[i],targetR[i])*SCALE);}
+  ctx.closePath();ctx.fill();
+  ctx.restore();
+
+  // target ghost (outline, drawn ON TOP so the goal is always visible)
+  ctx.strokeStyle='rgba(120,210,255,.9)';ctx.lineWidth=1.6;ctx.setLineDash([6,5]);
+  ctx.beginPath();
+  for(let i=0;i<N;i++){const x=zPx(i/(N-1)*partLen),y=centerY-targetR[i]*SCALE;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+  ctx.stroke();
+  ctx.beginPath();
+  for(let i=0;i<N;i++){const x=zPx(i/(N-1)*partLen),y=centerY+targetR[i]*SCALE;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+  ctx.stroke();ctx.setLineDash([]);
+
+  // tolerance strip along lower surface
+  for(let i=0;i<N-1;i++){
+    const x=zPx(i/(N-1)*partLen),x2=zPx((i+1)/(N-1)*partLen);
+    const y=centerY+radius[i]*SCALE;
+    let col;
+    if(scrap[i])col='rgba(255,91,82,.9)';
+    else{const d=radius[i]-targetR[i];col=d>TOL?'rgba(255,210,74,.85)':d<-TOL?'rgba(255,91,82,.9)':'rgba(79,211,122,.95)';}
+    ctx.strokeStyle=col;ctx.lineWidth=3.2;ctx.beginPath();ctx.moveTo(x,y+2.2);ctx.lineTo(x2,y+2.2);ctx.stroke();
+  }
+
+  drawSparks();
+
+  // tool (comes from below)
+  drawTool(false);
+
+  // live readout at tool
+  drawCaliper();
+}
+
+function drawMill(){
+  // reuse: show part from side, mill from top. target body = lathe result frozen
+  ctx.strokeStyle='rgba(255,255,255,.14)';ctx.setLineDash([7,8]);ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(WA.x,centerY);ctx.lineTo(WA.x+WA.w,centerY);ctx.stroke();ctx.setLineDash([]);
+
+  // slot target ghost (on top)
+  ctx.fillStyle='rgba(92,192,255,.14)';ctx.strokeStyle='rgba(92,192,255,.55)';ctx.setLineDash([5,5]);ctx.lineWidth=1.4;
+  ctx.beginPath();
+  for(let i=slotA;i<=slotB;i++){const x=zPx(i/(N-1)*partLen),y=centerY-(radius[i]-millTarget[i])*SCALE;i===slotA?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+  ctx.stroke();ctx.setLineDash([]);
+
+  // part body with milled slot removed from top
+  ctx.fillStyle=metalGrad(centerY-stockR*SCALE,centerY+stockR*SCALE);
+  ctx.beginPath();
+  ctx.moveTo(zPx(0),centerY-(radius[0]-mill[0])*SCALE);
+  for(let i=1;i<N;i++)ctx.lineTo(zPx(i/(N-1)*partLen),centerY-(radius[i]-mill[i])*SCALE);
+  for(let i=N-1;i>=0;i--)ctx.lineTo(zPx(i/(N-1)*partLen),centerY+radius[i]*SCALE);
+  ctx.closePath();ctx.fill();
+
+  // spin hatch (slower, part indexed for milling)
+  ctx.save();ctx.clip();ctx.strokeStyle='rgba(0,0,0,.12)';ctx.lineWidth=1.2;
+  for(let x=WA.x;x<WA.x+WA.w;x+=22){ctx.beginPath();ctx.moveTo(x,centerY-stockR*SCALE);ctx.lineTo(x,centerY+stockR*SCALE);ctx.stroke();}
+  ctx.restore();
+
+  // slot quality strip (top)
+  for(let i=slotA;i<slotB;i++){
+    const x=zPx(i/(N-1)*partLen),x2=zPx((i+1)/(N-1)*partLen);
+    const y=centerY-(radius[i]-mill[i])*SCALE;
+    const md=Math.abs(mill[i]-millTarget[i]);
+    const col=scrap[i]?'rgba(255,91,82,.9)':md<=TOL?'rgba(79,211,122,.95)':mill[i]<millTarget[i]?'rgba(255,210,74,.85)':'rgba(255,91,82,.9)';
+    ctx.strokeStyle=col;ctx.lineWidth=3.2;ctx.beginPath();ctx.moveTo(x,y-2.4);ctx.lineTo(x2,y-2.4);ctx.stroke();
+  }
+
+  drawSparks();
+  drawTool(true);
+  drawCaliper(true);
+}
+
+function drawTool(top){
+  const x=zPx(toolZ);
+  let y, s=14;
+  if(!top){ y=centerY+toolX*SCALE; // from below, tip points up
+    ctx.fillStyle='#e9edf2';ctx.strokeStyle='#11151a';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-s,y+s*1.5);ctx.lineTo(x+s,y+s*1.5);ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.fillStyle='#8a929c';ctx.fillRect(x-7,y+s*1.5,14,46);
+  }else{
+    const ii=clamp(Math.round(toolZ/partLen*(N-1)),0,N-1);
+    y=(centerY-radius[ii]*SCALE)+millSet*SCALE; // end mill bottom at desired depth
+    // flutes
+    ctx.save();
+    ctx.fillStyle='#cfd6de';ctx.strokeStyle='#11151a';ctx.lineWidth=2;
+    const mw=Math.max(10,(slotB-slotA)/N*WA.w*0.5);
+    ctx.fillRect(x-mw,y-60,mw*2,60);ctx.strokeRect(x-mw,y-60,mw*2,60);
+    ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=2;
+    const fp=(spinPhase*60)%16;
+    for(let k=-3;k<4;k++){ctx.beginPath();ctx.moveTo(x-mw,y-60+((k*16+fp)%80)-10);ctx.lineTo(x+mw,y-60+((k*16+fp)%80)+6);ctx.stroke();}
+    ctx.fillStyle='#9aa2ac';ctx.fillRect(x-mw+2,y,mw*2-4,4);
+    ctx.restore();
+  }
+}
+
+function drawCaliper(top){
+  const i=clamp(Math.round(toolZ/partLen*(N-1)),0,N-1);
+  const curDia=(radius[i]*2);
+  const tgtDia=(targetR[i]*2);
+  const x=zPx(toolZ);
+  ctx.save();
+  ctx.font='700 13px "Trebuchet MS",sans-serif';ctx.textAlign='center';
+  const boxY=WA.y+6;
+  let txt;
+  if(!top){
+    const d=radius[i]-targetR[i];
+    txt=`Ø ${curDia.toFixed(1)} → Ziel Ø ${tgtDia.toFixed(1)}`;
+    ctx.fillStyle=scrap[i]?'rgba(255,91,82,.95)':Math.abs(d)<=TOL?'rgba(79,211,122,.95)':'rgba(255,210,74,.95)';
+  }else{
+    txt=`Nut ${mill[i].toFixed(1)} / ${millTarget[i].toFixed(1)} mm`;
+    ctx.fillStyle='rgba(92,192,255,.95)';
+  }
+  const w=ctx.measureText(txt).width+18;
+  ctx.globalAlpha=.95;ctx.fillStyle='rgba(10,13,17,.9)';roundRect(x-w/2,boxY,w,24,7);ctx.fill();
+  ctx.fillStyle=top?'#9fd8ff':'#eef2f6';ctx.fillText(txt,x,boxY+16);
+  // guide line
+  ctx.strokeStyle='rgba(255,255,255,.2)';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(x,boxY+24);ctx.lineTo(x,centerY);ctx.stroke();ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+/* sparks */
+function updateSparks(dt){
+  for(const s of sparks){s.x+=s.vx;s.y+=s.vy;s.vy+=0.12;s.life-=dt*2.4;}
+  sparks=sparks.filter(s=>s.life>0);
+  if(sparks.length>260)sparks.splice(0,sparks.length-260);
+}
+function drawSparks(){
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const s of sparks){
+    ctx.globalAlpha=Math.max(0,s.life);
+    ctx.fillStyle=s.hot?'#ff7a3c':mat.spark;
+    ctx.fillRect(s.x,s.y,2.4,2.4);
+  }
+  ctx.restore();
+}
+
+/* HUD top + bottom bar */
+function drawHUD(){
+  const r=evalPart();
+  ctx.save();ctx.textAlign='left';
+  // top info pill (centered)
+  const label=(mode==='lathe'?'DREHEN':'FRÄSEN')+`  ·  Auftrag #${level}`;
+  const sub=`${mat.name} · Ø${(stockR*2)}×${partLen} mm · Tol ±${TOL.toFixed(1)}`;
+  ctx.font='800 14px "Trebuchet MS",sans-serif';const lw=ctx.measureText(label).width;
+  ctx.font='700 13px "Trebuchet MS",sans-serif';const sw=ctx.measureText(sub).width;
+  const tw=lw+sw+44;
+  const bx=W/2-tw/2;
+  ctx.fillStyle='rgba(16,19,23,.9)';roundRect(bx,12,tw,30,9);ctx.fill();
+  ctx.font='800 14px "Trebuchet MS",sans-serif';
+  ctx.fillStyle=mode==='lathe'?'#ffb020':'#5cc0ff';ctx.fillText(label,bx+16,32);
+  ctx.fillStyle='#9aa6b2';ctx.font='700 13px "Trebuchet MS",sans-serif';
+  ctx.fillText(sub,bx+16+lw+20,32);
+
+  // meters (right)
+  meter(W-WA.x-170,56,170,'Genauigkeit',r.dimAcc,'#4fd37a');
+  meter(W-WA.x-170,80,170,'Güte',r.quality,'#5cc0ff');
+  meter(W-WA.x-170,104,170,'Ausschuss',Math.min(1,r.scrapRate*4),'#ff5b52',r.scrapRate);
+  ctx.restore();
+}
+function meter(x,y,w,label,v,col,showVal){
+  ctx.save();ctx.font='700 11px "Trebuchet MS",sans-serif';ctx.textAlign='left';
+  ctx.fillStyle='#9aa6b2';ctx.fillText(label,x,y-2);
+  ctx.fillStyle='rgba(255,255,255,.1)';roundRect(x,y+2,w,8,4);ctx.fill();
+  ctx.fillStyle=col;roundRect(x,y+2,w*clamp(v,0,1),8,4);ctx.fill();
+  const pct=Math.round((showVal!==undefined?showVal:v)*100);
+  ctx.fillStyle='#cfd6de';ctx.textAlign='right';ctx.fillText(pct+'%',x+w,y-2);
+  ctx.restore();
+}
+
+function drawBottomBar(){
+  uiBtns=[];
+  const y=WA.y+WA.h+14, h=40;
+  // spindle toggle
+  addBtn(WA.x,y,150,h,(spindle?'■ Spindel AUS':'▶ Spindel AN'),()=>{spindle=!spindle;beep(spindle?300:160,.07,'sawtooth',0.05);},spindle?'warn':'ghost');
+  // mode progress button
+  if(mode==='lathe'){
+    addBtn(W-WA.x-210,y,210,h,'Zum Fräsen →',()=>{toMill();},'primary');
+  }else{
+    addBtn(W-WA.x-210,y,210,h,'Fertig · Prüfen ✓',()=>{finish();},'primary');
+    addBtn(W-WA.x-210-130,y,120,h,'← zurück Drehen',()=>{mode='lathe';beep(260,.06);},'ghost');
+  }
+  // help text center
+  ctx.save();ctx.textAlign='center';ctx.font='600 12.5px "Trebuchet MS",sans-serif';ctx.fillStyle='#8c96a2';
+  const help=mode==='lathe'
+    ? 'Ziehen am Werkstück: hoch = tiefer zustellen, seitlich = Support verfahren. Flache Späne für feine Oberfläche.'
+    : 'Ziehen: Fräser über die Nut führen und auf Zieltiefe absenken — nicht daneben oder zu tief fräsen.';
+  ctx.fillText(help,W/2,y+h+16);
+  ctx.restore();
+}
+function addBtn(x,y,w,h,label,fn,kind){
+  uiBtns.push({x,y,w,h,fn});
+  ctx.save();
+  let bg='rgba(20,24,29,.85)',fg='#eef2f6',bd='rgba(255,255,255,.14)';
+  if(kind==='primary'){bg='#ffb020';fg='#1a1205';bd='transparent';}
+  if(kind==='warn'){bg='#2a2118';fg='#ffd24a';bd='rgba(255,210,74,.4)';}
+  ctx.fillStyle=bg;roundRect(x,y,w,h,10);ctx.fill();
+  if(bd!=='transparent'){ctx.strokeStyle=bd;ctx.lineWidth=1.2;ctx.stroke();}
+  ctx.fillStyle=fg;ctx.font='800 14px "Trebuchet MS",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(label,x+w/2,y+h/2+1);ctx.restore();
+}
+
+updSetupHint();
+requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

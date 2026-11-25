@@ -274,3 +274,7 @@ Die restlichen 60 Spiele wurden aus der 3D-Kandidatenliste entfernt, da eine 3D-
 13. **Seitenansicht-Physik-Rennen im Block-Stil:**
    - *Schrottkiste: Block-Rallye (`games/schrottkiste.html`)*  
    *Begründung:* Das Spiel lebt von der reinen Seitenansicht: Rampen, Loopings, Wippen und Abrissbirnen sind 2D-Starrkörper-Physik (Matter.js), und die einzige Steuerung – Gas und Rückwärts, in der Luft zum Kippen – setzt voraus, dass man Neigung und Gelände auf einen Blick sieht. Eine 3D-Kamera würde die Landewinkel verschleiern und den Block-Look zerstören.
+
+14. **Technische Zerspanungs-Simulation (Dreh- & Fräs-Werkstatt):**
+   - *Dreh- & Fräs-Werkstatt: Zerspanungs-Simulator (`games/drehbank.html`)*  
+   *Begründung:* Die Mechanik ist die technische Zeichnung: Das rotationssymmetrische Werkstück wird als Radius-pro-Station-Profil im Querschnitt simuliert, Ist-Kontur gegen gestrichelte Soll-Kontur mit Mikrometer-Maßanzeige verglichen, und Zustelltiefe, Toleranzband und Untermaß müssen auf einen Blick ablesbar sein. Genau diese Maßgenauigkeit lebt von der verzerrungsfreien 2D-Seitenansicht; eine 3D-Kamera mit Perspektive und Tiefenunschärfe würde das Ablesen von Ø-Maßen und Toleranzen unmöglich machen.
