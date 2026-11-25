@@ -97,6 +97,14 @@ table { border-collapse:collapse; width:100%; }
 .quote small { display:block; color:var(--muted); font-size:10.5px; }
 .quote b { font-size:15px; font-variant-numeric:tabular-nums; }
 .quote .sp { color:var(--muted); font-size:11px; padding:0; }
+#tkHold { display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin:-2px 0 10px; padding:7px 10px; border-radius:8px; background:var(--panel2); border:1px solid var(--line); font-size:12.5px; }
+#tkHold .hl { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
+#tkHold b { font-variant-numeric:tabular-nums; }
+#tkHold .pill { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; font-weight:700; }
+#tkHold .pill.long { background:#16c78418; border:1px solid #16c78455; color:var(--up); }
+#tkHold .pill.short { background:#ea394318; border:1px solid #ea394355; color:var(--down); }
+#tkHold .pill.opt { background:#a78bfa18; border:1px solid #a78bfa55; color:var(--purple); }
+#tkHold.empty { color:var(--muted); }
 #ticket label.l { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin:9px 0 4px; }
 #ticket .seg { display:flex; width:100%; }
 #ticket .seg button { flex:1; padding:6px 4px; }
@@ -258,6 +266,7 @@ table { border-collapse:collapse; width:100%; }
     <div class="sp" id="tkSpread">–</div>
     <div class="qa"><small>Brief · Kauf</small><b id="tkAsk">–</b></div>
   </div>
+  <div id="tkHold" class="empty"><span class="hl">Mein Bestand</span><span>–</span></div>
   <div class="seg" id="tkMode"><button data-m="cfd" class="on">Long / Short</button><button data-m="opt">Optionen</button></div>
 
   <div id="pCfd">
@@ -1922,6 +1931,35 @@ function updateTicket() {
   const sp = askOf(a) - bidOf(a);
   $('tkSpread').innerHTML = 'Spread<br>' + (a.cls === 'fx' ? fmt(sp * 10000, 1) + ' Pips' : fmt(a.sp * 100, 2) + ' %');
   if (tk.mode === 'cfd') updateCfdSummary(); else updateOptSummary();
+  renderHoldings();
+}
+
+// Zeigt, wie viel vom aktuell gewählten Instrument im Bestand ist
+function renderHoldings() {
+  const el = $('tkHold');
+  if (!el) return;
+  if (!sel || !acct) { el.className = 'empty'; el.innerHTML = '<span class="hl">Mein Bestand</span><span>–</span>'; return; }
+  const sym = sel.sym;
+  let longU = 0, shortU = 0, pnl = 0;
+  for (const p of acct.positions) {
+    if (p.sym !== sym) continue;
+    if (p.side > 0) longU += p.units; else shortU += p.units;
+    pnl += posPnl(p);
+  }
+  let opt = 0;
+  for (const o of acct.options) { if (o.sym === sym) opt += o.qty; }
+  if (longU === 0 && shortU === 0 && opt === 0) {
+    el.className = 'empty';
+    el.innerHTML = '<span class="hl">Mein Bestand</span><span>Noch keine Position in ' + esc(sym) + '</span>';
+    return;
+  }
+  el.className = '';
+  let h = '<span class="hl">Mein Bestand</span>';
+  if (longU > 0) h += '<span class="pill long">▲ <b>' + fu(longU) + '</b> Stück Long</span>';
+  if (shortU > 0) h += '<span class="pill short">▼ <b>' + fu(shortU) + '</b> Stück Short</span>';
+  if (opt > 0) h += '<span class="pill opt"><b>' + fu(opt) + '</b> Optionen</span>';
+  if (longU > 0 || shortU > 0) h += '<span class="' + (pnl >= 0 ? 'up' : 'dn') + '">' + sEur(pnl) + '</span>';
+  el.innerHTML = h;
 }
 
 function updateCfdSummary() {
