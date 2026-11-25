@@ -89,6 +89,7 @@ Nützliche Browser-Werkzeuge mit modernem Canvas-, Web Audio- und Sensor-Support
 * **[`pixelfont/index.html`](pixelfont/index.html)** — *8x8 Pixel Font Studio*: Bitmap-Schrifteditor mit CRT-Vorschau und Export.
 * **[`tracker/index.html`](tracker/index.html)** — *Satellite Tracker*: Live-Überflugrechner und Weltkarten-Tracking.
 * **ConsensusGraph** — *Wissenschaftliche Papers & Studien*: Evidenz- und Konsens-Suche via PubMed ([historie.rwpxe.com](https://historie.rwpxe.com)).
+* **[`bitlocker/index.html`](bitlocker/index.html)** — *BitLocker Recovery Screen (Prank)*: Pixelgenauer, rein optischer Nachbau des Windows-BitLocker-Wiederherstellungsbildschirms. Reine Scherz-/Deko-Seite — das Eingabefeld ist kosmetisch, sendet nichts und schaltet nichts frei.
 
 ---
 
