@@ -64,7 +64,7 @@ Der Arcade-Hub bietet über 65 Minigames mit Highscores, Sound-Effekten (Web Aud
   * [`games/schrottkiste.html`](games/schrottkiste.html) — *Schrottkiste: Block-Rallye (2D-Seitenansicht im Block-Stil, flüssig in voller Auflösung mit interpolierter Matter.js-Physik und Längslenker-Federung: nur Gas & Rückwärts vom Start ins Ziel, in der Luft kippt man das Auto damit – Saltos geben Punkte, Dauergas löst keinen ungewollten Salto aus; Rampen & Schanzen, Loopings, Treppen, Wippen, Wackelbrücken, Kistenstapel, Fässer & Abrissbirnen; 6 Autos (Käfer, Pickup, Rennwagen, Monstertruck, Kleinbus, Jeep) mit eigener Physik zum Freischalten, 36 Level in 4 Themen, Bestzeiten & Punkte-Rekorde im localStorage, Touch-Pedale)*
   * [`games/gischtjagd.html`](games/gischtjagd.html) — *Gischtjagd 3D (Rennboot-Grand-Prix: Drift-Turbo, Nitro, Schanzen, 3 Strecken, 5 KI-Gegner)*
   * [`games/lokfuehrer.html`](games/lokfuehrer.html) — *ICE-Lokführer 3D: Bitte zurückbleiben! (Führerstand-Simulation, Spline-Gleise, Sifa, Bahnsteighalte & Verspätungen)*
-  * [`games/stadiumrush.html`](games/stadiumrush.html) — *Stadium Rush (Polytrack & Trackmania 3D-Zeitfahren, 68 Strecken A01–P68 in 5 Saisons, LAN-Multiplayer)*
+  * [`games/stadiumrush.html`](games/stadiumrush.html) — *Stadium Rush (Polytrack & Trackmania 3D-Zeitfahren, 80 Strecken A01–B80 in 6 Saisons, Online-Multiplayer)*
   * [`games/buerostuhl.html`](games/buerostuhl.html) — *Bürostuhl GP*
   * [`games/skytower.html`](games/skytower.html) — *Sky Tower 3D Stack Master*
   * [`games/kranfuehrer.html`](games/kranfuehrer.html) — *Kranführer 3D (Turmdrehkran: Pendeln abfangen, Bauteile präzise absetzen, Wind & Bauarbeiter, 5 Level)*
