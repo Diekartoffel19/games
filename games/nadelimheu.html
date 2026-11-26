@@ -466,37 +466,106 @@ function puff(p, n, spread = 0.25) {
   }
 }
 
+// ================= Heu-Shader: lose Halme, Wackeln beim Greifen, Brise, Zielmarkierung =================
+const hayU = { uHit: { value: new THREE.Vector3(0, -99, 0) }, uHitT: { value: 9 }, uHitA: { value: 0 }, uTime: windU, uHover: { value: new THREE.Vector3(0, -99, 0) } };
+// out: Normale zur Außenrichtung der Zelle ziehen (Haufen schattiert als Ganzes); wind: Ausdruck für Halm-Spitzen
+function hayShader(m, key, out, wind, noFlip) {
+  m.customProgramCacheKey = () => key;
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, hayU);
+    sh.vertexShader = 'uniform vec3 uHit; uniform float uHitT, uHitA, uTime;\nvarying vec3 vWPos;\n' + (out ? 'attribute vec3 aOut;\n' : '') + sh.vertexShader
+      .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\n' + (out ? `transformedNormal = normalize(mix(transformedNormal, normalize((viewMatrix * modelMatrix * vec4(aOut, 0.0)).xyz), ${out.toFixed(2)}));` : ''))
+      .replace('#include <project_vertex>', `
+        vec4 wp = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          wp = instanceMatrix * wp;
+        #endif
+        wp = modelMatrix * wp;
+        float hd = distance(wp.xyz, uHit);
+        float fo = exp(-hd * hd * 6.0) * uHitA;
+        wp.xyz += normalize(wp.xyz - uHit + vec3(0.0, 0.02, 0.0)) * fo * exp(-uHitT * 4.5) * sin(uHitT * 24.0) * 0.05;
+        wp.xz += vec2(sin(uTime * 1.9 + wp.z * 1.7 + wp.y * 2.3), cos(uTime * 1.4 + wp.x * 1.9)) * (${wind});
+        vWPos = wp.xyz;
+        vec4 mvPosition = viewMatrix * wp;
+        gl_Position = projectionMatrix * mvPosition;`);
+    sh.fragmentShader = 'uniform vec3 uHover;\nvarying vec3 vWPos;\n' + sh.fragmentShader
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vec3(1.0, 0.72, 0.38) * 0.2 * smoothstep(0.36, 0.04, distance(vWPos, uHover));')
+      .replace('#include <normal_fragment_begin>', noFlip ? THREE.ShaderChunk.normal_fragment_begin.replace('normal = normal * faceDirection;', '') : '#include <normal_fragment_begin>');
+  };
+}
+function hayPoke(p, amp) { hayU.uHit.value.copy(p); hayU.uHitT.value = 0; hayU.uHitA.value = amp; }
+
+// Halm-Strähnen als Alpha-Textur (prozedural): viele einzelne, leicht gebogene Halme
+const strawTex = (() => {
+  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S; const x = cv.getContext('2d');
+  x.lineCap = 'round';
+  for (let n = 0; n < 150; n++) {
+    const len = rand(0.4, 0.88) * S, ang = rand(-0.45, 0.45) + (Math.random() < 0.18 ? rand(-1.3, 1.3) : 0);
+    const cx = rand(0.3, 0.7) * S, cy = rand(0.14, 0.86) * S, dx = Math.cos(ang) * len / 2, dy = Math.sin(ang) * len / 2, bend = rand(-0.1, 0.1);
+    const w = rand(3.5, 7.5), h = rand(36, 50), l = rand(46, 74), sat = rand(45, 72);
+    const path = () => { x.beginPath(); x.moveTo(cx - dx, cy - dy); x.quadraticCurveTo(cx - dy * bend * 2, cy + dx * bend * 2, cx + dx, cy + dy); };
+    path(); x.lineWidth = w; x.strokeStyle = `hsl(${h},${sat}%,${l - 24}%)`; x.stroke();
+    path(); x.lineWidth = w * 0.58; x.strokeStyle = `hsl(${h},${sat}%,${l}%)`; x.stroke();
+    path(); x.lineWidth = w * 0.18; x.strokeStyle = `hsla(${h + 6},85%,${Math.min(93, l + 20)}%,0.85)`; x.stroke();
+  }
+  const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = MAXANISO; return t;
+})();
+const cardGeo = (() => { const g = new THREE.PlaneGeometry(1, 0.55, 4, 1), P = g.attributes.position; for (let i = 0; i < P.count; i++) P.setZ(i, 0.09 * P.getX(i) * P.getX(i)); return g; })();
+const cardMat = new THREE.MeshStandardMaterial({ map: strawTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.88 });
+hayShader(cardMat, 'hayCard', 0.86, '0.006 * (0.3 + abs(position.x) * 2.0)', true);
+const cardDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: strawTex, alphaTest: 0.42 });
+const cardSolo = new THREE.MeshStandardMaterial({ map: strawTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.7 });
+// Büschel aus Halm-Karten (für Gabel und Hand)
+function makeTuft(n, s) {
+  const g = new THREE.Group();
+  for (let i = 0; i < n; i++) { const m = new THREE.Mesh(cardGeo, cardSolo); m.rotation.set(rand(-1.2, 1.2), rand(0, 6.28), rand(-0.6, 0.6)); m.position.set(rand(-0.3, 0.3), rand(-0.2, 0.2), rand(-0.3, 0.3)).multiplyScalar(s); m.scale.setScalar(s * rand(0.7, 1.1)); g.add(m); }
+  return g;
+}
+
 // ================= Fliegende & liegende Halme =================
-const FS = 5000;
-const fsMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.008, 0.004, 0.33), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), FS);
+const FS = 6000;
+const fsMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.007, 0.0035, 0.33), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }), FS);
 fsMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FS * 3), 3);
 fsMesh.count = 0; fsMesh.frustumCulled = false; fsMesh.castShadow = false; fsMesh.receiveShadow = true; scene.add(fsMesh);
-const fsP = new Float32Array(FS * 3), fsV = new Float32Array(FS * 3), fsR = new Float32Array(FS * 3), fsA = new Float32Array(FS * 3), fsS = new Uint8Array(FS);
+const fsP = new Float32Array(FS * 3), fsV = new Float32Array(FS * 3), fsR = new Float32Array(FS * 3), fsA = new Float32Array(FS * 3), fsS = new Uint8Array(FS), fsSc = new Float32Array(FS);
 let fsNext = 0, fsFlying = 0;
 const dmy = new THREE.Object3D(), tmpC = new THREE.Color();
 const STRAW_COLS = ['#e2c070', '#d4ac55', '#ecd28e', '#c99b45', '#dcbc6a'].map(lin);
-function spawnStraw(p, v) {
-  const i = fsNext++ % FS;
-  fsP[i * 3] = p.x; fsP[i * 3 + 1] = p.y; fsP[i * 3 + 2] = p.z;
-  fsV[i * 3] = v.x; fsV[i * 3 + 1] = v.y; fsV[i * 3 + 2] = v.z;
-  fsR[i * 3] = rand(0, 6); fsR[i * 3 + 1] = rand(0, 6); fsR[i * 3 + 2] = rand(0, 6);
-  fsA[i * 3] = rand(-9, 9); fsA[i * 3 + 1] = rand(-6, 6); fsA[i * 3 + 2] = rand(-9, 9);
-  if (fsS[i] !== 1) fsFlying++;
-  fsS[i] = 1; fsMesh.count = Math.min(FS, Math.max(fsMesh.count, i + 1));
-  fsMesh.setColorAt(i, STRAW_COLS[i % 5]); fsMesh.instanceColor.needsUpdate = true;
+function fsWrite(i) {
+  const o = i * 3; dmy.position.set(fsP[o], fsP[o + 1], fsP[o + 2]); dmy.rotation.set(fsR[o], fsR[o + 1], fsR[o + 2]); dmy.scale.setScalar(fsSc[i]); dmy.updateMatrix();
+  fsMesh.setMatrixAt(i, dmy.matrix);
+}
+function spawnStraw(p, v, sc = 1, resting = false) {
+  const i = fsNext++ % FS, o = i * 3;
+  fsP[o] = p.x; fsP[o + 1] = p.y; fsP[o + 2] = p.z;
+  fsV[o] = v.x; fsV[o + 1] = v.y; fsV[o + 2] = v.z;
+  fsR[o] = resting ? rand(-0.08, 0.08) : rand(0, 6); fsR[o + 1] = rand(0, 6); fsR[o + 2] = resting ? rand(-0.08, 0.08) : rand(0, 6);
+  fsA[o] = rand(-7, 7); fsA[o + 1] = rand(-4, 4); fsA[o + 2] = rand(-7, 7);
+  fsSc[i] = sc * rand(0.7, 1.25);
+  if (fsS[i] === 1) fsFlying--;
+  fsS[i] = resting ? 2 : 1; if (!resting) fsFlying++;
+  fsMesh.count = Math.min(FS, Math.max(fsMesh.count, i + 1));
+  tmpC.copy(STRAW_COLS[(i * 7) % 5]).multiplyScalar(rand(0.8, 1.1)); fsMesh.setColorAt(i, tmpC); fsMesh.instanceColor.needsUpdate = true;
+  if (resting) { fsWrite(i); fsMesh.instanceMatrix.needsUpdate = true; }
+}
+// verstreutes Heu rund um den Haufen
+function scatterGround(n, r0, r1) {
+  for (let q = 0; q < n; q++) { const a = Math.random() * 6.283, r = r0 + Math.pow(Math.random(), 1.8) * (r1 - r0); spawnStraw(_v.set(Math.cos(a) * r, 0.006 + Math.random() * 0.02, Math.sin(a) * r), _v2.set(0, 0, 0), rand(0.35, 0.9), true); }
 }
 function updateStraws(dt) {
   if (!fsFlying) return;
-  const drag = Math.pow(0.35, dt);
+  const drag = Math.pow(0.3, dt), spin = Math.pow(0.55, dt);
   for (let i = 0; i < fsMesh.count; i++) {
     if (fsS[i] !== 1) continue;
     const o = i * 3;
-    fsV[o] *= drag; fsV[o + 2] *= drag; fsV[o + 1] = fsV[o + 1] * drag - 7.5 * dt;
+    // Halme flattern: starker Luftwiderstand, Seitwärts-Taumeln, geringe Fallgeschwindigkeit
+    fsV[o] = fsV[o] * drag + Math.sin(now * 7 + i) * 1.4 * dt; fsV[o + 2] = fsV[o + 2] * drag + Math.cos(now * 6 + i * 1.7) * 1.4 * dt;
+    fsV[o + 1] = Math.max(-2.4 * fsSc[i] - 0.6, fsV[o + 1] * Math.pow(0.6, dt) - 8.5 * dt);
     fsP[o] += fsV[o] * dt; fsP[o + 1] += fsV[o + 1] * dt; fsP[o + 2] += fsV[o + 2] * dt;
+    fsA[o] *= spin; fsA[o + 2] *= spin; fsA[o] += rand(-3, 3) * dt; fsA[o + 2] += rand(-3, 3) * dt;
     fsR[o] += fsA[o] * dt; fsR[o + 1] += fsA[o + 1] * dt; fsR[o + 2] += fsA[o + 2] * dt;
-    if (fsP[o + 1] <= 0.012) { fsP[o + 1] = 0.006 + Math.random() * 0.012; fsR[o] = rand(-0.08, 0.08); fsR[o + 2] = rand(-0.08, 0.08); fsS[i] = 2; fsFlying--; }
-    dmy.position.set(fsP[o], fsP[o + 1], fsP[o + 2]); dmy.rotation.set(fsR[o], fsR[o + 1], fsR[o + 2]); dmy.scale.setScalar(1); dmy.updateMatrix();
-    fsMesh.setMatrixAt(i, dmy.matrix);
+    if (fsP[o + 1] <= 0.012) { fsP[o + 1] = 0.006 + Math.random() * 0.014; fsR[o] = rand(-0.08, 0.08); fsR[o + 2] = rand(-0.08, 0.08); fsS[i] = 2; fsFlying--; }
+    fsWrite(i);
   }
   fsMesh.instanceMatrix.needsUpdate = true;
 }
@@ -504,7 +573,7 @@ function updateStraws(dt) {
 // ================= Der Heuhaufen (Voxel-Zellen mit Halm-Dichte) =================
 const C = 0.3;
 let NX, NY, NZ, GX, GZ, dens, dmax, fall, depthA, instOf, total = 0, removed = 0, stackR = 1, stackH = 1;
-let clumps = null, strays = null, baseCol = null, dirty = true, unstable = false, anyFall = false;
+let clumps = null, strays = null, cards = null, dirty = true, unstable = false, anyFall = false;
 const clumpGeo = (() => {
   const g = new THREE.IcosahedronGeometry(0.5, 1), P = g.attributes.position, nrm = [];
   for (let i = 0; i < P.count; i++) {
@@ -516,15 +585,12 @@ const clumpGeo = (() => {
   return g;
 })();
 const hayMat = new THREE.MeshStandardMaterial({ map: TEX.hay, roughness: 0.95, color: 0xffffff });
-// Haufen-Material: Normale je Klumpen wird mit der Außenrichtung der Zelle gemischt, so schattiert der Haufen als eine Fläche statt als Kissenstapel
-const stackMat = hayMat.clone();
-stackMat.onBeforeCompile = sh => {
-  sh.vertexShader = 'attribute vec3 aOut;\n' + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
-    vec3 sn = normalize((viewMatrix * modelMatrix * vec4(aOut, 0.0)).xyz);
-    transformedNormal = normalize(mix(transformedNormal, sn, 0.72));`);
-};
-const strayGeo = new THREE.BoxGeometry(0.006, 0.003, 0.46); strayGeo.translate(0, 0, 0.13);
-const strayMat = new THREE.MeshStandardMaterial({ color: lin('#e8c878'), roughness: 0.85 });
+// Kern-Klumpen: dunkle, dichte Unterlage zwischen den losen Halmen
+const stackMat = hayMat.clone(); stackMat.color = lin('#a89468');
+hayShader(stackMat, 'hayCore', 0.8, '0.0', false);
+const strayGeo = new THREE.BoxGeometry(0.005, 0.003, 0.46); strayGeo.translate(0, 0, 0.13);
+const strayMat = new THREE.MeshStandardMaterial({ color: lin('#e8c878'), roughness: 0.75 });
+hayShader(strayMat, 'hayStray', 0, '0.012 * max(position.z, 0.0) * 3.0', false);
 const I3 = (i, j, k) => (j * NZ + k) * NX + i;
 const filled = (i, j, k) => i >= 0 && j >= 0 && k >= 0 && i < NX && j < NY && k < NZ && dens[I3(i, j, k)] > 0;
 const cellCenter = (id, v) => { const i = id % NX, k = Math.floor(id / NX) % NZ, j = Math.floor(id / (NX * NZ)); return v.set(GX + (i + 0.5) * C, (j + 0.5) * C + fall[id], GZ + (k + 0.5) * C); };
@@ -555,23 +621,22 @@ function genStack(level, rain) {
   }
   anyFall = !!rain;
   const cap = N;
-  if (clumps) { scene.remove(clumps, strays); if (clumps.dispose) { clumps.dispose(); strays.dispose(); } }
-  const cg = clumpGeo.clone(); cg.setAttribute('aOut', new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3));
-  if (clumps) clumps.geometry.dispose();
-  clumps = new THREE.InstancedMesh(cg, stackMat, cap);
-  clumps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-  strays = new THREE.InstancedMesh(strayGeo, strayMat, cap * 3);
-  strays.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 9), 3);
-  baseCol = new Float32Array(cap * 3);
-  for (const m of [clumps, strays]) { m.frustumCulled = false; m.castShadow = true; m.receiveShadow = true; m.count = 0; scene.add(m); }
-  strays.castShadow = false;
+  for (const m of [clumps, strays, cards]) if (m) { scene.remove(m); m.geometry !== strayGeo && m.geometry.dispose(); if (m.dispose) m.dispose(); }
+  const inst = (geo, mat, n) => { const g = geo.clone(); g.setAttribute('aOut', new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3)); const m = new THREE.InstancedMesh(g, mat, n); m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3); m.frustumCulled = false; m.receiveShadow = true; m.count = 0; scene.add(m); return m; };
+  clumps = inst(clumpGeo, stackMat, cap); clumps.castShadow = true;
+  cards = inst(cardGeo, cardMat, cap * 8); cards.castShadow = true; cards.customDepthMaterial = cardDepth;
+  strays = new THREE.InstancedMesh(strayGeo, strayMat, cap * 4);
+  strays.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 12), 3);
+  strays.frustumCulled = false; strays.receiveShadow = true; strays.count = 0; scene.add(strays);
   placeItems(level);
+  scatterGround(rain ? 260 : 420, stackR * 0.9, stackR + 3.2);
   dirty = true; hover = -1;
 }
 
-const _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _z = new THREE.Vector3(0, 0, 1), _e = new THREE.Euler();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _n = new THREE.Vector3(), _z = new THREE.Vector3(0, 0, 1), _e = new THREE.Euler();
 function rebuild() {
-  let n = 0, s = 0; anyFall = false;
+  let n = 0, s = 0, c = 0; anyFall = false;
+  const cOut = cards.geometry.attributes.aOut, kOut = clumps.geometry.attributes.aOut;
   for (let j = 0; j < NY; j++) for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) {
     const id = I3(i, j, k); instOf[id] = -1;
     const d = dens[id]; if (!d) continue;
@@ -582,40 +647,47 @@ function rebuild() {
     if (fall[id] > 0) anyFall = true;
     if (!ex && fall[id] <= 0.001) continue;
     const h1 = hash(id * 3 + 1), h2 = hash(id * 3 + 2), h3 = hash(id * 3 + 3);
-    const f = d / dmax[id];
+    const f = d / dmax[id], sf = Math.sqrt(f);
     cellCenter(id, _v);
-    dmy.position.copy(_v); dmy.rotation.set(h1 * 6.28, h2 * 6.28, h3 * 6.28);
-    dmy.scale.setScalar(C * (0.8 + 1.15 * Math.sqrt(f)) * (0.94 + 0.12 * h1)); dmy.updateMatrix();
-    clumps.setMatrixAt(n, dmy.matrix);
-    const dp = depthA[id], b = Math.min(1.1, 0.72 + 0.06 * ex + 0.08 * h2 + 0.1 * (j / NY));
-    tmpC.setRGB(b * (1 - 0.18 * dp), b * (1 - 0.1 * dp), b * (1 - 0.3 * dp));
-    _v2.set(ox, oy + 0.35, oz).normalize(); clumps.geometry.attributes.aOut.setXYZ(n, _v2.x, _v2.y, _v2.z);
-    clumps.setColorAt(n, tmpC); baseCol[n * 3] = tmpC.r; baseCol[n * 3 + 1] = tmpC.g; baseCol[n * 3 + 2] = tmpC.b;
+    _n.set(ox, oy + 0.35, oz).normalize();
+    const dp = depthA[id], b = Math.min(1.1, 0.74 + 0.05 * ex + 0.08 * h2 + 0.1 * (j / NY));
+    // Kern
+    dmy.position.copy(_v); dmy.rotation.set(h1 * 6.28, h2 * 6.28, h3 * 6.28); dmy.scale.setScalar(C * (0.6 + 0.55 * sf)); dmy.updateMatrix();
+    clumps.setMatrixAt(n, dmy.matrix); kOut.setXYZ(n, _n.x, _n.y, _n.z);
+    tmpC.setRGB(b * (1 - 0.18 * dp), b * (1 - 0.1 * dp), b * (1 - 0.3 * dp)); clumps.setColorAt(n, tmpC);
     instOf[id] = n; n++;
-    if (ex) {
-      const cnt = oy > 0 ? 7 : 4;
-      for (let q = 0; q < cnt; q++) {
-        const hq = hash(id * 7 + q), hr = hash(id * 13 + q * 5), hs = hash(id * 17 + q * 3);
-        _v2.set(ox + (hq - 0.5) * 2.2, oy + (hr - 0.5) * 2.2 + 0.3, oz + (hs - 0.5) * 2.2).normalize();
-        _q.setFromUnitVectors(_z, _v2);
-        dmy.quaternion.copy(_q); dmy.position.copy(_v).addScaledVector(_v2, C * 0.25);
-        dmy.scale.set(1, 1, (0.5 + 0.9 * hq) * (0.5 + 0.5 * f)); dmy.updateMatrix();
-        strays.setMatrixAt(s, dmy.matrix);
-        tmpC.copy(STRAW_COLS[(id + q) % 5]).multiplyScalar(0.85 + 0.25 * hr); strays.setColorAt(s, tmpC); s++;
-      }
+    // lose Halm-Strähnen, meist flach am Haufen anliegend, manche abstehend
+    const nc = Math.round((oy > 0 ? 8 : 5) * (0.5 + 0.5 * sf)) + (ex > 2 ? 2 : 0);
+    for (let q = 0; q < nc; q++) {
+      const hq = hash(id * 11 + q), hr = hash(id * 23 + q * 7), hs = hash(id * 31 + q * 3), ht = hash(id * 41 + q * 5);
+      if (hq < 0.78) _v2.set(_n.x + (hr - 0.5) * 1.3, _n.y + (hs - 0.5) * 1.3, _n.z + (ht - 0.5) * 1.3).normalize();
+      else _v2.set(hr - 0.5, hs - 0.5, ht - 0.5).normalize();
+      _q.setFromUnitVectors(_z, _v2); _q2.setFromAxisAngle(_v2, hr * 6.283); dmy.quaternion.multiplyQuaternions(_q2, _q);
+      dmy.position.copy(_v).addScaledVector(_n, C * (0.22 + 0.3 * hs)); dmy.position.x += (hr - 0.5) * C * 0.9; dmy.position.y += (hs - 0.5) * C * 0.6; dmy.position.z += (ht - 0.5) * C * 0.9;
+      dmy.scale.setScalar((0.42 + 0.42 * hq) * (0.55 + 0.45 * sf)); dmy.updateMatrix();
+      cards.setMatrixAt(c, dmy.matrix); cOut.setXYZ(c, _n.x, _n.y, _n.z);
+      const cb = b * (0.8 + 0.26 * ht) * (1 - 0.12 * dp); tmpC.setRGB(cb, cb * (0.97 - 0.05 * dp), cb * (0.92 - 0.15 * dp)); cards.setColorAt(c, tmpC); c++;
+    }
+    // einzelne abstehende Halme
+    const ns = oy > 0 ? 4 : 2;
+    for (let q = 0; q < ns; q++) {
+      const hq = hash(id * 7 + q), hr = hash(id * 13 + q * 5), hs = hash(id * 17 + q * 3);
+      _v2.set(_n.x + (hq - 0.5) * 2.2, _n.y + (hr - 0.5) * 2.2 + 0.2, _n.z + (hs - 0.5) * 2.2).normalize();
+      _q.setFromUnitVectors(_z, _v2);
+      dmy.quaternion.copy(_q); dmy.position.copy(_v).addScaledVector(_n, C * 0.3);
+      dmy.scale.set(1, 1, (0.5 + 0.9 * hq) * (0.5 + 0.5 * f)); dmy.updateMatrix();
+      strays.setMatrixAt(s, dmy.matrix);
+      tmpC.copy(STRAW_COLS[(id + q) % 5]).multiplyScalar(0.85 + 0.25 * hr); strays.setColorAt(s, tmpC); s++;
     }
   }
-  clumps.count = n; strays.count = s;
-  clumps.instanceMatrix.needsUpdate = clumps.instanceColor.needsUpdate = clumps.geometry.attributes.aOut.needsUpdate = true;
-  strays.instanceMatrix.needsUpdate = strays.instanceColor.needsUpdate = true;
+  clumps.count = n; strays.count = s; cards.count = c;
+  for (const m of [clumps, strays, cards]) { m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
+  kOut.needsUpdate = cOut.needsUpdate = true;
   dirty = false;
-  if (hover >= 0) highlight(hover, true);
 }
+// Zielmarkierung: warmes Glimmen um die anvisierte Zelle (im Heu-Shader)
 function highlight(id, on) {
-  const n = instOf[id]; if (n < 0 || n >= clumps.count) return;
-  const m = on ? 1.45 : 1;
-  tmpC.setRGB(baseCol[n * 3] * m, baseCol[n * 3 + 1] * m, baseCol[n * 3 + 2] * m);
-  clumps.setColorAt(n, tmpC); clumps.instanceColor.needsUpdate = true;
+  if (on && id >= 0) cellCenter(id, hayU.uHover.value); else hayU.uHover.value.set(0, -99, 0);
 }
 // Schwerkraft: Zellen ohne Unterlage rutschen nach unten (gräbst du unten, stürzt es nach)
 let settleT = 0;
@@ -748,11 +820,20 @@ function updateItems(dt) {
 const vm = new THREE.Group(); vmScene.add(vm);
 const R = build('hand', false); const handG = new THREE.Group(); handG.add(R.root); vm.add(handG);
 const fingers = ['f1', 'f2', 'f3', 'f4'];
-R.sleeve.scale.set(0.78, 1, 0.78); R.sleeve.rotation.set(0.5, 0.32, 0); // abgeknicktes Handgelenk: Unterarm kommt von unten rechts
-MATS['#8e2b22s'].color.copy(lin('#6a2219'));
-function curlHand(P, c, spread = 0) {
-  fingers.forEach((f, i) => { P[f].rotation.set(-c * (0.9 + 0.08 * i), (i - 1.5) * spread * 0.12, 0); P[f + '_tip'].rotation.x = -c * 1.25; });
-  P.th.rotation.set(-c * 0.35, -c * 0.7, -c * 0.25); P.th_tip.rotation.x = -c * 0.6;
+R.sleeve.scale.set(0.8, 0.8, 1); R.sleeve.rotation.set(0.85, 0.42, 0); // abgeknicktes Handgelenk: Unterarm kommt von unten rechts
+// Flanellhemd: kariertes Muster mit zylindrischen UVs am Ärmel
+{
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const x = cv.getContext('2d');
+  x.fillStyle = '#7a2219'; x.fillRect(0, 0, 128, 128);
+  x.fillStyle = 'rgba(20,10,10,.55)'; for (let i = 0; i < 128; i += 32) { x.fillRect(i, 0, 12, 128); x.fillRect(0, i, 128, 12); }
+  x.fillStyle = 'rgba(230,200,170,.18)'; for (let i = 18; i < 128; i += 32) { x.fillRect(i, 0, 2, 128); x.fillRect(0, i, 128, 2); }
+  const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  OBJ.hand_sleeve.geos.forEach(({ g }) => { const P = g.attributes.position, uv = new Float32Array(P.count * 2); for (let i = 0; i < P.count; i++) { uv[i * 2] = Math.atan2(P.getX(i), P.getY(i)) / 6.283 * 3 + 1.5; uv[i * 2 + 1] = P.getZ(i) * 7; } g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); });
+  const fm = MATS['#8e2b22s']; fm.map = t; fm.color.set(0xffffff); fm.roughness = 0.95; fm.needsUpdate = true;
+}
+function curlHand(P, c, spread = 0, cf = null) {
+  fingers.forEach((f, i) => { const ci = cf ? cf(i) : c; P[f].rotation.set(-ci * (0.9 + 0.08 * i), (i - 1.5) * spread * 0.12, 0); P[f + '_tip'].rotation.x = -ci * 1.25; });
+  const ct = cf ? cf(1.5) : c; P.th.rotation.set(-ct * 0.35, -ct * 0.7, -ct * 0.25); P.th_tip.rotation.x = -ct * 0.6;
 }
 // Halmbündel in der Hand
 const bundle = new THREE.Group(); R.root.add(bundle); bundle.position.set(0, -0.018, 0.075);
@@ -762,8 +843,10 @@ for (let i = 0; i < 14; i++) {
   m.rotation.set(rand(-0.25, 0.25), rand(-0.4, 0.4), Math.PI / 2 + rand(-0.3, 0.3)); m.position.set(rand(-0.02, 0.02), rand(-0.012, 0.012), rand(-0.02, 0.02));
   bundle.add(m); bundleStraws.push(m);
 }
-const bundleClump = new THREE.Mesh(clumpGeo, hayMat); bundleClump.scale.setScalar(0.1); bundleClump.position.set(0, -0.03, 0); bundle.add(bundleClump);
-function showBundle(n) { bundle.visible = n > 0; bundleStraws.forEach((m, i) => m.visible = i < Math.min(14, n)); bundleClump.visible = n > 14; bundleClump.scale.setScalar(0.06 + Math.min(0.1, n * 0.002)); }
+const bundleClump = makeTuft(6, 0.09); bundleClump.position.set(0, -0.03, 0); bundle.add(bundleClump);
+// der gerade herausgezogene Halm (spannt sich zwischen Fingern und Haufen)
+const strand = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.0025, 1, 5), new THREE.MeshStandardMaterial({ color: STRAW_COLS[2], roughness: 0.7 })); strand.visible = false; vm.add(strand);
+function showBundle(n) { bundle.visible = n > 0; bundleStraws.forEach((m, i) => m.visible = i < Math.min(14, n)); bundleClump.visible = n > 14; bundleClump.scale.setScalar(0.6 + Math.min(1, n * 0.02)); }
 showBundle(0);
 // gehaltene Nadel (Fund-Animation)
 const heldNeedle = makeItemMesh('needle'); heldNeedle.visible = false; R.root.add(heldNeedle); heldNeedle.position.set(-0.012, -0.03, -0.12); heldNeedle.rotation.set(0.2, 0.4, 0.15);
@@ -773,8 +856,8 @@ const heldSpark = new THREE.Sprite(needleSpark.material.clone()); heldSpark.scal
 const forkG = new THREE.Group(); const FK = build('fork', false); forkG.add(FK.root); vm.add(forkG);
 const fh1 = build('hand', false), fh2 = build('hand', false);
 [fh1, fh2].forEach((h, i) => { curlHand(h, 1.35); h.sleeve.visible = false; FK.root.add(h.root); h.root.rotation.set(0, -Math.PI / 2, -0.6); h.root.position.set(0.035, 0.03, i ? -0.55 : 0.02); });
-fh2.root.scale.x = -1; fh2.root.rotation.set(0, Math.PI / 2, 0.6); fh2.root.position.x = -0.035;
-const forkClump = new THREE.Mesh(clumpGeo, hayMat); FK.root.add(forkClump); forkClump.position.set(0, 0.06, -1.27); forkClump.visible = false;
+fh2.root.visible = false; fh2.root.scale.x = -1; fh2.root.rotation.set(0, Math.PI / 2, 0.6); fh2.root.position.x = -0.035;
+const forkClump = makeTuft(11, 0.24); FK.root.add(forkClump); forkClump.position.set(0, 0.08, -1.26); forkClump.visible = false;
 
 // Laubbläser (aus Primitiven)
 const blowG = new THREE.Group(); vm.add(blowG);
@@ -910,7 +993,8 @@ $('cards').addEventListener('click', e => {
 });
 
 // ================= Spieler & Eingabe =================
-const P = { pos: new THREE.Vector3(0, 0, 6.5), vy: 0, ground: true, yaw: 0, pitch: -0.12, stepOff: 0, bob: 0 };
+const P = { pos: new THREE.Vector3(0, 0, 6.5), vy: 0, ground: true, yaw: 0, pitch: -0.12, stepOff: 0, bob: 0, land: 0 };
+let shake = 0;
 const PRAD = 0.28, PH = 1.7, EYE = 1.62;
 const keys = {}, mouse = { down: false, click: false };
 let state = 'title', tool = 'hand', stackTime = 0, magT = 0, now = 0, hover = -1, needleLook = false;
@@ -999,15 +1083,16 @@ function updatePlayer(dt) {
   const ny = P.pos.y + P.vy * dt;
   if (P.vy <= 0) {
     const top = cellsOverlap(P.pos.x, ny, P.pos.z), fl = Math.max(0, top);
-    if (ny <= fl) { if (!P.ground && P.vy < -4) rustle(0.6); P.pos.y = fl; P.vy = 0; P.ground = true; } else { P.pos.y = ny; P.ground = false; }
+    if (ny <= fl) { if (!P.ground && P.vy < -3) { rustle(0.6); P.land = Math.min(0.12, -P.vy * 0.012); } P.pos.y = fl; P.vy = 0; P.ground = true; } else { P.pos.y = ny; P.ground = false; }
   } else { if (cellsOverlap(P.pos.x, ny, P.pos.z) >= 0) P.vy = 0; else P.pos.y = ny; P.ground = false; }
   // Heu rutscht von oben auf dich → hochdrücken
   const inside = cellsOverlap(P.pos.x, P.pos.y, P.pos.z); if (inside > P.pos.y && inside - P.pos.y < 0.7) P.pos.y = inside;
   P.stepOff *= Math.pow(0.0005, dt);
   const moving = l > 0 && P.ground;
   if (moving) { P.bob += dt * sp * 2.3; stepAcc += dt * sp; if (stepAcc > 0.75) { stepAcc = 0; step(); } }
-  camera.position.set(P.pos.x, P.pos.y + EYE + P.stepOff + (moving ? Math.abs(Math.sin(P.bob)) * 0.035 : 0), P.pos.z);
-  camera.rotation.set(P.pitch, P.yaw, 0);
+  P.land = Math.max(0, P.land - dt * 0.35); shake = Math.max(0, shake - dt * 3);
+  camera.position.set(P.pos.x, P.pos.y + EYE + P.stepOff - P.land + (moving ? Math.abs(Math.sin(P.bob)) * 0.035 : 0), P.pos.z);
+  camera.rotation.set(P.pitch + Math.sin(now * 53) * shake * 0.01, P.yaw + Math.sin(now * 41 + 1) * shake * 0.01, (moving ? Math.sin(P.bob) * 0.006 : 0) + Math.sin(now * 37) * shake * 0.006);
   return moving;
 }
 
@@ -1036,7 +1121,9 @@ function commitGrab() {
   }
   if (a.taken) { addTaler(a.taken * PRICE[lv('preis')]); rustle(Math.min(1, a.taken / 10)); puff(a.point, Math.min(40, 6 + a.taken)); }
   if (a.type === 'hand') showBundle(a.taken);
-  else { forkClump.visible = a.taken > 0; forkClump.scale.setScalar(0.12 + Math.min(0.2, a.taken * 0.0016)); }
+  else { forkClump.visible = a.taken > 0; forkClump.scale.setScalar(0.5 + Math.min(0.9, a.taken * 0.006)); }
+  hayPoke(a.point, a.type === 'fork' ? 2.4 : 1); shake = Math.max(shake, a.type === 'fork' ? 0.9 : 0.25);
+  for (let i = 0; i < Math.min(14, 3 + a.taken); i++) spawnStraw(a.point, _u.set(rand(-0.8, 0.8), rand(0.4, 1.8), rand(-0.8, 0.8)), rand(0.25, 0.45));
 }
 const _w = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3();
 function releaseBundle(n, from) {
@@ -1044,7 +1131,8 @@ function releaseBundle(n, from) {
   const cnt = Math.min(n, from === 'fork' ? 50 : 14);
   for (let i = 0; i < cnt; i++) {
     _u.copy(_r).multiplyScalar(rand(2.2, 3.6)).addScaledVector(_w, rand(0.5, 1.8)); _u.y += rand(1.8, 3.2);
-    spawnStraw(_v.copy(from === 'fork' ? anim.point : camera.position).addScaledVector(_r, 0.35).add(_v2.set(rand(-0.1, 0.1), from === 'fork' ? 0.6 : -0.25, rand(-0.1, 0.1))), _u);
+    if (from === 'fork') FK.root.localToWorld(_v.set(rand(-0.1, 0.1), 0.08, -1.26 + rand(-0.1, 0.1))); else R.root.localToWorld(_v.set(rand(-0.02, 0.02), -0.02, -0.07));
+    spawnStraw(fromVM(_v), _u, from === 'fork' ? rand(0.6, 1.2) : 1);
   }
   whoosh();
 }
@@ -1067,7 +1155,7 @@ function updateTool(dt, hit) {
             const t = takeFrom(h.id, 1 + l); if (t) {
               addTaler(t * PRICE[lv('preis')]); blowAcc += t;
               const p = _v.copy(ray.o).addScaledVector(_v2, h.t + 0.1);
-              puff(p, 3, 0.15);
+              puff(p, 3, 0.15); hayPoke(p, 0.8); hayU.uHitT.value = 0.05;
               if (Math.random() < 0.5) spawnStraw(p, _u.copy(_v2).multiplyScalar(rand(4, 7)).add(_r.set(rand(-1, 1), rand(1, 3), rand(-1, 1))));
             }
           }
@@ -1082,7 +1170,7 @@ function updateTool(dt, hit) {
   if (!anim || tool === 'blow') mouse.click = false; // Klick während Animation = nächster Griff
   if (anim) {
     anim.t += dt / anim.dur; if (SHOT_PH) anim.t = Math.min(anim.t, SHOT_PH); const a = anim.t;
-    const commitAt = anim.type === 'fork' ? 0.3 : 0.44, relAt = anim.type === 'fork' ? 0.74 : 0.8;
+    const commitAt = anim.type === 'fork' ? 0.3 : 0.5, relAt = anim.type === 'fork' ? 0.8 : 0.88;
     if (!anim.done && a >= commitAt) { anim.done = true; commitGrab(); }
     if (!anim.rel && a >= relAt) { anim.rel = true; if (anim.taken) releaseBundle(anim.taken, anim.type); showBundle(0); forkClump.visible = false; }
     if (a >= 1) anim = null;
@@ -1151,9 +1239,47 @@ function finishFound() {
   setState('found');
 }
 
-// Viewmodel-Animation
-const vmBase = new THREE.Vector3(), vmRot = new THREE.Euler(), sway = { x: 0, y: 0, py: 0, pp: 0 };
+// Viewmodel-Animation über Keyframes: [t, dx, dy, dz, rx, ry, rz, curl, spread] (Offsets zur Grundhaltung)
+const sway = { x: 0, y: 0, py: 0, pp: 0 };
+const smooth = t => t * t * (3 - 2 * t);
+function sampleKF(K, a, out) {
+  let i = 0; while (i < K.length - 2 && a > K[i + 1][0]) i++;
+  const A = K[i], B = K[i + 1], u = smooth(clamp((a - A[0]) / (B[0] - A[0]), 0, 1));
+  for (let k = 1; k < A.length; k++) out[k - 1] = lerp(A[k], B[k], u);
+  return out;
+}
+// Hand: hinlangen, zugreifen, zweimal zupfen, Halm anschauen, ausholen, wegwerfen. Spalten 1-3 werden aus dem Ziel berechnet.
+const HAND_KF = [
+  [0.00, 0, 0, 0, 0, 0, 0, 0.15, 0],
+  [0.16, 0.45, 0.06, 0, 0.0, -0.023, 0.05, -0.1, 0.6],
+  [0.32, 1, 0, 0, -0.45, -0.053, 0, -0.2, 1],
+  [0.42, 1, -0.01, -0.035, -0.5, -0.053, 0, 1.15, 0],
+  [0.50, 1, 0.02, 0.05, -0.3, -0.045, 0.07, 1.2, 0],
+  [0.55, 1, 0, 0.02, -0.4, -0.048, -0.04, 1.2, 0],
+  [0.63, 1, 0.05, 0.12, -0.1, -0.03, 0.08, 1.2, 0],
+  [0.76, -1, 0, 0, 0.45, 0.35, 0.7, 1.1, 0],
+  [0.84, -2, 0, 0, 0.2, 0.3, 0.4, 1.1, 0],
+  [0.92, -3, 0, 0, 0, -0.5, -0.9, 0, 0.4],
+  [1.00, 0, 0, 0, 0, 0, 0, 0.15, 0],
+];
+const HAND_FIXED = { '-1': [0.1, -0.14, -0.42], '-2': [0.05, -0.16, -0.4], '-3': [0.42, -0.04, -0.42] };
+// Gabel: ausholen, zustechen, eindrehen, schwer anheben, ausholen, schleudern
+const FORK_KF = [
+  [0.00, 0, 0, 0, 0, 0, 0],
+  [0.14, 0, 0.05, 0.12, 0.12, 0, 0],
+  [0.30, 0, -0.05, -0.55, -0.2, 0, 0],
+  [0.37, 0, -0.04, -0.5, -0.22, 0, 0.28],
+  [0.62, 0, 0.2, -0.25, 0.3, 0, 0.1],
+  [0.73, -0.05, 0.24, -0.2, 0.38, 0.22, 0.15],
+  [0.86, 0.22, 0.12, -0.15, 0.15, -1.0, -0.55],
+  [1.00, 0, 0, 0, 0, 0, 0],
+];
+const kf = new Array(8).fill(0), VMK = Math.tan(THREE.MathUtils.degToRad(36)) / Math.tan(THREE.MathUtils.degToRad(30));
+// Weltpunkt → Viewmodel-Raum (anderes FOV, gleiche Bildschirmposition) und zurück
+const toVM = v => { camera.worldToLocal(v); v.x *= VMK; v.y *= VMK; return v; };
+const fromVM = v => { v.x /= VMK; v.y /= VMK; return camera.localToWorld(v); };
 function poseTool(g, pose, dx, dy, dz, rx, ry, rz) { g.position.set(pose.p[0] + dx, pose.p[1] + dy, pose.p[2] + dz); g.rotation.set(pose.r[0] + rx, pose.r[1] + ry, pose.r[2] + rz); }
+const _tip = new THREE.Vector3(), _far = new THREE.Vector3(), _yAx = new THREE.Vector3(0, 1, 0);
 function updateViewmodel(dt, moving) {
   const vis = state !== 'title';
   vm.visible = vis;
@@ -1165,41 +1291,58 @@ function updateViewmodel(dt, moving) {
   const drop = swapT > 0.5 ? (1 - swapT) * 2 : swapT * 2; // runter, wechseln, hoch
   for (const k in toolG) toolG[k].visible = k === tool;
   const g = toolG[tool], pose = TOOL_POSE[tool];
-  let dx = bx + sway.x, dy = by - drop * 0.35 + sway.y, dz = 0, rx = 0, ry = 0, rz = 0, curl = 0.15, spread = 0;
+  let dx = bx + sway.x, dy = by - drop * 0.35 + sway.y - P.land, dz = 0, rx = 0, ry = 0, rz = 0, curl = 0.15 + 0.05 * Math.sin(now * 0.8), spread = 0, cf = null;
+  strand.visible = false;
   if (foundT >= 0) {
-    foundT += dt; const k = ease(Math.min(1, foundT / 0.7));
-    dx += lerp(0, -0.17, k); dy += lerp(0, 0.2, k); dz += lerp(0, 0.06, k); rx += lerp(0, 0.55, k); ry += lerp(0, -0.2, k) + Math.sin(now * 1.3) * 0.08 * k; rz += lerp(0, 0.5, k);
+    foundT += dt; const k = ease(Math.min(1, foundT / 0.8));
+    dx += lerp(0, -0.17, k); dy += lerp(0, 0.2, k); dz += lerp(0, 0.08, k); rx += lerp(0, 0.55, k); ry += lerp(0, -0.2, k) + Math.sin(now * 1.3) * 0.1 * k; rz += lerp(0, 0.5, k) + Math.sin(now * 0.9) * 0.06 * k;
     curl = 0.8; heldSpark.material.rotation = now; heldSpark.scale.setScalar(0.035 + 0.012 * Math.sin(now * 5));
-    if (foundT > 2.3 && state === 'play') finishFound();
+    if (foundT > 2.6 && state === 'play') finishFound();
   } else if (anim && anim.type === 'hand') {
-    const a = anim.t;
-    const tgt = _v.copy(anim.point); camera.worldToLocal(tgt); tgt.clampLength(0, 0.55);
-    const hp = TOOL_POSE.hand.p, reach = [clamp(tgt.x * 0.45, -0.14, 0.14) + 0.05 - hp[0], clamp(tgt.y * 0.45, -0.18, 0.08) - 0.1 - hp[1], -0.64 - hp[2]];
-    let k;
-    if (a < 0.38) { k = ease(a / 0.38); curl = lerp(0.15, -0.15, k); spread = k; }
-    else if (a < 0.5) { k = 1; const c = (a - 0.38) / 0.12; curl = lerp(-0.15, 1.15, c); spread = 1 - c; }
-    else if (a < 0.72) { k = 1 - ease((a - 0.5) / 0.22) * 0.85; curl = 1.15; }
-    else { k = 0.15 * (1 - (a - 0.72) / 0.28); const t = ease((a - 0.72) / 0.28); dx += Math.sin(t * Math.PI) * 0.16; dy += Math.sin(t * Math.PI) * 0.06; rz += -Math.sin(t * Math.PI) * 0.9; ry += -Math.sin(t * Math.PI) * 0.5; curl = a < 0.8 ? 1.15 : lerp(1.15, 0, (a - 0.8) / 0.2); }
-    dx += reach[0] * k; dy += reach[1] * k; dz += reach[2] * k; rx += -0.12 * k; ry += 0.1 * k;
+    const a = anim.t, hp = pose.p;
+    const tgt = toVM(_v.copy(anim.point)); tgt.clampLength(0, 0.62);
+    const A = [clamp(tgt.x * 0.5, -0.15, 0.15) + 0.04, clamp(tgt.y * 0.5, -0.2, 0.08) - 0.1, -0.64];
+    sampleKF(HAND_KF, a, kf);
+    // Spalte 1: 0..1 = Anteil Richtung Ziel, negative Werte = feste Posen (anschauen, ausholen, werfen)
+    let i = 0; while (i < HAND_KF.length - 2 && a > HAND_KF[i + 1][0]) i++;
+    const KA = HAND_KF[i], KB = HAND_KF[i + 1], u = smooth(clamp((a - KA[0]) / (KB[0] - KA[0]), 0, 1));
+    const at = (m, ax) => m >= 0 ? lerp(hp[ax], A[ax], m) : HAND_FIXED[String(m)][ax];
+    for (let ax = 0; ax < 3; ax++) {
+      const base = lerp(at(KA[1], ax), at(KB[1], ax), u);
+      const off = ax === 0 ? 0 : kf[ax];
+      if (ax === 0) dx += base - hp[0]; else if (ax === 1) dy += base - hp[1] + off; else dz += base - hp[2] + off;
+    }
+    rx += kf[3]; ry += kf[4]; rz += kf[5]; spread = kf[7];
+    // Finger schließen und öffnen nacheinander (Zeigefinger zuerst)
+    cf = fi => sampleKF(HAND_KF, clamp(a - fi * 0.014, 0, 1), _kf2)[6];
+    if (a > 0.42 && a < 0.64 && anim.hit) {
+      // der herausgezogene Halm spannt sich zwischen Hand und Haufen
+      R.f2_tip.getWorldPosition(_tip);
+      toVM(_far.copy(anim.point)); _far.lerp(_tip, smooth(clamp((a - 0.5) / 0.14, 0, 1)));
+      const len = _tip.distanceTo(_far);
+      if (len > 0.02) { strand.visible = true; strand.position.addVectors(_tip, _far).multiplyScalar(0.5); strand.scale.set(1, len, 1); strand.quaternion.setFromUnitVectors(_yAx, _v2.subVectors(_far, _tip).normalize()); }
+    }
   } else if (anim && anim.type === 'fork') {
-    const a = anim.t;
-    if (a < 0.3) { const k = ease(a / 0.3); dz -= 0.45 * k; dy -= 0.04 * k; rx -= 0.18 * k; }
-    else if (a < 0.6) { const k = ease((a - 0.3) / 0.3); dz -= 0.45 * (1 - k * 0.6); dy += 0.18 * k - 0.04; rx += -0.18 + 0.45 * k; }
-    else { const k = ease((a - 0.6) / 0.4), s = Math.sin(k * Math.PI); dz -= 0.18 * (1 - k); dy += 0.14 * (1 - k); rx += 0.27 * (1 - k) + 0.2 * s; ry -= 0.9 * s; rz -= 0.5 * s; dx += 0.15 * s; }
-  } else if (tool === 'blow' && mouse.down) { dx += rand(-0.004, 0.004); dy += rand(-0.004, 0.004); }
+    sampleKF(FORK_KF, anim.t, kf);
+    dx += kf[0]; dy += kf[1]; dz += kf[2]; rx += kf[3]; ry += kf[4]; rz += kf[5];
+  } else if (tool === 'blow' && mouse.down) { dx += rand(-0.005, 0.005); dy += rand(-0.005, 0.005); rz += rand(-0.01, 0.01); }
   poseTool(g, pose, dx, dy, dz, rx, ry, rz);
-  if (tool === 'hand') curlHand(R, curl, spread);
-  poseTool(detG, TOOL_POSE.det, bx * 0.7 + sway.x, by + sway.y - (foundT >= 0 ? 0.3 : 0), 0, Math.sin(now * 0.9) * 0.02, 0, 0);
+  if (tool === 'hand') curlHand(R, curl, spread, cf);
+  poseTool(detG, TOOL_POSE.det, bx * 0.7 + sway.x, by + sway.y - P.land - (foundT >= 0 ? 0.3 : 0), 0, Math.sin(now * 0.9) * 0.02, 0, 0);
   // Sonne auch im Viewmodel aus der richtigen Richtung
   vmSun.position.copy(SUN).transformDirection(camera.matrixWorldInverse).multiplyScalar(5);
 }
+const _kf2 = new Array(8).fill(0);
 
 // ================= Hauptschleife =================
 let last = performance.now(), saveT = 0;
 function frame(t) {
   requestAnimationFrame(frame);
   const dt = clamp((t - last) / 1000, 0, 0.05); last = t; now += dt;
-  windU.value = now;
+  windU.value = now; hayU.uHitT.value += dt;
+  // Zeitlupe und Zoom beim Nadelfund
+  const ts = foundT >= 0 ? lerp(0.3, 1, clamp((foundT - 0.9) / 0.9, 0, 1)) : 1, wdt = dt * ts;
+  camera.fov = lerp(camera.fov, foundT >= 0 && foundT < 2 ? 56 : 72, Math.min(1, dt * 4)); camera.updateProjectionMatrix();
   let moving = false, hit = null;
   if (state === 'title') {
     const a = now * 0.07;
@@ -1218,8 +1361,8 @@ function frame(t) {
     magT = Math.max(0, magT - dt);
   }
   sky.position.copy(camera.position);
-  settle(dt); if (dirty) rebuild();
-  updateStraws(dt); updateItems(dt); updateXray(dt); updateDetector(dt);
+  settle(wdt); if (dirty) rebuild();
+  updateStraws(wdt); updateItems(wdt); updateXray(dt); updateDetector(dt);
   // Staub
   for (let i = 0; i < DUST; i++) {
     if (dustL[i] <= 0) { dustC[i * 3] = dustC[i * 3 + 1] = dustC[i * 3 + 2] = 0; continue; }
