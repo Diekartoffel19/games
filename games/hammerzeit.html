@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Hammerzeit 3D — Block-Abriss</title>
+<meta name="description" content="Schnapp dir den Hammer und mach die Mini-Block-Stadt platt: Häuser, Hochhäuser, Autos und Bäume in Ego-Perspektive zerlegen, Einstürze auslösen und TNT-Kisten hochjagen.">
+<meta name="theme-color" content="#8ec9ff">
+<link rel="icon" type="image/x-icon" href="../src/favicon.ico">
+<script defer src="https://umami.rwpxe.com/script.js" data-website-id="cb5d0067-4455-44c8-a10b-fe5432756eea"></script>
+<script src="../src/arcade-core.js"></script>
+<script>
+let appStarted = false;
+window.showErrorNotice = function(msg) {
+  const fb = document.getElementById('fallbackError');
+  if (fb) {
+    if (msg) document.getElementById('fallbackMsg').textContent = msg;
+    fb.style.display = 'block';
+  }
+};
+window.addEventListener('error', function(e) {
+  if (!appStarted) showErrorNotice('Ladefehler: ' + (e.message || 'CDN oder Skript nicht verfügbar'));
+});
+setTimeout(function() {
+  if (!appStarted) showErrorNotice('Ladezeit überschritten (CDN nicht erreichbar oder WebGL blockiert).');
+}, 8000);
+</script>
+<style>
+* { box-sizing:border-box; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; overflow:hidden; background:#8ec9ff; color:#fff; font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+canvas { display:block; }
+.back { position:fixed; top:10px; left:12px; z-index:50; color:#fff; text-decoration:none; font-size:14px; font-weight:700; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); padding:6px 14px; border-radius:20px; }
+#mute { position:fixed; top:10px; left:110px; z-index:50; background:rgba(0,0,0,.55); color:#fff; border:1px solid rgba(255,255,255,.25); border-radius:20px; font-size:16px; padding:5px 12px; cursor:pointer; }
+#hud { position:fixed; top:10px; right:12px; z-index:20; display:flex; gap:8px; pointer-events:none; }
+.stat { background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:6px 12px; text-align:center; min-width:90px; }
+.stat b { display:block; font-size:20px; }
+.stat span { font-size:11px; opacity:.8; }
+#cross { position:fixed; left:50%; top:50%; width:18px; height:18px; margin:-9px 0 0 -9px; z-index:20; pointer-events:none; }
+#cross::before, #cross::after { content:""; position:absolute; background:#fff; box-shadow:0 0 2px #000; }
+#cross::before { left:8px; top:0; width:2px; height:18px; }
+#cross::after { top:8px; left:0; height:2px; width:18px; }
+#charge { position:fixed; left:50%; bottom:60px; width:220px; height:12px; margin-left:-110px; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.4); border-radius:6px; overflow:hidden; z-index:20; opacity:0; transition:opacity .15s; }
+#charge i { display:block; height:100%; width:0; background:linear-gradient(90deg,#f1c40f,#e74c3c); }
+#msg { position:fixed; left:0; right:0; top:22%; text-align:center; font-size:34px; font-weight:900; z-index:20; pointer-events:none; text-shadow:0 3px 0 #000, 0 0 12px rgba(0,0,0,.6); opacity:0; transition:opacity .3s; }
+#pop { position:fixed; left:50%; top:50%; margin:26px 0 0 14px; font-size:22px; font-weight:900; color:#ffe066; text-shadow:0 2px 0 #000; z-index:20; pointer-events:none; opacity:0; }
+#pop.go { animation:pop .8s ease-out; }
+@keyframes pop { 0% { opacity:1; transform:translateY(0) scale(1.3); } 100% { opacity:0; transform:translateY(-40px) scale(1); } }
+#keys { position:fixed; left:12px; bottom:10px; z-index:20; font-size:12px; opacity:.85; background:rgba(0,0,0,.45); padding:5px 10px; border-radius:8px; pointer-events:none; }
+.overlay { position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center; background:rgba(10,20,40,.55); }
+.overlay.hide { display:none; }
+.card { background:#1d2a3c; border:3px solid #f1c40f; border-radius:14px; padding:22px 28px; max-width:520px; text-align:center; box-shadow:0 10px 0 rgba(0,0,0,.35); }
+.card h1 { margin:0; font-size:34px; color:#f1c40f; }
+.card .sub { margin:4px 0 12px; opacity:.85; }
+.card ul { text-align:left; font-size:14px; line-height:1.6; padding-left:20px; }
+.btnrow { display:flex; gap:10px; justify-content:center; margin-top:14px; }
+button.big { font:inherit; font-size:18px; font-weight:800; padding:10px 22px; border:0; border-radius:10px; background:#f1c40f; color:#1d2a3c; cursor:pointer; box-shadow:0 4px 0 #b8900a; }
+button.big.alt { background:#5d7a99; color:#fff; box-shadow:0 4px 0 #3c536b; }
+.note { font-size:12px; opacity:.7; }
+#fallbackError a { color:#fff; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Arcade</a>
+<button id="mute" aria-label="Ton an/aus">🔊</button>
+<div id="hud">
+  <div class="stat"><b id="score">0</b><span>Punkte</span></div>
+  <div class="stat"><b id="pct">0%</b><span>zerstört</span></div>
+  <div class="stat"><b id="tool">Hammer</b><span id="next"></span></div>
+</div>
+<div id="cross"></div>
+<div id="charge"><i></i></div>
+<div id="msg"></div>
+<div id="pop"></div>
+<div id="keys">WASD laufen · Maus halten = aufladen · loslassen = zuschlagen · Leertaste springen · Shift rennen · F fliegen · Esc Pause</div>
+<div class="overlay" id="menu"><div class="card">
+  <h1>🔨 Hammerzeit 3D</h1>
+  <p class="sub">Block-Abriss in der Mini-Stadt</p>
+  <p>Mach alles kaputt: Häuser, Hochhäuser, Läden, Autos und Bäume. Was keinen Halt mehr hat, stürzt ein. Rote Kisten sind TNT!</p>
+  <ul>
+    <li><b>WASD</b> laufen, <b>Shift</b> rennen, <b>Leertaste</b> springen</li>
+    <li><b>Linke Maustaste halten</b> = Schlag aufladen, <b>loslassen</b> = zuschlagen</li>
+    <li><b>F</b> Flugmodus (Leertaste hoch, <b>C</b> runter), <b>M</b> Ton, <b>Esc</b> Pause</li>
+    <li>Mehr Zerstörung schaltet größere Hämmer frei</li>
+  </ul>
+  <p id="bestLine"></p>
+  <div class="btnrow"><button id="play" class="big">Los geht's</button><button id="newcity" class="big alt">Neue Stadt</button></div>
+  <p class="note">Benötigt Maus &amp; Tastatur.</p>
+</div></div>
+<div id="fallbackError" style="display:none;position:fixed;inset:0;background:#123;color:#fff;z-index:99999;padding:30px;text-align:center;">
+  <h2>🔨 Der Hammer klemmt</h2>
+  <p id="fallbackMsg" style="margin:16px 0;font-size:18px">3D-Engine oder CDN konnte nicht geladen werden.</p>
+  <p><a href="../index.html">Zurück zum Hub</a></p>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const $ = id => document.getElementById(id);
+const KEY = 'hammerzeit_best';
+
+// ---------- Welt (Voxel-Gitter) ----------
+const W = 72, H = 40, D = 72, G = 3;           // G = erste Luftschicht über dem Boden
+const WD = W * D, N = W * H * D;
+const world = new Uint8Array(N);
+const idx = (x, y, z) => x + z * W + y * WD;
+const inB = (x, y, z) => x >= 0 && x < W && y >= 0 && y < H && z >= 0 && z < D;
+const get = (x, y, z) => inB(x, y, z) ? world[idx(x, y, z)] : 0;
+// Kollision: Weltrand seitlich und unten ist massiv, oben offen
+const solidC = (x, y, z) => (x < 0 || z < 0 || x >= W || z >= D || y < 0) ? true : y >= H ? false : world[idx(x, y, z)] !== 0;
+
+const AIR = 0, BED = 1, DIRT = 2, GRASS = 3, ROAD = 4, BRICK = 5, PLASTER = 6, GLASS = 7, PLANK = 8, ROOF = 9,
+      LEAVES = 10, LOG = 11, CONCRETE = 12, CAR_R = 13, CAR_B = 14, CAR_Y = 15, WALK = 16, TNT = 17;
+const COLORS = [0, 0x3a3a3a, 0x7a5530, 0x5dab3c, 0x45474d, 0xa8483a, 0xe8dfcf, 0xa8dcf2, 0xb98a52, 0xc0392b,
+                0x3f8f2f, 0x6b4a2b, 0x9aa0a6, 0xd8322f, 0x2f6fd8, 0xf2c230, 0xc8c8c0, 0xff3b1f];
+const PTS = [0, 0, 1, 1, 1, 2, 2, 3, 2, 2, 1, 2, 3, 5, 5, 5, 1, 10];
+const MIN_Y = 2; // Bedrock (0) und Erde (1) bleiben, sonst kommt man aus Löchern nicht raus
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3) | 0; n ^= n >>> 4; n = Math.imul(n, 0x27d4eb2d); n ^= n >>> 15; return n >>> 0; }
+
+function genCity(seed) {
+  world.fill(0);
+  const r = mulberry32(seed), ri = (a, b) => a + Math.floor(r() * (b - a + 1)), ch = a => a[Math.floor(r() * a.length)];
+  const set = (x, y, z, t) => { if (inB(x, y, z)) world[idx(x, y, z)] = t; };
+  const box = (x0, y0, z0, x1, y1, z1, t) => { for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) set(x, y, z, t); };
+  // Hülle: pick(x,y,z,along,corner) liefert den Blocktyp jeder Außenwand-Zelle
+  const shell = (ox, oz, w, d, y0, y1, pick) => {
+    for (let y = y0; y <= y1; y++) for (let z = oz; z < oz + d; z++) for (let x = ox; x < ox + w; x++) {
+      const ex = x === ox || x === ox + w - 1, ez = z === oz || z === oz + d - 1;
+      if (!ex && !ez) continue;
+      set(x, y, z, pick(x, y, z, ez ? x - ox : z - oz, ex && ez));
+    }
+  };
+
+  for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    const mx = x % 18, mz = z % 18, road = mx < 4 || mz < 4;
+    const walk = !road && (mx === 4 || mx === 17 || mz === 4 || mz === 17);
+    set(x, 0, z, BED); set(x, 1, z, DIRT); set(x, 2, z, road ? ROAD : walk ? WALK : GRASS);
+  }
+
+  const tree = (x, z) => {
+    const h = ri(3, 5);
+    for (let y = G; y < G + h; y++) set(x, y, z, LOG);
+    const cy = G + h;
+    for (let dy = -2; dy <= 1; dy++) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++)
+      if (dx * dx + dz * dz + dy * dy * 1.4 <= 5.5 && !get(x + dx, cy + dy, z + dz)) set(x + dx, cy + dy, z + dz, LEAVES);
+  };
+
+  const house = (x0, z0) => {
+    const w = ri(7, 11), d = ri(7, 11), ox = x0 + ri(0, 12 - w), oz = z0 + ri(0, 12 - d), fl = ri(1, 3), fh = 4;
+    const wt = r() < 0.5 ? BRICK : PLASTER, top = G + fl * fh;
+    shell(ox, oz, w, d, G, top - 1, (x, y, z, a, corner) => {
+      const fy = (y - G) % fh;
+      return !corner && (fy === 1 || fy === 2) && a % 3 === 1 ? GLASS : wt;
+    });
+    for (let f = 1; f < fl; f++) box(ox + 1, G + f * fh, oz + 1, ox + w - 2, G + f * fh, oz + d - 2, PLANK);
+    const dx = ox + (w >> 1);
+    set(dx, G, oz, AIR); set(dx, G + 1, oz, AIR);
+    for (let i = 0; ; i++) { // Satteldach, Treppenstufen
+      const z1 = oz + i, z2 = oz + d - 1 - i, y = top + i;
+      if (z1 > z2) break;
+      for (let x = ox; x < ox + w; x++) { set(x, y, z1, ROOF); set(x, y, z2, ROOF); }
+      for (let z = z1 + 1; z < z2; z++) { set(ox, y, z, wt); set(ox + w - 1, y, z, wt); }
+    }
+    if (r() < 0.4) set(ox + 1 + ri(0, w - 3), G, oz + 1 + ri(0, d - 3), TNT);
+  };
+
+  const tower = (x0, z0) => {
+    const w = ri(7, 10), d = ri(7, 10), ox = x0 + ri(0, 12 - w), oz = z0 + ri(0, 12 - d), h = 3 * ri(4, 10);
+    shell(ox, oz, w, d, G, G + h - 1, (x, y, z, a, corner) => {
+      const fy = (y - G) % 3;
+      return corner || fy === 0 || a % 3 === 0 ? CONCRETE : GLASS;
+    });
+    for (let y = G + 3; y < G + h; y += 3) {
+      box(ox + 1, y, oz + 1, ox + w - 2, y, oz + d - 2, CONCRETE);
+      if (r() < 0.3) set(ox + 1 + ri(0, w - 3), y + 1, oz + 1 + ri(0, d - 3), TNT);
+    }
+    box(ox, G + h, oz, ox + w - 1, G + h, oz + d - 1, CONCRETE);
+    const mx = ox + (w >> 1), mz = oz + (d >> 1);
+    for (let y = G + h + 1; y <= G + h + 3; y++) set(mx, y, mz, CONCRETE);
+    set(mx, G + h + 4, mz, CAR_R);
+    set(mx, G, oz, AIR); set(mx, G + 1, oz, AIR); set(mx - 1, G, oz, AIR); set(mx - 1, G + 1, oz, AIR);
+  };
+
+  const shop = (x0, z0) => {
+    const w = ri(10, 12), d = ri(8, 11), ox = x0 + ri(0, 12 - w), oz = z0 + ri(0, 12 - d), h = 5;
+    const wt = r() < 0.5 ? BRICK : PLASTER, sign = ch([CAR_R, CAR_B, CAR_Y]);
+    shell(ox, oz, w, d, G, G + h - 1, (x, y, z, a, corner) => {
+      if (z === oz && !corner) return y < G + 3 ? GLASS : y === G + 3 ? sign : wt;
+      return wt;
+    });
+    box(ox, G + h, oz, ox + w - 1, G + h, oz + d - 1, CONCRETE);
+    const mx = ox + (w >> 1);
+    set(mx, G, oz, AIR); set(mx, G + 1, oz, AIR); set(mx - 1, G, oz, AIR); set(mx - 1, G + 1, oz, AIR);
+    for (let z = oz + 2; z < oz + d - 2; z += 3) box(ox + 2, G, z, ox + w - 3, G + 1, z, PLANK); // Regale
+    for (let i = ri(1, 3); i > 0; i--) set(ox + 1 + ri(0, w - 3), G + 2, oz + 2 + 3 * ri(0, Math.max(0, Math.floor((d - 5) / 3))), TNT);
+  };
+
+  const park = (x0, z0) => {
+    shell(x0, z0, 12, 12, G, G, (x, y, z, a) => a === 5 || a === 6 ? AIR : PLANK);
+    for (let i = ri(2, 4); i > 0; i--) tree(x0 + ri(2, 9), z0 + ri(2, 9));
+    if (r() < 0.5) { const tx = x0 + ri(2, 8), tz = z0 + ri(2, 8); box(tx, G, tz, tx + 1, G + 1, tz + 1, TNT); }
+  };
+
+  const ziggurat = (x0, z0) => {
+    for (let i = 0; i < 6; i++) box(x0 + i, G + i, z0 + i, x0 + 11 - i, G + i, z0 + 11 - i, i % 2 ? BRICK : CONCRETE);
+    set(x0 + 5, G + 2, z0 + 5, TNT); set(x0 + 6, G + 2, z0 + 6, TNT);
+  };
+
+  for (let lz = 0; lz < 4; lz++) for (let lx = 0; lx < 4; lx++) {
+    const x0 = lx * 18 + 5, z0 = lz * 18 + 5, k = r();
+    if (k < 0.35) house(x0, z0); else if (k < 0.57) tower(x0, z0); else if (k < 0.74) shop(x0, z0);
+    else if (k < 0.92) park(x0, z0); else ziggurat(x0, z0);
+  }
+
+  const car = (x, z, alongX) => {
+    const col = ch([CAR_R, CAR_B, CAR_Y, PLASTER]);
+    for (let a = 0; a < 4; a++) for (let b = 0; b < 2; b++) {
+      const cx = alongX ? x + a : x + b, cz = alongX ? z + b : z + a;
+      set(cx, G, cz, col);
+      if (a === 1 || a === 2) set(cx, G + 1, cz, GLASS);
+    }
+  };
+  for (let k = 0; k < 4; k++) for (let s = 0; s < 4; s++) {
+    if (r() < 0.55) car(k * 18 + (r() < 0.5 ? 0 : 2), s * 18 + 5 + ri(0, 8), false);
+    if (r() < 0.55) car(s * 18 + 5 + ri(0, 8), k * 18 + (r() < 0.5 ? 0 : 2), true);
+  }
+}
+
+// ---------- Renderer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+const canvas = renderer.domElement;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8ec9ff);
+scene.fog = new THREE.Fog(0x8ec9ff, 45, 120);
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 300);
+camera.rotation.order = 'YXZ';
+scene.add(camera);
+scene.add(new THREE.HemisphereLight(0xe4f3ff, 0x6a5a40, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(W / 2 + 35, 80, D / 2 + 25);
+sun.target.position.set(W / 2, 0, D / 2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 220 });
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.03;
+scene.add(sun, sun.target);
+
+// Wiese außerhalb der Welt, damit die Stadt nicht wie eine Insel schwebt
+{
+  const m = new THREE.MeshLambertMaterial({ color: 0x5dab3c });
+  const strip = (w, d, x, z) => { const p = new THREE.Mesh(new THREE.PlaneGeometry(w, d), m); p.rotation.x = -Math.PI / 2; p.position.set(x, G, z); p.receiveShadow = true; scene.add(p); };
+  strip(600, 300, W / 2, -150); strip(600, 300, W / 2, D + 150);
+  strip(264, D, -132, D / 2); strip(264, D, W + 132, D / 2);
+}
+
+function blockTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 16;
+  const g = c.getContext('2d');
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const v = (x === 0 || y === 0 || x === 15 || y === 15) ? 170 : 215 + Math.random() * 40;
+    g.fillStyle = `rgb(${v | 0},${v | 0},${v | 0})`; g.fillRect(x, y, 1, 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestMipmapLinearFilter;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const blockMat = new THREE.MeshLambertMaterial({ map: blockTexture() });
+const tc = new THREE.Color();
+function cellColor(t, c) { tc.setHex(COLORS[t]); const j = 0.86 + (hash(c) & 255) / 255 * 0.22; tc.r *= j; tc.g *= j; tc.b *= j; return tc; }
+
+// Nur freiliegende Blöcke werden als Instanz gezeichnet
+const MAXI = 90000;
+const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), blockMat, MAXI);
+mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAXI * 3), 3);
+mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+mesh.count = 0; mesh.frustumCulled = false; mesh.castShadow = mesh.receiveShadow = true;
+scene.add(mesh);
+const iM = mesh.instanceMatrix.array, iC = mesh.instanceColor.array;
+const slot = new Int32Array(N).fill(-1), cellOf = new Int32Array(MAXI);
+let icount = 0, meshDirty = false;
+
+const solidR = (x, y, z) => y < 0 ? true : get(x, y, z) !== 0;
+const exposed = (x, y, z) => !solidR(x + 1, y, z) || !solidR(x - 1, y, z) || !solidR(x, y + 1, z) || !solidR(x, y - 1, z) || !solidR(x, y, z + 1) || !solidR(x, y, z - 1);
+
+function addInst(c) {
+  if (slot[c] >= 0 || !world[c] || icount >= MAXI) return;
+  const i = icount++, x = c % W, z = ((c / W) | 0) % D, y = (c / WD) | 0, o = i * 16;
+  slot[c] = i; cellOf[i] = c;
+  iM.fill(0, o, o + 16); iM[o] = iM[o + 5] = iM[o + 10] = iM[o + 15] = 1;
+  iM[o + 12] = x + 0.5; iM[o + 13] = y + 0.5; iM[o + 14] = z + 0.5;
+  cellColor(world[c], c); iC[i * 3] = tc.r; iC[i * 3 + 1] = tc.g; iC[i * 3 + 2] = tc.b;
+  meshDirty = true;
+}
+function remInst(c) {
+  const i = slot[c];
+  if (i < 0) return;
+  const last = --icount;
+  if (i !== last) {
+    iM.copyWithin(i * 16, last * 16, last * 16 + 16);
+    iC.copyWithin(i * 3, last * 3, last * 3 + 3);
+    const lc = cellOf[last]; cellOf[i] = lc; slot[lc] = i;
+  }
+  slot[c] = -1; meshDirty = true;
+}
+function rebuildMesh() {
+  slot.fill(-1); icount = 0;
+  for (let y = 0; y < H; y++) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++)
+    if (world[idx(x, y, z)] && exposed(x, y, z)) addInst(idx(x, y, z));
+}
+function forNeighbors(c, fn) {
+  const x = c % W, z = ((c / W) | 0) % D, y = (c / WD) | 0;
+  if (x > 0) fn(c - 1); if (x < W - 1) fn(c + 1);
+  if (z > 0) fn(c - W); if (z < D - 1) fn(c + W);
+  if (y > 0) fn(c - WD); if (y < H - 1) fn(c + WD);
+}
+
+// ---------- Partikel & Trümmer ----------
+const dummy = new THREE.Object3D();
+function makePool(max, size, big) {
+  const m = new THREE.InstancedMesh(new THREE.BoxGeometry(size, size, size), blockMat, max);
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+  m.count = 0; m.frustumCulled = false; m.castShadow = big;
+  scene.add(m);
+  return { m, max, half: size / 2, big, items: [] };
+}
+const chips = makePool(2500, 0.28, false);
+const debris = makePool(2500, 1, true);
+function spawn(pool, x, y, z, vx, vy, vz, col, life) {
+  if (pool.items.length >= pool.max) return false;
+  pool.items.push({ x, y, z, vx, vy, vz, rx: 0, rz: 0, wx: (Math.random() - 0.5) * 10, wz: (Math.random() - 0.5) * 10, life, r: col.r, g: col.g, b: col.b });
+  return true;
+}
+function burst(x, y, z, col, n, power) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = power * (0.4 + Math.random());
+    spawn(chips, x + Math.random() - 0.5, y + Math.random() - 0.5, z + Math.random() - 0.5, Math.cos(a) * s, 2 + Math.random() * power, Math.sin(a) * s, col, 1 + Math.random() * 0.8);
+  }
+}
+let lastThud = 0;
+function updatePool(pool, dt) {
+  const it = pool.items, half = pool.half;
+  let w = 0;
+  for (let i = 0; i < it.length; i++) {
+    const p = it[i];
+    p.life -= dt;
+    if (p.life <= 0) continue;
+    p.vy = Math.max(p.vy - 26 * dt, -45);
+    const nx = p.x + p.vx * dt, nz = p.z + p.vz * dt;
+    if (solidC(Math.floor(nx), Math.floor(p.y), Math.floor(nz))) { p.vx *= -0.3; p.vz *= -0.3; } else { p.x = nx; p.z = nz; }
+    p.y += p.vy * dt;
+    if (p.vy < 0 && solidC(Math.floor(p.x), Math.floor(p.y - half), Math.floor(p.z))) {
+      if (pool.big && p.vy < -7) { // Aufprall: großer Trümmerblock zerbröselt
+        tc.setRGB(p.r, p.g, p.b); burst(p.x, p.y, p.z, tc, 3, 3);
+        const now = performance.now();
+        if (now - lastThud > 70) { lastThud = now; ArcadeCore.playTone(55 + Math.random() * 40, 0.12, 'sawtooth', 0.05); }
+        continue;
+      }
+      p.y = Math.floor(p.y - half) + 1 + half; p.vy *= -0.25; p.vx *= 0.6; p.vz *= 0.6; p.wx *= 0.5; p.wz *= 0.5;
+    }
+    p.rx += p.wx * dt; p.rz += p.wz * dt;
+    it[w++] = p;
+  }
+  it.length = w;
+  const ca = pool.m.instanceColor.array;
+  for (let i = 0; i < w; i++) {
+    const p = it[i];
+    dummy.position.set(p.x, p.y, p.z); dummy.rotation.set(p.rx, 0, p.rz);
+    dummy.scale.setScalar(Math.min(1, p.life / 0.5)); dummy.updateMatrix();
+    pool.m.setMatrixAt(i, dummy.matrix);
+    ca[i * 3] = p.r; ca[i * 3 + 1] = p.g; ca[i * 3 + 2] = p.b;
+  }
+  pool.m.count = w;
+  pool.m.instanceMatrix.needsUpdate = true; pool.m.instanceColor.needsUpdate = true;
+}
+
+// ---------- Spielzustand ----------
+const LEVELS = [
+  { name: 'Hammer', r: 1.25, at: 0, col: 0x8a8f96, s: 1 },
+  { name: 'Vorschlaghammer', r: 2.0, at: 0.06, col: 0x5f666e, s: 1.2 },
+  { name: 'Abrisshammer', r: 2.9, at: 0.2, col: 0xc0392b, s: 1.4 },
+  { name: 'Mega-Hammer', r: 4.0, at: 0.4, col: 0xf1c40f, s: 1.65 },
+];
+const WIN_PCT = 0.85;
+let score = 0, best = Number(ArcadeCore.getScore(KEY)) || 0, destroyed = 0, total = 1, lv = 0, won = false;
+let tntQueue = [], shake = 0, glassHits = 0;
+const P = { x: 20, y: G, z: 20, vx: 0, vy: 0, vz: 0, yaw: -2.356, pitch: -0.1, onGround: false, fly: false };
+const PR = 0.3, PH = 1.8, EYE = 1.62, REACH = 5;
+
+function destroyCell(c) {
+  const t = world[c];
+  world[c] = AIR; remInst(c);
+  if (((c / WD) | 0) >= G) destroyed++;
+  score += PTS[t];
+  if (t === GLASS) glassHits++;
+  if (t === TNT) tntQueue.push({ c, t: 0.22 });
+}
+
+// Einsturz: Komponenten ohne Verbindung zum Boden (y<=1) fallen herunter
+const mark = new Int32Array(N), LIMIT = 15000, Q = new Int32Array(LIMIT + 8);
+let compId = 0;
+function collapseCheck(removed) {
+  const start = compId + 1;
+  for (const c of removed) forNeighbors(c, n => { if (world[n] && mark[n] < start) floodTest(n, start); });
+}
+function floodTest(s, start) {
+  const id = ++compId;
+  let h = 0, t = 0, anchored = false;
+  Q[t++] = s; mark[s] = id;
+  outer: while (h < t) {
+    const c = Q[h++];
+    if (((c / WD) | 0) <= 1) { anchored = true; break; }
+    const x = c % W, z = ((c / W) | 0) % D, y = (c / WD) | 0;
+    const ns = [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, z > 0 ? c - W : -1, z < D - 1 ? c + W : -1, y > 0 ? c - WD : -1, y < H - 1 ? c + WD : -1];
+    for (const n of ns) {
+      if (n < 0 || !world[n] || mark[n] === id) continue;
+      if (mark[n] >= start || t >= LIMIT) { anchored = true; break outer; } // gehört zu bereits verankertem Teil / zu groß
+      mark[n] = id; Q[t++] = n;
+    }
+  }
+  if (anchored) return;
+  const before = score;
+  for (let i = 0; i < t; i++) {
+    const c = Q[i], x = c % W, z = ((c / W) | 0) % D, y = (c / WD) | 0;
+    cellColor(world[c], c);
+    if (!spawn(debris, x + 0.5, y + 0.5, z + 0.5, (Math.random() - 0.5) * 1.2, -Math.random(), (Math.random() - 0.5) * 1.2, tc, 5 + Math.random() * 2))
+      burst(x + 0.5, y + 0.5, z + 0.5, tc, 1, 2);
+    destroyCell(c);
+  }
+  if (t >= 6) { say('EINSTURZ! +' + (score - before)); ArcadeCore.explosion(); shake = Math.max(shake, Math.min(0.4, t / 400)); }
+}
+
+function smash(cx, cy, cz, r) {
+  const list = [];
+  const y0 = Math.max(MIN_Y, Math.floor(cy - r)), y1 = Math.min(H - 1, Math.floor(cy + r));
+  const x0 = Math.max(0, Math.floor(cx - r)), x1 = Math.min(W - 1, Math.floor(cx + r));
+  const z0 = Math.max(0, Math.floor(cz - r)), z1 = Math.min(D - 1, Math.floor(cz + r));
+  for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
+    const dx = x + 0.5 - cx, dy = y + 0.5 - cy, dz = z + 0.5 - cz, c = idx(x, y, z);
+    if (dx * dx + dy * dy + dz * dz <= r * r && world[c] && world[c] !== BED) list.push(c);
+  }
+  const before = score;
+  const step = Math.max(1, Math.floor(list.length / 60));
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    if (i % step === 0) {
+      const x = c % W, z = ((c / W) | 0) % D, y = (c / WD) | 0;
+      cellColor(world[c], c); burst(x + 0.5, y + 0.5, z + 0.5, tc, 3, 4);
+    }
+    destroyCell(c);
+  }
+  for (const c of list) forNeighbors(c, addInst); // Nachbarn eines Lochs liegen jetzt frei
+  collapseCheck(list);
+  if (score > before) popScore(score - before);
+  checkLevel();
+  return list.length;
+}
+
+function explode(c) {
+  const x = c % W + 0.5, z = ((c / W) | 0) % D + 0.5, y = ((c / WD) | 0) + 0.5, r = 3.6;
+  smash(x, y, z, r);
+  tc.setHex(0xff9a2a); burst(x, y, z, tc, 25, 9);
+  tc.setHex(0x555555); burst(x, y, z, tc, 15, 6);
+  ArcadeCore.explosion(); setTimeout(() => ArcadeCore.explosion(), 90);
+  const dx = P.x - x, dy = P.y + 0.9 - y, dz = P.z - z, d = Math.hypot(dx, dy, dz), reach = r + 4;
+  if (d < reach) {
+    const f = 14 * (1 - d / reach) / Math.max(d, 0.5);
+    P.vx += dx * f; P.vz += dz * f; P.vy += 5 + dy * f * 0.5;
+    shake = Math.max(shake, 0.5 * (1 - d / reach));
+  }
+}
+
+function checkLevel() {
+  const pct = destroyed / total;
+  while (lv < LEVELS.length - 1 && pct >= LEVELS[lv + 1].at) {
+    lv++; say('Neues Werkzeug: ' + LEVELS[lv].name + '!'); ArcadeCore.powerup(); styleHammer();
+  }
+  if (!won && pct >= WIN_PCT) { won = true; say('STADT PLATT! 🏆'); ArcadeCore.powerup(); }
+}
+
+// ---------- Voxel-Raycast (DDA) ----------
+function raycast(o, d, maxD) {
+  let x = Math.floor(o.x), y = Math.floor(o.y), z = Math.floor(o.z);
+  const sx = Math.sign(d.x), sy = Math.sign(d.y), sz = Math.sign(d.z);
+  const tdx = d.x ? Math.abs(1 / d.x) : Infinity, tdy = d.y ? Math.abs(1 / d.y) : Infinity, tdz = d.z ? Math.abs(1 / d.z) : Infinity;
+  let tx = d.x > 0 ? (x + 1 - o.x) * tdx : d.x < 0 ? (o.x - x) * tdx : Infinity;
+  let ty = d.y > 0 ? (y + 1 - o.y) * tdy : d.y < 0 ? (o.y - y) * tdy : Infinity;
+  let tz = d.z > 0 ? (z + 1 - o.z) * tdz : d.z < 0 ? (o.z - z) * tdz : Infinity;
+  let t = 0;
+  while (t <= maxD) {
+    if (inB(x, y, z) && world[idx(x, y, z)]) return { x, y, z, t };
+    if (tx < ty && tx < tz) { x += sx; t = tx; tx += tdx; }
+    else if (ty < tz) { y += sy; t = ty; ty += tdy; }
+    else { z += sz; t = tz; tz += tdz; }
+  }
+  return null;
+}
+
+// ---------- Hammer (Ego-Ansicht) ----------
+const hammer = new THREE.Group();
+const hMatHandle = new THREE.MeshLambertMaterial({ color: 0x8a5a2b, depthTest: false });
+const hMatHead = new THREE.MeshLambertMaterial({ color: 0x8a8f96, depthTest: false });
+const handle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.62, 0.06), hMatHandle);
+handle.position.y = 0.25; handle.renderOrder = 998;
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.36), hMatHead);
+head.position.set(0, 0.58, -0.04); head.renderOrder = 999;
+hammer.add(handle, head);
+hammer.position.set(0.45, -0.5, -0.8);
+hammer.scale.setScalar(0.75);
+camera.add(hammer);
+function styleHammer() { hMatHead.color.setHex(LEVELS[lv].col); head.scale.setScalar(LEVELS[lv].s); }
+
+const highlight = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.01, 1.01, 1.01)), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 }));
+highlight.visible = false;
+scene.add(highlight);
+
+let charging = false, charge = 0, swingT = -1, swingPower = 0, impactDone = false;
+const tmpV = new THREE.Vector3(), eye = new THREE.Vector3();
+
+function impact() {
+  camera.getWorldDirection(tmpV);
+  const hit = raycast(eye, tmpV, REACH);
+  if (!hit) { ArcadeCore.playTone(160, 0.08, 'triangle', 0.05); return; }
+  const r = LEVELS[lv].r * (0.7 + swingPower * 0.9);
+  glassHits = 0;
+  const n = smash(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, r);
+  if (n === 0) { ArcadeCore.playTone(900, 0.05, 'square', 0.05); shake = Math.max(shake, 0.04); return; } // Bedrock
+  ArcadeCore.hit();
+  if (r > 2.4) ArcadeCore.explosion();
+  for (let i = 0; i < Math.min(3, glassHits); i++) setTimeout(() => ArcadeCore.playTone(1700 + Math.random() * 900, 0.07, 'square', 0.035), i * 45);
+  shake = Math.max(shake, Math.min(0.35, 0.05 + r * 0.05));
+}
+
+// ---------- Spieler ----------
+function collides() {
+  const x0 = Math.floor(P.x - PR), x1 = Math.floor(P.x + PR), y0 = Math.floor(P.y), y1 = Math.floor(P.y + PH);
+  const z0 = Math.floor(P.z - PR), z1 = Math.floor(P.z + PR);
+  for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if (solidC(x, y, z)) return true;
+  return false;
+}
+function moveAxis(axis, d) {
+  P[axis] += d;
+  if (!collides()) return;
+  const e = 1e-3;
+  if (axis === 'y') {
+    if (d < 0) { P.y = Math.floor(P.y) + 1; P.onGround = true; } else P.y = Math.floor(P.y + PH) - PH - e;
+    P.vy = 0;
+  } else {
+    P[axis] = d > 0 ? Math.floor(P[axis] + PR) - PR - e : Math.floor(P[axis] - PR) + 1 + PR + e;
+    if (axis === 'x') P.vx = 0; else P.vz = 0;
+  }
+}
+const keys = new Set();
+function updatePlayer(dt) {
+  const fwd = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+  const side = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+  const sp = P.fly ? 13 : keys.has('ShiftLeft') || keys.has('ShiftRight') ? 8.5 : 5.2;
+  const s = Math.sin(P.yaw), c = Math.cos(P.yaw);
+  let wx = -s * fwd + c * side, wz = -c * fwd - s * side;
+  const l = Math.hypot(wx, wz); if (l > 0) { wx /= l; wz /= l; }
+  const acc = P.onGround || P.fly ? 14 : 3;
+  const k = 1 - Math.exp(-acc * dt);
+  P.vx += (wx * sp - P.vx) * k; P.vz += (wz * sp - P.vz) * k;
+  if (P.fly) {
+    const up = (keys.has('Space') ? 1 : 0) - (keys.has('KeyC') ? 1 : 0);
+    P.vy += (up * 10 - P.vy) * (1 - Math.exp(-10 * dt));
+  } else {
+    if (keys.has('Space') && P.onGround) { P.vy = 8.4; ArcadeCore.playTone(300, 0.05, 'sine', 0.03); }
+    P.vy = Math.max(P.vy - 24 * dt, -40);
+  }
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(P.vx), Math.abs(P.vy), Math.abs(P.vz)) * dt / 0.4));
+  const h = dt / steps;
+  P.onGround = false;
+  for (let i = 0; i < steps; i++) { moveAxis('x', P.vx * h); moveAxis('z', P.vz * h); moveAxis('y', P.vy * h); }
+  if (P.y > H + 10) P.y = H + 10;
+}
+
+// ---------- UI ----------
+let msgTimer = 0;
+function say(t) { $('msg').textContent = t; $('msg').style.opacity = 1; msgTimer = 2.2; }
+function popScore(n) { const e = $('pop'); e.textContent = '+' + n; e.classList.remove('go'); void e.offsetWidth; e.classList.add('go'); }
+function updateHud() {
+  $('score').textContent = ArcadeCore.formatNumber(score);
+  $('pct').textContent = (destroyed / total * 100).toFixed(1) + '%';
+  $('tool').textContent = LEVELS[lv].name;
+  $('next').textContent = lv < LEVELS.length - 1 ? 'nächster ab ' + Math.round(LEVELS[lv + 1].at * 100) + '%' : 'Ziel: ' + Math.round(WIN_PCT * 100) + '%';
+  if (score > best) { best = score; ArcadeCore.saveScore(KEY, best); }
+}
+function syncMute() { $('mute').textContent = ArcadeCore.isMuted() ? '🔇' : '🔊'; }
+$('mute').addEventListener('click', e => { ArcadeCore.toggleMute(); syncMute(); e.currentTarget.blur(); });
+syncMute();
+
+function newCity() {
+  genCity((Math.random() * 2 ** 31) | 0);
+  total = 0;
+  for (let i = G * WD; i < N; i++) if (world[i]) total++;
+  rebuildMesh();
+  score = 0; destroyed = 0; lv = 0; won = false; tntQueue = [];
+  chips.items.length = 0; debris.items.length = 0;
+  Object.assign(P, { x: 20, y: G, z: 20, vx: 0, vy: 0, vz: 0, yaw: -2.356, pitch: -0.1, fly: false });
+  styleHammer(); updateHud();
+}
+function showMenu(paused) {
+  $('menu').classList.remove('hide');
+  $('play').textContent = paused ? 'Weiter' : "Los geht's";
+  $('bestLine').textContent = best ? 'Rekord: ' + ArcadeCore.formatNumber(best) + ' Punkte' : '';
+}
+function lock() { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); }
+$('play').addEventListener('click', lock);
+$('newcity').addEventListener('click', () => { newCity(); lock(); });
+let locked = false, started = false;
+document.addEventListener('pointerlockchange', () => {
+  locked = document.pointerLockElement === canvas;
+  if (locked) { started = true; $('menu').classList.add('hide'); }
+  else { charging = false; keys.clear(); showMenu(started); }
+});
+document.addEventListener('mousemove', e => {
+  if (!locked) return;
+  P.yaw -= e.movementX * 0.0022;
+  P.pitch = Math.max(-1.55, Math.min(1.55, P.pitch - e.movementY * 0.0022));
+});
+document.addEventListener('mousedown', e => {
+  if (!locked || e.button !== 0 || swingT >= 0) return;
+  charging = true; charge = 0;
+});
+document.addEventListener('mouseup', e => {
+  if (!locked || e.button !== 0 || !charging) return;
+  charging = false; swingPower = charge; swingT = 0; impactDone = false;
+  ArcadeCore.playTone(140 + swingPower * 80, 0.09, 'triangle', 0.05);
+});
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') e.preventDefault();
+  keys.add(e.code);
+  if (e.repeat) return;
+  if (e.code === 'KeyM') { ArcadeCore.toggleMute(); syncMute(); }
+  if (e.code === 'KeyF' && locked) { P.fly = !P.fly; P.vy = 0; say(P.fly ? 'Flugmodus an' : 'Flugmodus aus'); }
+});
+document.addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ---------- Loop ----------
+let last = performance.now(), hudT = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (locked) {
+    updatePlayer(dt);
+    if (charging) charge = Math.min(1, charge + dt / 0.9);
+    if (swingT >= 0) {
+      swingT += dt;
+      if (!impactDone && swingT >= 0.09) { impactDone = true; impact(); }
+      if (swingT >= 0.32) swingT = -1;
+    }
+  }
+  for (let i = tntQueue.length - 1; i >= 0; i--) {
+    const q = tntQueue[i];
+    if ((q.t -= dt) <= 0) { tntQueue.splice(i, 1); explode(q.c); }
+  }
+  updatePool(chips, dt);
+  updatePool(debris, dt);
+  if (meshDirty) {
+    mesh.count = icount; mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true; meshDirty = false;
+  }
+
+  // Kamera + Wackeln
+  eye.set(P.x, P.y + EYE, P.z);
+  camera.position.copy(eye);
+  shake *= Math.exp(-dt * 7);
+  camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake;
+  camera.rotation.set(P.pitch, P.yaw, 0);
+
+  // Hammer-Animation
+  const moving = Math.hypot(P.vx, P.vz) > 0.5 && P.onGround;
+  const bob = moving ? Math.sin(now / 110) * 0.025 : 0;
+  let rot = -0.25;
+  if (charging) rot = -0.25 + 1.05 * charge + (charge >= 1 ? Math.sin(now / 25) * 0.03 : 0);
+  else if (swingT >= 0) rot = swingT < 0.09 ? 1.05 * swingPower - 0.25 - (swingT / 0.09) * (1.05 + 1.05 * swingPower) : -1.3 + ((swingT - 0.09) / 0.23) * 1.05;
+  hammer.rotation.set(rot, 0, -0.2);
+  hammer.position.y = -0.5 + bob;
+  $('charge').style.opacity = charging ? 1 : 0;
+  $('charge').firstElementChild.style.width = (charge * 100) + '%';
+
+  // Zielblock markieren
+  camera.getWorldDirection(tmpV);
+  const hit = locked ? raycast(eye, tmpV, REACH) : null;
+  highlight.visible = !!hit;
+  if (hit) highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+
+  if (msgTimer > 0 && (msgTimer -= dt) <= 0) $('msg').style.opacity = 0;
+  if ((hudT += dt) > 0.15) { hudT = 0; updateHud(); }
+
+  renderer.render(scene, camera);
+  if (!appStarted) appStarted = true;
+  requestAnimationFrame(frame);
+}
+
+newCity();
+showMenu(false);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
