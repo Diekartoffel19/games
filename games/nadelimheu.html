@@ -62,11 +62,17 @@
   #det .leds { display:flex; gap:3px; margin-top:8px; }
   #det .leds i { flex:1; height:14px; border-radius:3px; background:rgba(255,255,255,.08); transition:background .08s; }
   #det .rd { margin-top:6px; font-size:12px; font-weight:600; height:16px; }
-  #hint { bottom:92px; left:50%; transform:translateX(-50%); font-size:13.5px; padding:7px 14px; border-radius:12px; background:var(--glass); opacity:0; transition:opacity .4s; text-align:center; max-width:80vw; }
+  #kraft { bottom:90px; left:50%; transform:translateX(-50%); width:220px; font-size:10px; letter-spacing:2px; font-weight:700; text-align:center; }
+  #kraft span { opacity:.7; }
+  #kraft .bar { margin-top:4px; height:6px; }
+  #kraft .bar i { transition:width .1s; }
+  #kraft.low span { color:#ff8a6a; opacity:1; }
+  #kraft.low .bar i { background:linear-gradient(90deg,#a3352a,#ff7a4a); box-shadow:0 0 12px rgba(255,110,70,.6); }
+  #hint { bottom:122px; left:50%; transform:translateX(-50%); font-size:13.5px; padding:7px 14px; border-radius:12px; background:var(--glass); opacity:0; transition:opacity .4s; text-align:center; max-width:80vw; }
   #hint.on { opacity:1; }
   #keys { bottom:20px; right:18px; font-size:11.5px; opacity:.7; text-align:right; line-height:1.7; }
   #keys kbd { font-family:Inter; font-size:10.5px; border:1px solid rgba(255,255,255,.35); border-radius:4px; padding:0 5px; margin:0 1px; }
-  #toasts { top:84px; right:16px; display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  #toasts { top:118px; right:16px; display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
   .toast { background:var(--glass); backdrop-filter:blur(8px); border-left:3px solid var(--gold); padding:8px 13px; border-radius:10px; font-size:13.5px; font-weight:600; animation:tin .3s ease-out, tout .5s ease-in 2.6s forwards; }
   .toast small { display:block; font-weight:400; opacity:.7; font-size:11.5px; }
   @keyframes tin { from { transform:translateX(30px); opacity:0; } }
@@ -108,6 +114,11 @@
   .buy .coin { width:15px; height:15px; }
   .buy:disabled { cursor:default; background:rgba(255,255,255,.08); color:rgba(255,240,210,.45); }
   .buy.max { background:rgba(120,200,120,.15); color:#bfe6b0; }
+  .cat { grid-column:1/-1; margin:14px 0 -2px; display:flex; align-items:baseline; gap:12px; border-bottom:1px solid rgba(255,220,160,.14); padding-bottom:6px; }
+  .cat:first-child { margin-top:0; }
+  .cat b { font-family:Fraunces,serif; font-size:21px; color:var(--gold); }
+  .cat span { font-size:12.5px; opacity:.6; }
+  .card.locked { opacity:.42; }
   #found { background:radial-gradient(ellipse at center, rgba(30,20,8,.35), rgba(10,6,2,.8)); }
   #found .panel { width:min(520px,92vw); text-align:center; padding:34px 30px; }
   #found h2 { font-family:Fraunces,serif; font-size:44px; margin:0; color:#fff4dc; }
@@ -125,7 +136,8 @@
 
 <div class="hud" id="hudTop" style="display:none"><div class="chip" id="taler"><div class="coin"></div><span id="talerN">0</span><small>Taler</small></div></div>
 <div class="hud" id="prog" style="display:none"><div id="progLbl">Heuhaufen Nr. 1 <span id="progPct">· 0 % durchsucht</span></div><div class="bar"><i id="progBar"></i></div></div>
-<div class="hud chip" id="hudRight" style="display:none">⏱ <b id="tm">0:00</b><br>Nadeln gefunden: <b id="ndl">0</b></div>
+<div class="hud chip" id="hudRight" style="display:none">⏱ <b id="tm">0:00</b><br>Nadeln gefunden: <b id="ndl">0</b><span id="autoL" style="display:none"><br>Maschinen: <b id="autoR">0</b> Halme/s</span></div>
+<div class="hud" id="kraft" style="display:none"><span id="kraftL">KRAFT</span><div class="bar"><i id="kraftBar"></i></div></div>
 <div class="hud" id="cross" style="display:none"><div class="ring"></div><div class="dot"></div></div>
 <div class="hud" id="prompt"></div>
 <div class="hud" id="hint"></div>
@@ -192,16 +204,27 @@ const lv = id => save.up[id] || 0;
 // ================= Upgrades =================
 const GRIFF = [1, 2, 3, 5, 8, 12, 18, 25, 35];
 const PRICE = [1, 1.5, 2, 3, 4, 6, 8, 11, 15, 20, 28];
+const CATS = { hand: ['Handarbeit', 'Deine Hände werden müde. Das hier hilft ein bisschen.'], gadget: ['Gadgets', 'Werkzeuge, die die Suche abkürzen.'], auto: ['Automation', 'Maschinen arbeiten für dich – auch während du in der Werkstatt stöberst.'] };
 const UPG = [
-  { id: 'griff', name: 'Kräftiger Griff', max: 8, desc: 'Mehr Halme pro Handgriff. Am Anfang: genau einer.', cost: l => Math.round(18 * Math.pow(2.25, l)), stat: l => GRIFF[l] + ' Halm' + (GRIFF[l] > 1 ? 'e' : '') + ' pro Griff' },
-  { id: 'tempo', name: 'Flinke Finger', max: 8, desc: 'Schnellere Griffe und Gabelstiche.', cost: l => Math.round(30 * Math.pow(2.1, l)), stat: l => (0.9 * Math.pow(0.87, l)).toFixed(2) + ' s pro Griff' },
-  { id: 'handschuh', name: 'Arbeitshandschuhe', max: 1, desc: 'Maustaste gedrückt halten = Dauergriff. Und das Heu juckt nicht mehr.', cost: () => 60, stat: l => l ? 'Dauergriff aktiv' : 'Einzelklicks' },
-  { id: 'preis', name: 'Heuhändler', max: 10, desc: 'Der Bauer zahlt mehr pro bewegtem Halm.', cost: l => Math.round(90 * Math.pow(2.45, l)), stat: l => PRICE[l] + ' Taler pro Halm' },
-  { id: 'detektor', name: 'Metalldetektor', max: 5, desc: 'Piept in der Nähe von Metall. Mehr Stufen = mehr Reichweite, ab Stufe 3 unterscheidet er Nadel und Schrott.', cost: l => [220, 650, 1600, 4200, 11000][l], stat: l => l ? 'Reichweite ' + detRange(l).toFixed(1) + ' m' + (l >= 3 ? ' · Diskriminator' : '') : 'nicht vorhanden' },
-  { id: 'gabel', name: 'Heugabel', max: 5, desc: 'Taste 2. Sticht ganze Büschel aus dem Haufen. Mehr Stufen = breitere Stiche.', cost: l => [700, 2100, 5800, 15000, 38000][l], stat: l => l ? '~' + forkAmount(l) + ' Halme pro Stich' : 'nicht vorhanden' },
-  { id: 'magnet', name: 'Magnet-Puls', max: 3, desc: 'Taste Q. Lässt Metall im Umkreis kurz durchs Heu leuchten.', cost: l => [2400, 8000, 22000][l], stat: l => l ? 'Radius ' + magRadius(l) + ' m · ' + magCool(l) + ' s Abklingzeit' : 'nicht vorhanden' },
-  { id: 'geblaese', name: 'Laubbläser', max: 4, desc: 'Taste 3. Bläst Heu in Massen weg. Laut. Sehr laut.', cost: l => [9000, 26000, 70000, 190000][l], stat: l => l ? 'Stufe ' + l + ' · Reichweite 6 m' : 'nicht vorhanden' },
+  { id: 'griff', cat: 'hand', name: 'Kräftiger Griff', max: 8, desc: 'Mehr Halme pro Handgriff. Am Anfang: genau einer.', cost: l => Math.round(18 * Math.pow(2.25, l)), stat: l => GRIFF[l] + ' Halm' + (GRIFF[l] > 1 ? 'e' : '') + ' pro Griff' },
+  { id: 'tempo', cat: 'hand', name: 'Flinke Finger', max: 8, desc: 'Schnellere Griffe und Gabelstiche.', cost: l => Math.round(30 * Math.pow(2.1, l)), stat: l => (0.9 * Math.pow(0.87, l)).toFixed(2) + ' s pro Griff' },
+  { id: 'handschuh', cat: 'hand', name: 'Arbeitshandschuhe', max: 1, desc: 'Maustaste gedrückt halten = Dauergriff. Die Arme ermüden 30 % langsamer.', cost: () => 60, stat: l => l ? 'Dauergriff aktiv' : 'Einzelklicks' },
+  { id: 'kaffee', cat: 'hand', name: 'Thermoskanne Kaffee', max: 4, desc: 'Schneller wieder bei Kräften. Müde Arme greifen bis zu 4× langsamer.', cost: l => Math.round(70 * Math.pow(2.7, l)), stat: l => 'Erholung ' + Math.round(fatRec(l) * 100) + ' % pro s' },
+  { id: 'preis', cat: 'hand', name: 'Heuhändler', max: 10, desc: 'Der Bauer zahlt mehr pro bewegtem Halm – auch für Halme, die deine Maschinen bewegen.', cost: l => Math.round(90 * Math.pow(2.45, l)), stat: l => PRICE[l] + ' Taler pro Halm' },
+  { id: 'detektor', cat: 'gadget', name: 'Metalldetektor', max: 5, desc: 'Piept in der Nähe von Metall. Mehr Stufen = mehr Reichweite, ab Stufe 3 unterscheidet er Nadel und Schrott.', cost: l => [220, 650, 1600, 4200, 11000][l], stat: l => l ? 'Reichweite ' + detRange(l).toFixed(1) + ' m' + (l >= 3 ? ' · Diskriminator' : '') : 'nicht vorhanden' },
+  { id: 'gabel', cat: 'gadget', name: 'Heugabel', max: 5, desc: 'Taste 2. Sticht ganze Büschel aus dem Haufen. Mehr Stufen = breitere Stiche.', cost: l => [700, 2100, 5800, 15000, 38000][l], stat: l => l ? '~' + forkAmount(l) + ' Halme pro Stich' : 'nicht vorhanden' },
+  { id: 'magnet', cat: 'gadget', name: 'Magnet-Puls', max: 3, desc: 'Taste Q. Lässt Metall im Umkreis kurz durchs Heu leuchten.', cost: l => [2400, 8000, 22000][l], stat: l => l ? 'Radius ' + magRadius(l) + ' m · ' + magCool(l) + ' s Abklingzeit' : 'nicht vorhanden' },
+  { id: 'geblaese', cat: 'gadget', name: 'Laubbläser', max: 4, desc: 'Taste 3. Bläst Heu in Massen weg. Laut. Sehr laut. Motor statt Muskeln: macht nicht müde.', cost: l => [9000, 26000, 70000, 190000][l], stat: l => l ? 'Stufe ' + l + ' · Reichweite 6 m' : 'nicht vorhanden' },
+  { id: 'huhn', cat: 'auto', name: 'Hofhühner', max: 6, desc: 'Picken unermüdlich Halme vom Fuß des Haufens. Jedes Huhn ein kleiner Mitarbeiter.', cost: l => Math.round(220 * Math.pow(2.3, l)), stat: l => l ? l + (l > 1 ? ' Hühner' : ' Huhn') + ' · ~' + (l * HEN_RATE).toFixed(1) + ' Halme/s' : 'kein Huhn' },
+  { id: 'robo', cat: 'auto', name: 'Heu-Roboter', max: 4, req: 'huhn', desc: 'Fressen sich von unten durch den Haufen. Der Rest rutscht von allein nach.', cost: l => [5000, 14000, 38000, 100000][l], stat: l => l ? l + ' Roboter · ~' + l * ROBO_RATE + ' Halme/s' : 'kein Roboter' },
+  { id: 'kran', cat: 'auto', name: 'Turmdrehkran', max: 4, req: 'robo', desc: 'Greift ganze Klumpen von oben. Mehr Stufen = schneller und größerer Greifer.', cost: l => [90000, 300000, 900000, 2600000][l], stat: l => l ? 'Stufe ' + l + ' · ~' + craneCells(l) + ' Zellen pro Griff' : 'nicht vorhanden' },
+  { id: 'sorter', cat: 'auto', name: 'Sortieranlage', max: 1, req: 'kran', desc: 'Liegt die Nadel frei, zieht die Magnettrommel sie heraus. Du musst sie nicht mehr selbst aufheben.', cost: () => 3000000, stat: l => l ? 'Magnettrommel läuft' : 'nicht vorhanden' },
+  { id: 'autopilot', cat: 'auto', name: 'Hofcomputer', max: 1, req: 'sorter', desc: 'Bestellt nach jedem Fund sofort den nächsten Heuhaufen. Ab jetzt läuft der Hof von allein.', cost: () => 9000000, stat: l => l ? 'Autopilot an' : 'Autopilot aus' },
 ];
+const fatRec = l => 0.04 + 0.035 * l;
+const HEN_RATE = 2.5, ROBO_RATE = 20;
+const craneR = l => 1.8 + 0.5 * (l - 1);
+const craneCells = l => { const r = craneR(l); let n = 0; for (let i = -3; i <= 3; i++) for (let j = -3; j <= 0; j++) for (let k = -3; k <= 3; k++) if (i * i + j * j + k * k <= r * r + 0.01) n++; return n; };
 const detRange = l => [0, 2.2, 3.2, 4.3, 5.5, 7][l];
 const forkRadius = l => 1 + 0.35 * (l - 1);
 const forkAmount = l => { const r = forkRadius(l); let n = 0; for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) for (let k = -2; k <= 2; k++) if (i * i + j * j + k * k <= r * r + 0.01) n++; return n * (5 + 4 * l); };
@@ -350,6 +373,10 @@ function matFor(p) {
   if (p.c === '#7a4a2a') { o.metalness = 0.35; o.roughness = 0.8; }
   if (p.c === '#3f6b3a') { o.metalness = 0.3; o.roughness = 0.45; }
   if (p.c === '#39ff88') { o.emissive = lin('#39ff88'); o.emissiveIntensity = 0.5; }
+  if (p.c === '#ff4a3a') { o.emissive = lin('#ff4a3a'); o.emissiveIntensity = 2; }
+  if (p.c === '#f0b21e') { o.metalness = 0.25; o.roughness = 0.5; }
+  if (p.c === '#1e2a44') { o.metalness = 0.5; o.roughness = 0.25; }
+  if (p.c === '#b8322a') { o.metalness = 0.35; o.roughness = 0.4; }
   if (p.c === '#d9a07f') { o.roughness = 0.62; }
   if (p.tex) { o.map = TEX[p.tex]; o.color = new THREE.Color(p.tex === 'wood' ? 0xe6e6e6 : 0xffffff); }
   return (MATS[key] = new THREE.MeshStandardMaterial(o));
@@ -598,7 +625,7 @@ const cellCenter = (id, v) => { const i = id % NX, k = Math.floor(id / NX) % NZ,
 function genStack(level, rain) {
   stackR = Math.min(1.25 + 0.32 * (level - 1), 4.6);
   stackH = Math.min(1.5 + 0.28 * (level - 1), 4.3);
-  const spc = Math.min(5 + 2 * (level - 1), 40);
+  const spc = Math.min(6 + 3 * (level - 1), 48);
   NX = NZ = Math.ceil(2 * stackR / C) + 2; NY = Math.ceil(stackH / C) + 2;
   GX = GZ = -NX * C / 2;
   const N = NX * NY * NZ;
@@ -631,6 +658,7 @@ function genStack(level, rain) {
   placeItems(level);
   scatterGround(rain ? 260 : 420, stackR * 0.9, stackR + 3.2);
   dirty = true; hover = -1;
+  layoutMachines(true);
 }
 
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _n = new THREE.Vector3(), _z = new THREE.Vector3(0, 0, 1), _e = new THREE.Euler();
@@ -709,14 +737,16 @@ function settle(dt) {
   }
   if (moved) { dirty = true; anyFall = true; rustle(0.4, 0.5); } else unstable = false;
 }
-function takeFrom(id, n) {
+// lazy: Maschinen – Neuaufbau gedrosselt statt jeden Frame
+let dirtySoft = false, softT = 0;
+function takeFrom(id, n, lazy) {
   const t = Math.min(n, dens[id]); if (!t) return 0;
   dens[id] -= t; removed += t; save.straws += t;
   if (!dens[id]) {
     unstable = true;
     for (const it of items) if (it.cell === id) freeItem(it);
   }
-  dirty = true;
+  if (lazy) dirtySoft = true; else dirty = true;
   return t;
 }
 // Voxel-DDA durch das Zellgitter
@@ -797,12 +827,21 @@ function updateItems(dt) {
       if (t > 1.0) { it.gone = true; scene.remove(it.mesh); }
       continue;
     }
+    if (it.free && it.type === 'needle' && sorter && foundT < 0 && (it.freeT = (it.freeT || 0) + dt) > 2.5) {
+      // Sortieranlage: Magnettrommel zieht die freiliegende Nadel heraus (2,5 s Vorsprung für dich)
+      sorter.drum.getWorldPosition(_v2); _v.subVectors(_v2, it.pos); const d = _v.length();
+      if (d < 0.3) { it.gone = true; scene.remove(it.mesh); autoFound(); continue; }
+      it.pos.addScaledVector(_v, Math.min(d, dt * Math.min(16, 1 + (it.freeT - 2.5) * 7)) / d); it.pos.y += dt * Math.min(2, d * 0.4);
+      it.mesh.position.copy(it.pos); it.mesh.rotation.y += dt * 9;
+      if (Math.random() < dt * 30) puff(it.pos, 1, 0.05);
+      continue;
+    }
     if (it.free) {
       const fl = floorBelow(it.pos);
       if (it.pos.y > fl + 0.02) { it.vy -= 9 * dt; it.pos.y = Math.max(fl + 0.02, it.pos.y + it.vy * dt); } else { it.vy = 0; it.pos.y = fl + 0.02; }
       // wenn Heu nachrutscht und die Nadel wieder verschüttet
       const i = Math.floor((it.pos.x - GX) / C), j = Math.floor(it.pos.y / C), k = Math.floor((it.pos.z - GZ) / C);
-      if (filled(i, j, k)) { it.free = false; it.cell = I3(i, j, k); cellCenter(it.cell, _v); it.off.subVectors(it.pos, _v); }
+      if (filled(i, j, k)) { it.free = false; it.freeT = 0; it.cell = I3(i, j, k); cellCenter(it.cell, _v); it.off.subVectors(it.pos, _v); }
       it.mesh.position.copy(it.pos);
       if (it.type === 'needle') it.mesh.rotation.set(0, it.mesh.rotation.y, 0);
     } else updateItemPos(it);
@@ -961,6 +1000,9 @@ function updateHUD() {
   $('progPct').textContent = '· ' + (pct < 10 ? pct.toFixed(1) : Math.floor(pct)) + ' % durchsucht';
   $('progBar').style.width = pct + '%';
   $('tm').textContent = fmtTime(stackTime); $('ndl').textContent = save.needles;
+  $('autoL').style.display = bots.length || crane ? '' : 'none'; $('autoR').textContent = fmt(autoRate);
+  $('kraftBar').style.width = (100 - fat * 100) + '%'; $('kraft').classList.toggle('low', fat > 0.6);
+  $('kraftL').textContent = fat > 0.85 ? 'ARME BRENNEN' : fat > 0.6 ? 'ERSCHÖPFT' : 'KRAFT';
   document.querySelectorAll('.slot').forEach(s => {
     const t = s.dataset.t;
     s.classList.toggle('act', t === tool);
@@ -972,23 +1014,28 @@ function updateHUD() {
 }
 function renderShop() {
   $('talerS').textContent = fmt(save.taler);
+  let cat = '';
   $('cards').innerHTML = UPG.map(u => {
-    const l = lv(u.id), maxed = l >= u.max, c = maxed ? 0 : u.cost(l);
+    const l = lv(u.id), maxed = l >= u.max, c = maxed ? 0 : u.cost(l), locked = u.req && !lv(u.req);
+    const head = u.cat !== cat ? '<div class="cat"><b>' + CATS[u.cat][0] + '</b><span>' + CATS[u.cat][1] + '</span></div>' : ''; cat = u.cat;
     const pips = u.max > 1 ? '<div class="pips">' + Array.from({ length: u.max }, (_, i) => '<i class="' + (i < l ? 'on' : '') + '"></i>').join('') + '</div>' : '';
     const st = u.stat(l) + (maxed ? '' : ' → ' + u.stat(l + 1));
-    return '<div class="card"><h3>' + u.name + pips + '</h3><p>' + u.desc + '</p><div class="st">' + st + '</div>' +
-      (maxed ? '<button class="buy max" disabled>Maximal ausgebaut</button>' : '<button class="buy" data-id="' + u.id + '"' + (save.taler < c ? ' disabled' : '') + '><span class="coin"></span>' + fmt(c) + '</button>') + '</div>';
+    const btn = maxed ? '<button class="buy max" disabled>Maximal ausgebaut</button>'
+      : locked ? '<button class="buy" disabled>Erst: ' + UPG.find(x => x.id === u.req).name + '</button>'
+      : '<button class="buy" data-id="' + u.id + '"' + (save.taler < c ? ' disabled' : '') + '><span class="coin"></span>' + fmt(c) + '</button>';
+    return head + '<div class="card' + (locked ? ' locked' : '') + '"><h3>' + u.name + pips + '</h3><p>' + u.desc + '</p><div class="st">' + st + '</div>' + btn + '</div>';
   }).join('');
 }
 $('cards').addEventListener('click', e => {
   const b = e.target.closest('.buy'); if (!b || b.disabled) return;
   const u = UPG.find(x => x.id === b.dataset.id), l = lv(u.id), c = u.cost(l);
-  if (l >= u.max || save.taler < c) return;
+  if (l >= u.max || save.taler < c || (u.req && !lv(u.req))) return;
   save.taler -= c; save.up[u.id] = l + 1; persist();
   if (window.ArcadeCore) ArcadeCore.powerup();
   if (u.id === 'handschuh') SKIN.color.copy(lin('#7d5a35'));
   if (u.id === 'gabel' && l === 0) { tool = 'fork'; hint('Heugabel freigeschaltet! Taste 2.'); }
   if (u.id === 'geblaese' && l === 0) { tool = 'blow'; hint('Laubbläser! Taste 3, Maustaste halten.'); }
+  if (u.cat === 'auto') { syncMachines(); toast({ huhn: 'Ein Huhn zieht ein', robo: 'Heu-Roboter geliefert', kran: l ? 'Kran aufgerüstet' : 'Der Kran steht', sorter: 'Sortieranlage läuft', autopilot: 'Hofcomputer online' }[u.id], { huhn: 'Gack.', robo: 'Brummt hinter dem Haufen los.', kran: 'Hinter dem Haufen – schau mal hoch.', sorter: 'Freiliegende Nadeln holt jetzt die Magnettrommel.', autopilot: 'Nach jedem Fund kommt der nächste Haufen von allein.' }[u.id]); }
   renderShop();
 });
 
@@ -1005,7 +1052,7 @@ function setState(s) {
   state = s;
   $('start').classList.toggle('on', s === 'title'); $('pause').classList.toggle('on', s === 'pause'); $('shop').classList.toggle('on', s === 'shop'); $('found').classList.toggle('on', s === 'found');
   const hud = s !== 'title';
-  ['hudTop', 'prog', 'hudRight', 'hotbar', 'keys'].forEach(id => $(id).style.display = hud ? '' : 'none');
+  ['hudTop', 'prog', 'hudRight', 'hotbar', 'keys', 'kraft'].forEach(id => $(id).style.display = hud ? '' : 'none');
   $('cross').style.display = s === 'play' ? '' : 'none';
   document.body.classList.toggle('playing', s !== 'title');
   if (s !== 'play') { mouse.down = false; blowSound(false); }
@@ -1015,7 +1062,8 @@ $('startBtn').onclick = () => { setState('play'); lock(); startAmbient(); genSta
 $('resumeBtn').onclick = () => { setState('play'); lock(); };
 $('shopBtn2').onclick = () => setState('shop');
 $('closeShop').onclick = () => { setState('play'); lock(); };
-$('nextBtn').onclick = () => { save.level++; persist(); stackTime = 0; genStack(save.level, true); placePlayer(); setState('play'); lock(); };
+function nextStack() { save.level++; persist(); stackTime = 0; nextStackT = -1; genStack(save.level, true); placePlayer(); }
+$('nextBtn').onclick = () => { nextStack(); setState('play'); lock(); };
 document.addEventListener('pointerlockchange', () => { if (!locked() && state === 'play' && !SHOT) setState('pause'); });
 canvas.addEventListener('mousedown', e => {
   if (state === 'play' && !locked() && !SHOT) { lock(); return; }
@@ -1110,7 +1158,15 @@ function aim() {
   }
   return hit;
 }
-function startAnim(type, hit) { anim = { type, t: 0, dur: type === 'fork' ? 1.15 * Math.pow(0.9, lv('tempo')) : tempoT(), hit, done: false, rel: false, taken: 0, point: ray.o.clone().addScaledVector(ray.d, hit ? hit.t + 0.1 : 1.5) }; }
+// Ermüdung: jeder Griff kostet Kraft, müde Arme greifen bis zu 4× langsamer
+let fat = 0;
+function tire(k) {
+  fat = Math.min(1, fat + k * (lv('handschuh') ? 0.7 : 1));
+  if (fat > 0.85) hintOnce('tired', 'Deine Arme brennen. Kurz verschnaufen – oder in der Werkstatt (E) Kaffee und Maschinen kaufen.', 6);
+}
+function startAnim(type, hit) {
+  if (hit) tire(type === 'fork' ? 0.16 : 0.08);
+  anim = { type, t: 0, dur: (type === 'fork' ? 1.15 * Math.pow(0.9, lv('tempo')) : tempoT()) * (1 + 3 * fat * fat), hit, done: false, rel: false, taken: 0, point: ray.o.clone().addScaledVector(ray.d, hit ? hit.t + 0.1 : 1.5) }; }
 function commitGrab() {
   const a = anim; if (!a.hit) return;
   if (a.type === 'hand') a.taken = takeFrom(a.hit.id, GRIFF[lv('griff')]);
@@ -1228,15 +1284,212 @@ function pickNeedle() {
   for (let i = 0; i < 60; i++) spawnStraw(_v.copy(nd.pos), _u.set(rand(-3, 3), rand(3, 7), rand(-3, 3)));
   puff(nd.pos, 60, 0.6);
 }
+const needleReward = () => Math.round(120 * Math.pow(save.level, 1.7));
 function finishFound() {
-  const rew = Math.round(120 * Math.pow(save.level, 1.7));
+  const rew = needleReward();
   save.taler += rew; save.needles++; persist();
+  heldNeedle.visible = false; foundT = -1;
+  showFound(rew);
+}
+function showFound(rew) {
   $('fTime').textContent = fmtTime(stackTime); $('fStraw').textContent = fmt(removed);
   $('fPct').textContent = Math.round(removed / total * 100) + ' %'; $('fRew').textContent = '+' + fmt(rew);
   $('fNext').textContent = 'Nächster Haufen: größer, dichter, mehr Schrott.';
-  heldNeedle.visible = false; foundT = -1;
   document.exitPointerLock && document.exitPointerLock();
   setState('found');
+}
+
+// ================= Automation: Hühner, Heu-Roboter, Kran, Sortieranlage, Hofcomputer =================
+const bots = [];
+let crane = null, sorter = null, hofpc = null, autoAcc = 0, autoWin = 0, autoRate = 0, autoNoise = 0, nextStackT = -1, foundPending = 0;
+const CR_ANG = -0.35; // Kran rechts neben dem Haufen, nicht im Gegenlicht (Spieler startet bei +z)
+const GLOW = MATS['#39ff88'].clone(); GLOW.emissiveIntensity = 1.4; // eigene Kopie, sonst pulsieren LEDs mit dem Detektor
+const LAMP = MATS['#ff4a3a'];
+function unshareGlow(root) { root.traverse(o => { if (o.material === MATS['#39ff88']) o.material = GLOW; }); }
+const angTo = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+const yawOf = (dx, dz) => Math.atan2(-dx, -dz); // Modelle schauen nach -Z
+// erste Heu-Zelle auf Höhe j, von außen entlang des Winkels gesucht → { id, r }
+function edgeCell(ang, j) {
+  const cx = Math.cos(ang), cz = Math.sin(ang);
+  for (let r = NX * C * 0.5 + C; r > 0; r -= C * 0.5) {
+    const i = Math.floor((cx * r - GX) / C), k = Math.floor((cz * r - GZ) / C);
+    if (filled(i, j, k)) { const id = I3(i, j, k); return fall[id] < 0.05 ? { id, r } : null; }
+  }
+  return null;
+}
+function colTop(i, k) { for (let j = NY - 1; j >= 0; j--) { const id = I3(i, j, k); if (dens[id]) return fall[id] < 0.05 ? j : -1; } return -1; }
+function machineTake(id, n, at) {
+  const t = takeFrom(id, n, true); if (!t) return 0;
+  addTaler(t * PRICE[lv('preis')], false); autoAcc += t;
+  if (at && Math.random() < 0.5) { puff(at, 2, 0.12); spawnStraw(at, _u.set(rand(-0.6, 0.6), rand(0.6, 1.6), rand(-0.6, 0.6)), rand(0.3, 0.5)); }
+  return t;
+}
+function addBot(kind) {
+  const p = build(kind === 'hen' ? 'chicken' : 'robo'), a = Math.random() * 6.283;
+  if (kind === 'robo') { p.root.scale.setScalar(1.25); unshareGlow(p.root); }
+  const b = { kind, p, ang: a, rad: stackR + 2 + Math.random() * 2, tAng: a, tRad: stackR + 2, yaw: 0, id: -1, t: Math.random(), wait: Math.random(), peck: 0, bites: 0 };
+  scene.add(p.root); bots.push(b);
+}
+function retarget(b) {
+  for (let n = 1; n <= 6; n++) {
+    const a = b.ang + rand(-0.5, 0.5) * n, e = edgeCell(a, 0);
+    if (e) { b.id = e.id; b.tAng = a; b.tRad = e.r + (b.kind === 'hen' ? 0.2 : 0.5); b.bites = 0; return; }
+  }
+  // nichts erreichbar: ein Stück herumlaufen und später nochmal schauen
+  b.id = -1; b.wait = 1.5; b.tAng = b.ang + rand(-1.2, 1.2); b.tRad = stackR + 1.5 + Math.random() * 2;
+}
+function updateBot(b, dt) {
+  const hen = b.kind === 'hen', sp = hen ? 0.9 : 1.4;
+  if (b.id >= 0 && !dens[b.id]) b.id = -1;
+  if (b.id < 0 && (b.wait -= dt) <= 0) retarget(b);
+  const da = angTo(b.ang, b.tAng), x0 = Math.cos(b.ang) * b.rad, z0 = Math.sin(b.ang) * b.rad;
+  let moving = true;
+  if (Math.abs(da) > 0.03) {
+    // erst nach außen, dann um den Haufen herum
+    const travel = Math.max(b.tRad, stackR * 1.12 + 0.4);
+    if (b.rad < travel - 0.05) b.rad = Math.min(travel, b.rad + sp * dt);
+    else { b.ang += Math.sign(da) * Math.min(Math.abs(da), sp * dt / b.rad); b.rad += (travel - b.rad) * Math.min(1, dt * 2); }
+  } else if (Math.abs(b.rad - b.tRad) > 0.03) b.rad += clamp(b.tRad - b.rad, -sp * dt, sp * dt);
+  else moving = false;
+  const x = Math.cos(b.ang) * b.rad, z = Math.sin(b.ang) * b.rad;
+  const wy = moving ? yawOf(x - x0, z - z0) : yawOf(-x, -z);
+  b.yaw += angTo(b.yaw, wy) * Math.min(1, dt * 8);
+  b.p.root.position.set(x, 0, z); b.p.root.rotation.y = b.yaw;
+  b.peck = Math.max(0, b.peck - dt * 3.2);
+  if (!moving && b.id >= 0 && (b.t -= dt) <= 0) {
+    b.t = hen ? rand(0.3, 0.5) : 0.4;
+    cellCenter(b.id, _w);
+    if (!machineTake(b.id, hen ? 1 : 8, _w)) b.id = -1;
+    else if (++b.bites > (hen ? 6 : 14) && Math.random() < 0.3) b.id = -1; // weiterziehen
+    b.peck = 1;
+  }
+  if (hen) {
+    const pk = Math.sin(b.peck * Math.PI);
+    b.p.head.rotation.set(-1.0 * pk, moving ? 0 : Math.sin(now * 1.7 + b.ang * 5) * 0.4 * (1 - pk), 0);
+    b.p.root.position.y = moving ? Math.abs(Math.sin(now * 13 + b.ang * 9)) * 0.025 : 0;
+    b.p.root.rotation.z = moving ? Math.sin(now * 13 + b.ang * 9) * 0.08 : 0;
+  } else {
+    b.p.brush.rotation.x -= dt * (moving ? 8 : 26);
+    b.p.root.rotation.z = b.peck * 0.03 * Math.sin(now * 40);
+  }
+}
+// ---- Kran ----
+const TROLLEY_Y = 7.9, CLAW_TIPS = 1.45, CLAW_UP = -1.1;
+function makeCrane() {
+  const p = build('kran'); scene.add(p.root);
+  const cg = new THREE.CylinderGeometry(0.014, 0.014, 1, 5);
+  p.cables = [-0.12, 0.12].map(x => { const m = new THREE.Mesh(cg, MATS['#2d3036']); m.position.x = x; p.trolley.add(m); return m; });
+  p.load = new THREE.Group(); p.load.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 1), hayMat), makeTuft(14, 0.62));
+  p.load.position.y = -1.0; p.load.visible = false; p.claw.add(p.load);
+  // Schwenkachsen der drei Finger (Blender: 90°, 210°, 330° um den Hub)
+  p.axes = [0, 1, 2].map(i => { const a = (i * 120 + 90) * Math.PI / 180; return new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a)); });
+  p.col = { x: 0, z: 0, r: 0.9 }; circles.push(p.col);
+  p.st = { ph: 'choose', t: 0, yaw: 0, dist: 4, h: CLAW_UP, open: 0, tYaw: 0, tDist: 4, tH: CLAW_UP, id: -1, taken: 0 };
+  return p;
+}
+function craneDrop() {
+  if (sorter) { sorter.root.updateMatrixWorld(); return _r.set(0, 2.9, 0).applyMatrix4(sorter.root.matrixWorld); }
+  return _r.set(crane.root.position.x * 1.0 + Math.cos(CR_ANG + 0.9) * 3, 0.3, crane.root.position.z + Math.sin(CR_ANG + 0.9) * 3);
+}
+function updateCrane(dt) {
+  const p = crane, s = p.st, l = lv('kran'), spd = 1 + 0.4 * (l - 1), mx = p.root.position.x, mz = p.root.position.z;
+  const go = (k, v, r) => { const d = k === 'yaw' ? angTo(s.yaw, v) : v - s[k]; s[k] += clamp(d, -r * dt, r * dt); return Math.abs(d) < 0.01; };
+  s.t += dt;
+  if (s.ph === 'choose') {
+    // ein paar zufällige Säulen in Reichweite ansehen, die höchste nehmen
+    let best = -1, bj = -1;
+    for (let n = 0; n < 24; n++) {
+      const i = Math.floor(Math.random() * NX), k = Math.floor(Math.random() * NZ), j = colTop(i, k);
+      if (j < 0) continue;
+      const x = GX + (i + 0.5) * C - mx, z = GZ + (k + 0.5) * C - mz, d = Math.hypot(x, z);
+      if (d < 1.6 || d > 10.2) continue;
+      if (j > bj) { bj = j; best = I3(i, j, k); }
+    }
+    if (best < 0) { s.ph = 'idle'; s.t = 0; }
+    else { cellCenter(best, _w); s.id = best; s.tYaw = yawOf(_w.x - mx, _w.z - mz); s.tDist = Math.hypot(_w.x - mx, _w.z - mz); s.tH = (bj + 1) * C + CLAW_TIPS - 0.3 - TROLLEY_Y; s.ph = 'move'; }
+  } else if (s.ph === 'idle') { go('h', CLAW_UP, 2); if (s.t > 2) s.ph = 'choose'; }
+  else if (s.ph === 'move') { go('h', CLAW_UP, 3 * spd); s.open = Math.min(1, s.open + dt * 2); if (go('yaw', s.tYaw, 0.8 * spd) & go('dist', s.tDist, 3 * spd)) { s.ph = 'lower'; s.t = 0; } }
+  else if (s.ph === 'lower') { if (go('h', s.tH, 4 * spd)) { s.ph = 'grab'; s.t = 0; } }
+  else if (s.ph === 'grab') {
+    s.open = Math.max(-0.15, 1 - s.t * 2.5 * spd);
+    if (s.t * spd > 0.5) {
+      const id = s.id, ci = id % NX, ck = Math.floor(id / NX) % NZ, cj = Math.floor(id / (NX * NZ)), r = craneR(l);
+      s.taken = 0;
+      for (let dj = -3; dj <= 0; dj++) for (let dk = -3; dk <= 3; dk++) for (let di = -3; di <= 3; di++)
+        if (di * di + dj * dj + dk * dk <= r * r + 0.01 && filled(ci + di, cj + dj, ck + dk)) s.taken += machineTake(I3(ci + di, cj + dj, ck + dk), 9999, null);
+      cellCenter(id, _w); puff(_w, 22, 0.5); hayPoke(_w, 2);
+      for (let q = 0; q < 10; q++) spawnStraw(_w, _u.set(rand(-1.5, 1.5), rand(0.5, 2), rand(-1.5, 1.5)), rand(0.4, 0.8));
+      if (_w.distanceTo(camera.position) < 14) rustle(1, 0.6);
+      p.load.visible = s.taken > 0; p.load.scale.setScalar(0.5 + Math.min(0.8, s.taken / 900));
+      s.ph = 'lift'; s.t = 0;
+    }
+  } else if (s.ph === 'lift') { if (go('h', CLAW_UP, 2.2 * spd)) { const d = craneDrop(); s.tYaw = yawOf(d.x - mx, d.z - mz); s.tDist = Math.hypot(d.x - mx, d.z - mz); s.dropY = d.y; s.ph = 'swing'; s.t = 0; } }
+  else if (s.ph === 'swing') {
+    if (go('yaw', s.tYaw, 0.8 * spd) & go('dist', s.tDist, 3 * spd)) { s.ph = 'drop'; s.t = 0; }
+  } else if (s.ph === 'drop') {
+    go('h', s.dropY + CLAW_TIPS + 0.3 - TROLLEY_Y, 3 * spd);
+    s.open = Math.min(1, s.open + dt * 3);
+    if (p.load.visible && s.open > 0.5) {
+      p.load.visible = false; const d = craneDrop(); puff(_w.copy(d).setY(d.y + 0.3), 18, 0.5);
+      for (let q = 0; q < 8; q++) spawnStraw(_w, _u.set(rand(-1, 1), rand(0, 1), rand(-1, 1)), rand(0.4, 0.8));
+      if (sorter) sorter.spin = 3;
+    }
+    if (s.t > 0.9 / spd) { s.ph = 'choose'; s.t = 0; }
+  }
+  // Pose: Ausleger, Laufkatze, Seil, Greifer
+  p.jib.rotation.y = s.yaw; p.trolley.position.z = -s.dist; p.claw.position.y = s.h;
+  p.claw.rotation.y = Math.sin(now * 0.7) * 0.05;
+  for (const c of p.cables) { c.scale.y = -s.h; c.position.y = s.h / 2; }
+  [p.p1, p.p2, p.p3].forEach((f, i) => f.quaternion.setFromAxisAngle(p.axes[i], -0.5 * s.open + 0.12));
+}
+// Maschinen um den aktuellen Haufen aufstellen
+function layoutMachines(reset) {
+  const d = stackR + 1.7;
+  if (crane) {
+    crane.root.position.set(Math.cos(CR_ANG) * d, 0, Math.sin(CR_ANG) * d); crane.col.x = crane.root.position.x; crane.col.z = crane.root.position.z;
+    if (reset) { Object.assign(crane.st, { ph: 'idle', t: 1 }); crane.load.visible = false; }
+  }
+  if (sorter) {
+    const a = CR_ANG - 3.2 / (stackR + 2.4), r = stackR + 2.4;
+    sorter.root.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); sorter.root.rotation.y = -a; // Förderband zeigt nach außen
+    Object.assign(sorter.col, { x: sorter.root.position.x + Math.cos(a) * 1.55, z: sorter.root.position.z + Math.sin(a) * 1.55, r: -a });
+  }
+  if (hofpc) {
+    const a = Math.PI / 2 + 0.85, r = stackR + 3.4;
+    hofpc.root.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); hofpc.root.rotation.y = yawOf(-Math.cos(a), -Math.sin(a));
+    hofpc.col.x = hofpc.root.position.x; hofpc.col.z = hofpc.root.position.z;
+  }
+  if (reset) for (const b of bots) { b.id = -1; b.wait = Math.random(); if (b.rad < stackR + 0.6) { b.rad = stackR + 1.8; } }
+}
+function syncMachines() {
+  while (bots.filter(b => b.kind === 'hen').length < lv('huhn')) addBot('hen');
+  while (bots.filter(b => b.kind === 'robo').length < lv('robo')) addBot('robo');
+  if (lv('kran') && !crane) crane = makeCrane();
+  if (lv('sorter') && !sorter) { sorter = build('sortierer'); sorter.spin = 0; unshareGlow(sorter.root); scene.add(sorter.root); boxes.push(sorter.col = { x: 0, z: 0, r: 0, hw: 2.35, hd: 0.85 }); }
+  if (lv('autopilot') && !hofpc) { hofpc = build('hofpc'); unshareGlow(hofpc.root); scene.add(hofpc.root); circles.push(hofpc.col = { x: 0, z: 0, r: 0.75 }); }
+  layoutMachines(false);
+}
+function updateMachines(dt) {
+  for (const b of bots) updateBot(b, dt);
+  // Bots weichen einander seitlich aus
+  for (let i = 0; i < bots.length; i++) for (let j = i + 1; j < bots.length; j++) {
+    const a = bots[i], b = bots[j], pa = a.p.root.position, pb = b.p.root.position, m = (a.kind === 'robo' ? 0.42 : 0.2) + (b.kind === 'robo' ? 0.42 : 0.2);
+    if (pa.distanceToSquared(pb) < m * m) { const s = angTo(a.ang, b.ang) >= 0 ? 1 : -1, k = dt * 2.5 / Math.max(1, Math.min(a.rad, b.rad)); a.ang -= s * k; b.ang += s * k; }
+  }
+  if (crane) updateCrane(dt);
+  if (sorter) { sorter.spin = Math.max(0.4, sorter.spin - dt * 0.6); sorter.drum.rotation.z -= dt * sorter.spin * 2; }
+  if (hofpc) LAMP.emissiveIntensity = (now % 1.2) < 0.15 ? 6 : 0.4;
+  GLOW.emissiveIntensity = 1.2 + 0.3 * Math.sin(now * 3);
+  autoWin += dt; if (autoWin >= 1) { autoRate = lerp(autoRate, autoAcc / autoWin, 0.5); autoAcc = 0; autoWin = 0; }
+  if (autoAcc && (autoNoise -= dt) <= 0 && bots.length) { autoNoise = 0.7; rustle(0.2, 0.25); }
+  if (nextStackT > 0 && (nextStackT -= dt) <= 0) { nextStack(); toast('Hofcomputer', 'Heuhaufen Nr. ' + save.level + ' ist angeliefert.'); }
+}
+// Sortieranlage hat die Nadel herausgezogen
+function autoFound() {
+  const rew = needleReward(); save.taler += rew; save.needles++; persist();
+  chime(); if (window.ArcadeCore) ArcadeCore.powerup();
+  toast('✦ Nadel gefunden! +' + fmt(rew), 'Die Magnettrommel hat sie aus dem Heu gezogen.');
+  if (lv('autopilot')) nextStackT = 3.5; else foundPending = rew;
 }
 
 // Viewmodel-Animation über Keyframes: [t, dx, dy, dz, rx, ry, rz, curl, spread] (Offsets zur Grundhaltung)
@@ -1293,6 +1546,7 @@ function updateViewmodel(dt, moving) {
   const g = toolG[tool], pose = TOOL_POSE[tool];
   let dx = bx + sway.x, dy = by - drop * 0.35 + sway.y - P.land, dz = 0, rx = 0, ry = 0, rz = 0, curl = 0.15 + 0.05 * Math.sin(now * 0.8), spread = 0, cf = null;
   strand.visible = false;
+  if (tool !== 'blow') { dy += Math.sin(now * 31) * 0.004 * fat * fat; rz += Math.sin(now * 23) * 0.012 * fat * fat; } // müde Arme zittern
   if (foundT >= 0) {
     foundT += dt; const k = ease(Math.min(1, foundT / 0.8));
     dx += lerp(0, -0.17, k); dy += lerp(0, 0.2, k); dz += lerp(0, 0.08, k); rx += lerp(0, 0.55, k); ry += lerp(0, -0.2, k) + Math.sin(now * 1.3) * 0.1 * k; rz += lerp(0, 0.5, k) + Math.sin(now * 0.9) * 0.06 * k;
@@ -1359,9 +1613,13 @@ function frame(t) {
       updateTool(dt, hit);
     }
     magT = Math.max(0, magT - dt);
+    fat = Math.max(0, fat - dt * fatRec(lv('kaffee')));
+    updateMachines(dt);
+    if (foundPending && state === 'play' && foundT < 0) { const r = foundPending; foundPending = 0; showFound(r); }
   }
   sky.position.copy(camera.position);
-  settle(wdt); if (dirty) rebuild();
+  settle(wdt); softT += dt;
+  if (dirty || (dirtySoft && softT > 0.12)) { rebuild(); dirtySoft = false; softT = 0; }
   updateStraws(wdt); updateItems(wdt); updateXray(dt); updateDetector(dt);
   // Staub
   for (let i = 0; i < DUST; i++) {
@@ -1387,6 +1645,7 @@ addEventListener('beforeunload', persist);
 if (lv('handschuh')) SKIN.color.copy(lin('#7d5a35'));
 tool = (save.tool === 'fork' && lv('gabel')) || (save.tool === 'blow' && lv('geblaese')) ? save.tool : 'hand';
 genStack(save.level, false);
+syncMachines();
 if (save.needles || save.taler) $('startStats').textContent = 'Heuhaufen Nr. ' + save.level + ' · ' + fmt(save.taler) + ' Taler · ' + save.needles + ' Nadel' + (save.needles === 1 ? '' : 'n') + ' gefunden';
 if (SHOT) {
   setState('play'); P.pos.set(0.4, 0, 3.2); P.pitch = -0.32;
@@ -1396,6 +1655,8 @@ if (SHOT) {
   if (SHOT === 'shop') setState('shop');
   if (SHOT === 'lvl') { save.level = 6; genStack(6, true); P.pos.set(0, 0, 7); P.pitch = -0.1; }
   if (SHOT === 'found') { P.pos.set(0.1, 0, 2.6); pickNeedle(); }
+  if (SHOT === 'auto') { save.level = 4; genStack(4, false); save.up = { huhn: 6, robo: 4, kran: 2, sorter: 1, autopilot: 1, detektor: 1 }; syncMachines(); P.pos.set(7.5, 0, 6.5); P.yaw = 0.95; P.pitch = 0.08; }
+  if (SHOT === 'tired') { fat = 0.9; }
 }
 requestAnimationFrame(frame);
 </script>
