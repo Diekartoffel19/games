@@ -2865,7 +2865,7 @@ const PLINKO_CONFIGS = {
   10: {
     low:    [8.9, 3, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 3, 8.9],
     medium: [22, 5, 2, 1.4, 0.6, 0.4, 0.6, 1.4, 2, 5, 22],
-    high:   [76, 10, 3, 1.4, 0.3, 0.2, 0.3, 1.4, 3, 10, 76]
+    high:   [76, 10, 3, 0.9, 0.3, 0.2, 0.3, 0.9, 3, 10, 76]
   },
   12: {
     low:    [10, 3, 1.6, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 1.6, 3, 10],
@@ -2992,8 +2992,16 @@ function dropPlinkoBall(startX = null) {
   const spawnX = startX !== null ? Math.max(100, Math.min(600, startX)) : 350 + (Math.random() - 0.5) * 16;
   const ballColors = ["#ef4444", "#f97316", "#eab308", "#3b82f6", "#ec4899", "#8b5cf6"];
   const ballColor = ballColors[Math.floor(Math.random() * ballColors.length)];
+  // Ergebnis wird beim Abwurf ausgelost (binomial wie ein echtes Galton-Brett); die Physik ist nur Animation.
+  // Vorher entschied die Physik: abprallende Bälle flogen über den Rand und landeten im höchsten Topf (RTP ~10x).
+  let k = 0;
+  for (let i = 0; i < plinkoRows; i++) k += Math.random() < 0.5;
+  const target = plinkoBuckets[k];
 
   plinkoBalls.push({
+    k,
+    mult: target.mult, // beim Abwurf festhalten, sonst lohnt Risiko-Umschalten während der Ball fällt
+    tx: target.cx,
     x: spawnX,
     y: 24,
     vx: (Math.random() - 0.5) * 12,
@@ -3017,7 +3025,7 @@ function resolvePlinkoLanding(ball, bIdx) {
   const bucket = plinkoBuckets[bIdx];
   if (!bucket) return;
 
-  const mult = bucket.mult;
+  const mult = ball.mult;
   const win = Math.round(ball.bet * mult);
 
   balance += win;
@@ -3117,10 +3125,6 @@ function updatePlinkoPhysics(dt) {
   const bottomY = 515;
   const rowSpacing = (bottomY - topY) / rows;
   const bucketTopY = 535;
-  const lastRowPins = rows + 2;
-  const hSpacing = 590 / (lastRowPins - 1);
-  const lastRowW = (lastRowPins - 1) * hSpacing;
-  const startX_last = (700 - lastRowW) / 2;
   const bucketCount = rows + 1;
 
   for (let s = 0; s < steps; s++) {
@@ -3132,6 +3136,10 @@ function updatePlinkoPhysics(dt) {
       ball.y += ball.vy * subDt;
       ball.vy += gravity * subDt;
       ball.vx *= 0.999;
+      // zum ausgelosten Topf lenken, nach unten hin immer stärker
+      const f = Math.max(0, Math.min(1, (ball.y - topY) / (bottomY - topY)));
+      ball.x += (ball.tx - ball.x) * Math.min(1, subDt * (ball.y > bottomY ? 30 : 10 * f * f));
+      if (ball.y > bottomY) ball.vx *= 0.9;
 
       // Peg collisions
       const approxRow = Math.floor((ball.y - topY) / rowSpacing);
@@ -3196,9 +3204,7 @@ function updatePlinkoPhysics(dt) {
 
       // Check landing in bucket
       if (ball.y >= bucketTopY + 12) {
-        let bIdx = Math.floor((ball.x - startX_last) / hSpacing);
-        bIdx = Math.max(0, Math.min(bucketCount - 1, bIdx));
-        resolvePlinkoLanding(ball, bIdx);
+        resolvePlinkoLanding(ball, Math.min(ball.k, bucketCount - 1));
         plinkoBalls.splice(b, 1);
       }
     }

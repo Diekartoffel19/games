@@ -93,7 +93,9 @@ const LANGC={JavaScript:'#f1e05a',TypeScript:'#3178c6',Python:'#3572A5',Java:'#b
 const lc=(l,i=0)=>LANGC[l]||PAL[i%PAL.length];
 Chart.defaults.color='#8b94ab';Chart.defaults.borderColor='#252d42';Chart.defaults.font.family='system-ui';
 let charts=[],state={};
-$('#t').value=localStorage.ght||'';
+// Token nur pro Tab halten: localStorage teilen sich alle Seiten dieser Domain; alten Wert einmalig umziehen
+if(localStorage.ght){sessionStorage.ght=localStorage.ght;localStorage.removeItem('ght')}
+$('#t').value=sessionStorage.ght||'';
 
 async function gh(path){
   const h={Accept:'application/vnd.github+json'};const t=$('#t').value.trim();if(t)h.Authorization='Bearer '+t;
@@ -117,7 +119,7 @@ const fmt=n=>n>=1000?(n/1000).toFixed(1)+'k':n;
 const card=(t,body,cls='s6')=>`<div class="card ${cls}"><h3>${t}</h3>${body}</div>`;
 const cv=(id,tall)=>`<div class="chart${tall?' tall':''}"><canvas id="${id}"></canvas></div>`;
 
-$('#f').onsubmit=e=>{e.preventDefault();localStorage.ght=$('#t').value.trim();location.hash='#'+$('#u').value.trim()};
+$('#f').onsubmit=e=>{e.preventDefault();sessionStorage.ght=$('#t').value.trim();location.hash='#'+$('#u').value.trim()};
 window.onhashchange=route;route();
 function route(){
   const h=decodeURIComponent(location.hash.slice(1));if(!h)return;
@@ -387,7 +389,7 @@ async function loadRepo(u,r){
       pages(`/repos/${u}/${r}/pulls?state=all`,3).catch(()=>[]),
       pages(`/repos/${u}/${r}/branches`,2).catch(()=>[])]);
     renderRepo(repo,commits,langs||{},contrib||[],pulls,branches);
-  }catch(e){app.innerHTML=`<div class="back"><button class="ghost" onclick="location.hash='#${esc(u)}'">← back</button></div><div class="err">${esc(e.message)}</div>`}
+  }catch(e){app.innerHTML=`<div class="back"><button class="ghost">← back</button></div><div class="err">${esc(e.message)}</div>`;app.querySelector('.back button').onclick=()=>location.hash='#'+u}
 }
 const dur=ms=>ms<36e5?Math.max(1,Math.round(ms/6e4))+'m':ms<864e5?Math.round(ms/36e5)+'h':ms<2592e6?Math.round(ms/864e5)+'d':Math.round(ms/2592e6)+'mo';
 function monthKeys(a,b){const k=[];let [y,m]=a.split('-').map(Number);for(;;){const s=`${y}-${String(m).padStart(2,'0')}`;if(s>b)break;k.push(s);if(++m>12){m=1;y++}}return k}
@@ -397,7 +399,7 @@ function renderRepo(repo,commits,langs,contrib,pulls,branches){
   const mc=commits.filter(c=>c.parents.length>1),ttm=merged.map(p=>new Date(p.merged_at)-new Date(p.created_at)).sort((a,b)=>a-b);
   const med=ttm.length?dur(ttm[Math.floor(ttm.length/2)]):'–';
   const tile=(k,v)=>`<div class="stat"><b>${v}</b>${k}</div>`;
-  app.innerHTML=`<div class="back"><button class="ghost" onclick="location.hash='#${repo.owner.login}'">← ${repo.owner.login}</button></div>
+  app.innerHTML=`<div class="back"><button class="ghost">← ${esc(repo.owner.login)}</button></div>
   <div class="card"><h2 style="margin:0">${esc(repo.full_name)} <a style="font-size:13px;color:var(--b)" target="_blank" href="${repo.html_url}">open ↗</a></h2>
     <div class="mut">${esc(repo.description||'')}</div>
     <div class="meta" style="margin-top:8px"><span>★ ${repo.stargazers_count}</span><span>⑂ ${repo.forks_count}</span><span>👁 ${repo.watchers_count}</span><span>issues ${repo.open_issues_count}</span><span>created ${repo.created_at.slice(0,10)}</span><span>pushed ${repo.pushed_at.slice(0,10)}</span><span>${(repo.size/1024).toFixed(1)} MB</span><span>default branch: ${esc(repo.default_branch)}</span></div>
@@ -415,6 +417,7 @@ function renderRepo(repo,commits,langs,contrib,pulls,branches){
     ${pulls.length?card('Pull requests & merges','<div class="seg" id="pf"></div><div class="list" id="pl"></div>','s12'):''}
     ${commits.length?card('Commit log','<div class="seg" id="lf"></div><div class="list" id="r6"></div>','s12'):''}
   </div>`;
+  app.querySelector('.back button').onclick=()=>location.hash='#'+repo.owner.login;
 
   const le=Object.entries(langs).sort((a,b)=>b[1]-a[1]);
   if(le.length)mk($('#r2'),{type:'doughnut',data:{labels:le.map(x=>x[0]),datasets:[{data:le.map(x=>x[1]),backgroundColor:le.map((x,i)=>lc(x[0],i)),borderColor:'#131824',borderWidth:3}]},options:{maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{boxWidth:10}}}}});

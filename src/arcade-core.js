@@ -5,7 +5,9 @@
 
 const ArcadeCore = (() => {
   let audioCtx = null;
-  let muted = typeof localStorage !== 'undefined' ? localStorage.getItem('arcade_sound_muted') === 'true' : false;
+  // Zugriff auf localStorage wirft bei blockierten Cookies (SecurityError) – nie außerhalb von try anfassen
+  let muted = false;
+  try { muted = localStorage.getItem('arcade_sound_muted') === 'true'; } catch (e) {}
 
   function getAudioContext() {
     if (typeof window === 'undefined') return null;
@@ -226,11 +228,9 @@ const ArcadeCore = (() => {
   function isMuted() { return muted; }
   function toggleMute() {
     muted = !muted;
-    if (typeof localStorage !== 'undefined') {
-      try {
-        localStorage.setItem('arcade_sound_muted', muted ? 'true' : 'false');
-      } catch (e) {}
-    }
+    try {
+      localStorage.setItem('arcade_sound_muted', muted ? 'true' : 'false');
+    } catch (e) {}
     if (typeof window !== 'undefined' && typeof CustomEvent !== 'undefined') {
       try {
         window.dispatchEvent(new CustomEvent('arcade_mute_changed', { detail: { muted } }));
@@ -306,7 +306,6 @@ const ArcadeCore = (() => {
   };
 
   function getScore(gameKey) {
-    if (typeof localStorage === 'undefined') return null;
     try {
       const storageKey = SCORE_KEYS[gameKey] || gameKey;
       let val = localStorage.getItem(storageKey);
@@ -320,7 +319,6 @@ const ArcadeCore = (() => {
   }
 
   function saveScore(gameKey, val) {
-    if (typeof localStorage === 'undefined') return;
     try {
       const storageKey = SCORE_KEYS[gameKey] || gameKey;
       localStorage.setItem(storageKey, val);
@@ -329,7 +327,6 @@ const ArcadeCore = (() => {
 
   function getAllScores() {
     const scores = {};
-    if (typeof localStorage === 'undefined') return scores;
     try {
       for (const [k, sk] of Object.entries(SCORE_KEYS)) {
         const v = localStorage.getItem(sk);

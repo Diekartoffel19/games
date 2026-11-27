@@ -200,7 +200,7 @@ const SAVE_KEY = 'nadelimheu_save';
 let save = { taler: 0, up: {}, level: 1, needles: 0, straws: 0, tool: 'hand' };
 try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && typeof d === 'object') save = Object.assign(save, { taler: Math.max(0, Number(d.taler) || 0), up: (d.up && typeof d.up === 'object') ? d.up : {}, level: Math.max(1, Math.floor(Number(d.level)) || 1), needles: Math.max(0, Math.floor(Number(d.needles)) || 0), straws: Math.max(0, Number(d.straws) || 0), tool: d.tool || 'hand' }); } catch (e) {}
 // shortcut: der halb durchsuchte Haufen wird nicht gespeichert, nach Reload kommt ein frischer Haufen derselben Stufe
-function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} if (window.ArcadeCore) ArcadeCore.saveScore('nadelimheu', save.needles); }
+function persist() { if (SHOT) return; /* Screenshot-/Test-URLs ändern Level & Upgrades – nie den echten Spielstand überschreiben */ try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} if (window.ArcadeCore) ArcadeCore.saveScore('nadelimheu', save.needles); }
 const lv = id => save.up[id] || 0;
 
 // ================= Upgrades =================
@@ -1515,10 +1515,16 @@ function syncMachines() {
 }
 function updateMachines(dt) {
   for (const b of bots) updateBot(b, dt);
-  // Bots weichen einander seitlich aus
+  // Bots weichen einander aus. Wer am Arbeiten ist, rückt samt Ziel zur Seite (sonst zieht updateBot ihn
+  // jedes Frame zurück → Zittern); wer gerade um den Haufen läuft, macht nach außen einen Bogen.
   for (let i = 0; i < bots.length; i++) for (let j = i + 1; j < bots.length; j++) {
     const a = bots[i], b = bots[j], pa = a.p.root.position, pb = b.p.root.position, m = (a.kind === 'robo' ? 0.42 : 0.2) + (b.kind === 'robo' ? 0.42 : 0.2);
-    if (pa.distanceToSquared(pb) < m * m) { const s = angTo(a.ang, b.ang) >= 0 ? 1 : -1, k = dt * 2.5 / Math.max(1, Math.min(a.rad, b.rad)); a.ang -= s * k; b.ang += s * k; }
+    const o = m - Math.hypot(pa.x - pb.x, pa.z - pb.z); if (o <= 0) continue;
+    const ta = Math.abs(angTo(a.ang, a.tAng)) > 0.03, tb = Math.abs(angTo(b.ang, b.tAng)) > 0.03;
+    const s = angTo(a.ang, b.ang) >= 0 ? 1 : -1, k = Math.min(o * 0.5, dt * 1.2) / Math.max(1, Math.min(a.rad, b.rad));
+    if (!ta) { a.ang -= s * k; a.tAng -= s * k; }
+    if (!tb) { b.ang += s * k; b.tAng += s * k; }
+    if (ta || tb) { const w = ta && (!tb || a.rad >= b.rad) ? a : b, v = w === a ? b : a; if (w.rad >= v.rad) w.rad += Math.min(o, dt * 5); }
   }
   if (crane) updateCrane(dt);
   if (sorter) { sorter.spin = Math.max(0.4, sorter.spin - dt * 0.6); sorter.drum.rotation.z -= dt * sorter.spin * 2; }
