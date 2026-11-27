@@ -48,6 +48,8 @@
   #cross.tgt .ring { border-color:rgba(246,210,122,.85); transform:scale(1); }
   #cross.ndl .ring { border-color:#9ff; left:-16px; top:-16px; width:32px; height:32px; box-shadow:0 0 14px #7ff; animation:pulse .8s infinite alternate; }
   @keyframes pulse { to { transform:scale(1.25); } }
+  #cross.pop .ring { animation:pop .28s ease-out; }
+  @keyframes pop { from { border-color:#fff2c4; transform:scale(.55); } to { border-color:rgba(246,210,122,0); transform:scale(1.6); } }
   #prompt { left:50%; top:calc(50% + 30px); transform:translateX(-50%); font-weight:600; font-size:14px; padding:5px 12px; border-radius:10px; background:var(--glass); opacity:0; transition:opacity .2s; white-space:nowrap; }
   #prompt.on { opacity:1; }
   #hotbar { bottom:18px; left:50%; transform:translateX(-50%); display:flex; gap:8px; }
@@ -157,7 +159,7 @@
   <p class="sub">Irgendwo da drin steckt eine Nähnadel. Du hast zwei Hände und sehr viel Zeit.</p>
   <button class="btn" id="startBtn">Losheuen</button>
   <div id="startStats"></div>
-  <div class="ctrl"><kbd>WASD</kbd> laufen · <kbd>Maus</kbd> umsehen · <kbd>Klick</kbd> Halm greifen · <kbd>Leertaste</kbd> springen · <kbd>E</kbd> Werkstatt<br><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Werkzeug wechseln · <kbd>Q</kbd> Magnet-Puls · <kbd>M</kbd> Ton an/aus</div>
+  <div class="ctrl"><kbd>WASD</kbd> laufen · <kbd>Maus</kbd> umsehen · <kbd>Klick</kbd> Halm greifen (schnell klicken!) · <kbd>Leertaste</kbd> springen · <kbd>E</kbd> Werkstatt<br><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Werkzeug wechseln · <kbd>Q</kbd> Magnet-Puls · <kbd>M</kbd> Ton an/aus</div>
 </div>
 <div class="ov" id="pause"><h2>Pause</h2><button class="btn" id="resumeBtn">Weiter suchen</button><button class="btn ghost" id="shopBtn2">Werkstatt öffnen</button></div>
 <div class="ov" id="shop"><div class="panel">
@@ -208,7 +210,7 @@ const CATS = { hand: ['Handarbeit', 'Deine Hände werden müde. Das hier hilft e
 const UPG = [
   { id: 'griff', cat: 'hand', name: 'Kräftiger Griff', max: 8, desc: 'Mehr Halme pro Handgriff. Am Anfang: genau einer.', cost: l => Math.round(18 * Math.pow(2.25, l)), stat: l => GRIFF[l] + ' Halm' + (GRIFF[l] > 1 ? 'e' : '') + ' pro Griff' },
   { id: 'tempo', cat: 'hand', name: 'Flinke Finger', max: 8, desc: 'Schnellere Griffe und Gabelstiche.', cost: l => Math.round(30 * Math.pow(2.1, l)), stat: l => (0.9 * Math.pow(0.87, l)).toFixed(2) + ' s pro Griff' },
-  { id: 'handschuh', cat: 'hand', name: 'Arbeitshandschuhe', max: 1, desc: 'Maustaste gedrückt halten = Dauergriff. Die Arme ermüden 30 % langsamer.', cost: () => 60, stat: l => l ? 'Dauergriff aktiv' : 'Einzelklicks' },
+  { id: 'handschuh', cat: 'hand', name: 'Arbeitshandschuhe', max: 1, desc: 'Griffiges Leder. Die Arme ermüden 40 % langsamer – klicken musst du trotzdem selbst.', cost: () => 60, stat: l => l ? 'Ermüdung −40 %' : 'bloße Hände' },
   { id: 'kaffee', cat: 'hand', name: 'Thermoskanne Kaffee', max: 4, desc: 'Schneller wieder bei Kräften. Müde Arme greifen bis zu 4× langsamer.', cost: l => Math.round(70 * Math.pow(2.7, l)), stat: l => 'Erholung ' + Math.round(fatRec(l) * 100) + ' % pro s' },
   { id: 'preis', cat: 'hand', name: 'Heuhändler', max: 10, desc: 'Der Bauer zahlt mehr pro bewegtem Halm – auch für Halme, die deine Maschinen bewegen.', cost: l => Math.round(90 * Math.pow(2.45, l)), stat: l => PRICE[l] + ' Taler pro Halm' },
   { id: 'detektor', cat: 'gadget', name: 'Metalldetektor', max: 5, desc: 'Piept in der Nähe von Metall. Mehr Stufen = mehr Reichweite, ab Stufe 3 unterscheidet er Nadel und Schrott.', cost: l => [220, 650, 1600, 4200, 11000][l], stat: l => l ? 'Reichweite ' + detRange(l).toFixed(1) + ' m' + (l >= 3 ? ' · Diskriminator' : '') : 'nicht vorhanden' },
@@ -318,12 +320,18 @@ if (FX) {
   bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.6, 0.92);
   composer.addPass(bloomPass);
   gradePass = new THREE.ShaderPass({
-    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, exposure: { value: 1.3 }, flash: { value: 0 } },
+    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, exposure: { value: 1.3 }, flash: { value: 0 }, sunUv: { value: new THREE.Vector2(0.5, 0.5) }, rays: { value: 0 } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float time, exposure, flash; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float time, exposure, flash, rays; uniform vec2 sunUv; varying vec2 vUv;
       vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
       void main(){
         vec3 c = texture2D(tDiffuse, vUv).rgb * exposure;
+        if (rays > 0.0) {
+          // radiale Unschärfe der hellsten Stellen Richtung Sonne: Strahlen zwischen Halmen und Bäumen
+          vec2 st = (vUv - sunUv) / 32.0, uv = vUv; vec3 gr = vec3(0.0); float w = 1.0;
+          for (int i = 0; i < 32; i++) { uv -= st; vec3 s = min(texture2D(tDiffuse, uv).rgb, vec3(3.0)); gr += s * smoothstep(1.1, 2.6, dot(s, vec3(0.3, 0.59, 0.11))) * w; w *= 0.94; }
+          c += gr * rays * 0.015 * vec3(1.0, 0.72, 0.42);
+        }
         c = aces(c);
         c = pow(c, vec3(1.0/2.2));
         float l = dot(c, vec3(0.299, 0.587, 0.114));
@@ -494,9 +502,9 @@ function puff(p, n, spread = 0.25) {
 }
 
 // ================= Heu-Shader: lose Halme, Wackeln beim Greifen, Brise, Zielmarkierung =================
-const hayU = { uHit: { value: new THREE.Vector3(0, -99, 0) }, uHitT: { value: 9 }, uHitA: { value: 0 }, uTime: windU, uHover: { value: new THREE.Vector3(0, -99, 0) } };
-// out: Normale zur Außenrichtung der Zelle ziehen (Haufen schattiert als Ganzes); wind: Ausdruck für Halm-Spitzen
-function hayShader(m, key, out, wind, noFlip) {
+const hayU = { uHit: { value: new THREE.Vector3(0, -99, 0) }, uHitT: { value: 9 }, uHitA: { value: 0 }, uTime: windU, uHover: { value: new THREE.Vector3(0, -99, 0) }, uSun: { value: SUN }, uSunCol: { value: lin('#ffb36b') } };
+// out: Normale zur Außenrichtung der Zelle ziehen (Haufen schattiert als Ganzes); wind: Ausdruck für Halm-Spitzen; trans: Durchscheinen im Gegenlicht
+function hayShader(m, key, out, wind, noFlip, trans = 0) {
   m.customProgramCacheKey = () => key;
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, hayU);
@@ -515,8 +523,15 @@ function hayShader(m, key, out, wind, noFlip) {
         vWPos = wp.xyz;
         vec4 mvPosition = viewMatrix * wp;
         gl_Position = projectionMatrix * mvPosition;`);
-    sh.fragmentShader = 'uniform vec3 uHover;\nvarying vec3 vWPos;\n' + sh.fragmentShader
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vec3(1.0, 0.72, 0.38) * 0.2 * smoothstep(0.36, 0.04, distance(vWPos, uHover));')
+    sh.fragmentShader = 'uniform vec3 uHover, uSun, uSunCol;\nvarying vec3 vWPos;\n' + sh.fragmentShader
+      // Kontakt-Verschattung: unten am Haufen kommt kaum Licht hin
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb *= mix(0.5, 1.0, smoothstep(0.0, 0.55, vWPos.y));')
+      // Halme leuchten im Gegenlicht durch, Ränder fangen die Abendsonne
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance += vec3(1.0, 0.72, 0.38) * 0.2 * smoothstep(0.36, 0.04, distance(vWPos, uHover));
+        { float bl = pow(max(dot(normalize(vWPos - cameraPosition), uSun), 0.0), 4.0);
+          float rim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.5);
+          totalEmissiveRadiance += diffuseColor.rgb * uSunCol * ${trans.toFixed(2)} * (bl * 0.9 + rim * (0.12 + 0.5 * bl)); }`)
       .replace('#include <normal_fragment_begin>', noFlip ? THREE.ShaderChunk.normal_fragment_begin.replace('normal = normal * faceDirection;', '') : '#include <normal_fragment_begin>');
   };
 }
@@ -539,7 +554,7 @@ const strawTex = (() => {
 })();
 const cardGeo = (() => { const g = new THREE.PlaneGeometry(1, 0.55, 4, 1), P = g.attributes.position; for (let i = 0; i < P.count; i++) P.setZ(i, 0.09 * P.getX(i) * P.getX(i)); return g; })();
 const cardMat = new THREE.MeshStandardMaterial({ map: strawTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.88 });
-hayShader(cardMat, 'hayCard', 0.86, '0.006 * (0.3 + abs(position.x) * 2.0)', true);
+hayShader(cardMat, 'hayCard', 0.86, '0.006 * (0.3 + abs(position.x) * 2.0)', true, 0.8);
 const cardDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: strawTex, alphaTest: 0.42 });
 const cardSolo = new THREE.MeshStandardMaterial({ map: strawTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.7 });
 // Büschel aus Halm-Karten (für Gabel und Hand)
@@ -614,10 +629,10 @@ const clumpGeo = (() => {
 const hayMat = new THREE.MeshStandardMaterial({ map: TEX.hay, roughness: 0.95, color: 0xffffff });
 // Kern-Klumpen: dunkle, dichte Unterlage zwischen den losen Halmen
 const stackMat = hayMat.clone(); stackMat.color = lin('#a89468');
-hayShader(stackMat, 'hayCore', 0.8, '0.0', false);
+hayShader(stackMat, 'hayCore', 0.8, '0.0', false, 0.2);
 const strayGeo = new THREE.BoxGeometry(0.005, 0.003, 0.46); strayGeo.translate(0, 0, 0.13);
 const strayMat = new THREE.MeshStandardMaterial({ color: lin('#e8c878'), roughness: 0.75 });
-hayShader(strayMat, 'hayStray', 0, '0.012 * max(position.z, 0.0) * 3.0', false);
+hayShader(strayMat, 'hayStray', 0, '0.012 * max(position.z, 0.0) * 3.0', false, 1.0);
 const I3 = (i, j, k) => (j * NZ + k) * NX + i;
 const filled = (i, j, k) => i >= 0 && j >= 0 && k >= 0 && i < NX && j < NY && k < NZ && dens[I3(i, j, k)] > 0;
 const cellCenter = (id, v) => { const i = id % NX, k = Math.floor(id / NX) % NZ, j = Math.floor(id / (NX * NZ)); return v.set(GX + (i + 0.5) * C, (j + 0.5) * C + fall[id], GZ + (k + 0.5) * C); };
@@ -678,7 +693,9 @@ function rebuild() {
     const f = d / dmax[id], sf = Math.sqrt(f);
     cellCenter(id, _v);
     _n.set(ox, oy + 0.35, oz).normalize();
-    const dp = depthA[id], b = Math.min(1.1, 0.74 + 0.05 * ex + 0.08 * h2 + 0.1 * (j / NY));
+    let occ = 0; for (let dj = -1; dj <= 1; dj++) for (let dk = -1; dk <= 1; dk++) for (let di = -1; di <= 1; di++) if (filled(i + di, j + dj, k + dk)) occ++;
+    const ao = lerp(1.08, 0.42, clamp((occ / 27 - 0.42) / 0.42, 0, 1));
+    const dp = depthA[id], b = Math.min(1.1, 0.74 + 0.05 * ex + 0.08 * h2 + 0.1 * (j / NY)) * ao;
     // Kern
     dmy.position.copy(_v); dmy.rotation.set(h1 * 6.28, h2 * 6.28, h3 * 6.28); dmy.scale.setScalar(C * (0.6 + 0.55 * sf)); dmy.updateMatrix();
     clumps.setMatrixAt(n, dmy.matrix); kOut.setXYZ(n, _n.x, _n.y, _n.z);
@@ -1033,7 +1050,7 @@ $('cards').addEventListener('click', e => {
   save.taler -= c; save.up[u.id] = l + 1; persist();
   if (window.ArcadeCore) ArcadeCore.powerup();
   if (u.id === 'handschuh') SKIN.color.copy(lin('#7d5a35'));
-  if (u.id === 'gabel' && l === 0) { tool = 'fork'; hint('Heugabel freigeschaltet! Taste 2.'); }
+  if (u.id === 'gabel' && l === 0) { tool = 'fork'; hint('Heugabel freigeschaltet! Taste 2, jeder Klick ein Stich.'); }
   if (u.id === 'geblaese' && l === 0) { tool = 'blow'; hint('Laubbläser! Taste 3, Maustaste halten.'); }
   if (u.cat === 'auto') { syncMachines(); toast({ huhn: 'Ein Huhn zieht ein', robo: 'Heu-Roboter geliefert', kran: l ? 'Kran aufgerüstet' : 'Der Kran steht', sorter: 'Sortieranlage läuft', autopilot: 'Hofcomputer online' }[u.id], { huhn: 'Gack.', robo: 'Brummt hinter dem Haufen los.', kran: 'Hinter dem Haufen – schau mal hoch.', sorter: 'Freiliegende Nadeln holt jetzt die Magnettrommel.', autopilot: 'Nach jedem Fund kommt der nächste Haufen von allein.' }[u.id]); }
   renderShop();
@@ -1041,9 +1058,9 @@ $('cards').addEventListener('click', e => {
 
 // ================= Spieler & Eingabe =================
 const P = { pos: new THREE.Vector3(0, 0, 6.5), vy: 0, ground: true, yaw: 0, pitch: -0.12, stepOff: 0, bob: 0, land: 0 };
-let shake = 0;
+let shake = 0, kick = 0;
 const PRAD = 0.28, PH = 1.7, EYE = 1.62;
-const keys = {}, mouse = { down: false, click: false };
+const keys = {}, mouse = { down: false, click: false, clickT: 0 };
 let state = 'title', tool = 'hand', stackTime = 0, magT = 0, now = 0, hover = -1, needleLook = false;
 let anim = null, swapT = 0, lastBeep = 0, detSig = 0, detNeedle = false, foundT = -1, stepAcc = 0;
 const locked = () => document.pointerLockElement === canvas;
@@ -1058,7 +1075,7 @@ function setState(s) {
   if (s !== 'play') { mouse.down = false; blowSound(false); }
   if (s === 'shop') renderShop();
 }
-$('startBtn').onclick = () => { setState('play'); lock(); startAmbient(); genStack(save.level, true); placePlayer(); hint('Klick auf den Heuhaufen, um einen einzelnen Halm herauszuziehen.', 6); };
+$('startBtn').onclick = () => { setState('play'); lock(); startAmbient(); genStack(save.level, true); placePlayer(); hint('Klick auf den Heuhaufen, um einen Halm herauszuziehen. Jeder Klick ein Griff.', 6); };
 $('resumeBtn').onclick = () => { setState('play'); lock(); };
 $('shopBtn2').onclick = () => setState('shop');
 $('closeShop').onclick = () => { setState('play'); lock(); };
@@ -1067,7 +1084,7 @@ $('nextBtn').onclick = () => { nextStack(); setState('play'); lock(); };
 document.addEventListener('pointerlockchange', () => { if (!locked() && state === 'play' && !SHOT) setState('pause'); });
 canvas.addEventListener('mousedown', e => {
   if (state === 'play' && !locked() && !SHOT) { lock(); return; }
-  if (e.button === 0 && state === 'play') { mouse.down = true; mouse.click = true; }
+  if (e.button === 0 && state === 'play') { mouse.down = true; mouse.click = true; mouse.clickT = 0.22; } // kurzer Puffer: zu früher Klick zählt für den nächsten Griff
 });
 addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
 addEventListener('mousemove', e => {
@@ -1138,9 +1155,9 @@ function updatePlayer(dt) {
   P.stepOff *= Math.pow(0.0005, dt);
   const moving = l > 0 && P.ground;
   if (moving) { P.bob += dt * sp * 2.3; stepAcc += dt * sp; if (stepAcc > 0.75) { stepAcc = 0; step(); } }
-  P.land = Math.max(0, P.land - dt * 0.35); shake = Math.max(0, shake - dt * 3);
+  P.land = Math.max(0, P.land - dt * 0.35); shake = Math.max(0, shake - dt * 3); kick *= Math.exp(-dt * 9);
   camera.position.set(P.pos.x, P.pos.y + EYE + P.stepOff - P.land + (moving ? Math.abs(Math.sin(P.bob)) * 0.035 : 0), P.pos.z);
-  camera.rotation.set(P.pitch + Math.sin(now * 53) * shake * 0.01, P.yaw + Math.sin(now * 41 + 1) * shake * 0.01, (moving ? Math.sin(P.bob) * 0.006 : 0) + Math.sin(now * 37) * shake * 0.006);
+  camera.rotation.set(P.pitch + kick + Math.sin(now * 53) * shake * 0.01, P.yaw + Math.sin(now * 41 + 1) * shake * 0.01, (moving ? Math.sin(P.bob) * 0.006 : 0) + Math.sin(now * 37) * shake * 0.006);
   return moving;
 }
 
@@ -1161,12 +1178,14 @@ function aim() {
 // Ermüdung: jeder Griff kostet Kraft, müde Arme greifen bis zu 4× langsamer
 let fat = 0;
 function tire(k) {
-  fat = Math.min(1, fat + k * (lv('handschuh') ? 0.7 : 1));
+  fat = Math.min(1, fat + k * (lv('handschuh') ? 0.6 : 1));
   if (fat > 0.85) hintOnce('tired', 'Deine Arme brennen. Kurz verschnaufen – oder in der Werkstatt (E) Kaffee und Maschinen kaufen.', 6);
 }
 function startAnim(type, hit) {
   if (hit) tire(type === 'fork' ? 0.16 : 0.08);
-  anim = { type, t: 0, dur: (type === 'fork' ? 1.15 * Math.pow(0.9, lv('tempo')) : tempoT()) * (1 + 3 * fat * fat), hit, done: false, rel: false, taken: 0, point: ray.o.clone().addScaledVector(ray.d, hit ? hit.t + 0.1 : 1.5) }; }
+  anim = { type, t: 0, dur: (type === 'fork' ? 1.15 * Math.pow(0.9, lv('tempo')) : tempoT()) * (1 + 3 * fat * fat), hit, done: false, rel: false, taken: 0, v: rand(-1, 1), point: ray.o.clone().addScaledVector(ray.d, hit ? hit.t + 0.1 : 1.5) }; }
+// Takt der Animation: Griff sitzt (commit), ab chain darf der nächste Klick den Wurf abkürzen, rel = Halme loslassen
+const ANIM_T = { hand: { commit: 0.3, chain: 0.5, rel: 0.8 }, fork: { commit: 0.3, chain: 0.62, rel: 0.78 } };
 function commitGrab() {
   const a = anim; if (!a.hit) return;
   if (a.type === 'hand') a.taken = takeFrom(a.hit.id, GRIFF[lv('griff')]);
@@ -1175,13 +1194,15 @@ function commitGrab() {
     for (let dj = -2; dj <= 2; dj++) for (let dk = -2; dk <= 2; dk++) for (let di = -2; di <= 2; di++)
       if (di * di + dj * dj + dk * dk <= r * r + 0.01 && filled(ci + di, cj + dj, ck + dk)) a.taken += takeFrom(I3(ci + di, cj + dj, ck + dk), per);
   }
-  if (a.taken) { addTaler(a.taken * PRICE[lv('preis')]); rustle(Math.min(1, a.taken / 10)); puff(a.point, Math.min(40, 6 + a.taken)); }
+  if (a.taken) { addTaler(a.taken * PRICE[lv('preis')]); rustle(Math.min(1, a.taken / 10)); puff(a.point, Math.min(40, 6 + a.taken)); popCross(); }
+  kick = a.type === 'fork' ? 0.03 : 0.012;
   if (a.type === 'hand') showBundle(a.taken);
   else { forkClump.visible = a.taken > 0; forkClump.scale.setScalar(0.5 + Math.min(0.9, a.taken * 0.006)); }
   hayPoke(a.point, a.type === 'fork' ? 2.4 : 1); shake = Math.max(shake, a.type === 'fork' ? 0.9 : 0.25);
   for (let i = 0; i < Math.min(14, 3 + a.taken); i++) spawnStraw(a.point, _u.set(rand(-0.8, 0.8), rand(0.4, 1.8), rand(-0.8, 0.8)), rand(0.25, 0.45));
 }
 const _w = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3();
+function popCross() { const c = $('cross'); c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); }
 function releaseBundle(n, from) {
   camera.getWorldDirection(_w); _r.set(1, 0, 0).applyQuaternion(camera.quaternion);
   const cnt = Math.min(n, from === 'fork' ? 50 : 14);
@@ -1195,7 +1216,7 @@ function releaseBundle(n, from) {
 let blowTick = 0, blowAcc = 0;
 function updateTool(dt, hit) {
   if (state !== 'play') return;
-  const wantGrab = mouse.click || (mouse.down && (lv('handschuh') || tool === 'blow'));
+  if (mouse.click && (mouse.clickT -= dt) <= 0) mouse.click = false;
   if (needleLook && mouse.click && !anim) { pickNeedle(); mouse.click = false; return; }
   if (tool === 'blow') {
     const on = mouse.down && !swapT;
@@ -1219,19 +1240,23 @@ function updateTool(dt, hit) {
         if (blowAcc > 30) { rustle(1, 0.7); blowAcc = 0; }
       }
     }
-  } else if (!anim && wantGrab && !swapT) {
-    if (hit) { startAnim(tool, hit); if (tool === 'hand' && !lv('griff')) hintOnce('first', 'Ein Halm. Nur noch ein paar tausend. Taler gibt\'s für jeden Halm – E öffnet die Werkstatt.', 6); }
-    else if (mouse.click) startAnim(tool, null);
+    mouse.click = false;
+  } else if (mouse.click && !swapT) {
+    // jeder Griff braucht einen eigenen Klick; ein Klick nach dem Herausziehen wirft sofort weg und greift neu
+    if (anim && anim.done && anim.t >= ANIM_T[anim.type].chain) { releaseNow(); anim = null; }
+    if (!anim) {
+      mouse.click = false; startAnim(tool, hit);
+      if (hit && tool === 'hand' && !lv('griff')) hintOnce('first', 'Ein Halm. Nur noch ein paar tausend. Je schneller du klickst, desto schneller suchst du – E öffnet die Werkstatt.', 6);
+    }
   }
-  if (!anim || tool === 'blow') mouse.click = false; // Klick während Animation = nächster Griff
   if (anim) {
-    anim.t += dt / anim.dur; if (SHOT_PH) anim.t = Math.min(anim.t, SHOT_PH); const a = anim.t;
-    const commitAt = anim.type === 'fork' ? 0.3 : 0.5, relAt = anim.type === 'fork' ? 0.8 : 0.88;
-    if (!anim.done && a >= commitAt) { anim.done = true; commitGrab(); }
-    if (!anim.rel && a >= relAt) { anim.rel = true; if (anim.taken) releaseBundle(anim.taken, anim.type); showBundle(0); forkClump.visible = false; }
+    anim.t += dt / anim.dur; if (SHOT_PH) anim.t = Math.min(anim.t, SHOT_PH); const a = anim.t, T = ANIM_T[anim.type];
+    if (!anim.done && a >= T.commit) { anim.done = true; commitGrab(); }
+    if (!anim.rel && a >= T.rel) releaseNow();
     if (a >= 1) anim = null;
   }
 }
+function releaseNow() { if (anim.rel) return; anim.rel = true; if (anim.taken) releaseBundle(anim.taken, anim.type); showBundle(0); forkClump.visible = false; }
 function magnetPulse() {
   const l = lv('magnet'); if (!l) { toast('Kein Magnet', 'Den Magnet-Puls gibt es in der Werkstatt (E).'); return; }
   if (magT > 0) return;
@@ -1501,30 +1526,29 @@ function sampleKF(K, a, out) {
   for (let k = 1; k < A.length; k++) out[k - 1] = lerp(A[k], B[k], u);
   return out;
 }
-// Hand: hinlangen, zugreifen, zweimal zupfen, Halm anschauen, ausholen, wegwerfen. Spalten 1-3 werden aus dem Ziel berechnet.
+// Hand: kurz ausholen, ins Heu stoßen, zupacken, rütteln, rausreißen, wegschleudern. Spalte 1: Anteil Richtung Ziel (>1 = hineinstoßen), negativ = feste Pose.
 const HAND_KF = [
   [0.00, 0, 0, 0, 0, 0, 0, 0.15, 0],
-  [0.16, 0.45, 0.06, 0, 0.0, -0.023, 0.05, -0.1, 0.6],
-  [0.32, 1, 0, 0, -0.45, -0.053, 0, -0.2, 1],
-  [0.42, 1, -0.01, -0.035, -0.5, -0.053, 0, 1.15, 0],
-  [0.50, 1, 0.02, 0.05, -0.3, -0.045, 0.07, 1.2, 0],
-  [0.55, 1, 0, 0.02, -0.4, -0.048, -0.04, 1.2, 0],
-  [0.63, 1, 0.05, 0.12, -0.1, -0.03, 0.08, 1.2, 0],
-  [0.76, -1, 0, 0, 0.45, 0.35, 0.7, 1.1, 0],
-  [0.84, -2, 0, 0, 0.2, 0.3, 0.4, 1.1, 0],
-  [0.92, -3, 0, 0, 0, -0.5, -0.9, 0, 0.4],
+  [0.07, -0.1, 0.03, 0.05, 0.18, -0.03, 0.1, -0.15, 1],
+  [0.20, 1.12, -0.01, -0.02, -0.55, -0.06, -0.05, -0.25, 1],
+  [0.30, 1.08, -0.02, -0.01, -0.5, -0.05, 0, 1.25, 0],
+  [0.35, 1.0, 0.012, 0.02, -0.38, -0.04, 0.1, 1.25, 0],
+  [0.40, 1.04, -0.008, 0.0, -0.46, -0.05, -0.08, 1.25, 0],
+  [0.52, 0.3, 0.07, 0.12, 0.2, -0.02, 0.12, 1.2, 0],
+  [0.66, -1, 0, 0, 0.45, 0.35, 0.7, 1.15, 0],
+  [0.80, -3, 0, 0, 0, -0.5, -0.9, 0, 0.5],
   [1.00, 0, 0, 0, 0, 0, 0, 0.15, 0],
 ];
-const HAND_FIXED = { '-1': [0.1, -0.14, -0.42], '-2': [0.05, -0.16, -0.4], '-3': [0.42, -0.04, -0.42] };
-// Gabel: ausholen, zustechen, eindrehen, schwer anheben, ausholen, schleudern
+const HAND_FIXED = { '-0.1': [0.22, -0.22, -0.4], '-1': [0.1, -0.14, -0.42], '-3': [0.42, -0.04, -0.42] };
+// Gabel: ausholen, zustechen (über das Ziel hinaus), eindrehen, schwer anheben, ausholen, schleudern
 const FORK_KF = [
   [0.00, 0, 0, 0, 0, 0, 0],
-  [0.14, 0, 0.05, 0.12, 0.12, 0, 0],
-  [0.30, 0, -0.05, -0.55, -0.2, 0, 0],
-  [0.37, 0, -0.04, -0.5, -0.22, 0, 0.28],
-  [0.62, 0, 0.2, -0.25, 0.3, 0, 0.1],
-  [0.73, -0.05, 0.24, -0.2, 0.38, 0.22, 0.15],
-  [0.86, 0.22, 0.12, -0.15, 0.15, -1.0, -0.55],
+  [0.12, 0, 0.07, 0.15, 0.16, 0, 0],
+  [0.24, 0, -0.06, -0.62, -0.22, 0, 0],
+  [0.30, 0, -0.05, -0.55, -0.24, 0, 0.3],
+  [0.50, 0, 0.18, -0.25, 0.28, 0, 0.12],
+  [0.64, -0.05, 0.24, -0.18, 0.4, 0.24, 0.16],
+  [0.78, 0.22, 0.12, -0.15, 0.15, -1.0, -0.55],
   [1.00, 0, 0, 0, 0, 0, 0],
 ];
 const kf = new Array(8).fill(0), VMK = Math.tan(THREE.MathUtils.degToRad(36)) / Math.tan(THREE.MathUtils.degToRad(30));
@@ -1546,7 +1570,6 @@ function updateViewmodel(dt, moving) {
   const g = toolG[tool], pose = TOOL_POSE[tool];
   let dx = bx + sway.x, dy = by - drop * 0.35 + sway.y - P.land, dz = 0, rx = 0, ry = 0, rz = 0, curl = 0.15 + 0.05 * Math.sin(now * 0.8), spread = 0, cf = null;
   strand.visible = false;
-  if (tool !== 'blow') { dy += Math.sin(now * 31) * 0.004 * fat * fat; rz += Math.sin(now * 23) * 0.012 * fat * fat; } // müde Arme zittern
   if (foundT >= 0) {
     foundT += dt; const k = ease(Math.min(1, foundT / 0.8));
     dx += lerp(0, -0.17, k); dy += lerp(0, 0.2, k); dz += lerp(0, 0.08, k); rx += lerp(0, 0.55, k); ry += lerp(0, -0.2, k) + Math.sin(now * 1.3) * 0.1 * k; rz += lerp(0, 0.5, k) + Math.sin(now * 0.9) * 0.06 * k;
@@ -1566,13 +1589,13 @@ function updateViewmodel(dt, moving) {
       const off = ax === 0 ? 0 : kf[ax];
       if (ax === 0) dx += base - hp[0]; else if (ax === 1) dy += base - hp[1] + off; else dz += base - hp[2] + off;
     }
-    rx += kf[3]; ry += kf[4]; rz += kf[5]; spread = kf[7];
+    rx += kf[3]; ry += kf[4]; rz += kf[5] + anim.v * 0.1 * Math.sin(Math.PI * a); spread = kf[7];
     // Finger schließen und öffnen nacheinander (Zeigefinger zuerst)
     cf = fi => sampleKF(HAND_KF, clamp(a - fi * 0.014, 0, 1), _kf2)[6];
-    if (a > 0.42 && a < 0.64 && anim.hit) {
+    if (a > 0.3 && a < 0.56 && anim.hit && anim.taken) {
       // der herausgezogene Halm spannt sich zwischen Hand und Haufen
       R.f2_tip.getWorldPosition(_tip);
-      toVM(_far.copy(anim.point)); _far.lerp(_tip, smooth(clamp((a - 0.5) / 0.14, 0, 1)));
+      toVM(_far.copy(anim.point)); _far.lerp(_tip, smooth(clamp((a - 0.42) / 0.14, 0, 1)));
       const len = _tip.distanceTo(_far);
       if (len > 0.02) { strand.visible = true; strand.position.addVectors(_tip, _far).multiplyScalar(0.5); strand.scale.set(1, len, 1); strand.quaternion.setFromUnitVectors(_yAx, _v2.subVectors(_far, _tip).normalize()); }
     }
@@ -1580,13 +1603,16 @@ function updateViewmodel(dt, moving) {
     sampleKF(FORK_KF, anim.t, kf);
     dx += kf[0]; dy += kf[1]; dz += kf[2]; rx += kf[3]; ry += kf[4]; rz += kf[5];
   } else if (tool === 'blow' && mouse.down) { dx += rand(-0.005, 0.005); dy += rand(-0.005, 0.005); rz += rand(-0.01, 0.01); }
-  poseTool(g, pose, dx, dy, dz, rx, ry, rz);
+  const S = swapT ? 1 : 1 - Math.exp(-dt * 30), o = vmSm;
+  o[0] = lerp(o[0], dx, S); o[1] = lerp(o[1], dy, S); o[2] = lerp(o[2], dz, S); o[3] = lerp(o[3], rx, S); o[4] = lerp(o[4], ry, S); o[5] = lerp(o[5], rz, S);
+  const tr = tool !== 'blow' ? fat * fat : 0; // müde Arme zittern
+  poseTool(g, pose, o[0], o[1] + Math.sin(now * 31) * 0.004 * tr, o[2], o[3], o[4], o[5] + Math.sin(now * 23) * 0.012 * tr);
   if (tool === 'hand') curlHand(R, curl, spread, cf);
   poseTool(detG, TOOL_POSE.det, bx * 0.7 + sway.x, by + sway.y - P.land - (foundT >= 0 ? 0.3 : 0), 0, Math.sin(now * 0.9) * 0.02, 0, 0);
   // Sonne auch im Viewmodel aus der richtigen Richtung
   vmSun.position.copy(SUN).transformDirection(camera.matrixWorldInverse).multiplyScalar(5);
 }
-const _kf2 = new Array(8).fill(0);
+const _kf2 = new Array(8).fill(0), vmSm = [0, 0, 0, 0, 0, 0];
 
 // ================= Hauptschleife =================
 let last = performance.now(), saveT = 0;
@@ -1636,7 +1662,13 @@ function frame(t) {
   flushPlus(dt);
   if (state !== 'title') updateHUD();
   saveT += dt; if (saveT > 5) { saveT = 0; persist(); }
-  if (composer) { gradePass.uniforms.time.value = now % 10; flashT = Math.max(0, flashT - dt * 1.2); gradePass.uniforms.flash.value = flashT * 0.5; composer.render(dt); }
+  if (composer) {
+    gradePass.uniforms.time.value = now % 10; flashT = Math.max(0, flashT - dt * 1.2); gradePass.uniforms.flash.value = flashT * 0.5;
+    const sp = _v.copy(SUN).multiplyScalar(300).add(camera.position).project(camera);
+    gradePass.uniforms.sunUv.value.set(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5);
+    gradePass.uniforms.rays.value = sp.z < 1 ? clamp(1.6 - Math.hypot(sp.x, sp.y) * 0.8, 0, 1) : 0;
+    composer.render(dt);
+  }
   else { renderer.autoClear = true; renderer.render(scene, camera); renderer.autoClear = false; renderer.clearDepth(); renderer.render(vmScene, vmCam); }
 }
 addEventListener('beforeunload', persist);
@@ -1649,14 +1681,15 @@ syncMachines();
 if (save.needles || save.taler) $('startStats').textContent = 'Heuhaufen Nr. ' + save.level + ' · ' + fmt(save.taler) + ' Taler · ' + save.needles + ' Nadel' + (save.needles === 1 ? '' : 'n') + ' gefunden';
 if (SHOT) {
   setState('play'); P.pos.set(0.4, 0, 3.2); P.pitch = -0.32;
-  if (SHOT === 'grab') { save.up.handschuh = 1; mouse.down = true; }
+  if (SHOT === 'grab') { mouse.click = true; mouse.clickT = 99; }
   if (SHOT === 'dig' || SHOT === 'fork') { save.up = { detektor: 3, gabel: 2, handschuh: 1, magnet: 1 }; for (let j = 0; j < 5; j++) for (let i = 4; i < 7; i++) for (let k = 5; k < NZ; k++) takeFrom(I3(i, j, k), 999); P.pos.set(0.1, 0, 2.6); P.pitch = -0.35; }
-  if (SHOT === 'fork') { tool = 'fork'; mouse.down = true; }
+  if (SHOT === 'fork') { tool = 'fork'; mouse.click = true; mouse.clickT = 99; }
   if (SHOT === 'shop') setState('shop');
   if (SHOT === 'lvl') { save.level = 6; genStack(6, true); P.pos.set(0, 0, 7); P.pitch = -0.1; }
   if (SHOT === 'found') { P.pos.set(0.1, 0, 2.6); pickNeedle(); }
   if (SHOT === 'auto') { save.level = 4; genStack(4, false); save.up = { huhn: 6, robo: 4, kran: 2, sorter: 1, autopilot: 1, detektor: 1 }; syncMachines(); P.pos.set(7.5, 0, 6.5); P.yaw = 0.95; P.pitch = 0.08; }
   if (SHOT === 'tired') { fat = 0.9; }
+  if (SHOT === 'sun') { P.pos.set(3.5, 0, 3); P.yaw = 0.86; P.pitch = 0.12; } // Gegenlicht: Sonne hinter dem Haufen
 }
 requestAnimationFrame(frame);
 </script>
