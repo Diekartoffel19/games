@@ -553,9 +553,6 @@ const strawTex = (() => {
   const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = MAXANISO; return t;
 })();
 const cardGeo = (() => { const g = new THREE.PlaneGeometry(1, 0.55, 4, 1), P = g.attributes.position; for (let i = 0; i < P.count; i++) P.setZ(i, 0.09 * P.getX(i) * P.getX(i)); return g; })();
-const cardMat = new THREE.MeshStandardMaterial({ map: strawTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.88 });
-hayShader(cardMat, 'hayCard', 0.86, '0.006 * (0.3 + abs(position.x) * 2.0)', true, 0.8);
-const cardDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: strawTex, alphaTest: 0.42 });
 const cardSolo = new THREE.MeshStandardMaterial({ map: strawTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.7 });
 // Büschel aus Halm-Karten (für Gabel und Hand)
 function makeTuft(n, s) {
@@ -614,37 +611,77 @@ function updateStraws(dt) {
 
 // ================= Der Heuhaufen (Voxel-Zellen mit Halm-Dichte) =================
 const C = 0.3;
-let NX, NY, NZ, GX, GZ, dens, dmax, fall, depthA, instOf, total = 0, removed = 0, stackR = 1, stackH = 1;
-let clumps = null, strays = null, cards = null, dirty = true, unstable = false, anyFall = false;
-const clumpGeo = (() => {
-  const g = new THREE.IcosahedronGeometry(0.5, 1), P = g.attributes.position, nrm = [];
-  for (let i = 0; i < P.count; i++) {
-    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
-    const k = 1 + 0.09 * Math.sin(x * 9.1 + y * 4.3) * Math.cos(z * 7.7 - x * 3.1) + 0.05 * Math.sin(y * 17 + z * 11);
-    P.setXYZ(i, x * k, y * k * 0.94, z * k); const l = Math.hypot(x, y, z); nrm.push(x / l, y / l, z / l);
-  }
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  return g;
-})();
+let NX, NY, NZ, GX, GZ, dens, dmax, fall, depthA, total = 0, removed = 0, stackR = 1, stackH = 1;
+let dirty = true, unstable = false, anyFall = false;
 const hayMat = new THREE.MeshStandardMaterial({ map: TEX.hay, roughness: 0.95, color: 0xffffff });
-// Kern-Klumpen: dunkle, dichte Unterlage zwischen den losen Halmen
-const stackMat = hayMat.clone(); stackMat.color = lin('#a89468');
-hayShader(stackMat, 'hayCore', 0.8, '0.0', false, 0.2);
-const strayGeo = new THREE.BoxGeometry(0.005, 0.003, 0.46); strayGeo.translate(0, 0, 0.13);
-const strayMat = new THREE.MeshStandardMaterial({ color: lin('#e8c878'), roughness: 0.75 });
-hayShader(strayMat, 'hayStray', 0, '0.012 * max(position.z, 0.0) * 3.0', false, 1.0);
+// Jeder Halm im Haufen ist ein eigenes Objekt: ein Klick nimmt genau diese Halme heraus.
+// Halme liegen in festen Blöcken (K Plätze) pro ursprünglich gefüllter Zelle; rutscht eine Zelle nach, wandert ihr Block mit.
+const strawGeo = (() => { const g = new THREE.CylinderGeometry(0.0095, 0.0065, 1, 3, 2, true); g.rotateX(Math.PI / 2); const P = g.attributes.position; for (let i = 0; i < P.count; i++) P.setX(i, P.getX(i) + 0.035 * (0.25 - P.getZ(i) * P.getZ(i))); g.computeVertexNormals(); return g; })();
+const strawMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62 });
+hayShader(strawMat, 'hayStraw', 0.45, '0.004 * abs(position.z) * 2.0', false, 1.0);
+const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
+let straws = null, K = 1, slotBase, sSeed, sAlive, sLo = 1e9, sHi = -1;
+const _sp = new THREE.Vector3(), _sd = new THREE.Vector3(), _sn = new THREE.Vector3(), _sq = new THREE.Quaternion();
+let _sl = 0;
+// Lage eines Halms aus seinem Seed (bleibt beim Nachrutschen gleich)
+function strawPose(slot, id) {
+  const sd = sSeed[slot], h = q => hash((sd + q * 7919) >>> 0);
+  cellCenter(id, _sp); _sp.x += (h(1) - 0.5) * C; _sp.y += (h(2) - 0.5) * C; _sp.z += (h(3) - 0.5) * C;
+  _sn.set(_sp.x / stackR, _sp.y / stackH * 0.8 + 0.35, _sp.z / stackR).normalize();
+  _sd.set(h(4) - 0.5, h(5) - 0.5, h(6) - 0.5).normalize();
+  if (h(7) < 0.12) _sd.addScaledVector(_sn, 0.7).normalize(); // ein paar stehen ab
+  else _sd.addScaledVector(_sn, -0.8 * _sd.dot(_sn)).normalize(); // die meisten liegen am Haufen an
+  _sq.setFromUnitVectors(_z, _sd); _sl = 0.34 + 0.24 * h(8);
+  return h(9);
+}
+function writeSlot(slot, id) {
+  if (!sAlive[slot]) straws.setMatrixAt(slot, ZERO_M);
+  else {
+    const r = strawPose(slot, id);
+    dmy.position.copy(_sp); dmy.quaternion.copy(_sq); dmy.scale.set(1, 1, _sl); dmy.updateMatrix(); straws.setMatrixAt(slot, dmy.matrix);
+    tmpC.copy(STRAW_COLS[sSeed[slot] % 5]).multiplyScalar((0.78 + 0.32 * r) * (1 - 0.4 * depthA[id])); if (r < 0.08) tmpC.multiply(_gC);
+    straws.setColorAt(slot, tmpC); straws.geometry.attributes.aOut.setXYZ(slot, _sn.x, _sn.y, _sn.z);
+  }
+  if (slot < sLo) sLo = slot; if (slot > sHi) sHi = slot;
+}
+const _gC = new THREE.Color(0.8, 1, 0.65); // vereinzelt grünliche Halme
+function writeCell(id) { const b = slotBase[id]; if (b >= 0) for (let q = 0; q < K; q++) writeSlot(b + q, id); }
+// nur den geänderten Bereich hochladen
+function flushStraws() {
+  if (sHi < 0) return;
+  const m = straws, a = m.geometry.attributes.aOut;
+  m.instanceMatrix.updateRange.offset = sLo * 16; m.instanceMatrix.updateRange.count = (sHi - sLo + 1) * 16;
+  for (const at of [m.instanceColor, a]) { at.updateRange.offset = sLo * 3; at.updateRange.count = (sHi - sLo + 1) * 3; at.needsUpdate = true; }
+  m.instanceMatrix.needsUpdate = true; sLo = 1e9; sHi = -1;
+}
+// die n lebenden Halme einer Zelle, die dem Strahl (o, d) bzw. dem Punkt o am nächsten liegen
+const _pick = [], _pickS = [];
+function pickSlots(id, n, o, d) {
+  _pick.length = 0; const b = slotBase[id]; if (b < 0) return _pick;
+  for (let q = 0; q < K; q++) {
+    const sl = b + q; if (!sAlive[sl]) continue;
+    strawPose(sl, id); _v2.subVectors(_sp, o);
+    let sc; if (d) { const t = _v2.dot(d); sc = Math.sqrt(Math.max(0, _v2.lengthSq() - t * t)) + 0.35 * t; } else sc = _v2.length();
+    _pick.push(sl); _pickS[sl - b] = sc;
+  }
+  _pick.sort((x, y) => _pickS[x - b] - _pickS[y - b]); if (_pick.length > n) _pick.length = n;
+  return _pick;
+}
 const I3 = (i, j, k) => (j * NZ + k) * NX + i;
+// Fundstücke sind sichtbar, sobald ihre Zelle auf 40 % ausgedünnt ist
+const thin = id => dens[id] * 5 <= dmax[id] * 2;
+const dense = (i, j, k) => filled(i, j, k) && !thin(I3(i, j, k));
 const filled = (i, j, k) => i >= 0 && j >= 0 && k >= 0 && i < NX && j < NY && k < NZ && dens[I3(i, j, k)] > 0;
 const cellCenter = (id, v) => { const i = id % NX, k = Math.floor(id / NX) % NZ, j = Math.floor(id / (NX * NZ)); return v.set(GX + (i + 0.5) * C, (j + 0.5) * C + fall[id], GZ + (k + 0.5) * C); };
 
 function genStack(level, rain) {
   stackR = Math.min(1.25 + 0.32 * (level - 1), 4.6);
   stackH = Math.min(1.5 + 0.28 * (level - 1), 4.3);
-  const spc = Math.min(6 + 3 * (level - 1), 48);
+  const spc = Math.min(30 + 4 * (level - 1), 90); // echte Halme pro Zelle: so viele, dass der Haufen dicht aussieht
   NX = NZ = Math.ceil(2 * stackR / C) + 2; NY = Math.ceil(stackH / C) + 2;
   GX = GZ = -NX * C / 2;
   const N = NX * NY * NZ;
-  dens = new Uint16Array(N); dmax = new Uint16Array(N); fall = new Float32Array(N); depthA = new Float32Array(N); instOf = new Int32Array(N).fill(-1);
+  dens = new Uint16Array(N); dmax = new Uint16Array(N); fall = new Float32Array(N); depthA = new Float32Array(N);
   total = 0; removed = 0;
   const seed = Math.random() * 100;
   for (let j = 0; j < NY; j++) for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) {
@@ -662,14 +699,16 @@ function genStack(level, rain) {
     if (rain) fall[id] = 5 + j * 0.45 + Math.random() * 4;
   }
   anyFall = !!rain;
-  const cap = N;
-  for (const m of [clumps, strays, cards]) if (m) { scene.remove(m); m.geometry !== strayGeo && m.geometry.dispose(); if (m.dispose) m.dispose(); }
-  const inst = (geo, mat, n) => { const g = geo.clone(); g.setAttribute('aOut', new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3)); const m = new THREE.InstancedMesh(g, mat, n); m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3); m.frustumCulled = false; m.receiveShadow = true; m.count = 0; scene.add(m); return m; };
-  clumps = inst(clumpGeo, stackMat, cap); clumps.castShadow = true;
-  cards = inst(cardGeo, cardMat, cap * 8); cards.castShadow = true; cards.customDepthMaterial = cardDepth;
-  strays = new THREE.InstancedMesh(strayGeo, strayMat, cap * 4);
-  strays.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 12), 3);
-  strays.frustumCulled = false; strays.receiveShadow = true; strays.count = 0; scene.add(strays);
+  // Halm-Blöcke: nur ursprünglich gefüllte Zellen; Nachrutschen bleibt in der Säule, landet also immer in einem Block
+  K = Math.round(spc * 1.25) + 1; slotBase = new Int32Array(N).fill(-1);
+  let nb = 0; for (let id = 0; id < N; id++) if (dens[id]) slotBase[id] = nb++ * K;
+  sSeed = new Uint32Array(nb * K); sAlive = new Uint8Array(nb * K);
+  for (let id = 0; id < N; id++) if (dens[id]) for (let q = 0; q < dens[id]; q++) { sAlive[slotBase[id] + q] = 1; sSeed[slotBase[id] + q] = (Math.random() * 4294967295) >>> 0; }
+  if (straws) { const m = straws; scene.remove(m); m.geometry.dispose(); if (m.dispose) m.dispose(); }
+  const inst = (geo, mat, n) => { const g = geo.clone(); g.setAttribute('aOut', new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3)); const m = new THREE.InstancedMesh(g, mat, n); m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3); m.frustumCulled = false; m.receiveShadow = true; m.castShadow = true; m.count = 0; scene.add(m); return m; };
+  straws = inst(strawGeo, strawMat, nb * K); straws.count = nb * K;
+  for (let id = 0; id < N; id++) writeCell(id);
+  sLo = 0; sHi = nb * K - 1;
   placeItems(level);
   scatterGround(rain ? 260 : 420, stackR * 0.9, stackR + 3.2);
   dirty = true; hover = -1;
@@ -677,57 +716,9 @@ function genStack(level, rain) {
 }
 
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _n = new THREE.Vector3(), _z = new THREE.Vector3(0, 0, 1), _e = new THREE.Euler();
-function rebuild() {
-  let n = 0, s = 0, c = 0; anyFall = false;
-  const cOut = cards.geometry.attributes.aOut, kOut = clumps.geometry.attributes.aOut;
-  for (let j = 0; j < NY; j++) for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) {
-    const id = I3(i, j, k); instOf[id] = -1;
-    const d = dens[id]; if (!d) continue;
-    let ex = 0, ox = 0, oy = 0, oz = 0;
-    if (!filled(i - 1, j, k)) { ex++; ox--; } if (!filled(i + 1, j, k)) { ex++; ox++; }
-    if (j > 0 && !filled(i, j - 1, k)) { ex++; oy--; } if (!filled(i, j + 1, k)) { ex++; oy++; }
-    if (!filled(i, j, k - 1)) { ex++; oz--; } if (!filled(i, j, k + 1)) { ex++; oz++; }
-    if (fall[id] > 0) anyFall = true;
-    if (!ex && fall[id] <= 0.001) continue;
-    const h1 = hash(id * 3 + 1), h2 = hash(id * 3 + 2), h3 = hash(id * 3 + 3);
-    const f = d / dmax[id], sf = Math.sqrt(f);
-    cellCenter(id, _v);
-    _n.set(ox, oy + 0.35, oz).normalize();
-    let occ = 0; for (let dj = -1; dj <= 1; dj++) for (let dk = -1; dk <= 1; dk++) for (let di = -1; di <= 1; di++) if (filled(i + di, j + dj, k + dk)) occ++;
-    const ao = lerp(1.08, 0.42, clamp((occ / 27 - 0.42) / 0.42, 0, 1));
-    const dp = depthA[id], b = Math.min(1.1, 0.74 + 0.05 * ex + 0.08 * h2 + 0.1 * (j / NY)) * ao;
-    // Kern
-    dmy.position.copy(_v); dmy.rotation.set(h1 * 6.28, h2 * 6.28, h3 * 6.28); dmy.scale.setScalar(C * (0.6 + 0.55 * sf)); dmy.updateMatrix();
-    clumps.setMatrixAt(n, dmy.matrix); kOut.setXYZ(n, _n.x, _n.y, _n.z);
-    tmpC.setRGB(b * (1 - 0.18 * dp), b * (1 - 0.1 * dp), b * (1 - 0.3 * dp)); clumps.setColorAt(n, tmpC);
-    instOf[id] = n; n++;
-    // lose Halm-Strähnen, meist flach am Haufen anliegend, manche abstehend
-    const nc = Math.round((oy > 0 ? 8 : 5) * (0.5 + 0.5 * sf)) + (ex > 2 ? 2 : 0);
-    for (let q = 0; q < nc; q++) {
-      const hq = hash(id * 11 + q), hr = hash(id * 23 + q * 7), hs = hash(id * 31 + q * 3), ht = hash(id * 41 + q * 5);
-      if (hq < 0.78) _v2.set(_n.x + (hr - 0.5) * 1.3, _n.y + (hs - 0.5) * 1.3, _n.z + (ht - 0.5) * 1.3).normalize();
-      else _v2.set(hr - 0.5, hs - 0.5, ht - 0.5).normalize();
-      _q.setFromUnitVectors(_z, _v2); _q2.setFromAxisAngle(_v2, hr * 6.283); dmy.quaternion.multiplyQuaternions(_q2, _q);
-      dmy.position.copy(_v).addScaledVector(_n, C * (0.22 + 0.3 * hs)); dmy.position.x += (hr - 0.5) * C * 0.9; dmy.position.y += (hs - 0.5) * C * 0.6; dmy.position.z += (ht - 0.5) * C * 0.9;
-      dmy.scale.setScalar((0.42 + 0.42 * hq) * (0.55 + 0.45 * sf)); dmy.updateMatrix();
-      cards.setMatrixAt(c, dmy.matrix); cOut.setXYZ(c, _n.x, _n.y, _n.z);
-      const cb = b * (0.8 + 0.26 * ht) * (1 - 0.12 * dp); tmpC.setRGB(cb, cb * (0.97 - 0.05 * dp), cb * (0.92 - 0.15 * dp)); cards.setColorAt(c, tmpC); c++;
-    }
-    // einzelne abstehende Halme
-    const ns = oy > 0 ? 4 : 2;
-    for (let q = 0; q < ns; q++) {
-      const hq = hash(id * 7 + q), hr = hash(id * 13 + q * 5), hs = hash(id * 17 + q * 3);
-      _v2.set(_n.x + (hq - 0.5) * 2.2, _n.y + (hr - 0.5) * 2.2 + 0.2, _n.z + (hs - 0.5) * 2.2).normalize();
-      _q.setFromUnitVectors(_z, _v2);
-      dmy.quaternion.copy(_q); dmy.position.copy(_v).addScaledVector(_n, C * 0.3);
-      dmy.scale.set(1, 1, (0.5 + 0.9 * hq) * (0.5 + 0.5 * f)); dmy.updateMatrix();
-      strays.setMatrixAt(s, dmy.matrix);
-      tmpC.copy(STRAW_COLS[(id + q) % 5]).multiplyScalar(0.85 + 0.25 * hr); strays.setColorAt(s, tmpC); s++;
-    }
-  }
-  clumps.count = n; strays.count = s; cards.count = c;
-  for (const m of [clumps, strays, cards]) { m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
-  kOut.needsUpdate = cOut.needsUpdate = true;
+// der Haufen besteht nur noch aus Einzelhalmen; hier wird nur erkannt, wann alles gelandet ist
+function checkFall() {
+  anyFall = false; for (let id = 0; id < fall.length; id++) if (fall[id] > 0) { anyFall = true; break; }
   dirty = false;
 }
 // Zielmarkierung: warmes Glimmen um die anvisierte Zelle (im Heu-Shader)
@@ -738,7 +729,7 @@ function highlight(id, on) {
 let settleT = 0;
 function settle(dt) {
   if (anyFall) {
-    for (let id = 0; id < fall.length; id++) if (fall[id] > 0) fall[id] = Math.max(0, fall[id] - dt * (3.5 + fall[id] * 1.6));
+    for (let id = 0; id < fall.length; id++) if (fall[id] > 0) { fall[id] = Math.max(0, fall[id] - dt * (3.5 + fall[id] * 1.6)); writeCell(id); }
     dirty = true;
   }
   if (!unstable) return;
@@ -746,9 +737,12 @@ function settle(dt) {
   let moved = false;
   for (let j = 1; j < NY; j++) for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) {
     const id = I3(i, j, k), b = id - NX * NZ;
-    if (dens[id] && !dens[b]) {
+    if (dens[id] && !dens[b] && slotBase[b] >= 0) {
       dens[b] = dens[id]; dmax[b] = dmax[id]; depthA[b] = depthA[id]; fall[b] = fall[id] + C;
       dens[id] = 0; fall[id] = 0; moved = true;
+      const sa = slotBase[id], sb = slotBase[b];
+      sAlive.copyWithin(sb, sa, sa + K); sSeed.copyWithin(sb, sa, sa + K); sAlive.fill(0, sa, sa + K);
+      writeCell(id); writeCell(b);
       for (const it of items) if (it.cell === id) it.cell = b;
     }
   }
@@ -756,13 +750,22 @@ function settle(dt) {
 }
 // lazy: Maschinen – Neuaufbau gedrosselt statt jeden Frame
 let dirtySoft = false, softT = 0;
-function takeFrom(id, n, lazy) {
+// o/d: Halme nächst zum Strahl (o, d) bzw. zum Punkt o nehmen; out: genommene Plätze (vor dem Löschen) sammeln
+function takeFrom(id, n, lazy, o, d, out) {
   const t = Math.min(n, dens[id]); if (!t) return 0;
-  dens[id] -= t; removed += t; save.straws += t;
-  if (!dens[id]) {
-    unstable = true;
-    for (const it of items) if (it.cell === id) freeItem(it);
+  const b = slotBase[id];
+  if (b >= 0) {
+    const sl = o ? pickSlots(id, t, o, d) : null;
+    for (let q = 0, c = 0; c < t && q < K; q++) {
+      const slot = sl ? sl[q] : b + K - 1 - q; if (slot === undefined) break;
+      if (!sAlive[slot]) continue;
+      if (out) { strawPose(slot, id); out.push({ p: _sp.clone(), q: _sq.clone(), len: _sl, col: straws.instanceColor.array.slice(slot * 3, slot * 3 + 3) }); }
+      sAlive[slot] = 0; writeSlot(slot, id); c++;
+    }
   }
+  dens[id] -= t; removed += t; save.straws += t;
+  if (!dens[id]) unstable = true;
+  if (thin(id)) for (const it of items) if (it.cell === id) freeItem(it);
   if (lazy) dirtySoft = true; else dirty = true;
   return t;
 }
@@ -821,7 +824,7 @@ function updateItemPos(it) { if (!it.free && it.cell >= 0) cellCenter(it.cell, i
 function floorBelow(p) {
   const i = Math.floor((p.x - GX) / C), k = Math.floor((p.z - GZ) / C);
   if (i < 0 || k < 0 || i >= NX || k >= NZ) return 0.01;
-  for (let j = Math.min(NY - 1, Math.floor(p.y / C)); j >= 0; j--) if (dens[I3(i, j, k)]) return (j + 1) * C;
+  for (let j = Math.min(NY - 1, Math.floor(p.y / C)); j >= 0; j--) if (dense(i, j, k)) return (j + 1) * C;
   return 0.01;
 }
 function freeItem(it) {
@@ -858,7 +861,7 @@ function updateItems(dt) {
       if (it.pos.y > fl + 0.02) { it.vy -= 9 * dt; it.pos.y = Math.max(fl + 0.02, it.pos.y + it.vy * dt); } else { it.vy = 0; it.pos.y = fl + 0.02; }
       // wenn Heu nachrutscht und die Nadel wieder verschüttet
       const i = Math.floor((it.pos.x - GX) / C), j = Math.floor(it.pos.y / C), k = Math.floor((it.pos.z - GZ) / C);
-      if (filled(i, j, k)) { it.free = false; it.freeT = 0; it.cell = I3(i, j, k); cellCenter(it.cell, _v); it.off.subVectors(it.pos, _v); }
+      if (dense(i, j, k)) { it.free = false; it.freeT = 0; it.cell = I3(i, j, k); cellCenter(it.cell, _v); it.off.subVectors(it.pos, _v); }
       it.mesh.position.copy(it.pos);
       if (it.type === 'needle') it.mesh.rotation.set(0, it.mesh.rotation.y, 0);
     } else updateItemPos(it);
@@ -900,9 +903,14 @@ for (let i = 0; i < 14; i++) {
   bundle.add(m); bundleStraws.push(m);
 }
 const bundleClump = makeTuft(6, 0.09); bundleClump.position.set(0, -0.03, 0); bundle.add(bundleClump);
-// der gerade herausgezogene Halm (spannt sich zwischen Fingern und Haufen)
-const strand = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.0025, 1, 5), new THREE.MeshStandardMaterial({ color: STRAW_COLS[2], roughness: 0.7 })); strand.visible = false; vm.add(strand);
-function showBundle(n) { bundle.visible = n > 0; bundleStraws.forEach((m, i) => m.visible = i < Math.min(14, n)); bundleClump.visible = n > 14; bundleClump.scale.setScalar(0.6 + Math.min(1, n * 0.02)); }
+// die gerade herausgezogenen Halme (Weltraum): erst gleiten sie aus dem Haufen, dann fliegen sie in die Hand
+const pullMesh = new THREE.InstancedMesh(strawGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, emissive: lin('#ffb347'), emissiveIntensity: 0.45 }), 14);
+pullMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(14 * 3), 3); pullMesh.count = 0; pullMesh.frustumCulled = false; pullMesh.castShadow = true; scene.add(pullMesh);
+// angepeilte Halme leuchten
+const hlMesh = new THREE.InstancedMesh(strawGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.9, 1.25, 0.55) }), 40);
+hlMesh.count = 0; hlMesh.frustumCulled = false; scene.add(hlMesh);
+let bundleN = 0;
+function showBundle(n) { bundleN = n; bundle.visible = n > 0; bundleStraws.forEach((m, i) => m.visible = i < Math.min(14, n)); bundleClump.visible = n > 14; bundleClump.scale.setScalar(0.6 + Math.min(1, n * 0.02)); }
 showBundle(0);
 // gehaltene Nadel (Fund-Animation)
 const heldNeedle = makeItemMesh('needle'); heldNeedle.visible = false; R.root.add(heldNeedle); heldNeedle.position.set(-0.012, -0.03, -0.12); heldNeedle.rotation.set(0.2, 0.4, 0.15);
@@ -1185,21 +1193,21 @@ function startAnim(type, hit) {
   if (hit) tire(type === 'fork' ? 0.16 : 0.08);
   anim = { type, t: 0, dur: (type === 'fork' ? 1.15 * Math.pow(0.9, lv('tempo')) : tempoT()) * (1 + 3 * fat * fat), hit, done: false, rel: false, taken: 0, v: rand(-1, 1), point: ray.o.clone().addScaledVector(ray.d, hit ? hit.t + 0.1 : 1.5) }; }
 // Takt der Animation: Griff sitzt (commit), ab chain darf der nächste Klick den Wurf abkürzen, rel = Halme loslassen
-const ANIM_T = { hand: { commit: 0.3, chain: 0.5, rel: 0.8 }, fork: { commit: 0.3, chain: 0.62, rel: 0.78 } };
+const ANIM_T = { hand: { commit: 0.3, chain: 0.6, rel: 0.84 }, fork: { commit: 0.3, chain: 0.62, rel: 0.78 } };
 function commitGrab() {
   const a = anim; if (!a.hit) return;
-  if (a.type === 'hand') a.taken = takeFrom(a.hit.id, GRIFF[lv('griff')]);
+  if (a.type === 'hand') { a.pulls = []; a.taken = takeFrom(a.hit.id, GRIFF[lv('griff')], false, ray.o, ray.d, a.pulls); a.pulls.length = Math.min(a.pulls.length, 14); }
   else {
     const id = a.hit.id, ci = id % NX, ck = Math.floor(id / NX) % NZ, cj = Math.floor(id / (NX * NZ)), r = forkRadius(lv('gabel')), per = 5 + 4 * lv('gabel');
     for (let dj = -2; dj <= 2; dj++) for (let dk = -2; dk <= 2; dk++) for (let di = -2; di <= 2; di++)
-      if (di * di + dj * dj + dk * dk <= r * r + 0.01 && filled(ci + di, cj + dj, ck + dk)) a.taken += takeFrom(I3(ci + di, cj + dj, ck + dk), per);
+      if (di * di + dj * dj + dk * dk <= r * r + 0.01 && filled(ci + di, cj + dj, ck + dk)) a.taken += takeFrom(I3(ci + di, cj + dj, ck + dk), per, false, a.point);
   }
   if (a.taken) { addTaler(a.taken * PRICE[lv('preis')]); rustle(Math.min(1, a.taken / 10)); puff(a.point, Math.min(40, 6 + a.taken)); popCross(); }
   kick = a.type === 'fork' ? 0.03 : 0.012;
   if (a.type === 'hand') showBundle(a.taken);
   else { forkClump.visible = a.taken > 0; forkClump.scale.setScalar(0.5 + Math.min(0.9, a.taken * 0.006)); }
   hayPoke(a.point, a.type === 'fork' ? 2.4 : 1); shake = Math.max(shake, a.type === 'fork' ? 0.9 : 0.25);
-  for (let i = 0; i < Math.min(14, 3 + a.taken); i++) spawnStraw(a.point, _u.set(rand(-0.8, 0.8), rand(0.4, 1.8), rand(-0.8, 0.8)), rand(0.25, 0.45));
+  if (a.type === 'fork') for (let i = 0; i < Math.min(14, a.taken); i++) spawnStraw(a.point, _u.set(rand(-0.8, 0.8), rand(0.4, 1.8), rand(-0.8, 0.8)), rand(0.25, 0.45));
 }
 const _w = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3();
 function popCross() { const c = $('cross'); c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); }
@@ -1250,7 +1258,7 @@ function updateTool(dt, hit) {
     }
   }
   if (anim) {
-    anim.t += dt / anim.dur; if (SHOT_PH) anim.t = Math.min(anim.t, SHOT_PH); const a = anim.t, T = ANIM_T[anim.type];
+    anim.t = SHOT_PH || anim.t + dt / anim.dur; const a = anim.t, T = ANIM_T[anim.type];
     if (!anim.done && a >= T.commit) { anim.done = true; commitGrab(); }
     if (!anim.rel && a >= T.rel) releaseNow();
     if (a >= 1) anim = null;
@@ -1526,17 +1534,18 @@ function sampleKF(K, a, out) {
   for (let k = 1; k < A.length; k++) out[k - 1] = lerp(A[k], B[k], u);
   return out;
 }
-// Hand: kurz ausholen, ins Heu stoßen, zupacken, rütteln, rausreißen, wegschleudern. Spalte 1: Anteil Richtung Ziel (>1 = hineinstoßen), negativ = feste Pose.
+// Hand: kurz ausholen, ins Heu stoßen, zupacken, Halm herauszupfen, rausreißen, wegschleudern. Spalte 1: Anteil Richtung Ziel (>1 = hineinstoßen), negativ = feste Pose.
 const HAND_KF = [
   [0.00, 0, 0, 0, 0, 0, 0, 0.15, 0],
   [0.07, -0.1, 0.03, 0.05, 0.18, -0.03, 0.1, -0.15, 1],
   [0.20, 1.12, -0.01, -0.02, -0.55, -0.06, -0.05, -0.25, 1],
   [0.30, 1.08, -0.02, -0.01, -0.5, -0.05, 0, 1.25, 0],
-  [0.35, 1.0, 0.012, 0.02, -0.38, -0.04, 0.1, 1.25, 0],
-  [0.40, 1.04, -0.008, 0.0, -0.46, -0.05, -0.08, 1.25, 0],
-  [0.52, 0.3, 0.07, 0.12, 0.2, -0.02, 0.12, 1.2, 0],
-  [0.66, -1, 0, 0, 0.45, 0.35, 0.7, 1.15, 0],
-  [0.80, -3, 0, 0, 0, -0.5, -0.9, 0, 0.5],
+  [0.37, 0.95, 0.012, 0.03, -0.38, -0.04, 0.1, 1.25, 0],
+  [0.43, 1.0, -0.006, 0.0, -0.46, -0.05, -0.08, 1.25, 0],
+  [0.49, 0.85, 0.02, 0.05, -0.3, -0.04, 0.08, 1.25, 0],
+  [0.60, 0.3, 0.07, 0.12, 0.2, -0.02, 0.12, 1.2, 0],
+  [0.72, -1, 0, 0, 0.45, 0.35, 0.7, 1.15, 0],
+  [0.85, -3, 0, 0, 0, -0.5, -0.9, 0, 0.5],
   [1.00, 0, 0, 0, 0, 0, 0, 0.15, 0],
 ];
 const HAND_FIXED = { '-0.1': [0.22, -0.22, -0.4], '-1': [0.1, -0.14, -0.42], '-3': [0.42, -0.04, -0.42] };
@@ -1569,7 +1578,6 @@ function updateViewmodel(dt, moving) {
   for (const k in toolG) toolG[k].visible = k === tool;
   const g = toolG[tool], pose = TOOL_POSE[tool];
   let dx = bx + sway.x, dy = by - drop * 0.35 + sway.y - P.land, dz = 0, rx = 0, ry = 0, rz = 0, curl = 0.15 + 0.05 * Math.sin(now * 0.8), spread = 0, cf = null;
-  strand.visible = false;
   if (foundT >= 0) {
     foundT += dt; const k = ease(Math.min(1, foundT / 0.8));
     dx += lerp(0, -0.17, k); dy += lerp(0, 0.2, k); dz += lerp(0, 0.08, k); rx += lerp(0, 0.55, k); ry += lerp(0, -0.2, k) + Math.sin(now * 1.3) * 0.1 * k; rz += lerp(0, 0.5, k) + Math.sin(now * 0.9) * 0.06 * k;
@@ -1592,13 +1600,6 @@ function updateViewmodel(dt, moving) {
     rx += kf[3]; ry += kf[4]; rz += kf[5] + anim.v * 0.1 * Math.sin(Math.PI * a); spread = kf[7];
     // Finger schließen und öffnen nacheinander (Zeigefinger zuerst)
     cf = fi => sampleKF(HAND_KF, clamp(a - fi * 0.014, 0, 1), _kf2)[6];
-    if (a > 0.3 && a < 0.56 && anim.hit && anim.taken) {
-      // der herausgezogene Halm spannt sich zwischen Hand und Haufen
-      R.f2_tip.getWorldPosition(_tip);
-      toVM(_far.copy(anim.point)); _far.lerp(_tip, smooth(clamp((a - 0.42) / 0.14, 0, 1)));
-      const len = _tip.distanceTo(_far);
-      if (len > 0.02) { strand.visible = true; strand.position.addVectors(_tip, _far).multiplyScalar(0.5); strand.scale.set(1, len, 1); strand.quaternion.setFromUnitVectors(_yAx, _v2.subVectors(_far, _tip).normalize()); }
-    }
   } else if (anim && anim.type === 'fork') {
     sampleKF(FORK_KF, anim.t, kf);
     dx += kf[0]; dy += kf[1]; dz += kf[2]; rx += kf[3]; ry += kf[4]; rz += kf[5];
@@ -1608,11 +1609,43 @@ function updateViewmodel(dt, moving) {
   const tr = tool !== 'blow' ? fat * fat : 0; // müde Arme zittern
   poseTool(g, pose, o[0], o[1] + Math.sin(now * 31) * 0.004 * tr, o[2], o[3], o[4], o[5] + Math.sin(now * 23) * 0.012 * tr);
   if (tool === 'hand') curlHand(R, curl, spread, cf);
+  updatePulls();
   poseTool(detG, TOOL_POSE.det, bx * 0.7 + sway.x, by + sway.y - P.land - (foundT >= 0 ? 0.3 : 0), 0, Math.sin(now * 0.9) * 0.02, 0, 0);
   // Sonne auch im Viewmodel aus der richtigen Richtung
   vmSun.position.copy(SUN).transformDirection(camera.matrixWorldInverse).multiplyScalar(5);
 }
 const _kf2 = new Array(8).fill(0), vmSm = [0, 0, 0, 0, 0, 0];
+const _hq = new THREE.Quaternion(), _qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), _hw = new THREE.Vector3(), _out = new THREE.Vector3();
+function updatePulls() {
+  let np = 0;
+  const pl = anim && anim.type === 'hand' && anim.pulls, a = pl ? anim.t : 1;
+  if (pl && a < 0.6) {
+    R.f2_tip.getWorldPosition(_hw); fromVM(_hw);
+    _hq.copy(camera.quaternion).multiply(_qY);
+    const sl = smooth(clamp((a - 0.3) / 0.19, 0, 1)), fl = smooth(clamp((a - 0.49) / 0.11, 0, 1));
+    pl.forEach((e, i) => {
+      // Halm wird aus dem Haufen gezupft: kommt ein Stück auf dich zu, dreht sich quer ins Bild, zittert, dann ab in die Hand
+      _out.subVectors(camera.position, e.p).normalize();
+      dmy.position.copy(e.p).addScaledVector(_out, 0.28 * sl); dmy.position.y += 0.06 * sl + Math.sin(a * 70 + i) * 0.006 * sl * (1 - fl);
+      dmy.position.lerp(_hw, fl); dmy.quaternion.copy(e.q).slerp(_hq, Math.max(sl * 0.75, fl)); dmy.scale.set(1, 1, lerp(e.len, 0.3, fl)); dmy.updateMatrix();
+      pullMesh.setMatrixAt(np, dmy.matrix); pullMesh.setColorAt(np, tmpC.fromArray(e.col)); np++;
+    });
+    pullMesh.instanceMatrix.needsUpdate = true; pullMesh.instanceColor.needsUpdate = true;
+  }
+  pullMesh.count = np;
+  bundle.visible = bundleN > 0 && !np; // erst wenn die Halme angekommen sind, liegen sie in der Hand
+}
+// angepeilte Halme hervorheben (nur Hand: genau die, die der nächste Klick nimmt)
+function updateHover(hit) {
+  let n = 0;
+  if (hit && tool === 'hand' && state === 'play' && foundT < 0 && (!anim || (anim.done && anim.t >= ANIM_T.hand.chain))) {
+    for (const sl of pickSlots(hit.id, GRIFF[lv('griff')], ray.o, ray.d)) {
+      strawPose(sl, hit.id); dmy.position.copy(_sp); dmy.quaternion.copy(_sq); dmy.scale.set(1.5, 1.5, _sl * 1.02); dmy.updateMatrix(); hlMesh.setMatrixAt(n++, dmy.matrix);
+    }
+    hlMesh.instanceMatrix.needsUpdate = true;
+  }
+  hlMesh.count = n;
+}
 
 // ================= Hauptschleife =================
 let last = performance.now(), saveT = 0;
@@ -1633,11 +1666,13 @@ function frame(t) {
     if (state === 'play' && foundT < 0) {
       hit = aim();
       const h = hit ? hit.id : -1;
-      if (h !== hover) { if (hover >= 0) highlight(hover, false); hover = h; if (h >= 0) highlight(h, true); }
+      const hc = tool === 'hand' ? -1 : h;
+      if (hc !== hover) { if (hover >= 0) highlight(hover, false); hover = hc; if (hc >= 0) highlight(hc, true); }
       $('cross').classList.toggle('tgt', !!hit && tool !== 'blow'); $('cross').classList.toggle('ndl', needleLook);
       $('prompt').classList.toggle('on', needleLook); if (needleLook) $('prompt').textContent = '✦ Klick: Nadel aufheben';
       updateTool(dt, hit);
     }
+    updateHover(state === 'play' ? hit : null);
     magT = Math.max(0, magT - dt);
     fat = Math.max(0, fat - dt * fatRec(lv('kaffee')));
     updateMachines(dt);
@@ -1645,7 +1680,8 @@ function frame(t) {
   }
   sky.position.copy(camera.position);
   settle(wdt); softT += dt;
-  if (dirty || (dirtySoft && softT > 0.12)) { rebuild(); dirtySoft = false; softT = 0; }
+  if (dirty || (dirtySoft && softT > 0.12)) { checkFall(); dirtySoft = false; softT = 0; }
+  flushStraws();
   updateStraws(wdt); updateItems(wdt); updateXray(dt); updateDetector(dt);
   // Staub
   for (let i = 0; i < DUST; i++) {
