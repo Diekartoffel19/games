@@ -2820,12 +2820,32 @@ function saveGame(notify = false) {
   }
 }
 
+// Spielstand (localStorage oder eingefügter Code) ist fremde Eingabe: nur bekannte Felder mit passendem Typ übernehmen.
+// Sonst landen Schlüssel als HTML im Lager (XSS) oder null-Felder lassen updateUI bei jedem Laden abstürzen.
+function cleanSave(p) {
+  const s = JSON.parse(JSON.stringify(defaultState));
+  if (!p || typeof p !== 'object') return s;
+  for (const k in s) {
+    const d = s[k], v = p[k];
+    if (typeof d === 'number') { if (Number.isFinite(v)) s[k] = v; }
+    else if (k === 'chems') { if (v && typeof v === 'object') for (const c in d) if (Number.isFinite(v[c])) d[c] = v[c]; }
+    else if (k === 'activeCook') {
+      const ok = v && typeof v === 'object' && RECIPES.some(r => r.id === v.recipeId) &&
+        ['duration', 'elapsed', 'temp', 'pressure', 'ph', 'purity', 'penaltyCount'].every(f => Number.isFinite(v[f]));
+      s[k] = ok ? { recipeId: v.recipeId, duration: v.duration, elapsed: v.elapsed, temp: v.temp, pressure: v.pressure, ph: v.ph, purity: v.purity, penaltyCount: v.penaltyCount,
+        stirring: !!v.stirring, distilledEarly: !!v.distilledEarly, overheatAlert: !!v.overheatAlert, onFire: !!v.onFire } : null;
+    }
+    else if (v && typeof v === 'object' && !Array.isArray(v)) { for (const id in v) if (typeof v[id] === 'boolean' || Number.isFinite(v[id])) d[id] = v[id]; }
+  }
+  return s;
+}
+
 function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      state = Object.assign(JSON.parse(JSON.stringify(defaultState)), parsed);
+      state = cleanSave(parsed);
       logMessage(`[SAVE FILE] Loaded successfully. Welcome back, Heisenberg.`, 'cyan');
     }
   } catch(e) {}
@@ -2842,7 +2862,7 @@ function importSave() {
   try {
     const json = atob(code);
     const parsed = JSON.parse(json);
-    state = Object.assign(JSON.parse(JSON.stringify(defaultState)), parsed);
+    state = cleanSave(parsed);
     saveGame();
     updateUI();
     showToast("Save imported!");
