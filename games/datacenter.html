@@ -98,7 +98,7 @@ canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touc
     <li><b>Engpässe:</b> PDUs und Hausanschluss haben kW-Grenzen, Kupferkabel nur 10 Gbit/s, der Uplink ist begrenzt.</li>
     <li><b>Upgrades:</b> Server (CPU/RAM/GPU), Switch-Ports, PDU-Leistung, Glasfaser, Hallen-Erweiterung, USV, DDoS-Schutz …</li>
   </ul>
-  <p style="font-size:12px;opacity:.75">Maus: Linksklick = bauen/auswählen · Ziehen = drehen · Rechts-/Mittelklick-Ziehen = verschieben · Mausrad = Zoom · WASD = Kamera · R = drehen · Tasten 1–9 = Werkzeuge · H = Wärmekarte · U = Upgrades · Esc = abbrechen. Touch: Tippen = bauen, Ziehen = drehen, zwei Finger = zoomen/verschieben.</p>
+  <p style="font-size:12px;opacity:.75">Maus: Linksklick = bauen/auswählen · Ziehen = drehen · Rechts-/Mittelklick-Ziehen = verschieben · Mausrad = Zoom · WASD = Kamera · R = drehen · Tasten 1–9 = Werkzeuge · H = Wärmekarte · U = Upgrades · G = Tempo 1×/2×/4× · Esc = abbrechen. Touch: Tippen = bauen, Ziehen = drehen, zwei Finger = zoomen/verschieben.</p>
   <div class="btns"><button class="btn" id="btnContinue">▶ Weiterspielen</button><button class="btn" id="btnNew">✨ Neues Rechenzentrum</button></div>
 </div></div>
 <div id="selftest" style="display:none;position:fixed;left:10px;bottom:90px;z-index:99;background:#000;color:#0f0;font:12px monospace;padding:8px;white-space:pre"></div>
@@ -112,9 +112,10 @@ canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touc
 const $ = id => document.getElementById(id);
 const AC = window.ArcadeCore || null;
 const QS = new URLSearchParams(location.search);
+const DEMO = !!QS.get('demo'); // Demo-Halle nie in den echten Spielstand schreiben
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const tone = (f, d, t, g) => { if (AC) AC.playTone(f, d, t, g); };
-const fmt = n => { n = Math.floor(n); return Math.abs(n) < 1e5 ? n.toLocaleString('de-DE') : (AC ? AC.formatNumber(n) : n.toLocaleString('de-DE')); };
+const fmt = n => { n = Math.trunc(n) || 0; return Math.abs(n) < 1e5 ? n.toLocaleString('de-DE') : (AC ? AC.formatNumber(n) : n.toLocaleString('de-DE')); };
 
 // ================= Balancing =================
 const SRV = [
@@ -162,8 +163,17 @@ const GW = 16, GH = 12; // volles Raster
 const SAVE_KEY = 'datacenter_save';
 const defSave = () => ({ v: 1, money: 2500, earned: 0, nid: 3, ms: 0, up: { hall: 0, mainp: 0, uplink: 0, fiber: 0, eco: 0, ups: 0, fw: 0 },
   objs: [{ id: 1, t: 'router', x: 0, z: 0, r: 0, lv: 0 }, { id: 2, t: 'main', x: 1, z: 0, r: 0, lv: 0 }], cables: [] });
-function loadSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); return s && s.v === 1 && Array.isArray(s.objs) ? s : null; } catch (e) { return null; } }
-function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S, (k, v) => k[0] === '_' ? undefined : v)); } catch (e) {} }
+function loadSave() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (!s || s.v !== 1 || !Array.isArray(s.objs) || !s.objs.some(o => o.t === 'router') || !s.objs.some(o => o.t === 'main')) return null;
+    s.up = Object.assign(defSave().up, s.up); // ältere Saves ohne neue Upgrade-Keys
+    const ids = new Set(s.objs.map(o => o.id));
+    s.cables = (s.cables || []).filter(c => ids.has(c.a) && ids.has(c.b)); // verwaiste Kabel verwerfen
+    return s;
+  } catch (e) { return null; }
+}
+function writeSave() { if (DEMO) return; S.t = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S, (k, v) => k[0] === '_' ? undefined : v)); } catch (e) {} }
 let S = defSave();
 let BYID = new Map();
 const val = id => UPGBY[id].vals[S.up[id]];
@@ -197,7 +207,7 @@ function simulate(dt) {
     const s = st.get(p.id), es = adj.get(p.id).filter(e => e.c.k === 'pwr');
     s.linked = es.some(e => e.o.t === 'main');
     s.load = es.filter(e => e.o.t !== 'main').reduce((a, e) => a + devKw(e.o), 0);
-    if (s.linked) mainLoad += s.load;
+    if (s.linked && s.load <= DEV.pdu.cap[p.lv] + 1e-9) mainLoad += s.load; // ausgelöste PDU zieht nichts
   }
   const mainCap = val('mainp'), mainOk = !blackout && mainLoad <= mainCap + 1e-9;
   const ms = st.get(main.id); ms.load = mainLoad; ms.pwr = mainOk;
@@ -244,7 +254,8 @@ function simulate(dt) {
   }
   const bwCap = val('uplink') * (ev === 'ddos' && !S.up.fw ? 0.25 : 1);
   const rF = rIn > 0 ? Math.min(rIn, bwCap) / rIn : 1;
-  for (const id of order) { const s = st.get(id), pr = parent.get(id); s.f = (s.in > 0 ? s.out / s.in : 1) * (pr.p === router.id ? rF : st.get(pr.p).f); }
+  for (const id of order) { const s = st.get(id), pr = parent.get(id); s.f = (s.in > 0 ? s.out / s.in : 1) * (pr.p === router.id ? rF : st.get(pr.p).f); if (s.f < 0.95) s.issue = 'Uplink-Engpass (' + Math.round(s.f * 100) + ' %)'; }
+  if (rIn > bwCap) st.get(router.id).issue = 'Uplink ausgelastet – Bandbreite upgraden';
   let gross = 0;
   for (const o of racks) {
     const s = st.get(o.id);
@@ -261,9 +272,10 @@ function simulate(dt) {
     const cs = st.get(c.id); if (!cs.pwr) continue;
     const cap = DEV.crac.cool[c.lv] * (ev === 'heat' ? 0.6 : 1);
     const near = racks.filter(r => Math.hypot(r.x - c.x, r.z - c.z) <= DEV.crac.radius);
-    const H = near.reduce((a, r) => a + st.get(r.id).heat, 0);
+    const need = r => Math.max(0, st.get(r.id).heat - st.get(r.id).cool); // schon gekühlte Wärme nicht doppelt bedienen
+    const H = near.reduce((a, r) => a + need(r), 0), k = H > 0 ? Math.min(1, cap / H) : 0;
     cs.load = Math.min(H, cap); cs.cap = cap;
-    for (const r of near) st.get(r.id).cool += st.get(r.id).heat * Math.min(1, H > 0 ? cap / H : 0);
+    for (const r of near) st.get(r.id).cool += need(r) * k;
   }
   for (const o of racks) {
     const s = st.get(o.id), cool = Math.min(s.cool, s.heat);
@@ -372,6 +384,8 @@ function paintFloor() {
     floor.setColorAt(z * GW + x, c);
   }
   floor.instanceColor.needsUpdate = true;
+  if (hallLine.userData.k === W + 'x' + H) return; // Linie nur bei Hallengröße neu (sonst Buffer-Leak im Wärmemodus)
+  hallLine.userData.k = W + 'x' + H; hallLine.geometry.dispose();
   const x0 = wx(0) - 0.5, z0 = wz(0) - 0.5, y = 0.02;
   hallLine.geometry.setFromPoints([new THREE.Vector3(x0, y, z0), new THREE.Vector3(x0 + W, y, z0), new THREE.Vector3(x0 + W, y, z0 + H), new THREE.Vector3(x0, y, z0 + H)]);
 }
@@ -381,13 +395,15 @@ function box(g, w, h, d, mat, x, y, z, shadow = true) {
   const m = new THREE.Mesh(boxGeo, mat); m.scale.set(w, h, d); m.position.set(x, y, z);
   m.castShadow = shadow; m.receiveShadow = shadow; g.add(m); return m;
 }
-function plate(g, tex, w, h, x, y, z) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 })); m.position.set(x, y, z); g.add(m); return m; }
+function plate(g, tex, w, h, x, y, z) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 })); m.userData.own = true; m.position.set(x, y, z); g.add(m); return m; }
 const iconSprites = {};
 function iconMat(ic) { return iconSprites[ic] || (iconSprites[ic] = new THREE.SpriteMaterial({ map: canvasTex(96, 96, (g, w, h) => { g.fillStyle = 'rgba(0,0,0,.65)'; g.beginPath(); g.arc(48, 48, 44, 0, 7); g.fill(); g.font = '56px "Segoe UI Emoji","Apple Color Emoji",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ic, 48, 52); }), depthTest: false })); }
 const objRoot = new THREE.Group(); scene.add(objRoot);
+// GPU-Speicher freigeben: eigene Geometrien + als own markierte Materialien (Sprites/boxGeo sind geteilt)
+function disposeTree(g) { g.traverse(m => { if (m.isSprite) return; if (m.geometry && m.geometry !== boxGeo) m.geometry.dispose(); if (m.material && m.userData.own) m.material.dispose(); }); }
 
 function buildMesh(o) {
-  if (o._g) objRoot.remove(o._g);
+  if (o._g) { objRoot.remove(o._g); disposeTree(o._g); }
   const g = new THREE.Group(), d = DEV[o.t];
   o._leds = []; o._ports = []; o._fan = null;
   if (o.t === 'rack') {
@@ -417,7 +433,7 @@ function buildMesh(o) {
     const fan = new THREE.Group();
     for (let i = 0; i < 4; i++) { const b = box(fan, 0.6, 0.02, 0.1, M.cab, 0, 0, 0, false); b.rotation.y = i * Math.PI / 4; }
     fan.position.y = 1.95; g.add(fan); o._fan = fan;
-    for (let i = 0; i <= o.lv; i++) box(g, 0.08, 0.04, 0.02, LED.act[0], -0.2 + i * 0.12, 1.6, 0.465, false);
+    for (let i = 0; i <= o.lv; i++) o._leds.push(box(g, 0.08, 0.04, 0.02, LED.off, -0.2 + i * 0.12, 1.6, 0.465, false));
   } else if (o.t === 'router') {
     box(g, 0.82, 2.0, 0.96, M.rack, 0, 1.0, 0);
     plate(g, labelTex('🌐', '#0d2a4a'), 0.5, 0.5, 0, 1.3, 0.481);
@@ -428,7 +444,7 @@ function buildMesh(o) {
     plate(g, labelTex('🏭', '#3a3f4a'), 0.5, 0.5, 0, 1.2, 0.401);
   }
   const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), new THREE.MeshBasicMaterial({ color: 0x5dff9b }));
-  lamp.position.y = d.h + 0.08; g.add(lamp); o._lamp = lamp;
+  lamp.userData.own = true; lamp.position.y = d.h + (o.t === 'crac' ? 0.18 : 0.08); g.add(lamp); o._lamp = lamp; // Klima: Lampe über dem Lüfter
   const sp = new THREE.Sprite(iconMat('⚡')); sp.scale.set(0.55, 0.55, 1); sp.position.y = d.h + 0.6; sp.visible = false; sp.renderOrder = 10; g.add(sp); o._icon = sp;
   g.position.set(wx(o.x), 0, wz(o.z)); g.rotation.y = (o.r || 0) * Math.PI / 2;
   g.userData.oid = o.id;
@@ -446,15 +462,16 @@ function cablePath(a, b, k, id) {
   for (let i = 0; i < pts.length - 1; i++) if (pts[i].distanceToSquared(pts[i + 1]) > 1e-6) path.add(new THREE.LineCurve3(pts[i], pts[i + 1]));
   return path;
 }
+function dropCable(c) { if (c._m) { cableRoot.remove(c._m); c._m.geometry.dispose(); c._m = null; } }
 function buildCable(c) {
-  if (c._m) cableRoot.remove(c._m);
+  dropCable(c);
   const a = BYID.get(c.a), b = BYID.get(c.b); if (!a || !b) return;
   const path = cablePath(a, b, c.k, c.id);
-  const m = new THREE.Mesh(new THREE.TubeGeometry(path, Math.max(8, path.curves.length * 6), c.k === 'pwr' ? 0.035 : 0.028, 5, false), c.k === 'pwr' ? M.pwr : c.f ? M.fib : M.cu);
+  const m = new THREE.Mesh(new THREE.TubeGeometry(path, Math.max(16, Math.ceil(path.getLength() * 8)), c.k === 'pwr' ? 0.035 : 0.028, 5, false), c.k === 'pwr' ? M.pwr : c.f ? M.fib : M.cu);
   m.castShadow = true; cableRoot.add(m); c._m = m;
 }
 function rebuildAll() {
-  objRoot.clear(); cableRoot.clear();
+  disposeTree(objRoot); disposeTree(cableRoot); objRoot.clear(); cableRoot.clear();
   reindex();
   for (const o of S.objs) { if (o.t === 'rack') o.srv = o.srv || []; buildMesh(o); }
   for (const c of S.cables) buildCable(c);
@@ -465,7 +482,7 @@ function rebuildAll() {
 const ghost = new THREE.Mesh(boxGeo, M.ghostOk); ghost.visible = false; scene.add(ghost);
 const ring = new THREE.Mesh(new THREE.RingGeometry(DEV.crac.radius - 0.06, DEV.crac.radius, 48), new THREE.MeshBasicMaterial({ color: 0x38e1ff, transparent: true, opacity: 0.6 }));
 ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; ring.visible = false; scene.add(ring);
-const preview = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.15, gapSize: 0.1 }));
+const PREV_N = 31, preview = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(PREV_N * 3), 3)), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.15, gapSize: 0.1 }));
 preview.visible = false; scene.add(preview);
 
 // ================= Visuelles Update =================
@@ -475,7 +492,7 @@ function updateVisuals() {
     let ic = '', lamp = 0x5dff9b;
     if (o.t === 'rack') {
       const running = s.run;
-      o._leds.forEach((l, i) => l.material = !o.srv.length ? LED.off : o.hot ? LED.red : !s.pwr ? LED.off : running ? (i % 3 === 0 ? LED.act[i % 3] : LED.on[i % 4]) : LED.amber);
+      o._leds.forEach((l, i) => l.material = !o.srv.length || !s.pwr ? LED.off : o.hot ? LED.red : running ? (i % 3 === 0 ? LED.act[Math.floor(i / 3) % 3] : LED.on[i % 4]) : LED.amber);
       if (!o.srv.length) { ic = '💤'; lamp = 0x666666; }
       else if (o.hot) { ic = '🔥'; lamp = 0xff3040; }
       else if (!s.pwr) { ic = '🔌'; lamp = 0xff3040; }
@@ -490,6 +507,7 @@ function updateVisuals() {
       o._leds.forEach(l => l.material = s.pwr ? LED.on[0] : LED.red);
       if (!s.linked) { ic = '🔌'; lamp = 0xff3040; } else if (!s.pwr) { ic = '💥'; lamp = 0xff3040; } else if (s.load > DEV.pdu.cap[o.lv] * 0.85) lamp = 0xffb02e;
     } else if (o.t === 'crac') {
+      o._leds.forEach((l, i) => l.material = s.pwr ? LED.act[i % 3] : LED.off);
       if (!s.pwr) { ic = '🔌'; lamp = 0xff3040; }
     } else if (o.t === 'main') {
       if (!s.pwr) { ic = '💥'; lamp = 0xff3040; } else if (s.load > SIM.kwCap * 0.85) lamp = 0xffb02e;
@@ -515,17 +533,21 @@ const TOOLS = [
   { id: 'pwr', icon: '🔴', name: 'Stromkabel' },
   { id: 'del', icon: '🗑️', name: 'Abreißen' },
 ];
+const SPEEDS = [1, 2, 4];
+let speedI = 0;
 let tool = 'select', placeRot = 0, cableFrom = null, selected = null, hover = null, useFiber = false, running = false;
 function renderTools() {
   $('tools').innerHTML = TOOLS.map((t, i) => `<button data-tool="${t.id}" class="${tool === t.id ? 'on' : ''}" title="Taste ${i + 1}"><span class="k">${i + 1}</span><span class="ic">${t.id === 'net' && useFiber ? '🟠' : t.icon}</span><span class="nm">${t.id === 'net' && useFiber ? 'Glasfaser' : t.name}</span>${t.cost ? `<span class="pr">${fmt(t.cost)} €</span>` : ''}</button>`).join('')
-    + `<span class="sep"></span><button data-act="heat" class="${heatMode ? 'on' : ''}" title="Taste H"><span class="ic">🌡️</span><span class="nm">Wärme</span></button><button data-act="shop" title="Taste U"><span class="ic">⬆️</span><span class="nm">Upgrades</span></button>`;
+    + `<span class="sep"></span><button data-act="heat" class="${heatMode ? 'on' : ''}" title="Taste H"><span class="ic">🌡️</span><span class="nm">Wärme</span></button><button data-act="shop" title="Taste U"><span class="ic">⬆️</span><span class="nm">Upgrades</span></button><button data-act="speed" class="${speedI ? 'on' : ''}" title="Taste G"><span class="ic">⏩</span><span class="nm">${SPEEDS[speedI]}× Tempo</span></button>`;
 }
 $('tools').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.tool) setTool(b.dataset.tool, b.dataset.tool === tool && tool === 'net'); // 2. Klick auf Netzkabel = Kupfer/Glasfaser
   else if (b.dataset.act === 'heat') toggleHeat();
   else if (b.dataset.act === 'shop') openShop();
+  else if (b.dataset.act === 'speed') toggleSpeed();
 });
+function toggleSpeed() { speedI = (speedI + 1) % SPEEDS.length; renderTools(); }
 function setTool(t, toggleFiber) {
   if (toggleFiber && S.up.fiber) useFiber = !useFiber;
   tool = t; cableFrom = null; preview.visible = false; renderTools(); updateHint(); updateGhost();
@@ -545,17 +567,17 @@ function alarm(o) { if (!running) return; tone(880, 0.12, 'square', 0.07); setTi
 function updateHUD() {
   const kwP = SIM.kwCap ? SIM.kw / SIM.kwCap : 0, bwP = SIM.bwCap ? SIM.bwWant / SIM.bwCap : 0;
   const mcol = p => p > 1 ? 'var(--bad)' : p > 0.85 ? 'var(--warn)' : 'var(--good)';
+  while (MILESTONES[S.ms] && SIM.net >= MILESTONES[S.ms].inc) {
+    const m = MILESTONES[S.ms++]; S.money += m.reward;
+    bigText(`🏆 ${m.title}!<br><span style="font-size:.5em">Bonus +${fmt(m.reward)} €</span>`);
+    if (AC) AC.powerup();
+  }
   const ms = MILESTONES[S.ms];
   $('top').innerHTML = `<div class="stat money">💰 <b class="${S.money < 0 ? 'neg' : ''}">${fmt(S.money)} €</b></div>`
     + `<div class="stat">📈 <b class="${SIM.net < 0 ? 'neg' : ''}">${SIM.net >= 0 ? '+' : ''}${fmt(SIM.net)} €/s</b> <small style="opacity:.7">(${fmt(SIM.gross)} − ${fmt(SIM.cost)} Strom)</small></div>`
     + `<div class="stat">🏭 ${SIM.kw.toFixed(1)}/${SIM.kwCap} kW<span class="meter"><i style="width:${Math.min(100, kwP * 100)}%;background:${mcol(kwP)}"></i></span></div>`
     + `<div class="stat">🌐 ${Math.round(SIM.bwWant)}/${Math.round(SIM.bwCap)} Gbit/s<span class="meter"><i style="width:${Math.min(100, bwP * 100)}%;background:${mcol(bwP)}"></i></span></div>`
     + `<div class="stat">🏆 ${S.ms ? MILESTONES[S.ms - 1].title : 'Startup'}${ms ? ` → ${fmt(Math.max(0, SIM.net))}/${fmt(ms.inc)} €/s` : ''}</div>`;
-  if (ms && SIM.net >= ms.inc) {
-    S.money += ms.reward; S.ms++;
-    bigText(`🏆 ${ms.title}!<br><span style="font-size:.5em">Bonus +${fmt(ms.reward)} €</span>`);
-    if (AC) AC.powerup();
-  }
   updateInfo();
 }
 function nextHint() {
@@ -600,7 +622,7 @@ function updateInfo() {
     a += `<div style="margin-top:6px;font-weight:700">Server (${o.srv.length}/${SLOTS})</div>`;
     o.srv.forEach((t, i) => {
       const n = SRV[t + 1], c = n ? Math.round(n.cost * 0.8) : 0;
-      a += `<div class="srv"><span>${t === 2 ? '🟩' : t === 1 ? '🟦' : '⬜'} ${SRV[t].name}<br><small style="opacity:.7">${SRV[t].inc} €/s · ${SRV[t].kw} kW</small></span>${n ? `<button class="btn" data-a="srvup" data-i="${i}" ${S.money < c ? 'disabled' : ''}>⬆ ${n.short} ${fmt(c)} €</button>` : '<small>max</small>'}</div>`;
+      a += `<div class="srv"><span>${t === 2 ? '🟩' : t === 1 ? '🟦' : '⬜'} ${SRV[t].name}<br><small style="opacity:.7">${SRV[t].inc} €/s · ${SRV[t].kw} kW</small></span><span style="display:flex;gap:4px;align-items:center">${n ? `<button class="btn" data-a="srvup" data-i="${i}" ${S.money < c ? 'disabled' : ''}>⬆ ${n.short} ${fmt(c)} €</button>` : '<small>max</small>'}<button class="btn red" data-a="srvsell" data-i="${i}" title="Verkaufen (+${fmt(Math.floor(srvValue(t) * 0.5))} €)">✕</button></span></div>`;
     });
     if (o.srv.length < SLOTS) a += `<button class="btn wide" data-a="srvadd" ${S.money < SRV[0].cost ? 'disabled' : ''}>+ Basic-Server (${SRV[0].cost} €)</button>`;
   } else if (o.t === 'sw') {
@@ -628,6 +650,7 @@ $('infoActs').addEventListener('click', e => {
   const b = e.target.closest('button'); const o = selected && BYID.get(selected); if (!b || !o) return;
   if (b.dataset.a === 'srvadd') addServer(o);
   else if (b.dataset.a === 'srvup') upgradeServer(o, +b.dataset.i);
+  else if (b.dataset.a === 'srvsell') sellServer(o, +b.dataset.i);
   else if (b.dataset.a === 'devup') upgradeDevice(o);
   else if (b.dataset.a === 'del') demolish(o);
 });
@@ -636,6 +659,14 @@ $('infoActs').addEventListener('click', e => {
 function pay(cost) { if (S.money < cost) { toast(`Zu wenig Geld (${fmt(cost)} € nötig)`); return false; } S.money -= cost; if (AC) AC.coin(); return true; }
 function changed() { simulate(0); updateVisuals(); updateHUD(); updateHint(); }
 function refund(o) { return Math.floor((o.spent || 0) * 0.5); }
+// Gesamtwert eines Servers der Stufe t (Kauf Basic + alle Upgrades zu 80 %)
+const srvValue = t => SRV[0].cost + SRV.slice(1, t + 1).reduce((a, n) => a + Math.round(n.cost * 0.8), 0);
+function sellServer(o, i) {
+  const t = o.srv[i]; if (t === undefined) return;
+  const v = srvValue(t), back = Math.floor(v * 0.5);
+  o.srv.splice(i, 1); o.spent = Math.max(0, (o.spent || 0) - v); S.money += back;
+  buildMesh(o); popup(o, '+' + fmt(back) + ' €', '#ffe066'); tone(260, 0.12, 'triangle', 0.07); changed();
+}
 function place(t, x, z) {
   if (x >= hallW() || z >= hallH()) return toast('Gesperrter Bereich – Halle erweitern (⬆️ Upgrades)');
   if (objAt(x, z)) return toast('Feld belegt');
@@ -664,10 +695,12 @@ function upgradeDevice(o) {
 function demolish(o) {
   if (DEV[o.t].fixed) return toast('Kann nicht abgerissen werden');
   let back = refund(o);
-  for (const c of cablesOf(o.id)) { back += Math.floor((c.spent || 0) * 0.5); cableRoot.remove(c._m); }
+  for (const c of cablesOf(o.id)) { back += Math.floor((c.spent || 0) * 0.5); dropCable(c); }
   S.cables = S.cables.filter(c => c.a !== o.id && c.b !== o.id);
-  S.objs = S.objs.filter(x => x !== o); objRoot.remove(o._g); reindex();
+  S.objs = S.objs.filter(x => x !== o); objRoot.remove(o._g); disposeTree(o._g); reindex();
   S.money += back; if (selected === o.id) selected = null;
+  if (cableFrom === o.id) { cableFrom = null; preview.visible = false; }
+  if (hover && hover.o === o) hover.o = null;
   tone(220, 0.2, 'sawtooth', 0.08); toast(`Abgerissen: +${fmt(back)} €`, true); changed();
 }
 const PWR_OK = ['crac-pdu', 'main-pdu', 'pdu-rack', 'pdu-sw'], NET_OK = ['rack-sw', 'sw-sw', 'router-sw'];
@@ -691,9 +724,10 @@ function cableClick(o) {
   if (!cableFrom) { cableFrom = o.id; tone(600, 0.05, 'sine', 0.06); updateHint(); return; }
   if (o.id === cableFrom) { cableFrom = null; preview.visible = false; updateHint(); return; }
   const a = BYID.get(cableFrom), b = o;
+  if (!a) { cableFrom = null; preview.visible = false; updateHint(); return; }
   const ex = S.cables.find(c => c.k === k && ((c.a === a.id && c.b === b.id) || (c.a === b.id && c.b === a.id)));
   if (ex) {
-    S.cables = S.cables.filter(c => c !== ex); cableRoot.remove(ex._m);
+    S.cables = S.cables.filter(c => c !== ex); dropCable(ex);
     S.money += Math.floor((ex.spent || 0) * 0.5); tone(300, 0.1, 'triangle', 0.08); toast('Kabel entfernt', true);
   } else {
     const err = cableError(a, b, k); if (err) return toast(err);
@@ -726,7 +760,7 @@ function openShop() { renderShop(); $('shop').classList.remove('hide'); }
 $('shopClose').onclick = () => $('shop').classList.add('hide');
 $('shopMenu').onclick = () => { $('shop').classList.add('hide'); showMenu(); };
 $('shopRestart').onclick = () => {
-  if (!confirm('Rechenzentrum wirklich neu starten? Der ganze Fortschritt geht verloren.')) return;
+  const yes = confirm('Rechenzentrum wirklich neu starten? Der ganze Fortschritt geht verloren.'); releaseKeys(); if (!yes) return;
   localStorage.removeItem(SAVE_KEY); $('shop').classList.add('hide'); start(true);
 };
 
@@ -781,11 +815,12 @@ function updateGhost() {
   ring.visible = !!ro; if (ro) ring.position.set(wx(ro.x), 0.03, wz(ro.z));
   canvas.style.cursor = tool === 'del' ? 'not-allowed' : hover && hover.o ? 'pointer' : 'default';
   if (cableFrom && hover) {
-    const a = BYID.get(cableFrom); if (!a) return;
+    const a = BYID.get(cableFrom); if (!a) { cableFrom = null; preview.visible = false; return; }
     const path = cablePath(a, hover.o || { t: 'rack', x: hover.x, z: hover.z }, tool, 0);
-    preview.geometry.setFromPoints(path.getSpacedPoints(30)); preview.computeLineDistances();
+    const pos = preview.geometry.attributes.position; path.getSpacedPoints(PREV_N - 1).forEach((v, i) => pos.setXYZ(i, v.x, v.y, v.z)); pos.needsUpdate = true;
+    preview.geometry.computeBoundingSphere(); preview.computeLineDistances();
     preview.material.color.setHex(tool === 'pwr' ? 0xff5d6c : useFiber ? 0xffa020 : 0x38e1ff); preview.visible = true;
-  }
+  } else preview.visible = false;
 }
 function showTip(cx, cy) {
   const t = $('tip');
@@ -800,21 +835,23 @@ function clickAt(p) {
   if (tool === 'net' || tool === 'pwr') return cableClick(p && p.o);
   if (!p) return;
   if (tool === 'del') { if (p.o) demolish(p.o); return; }
-  if (tool === 'srv') { if (p.o && p.o.t === 'rack') { addServer(p.o); selected = p.o.id; } else toast('Server nur in Racks einbauen'); return; }
+  if (tool === 'srv') { if (p.o && p.o.t === 'rack') { selected = p.o.id; $('infoActs').dataset.h = ''; addServer(p.o); updateInfo(); } else toast('Server nur in Racks einbauen'); return; }
   if (DEV[tool]) { if (p.o) { selected = p.o.id; updateInfo(); } else place(tool, p.x, p.z); }
 }
 const ptrs = new Map(); let drag = null, pinch = null;
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
-  canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; drag = null; return; }
+  if (ptrs.size >= 2) return; // 3. Finger ignorieren
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; drag = null; return; }
   drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, btn: e.button, moved: false, pan: e.button === 1 || e.button === 2 || e.shiftKey };
 });
 canvas.addEventListener('pointermove', e => {
   if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pinch && ptrs.size === 2) {
-    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    cam.dist *= pinch.d / Math.max(10, d); panBy(mx - pinch.mx, my - pinch.my);
+    const [a, b] = [...ptrs.values()], d = Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    cam.dist *= pinch.d / d; panBy(mx - pinch.mx, my - pinch.my);
     pinch = { d, mx, my }; return;
   }
   if (drag) {
@@ -832,6 +869,7 @@ canvas.addEventListener('pointerup', e => {
   else if (drag && !drag.moved && drag.btn === 2) setTool('select');
   drag = null;
 });
+canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { hover = null; updateGhost(); showTip(); } });
 canvas.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); drag = null; pinch = null; });
 canvas.addEventListener('wheel', e => { e.preventDefault(); cam.dist *= e.deltaY > 0 ? 1.1 : 0.9; }, { passive: false });
 function panBy(dx, dy) {
@@ -843,15 +881,20 @@ addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   keys[e.key.toLowerCase()] = true;
   if (!running) return;
+  if (!$('shop').classList.contains('hide')) { if (e.key === 'Escape' || e.key.toLowerCase() === 'u') $('shop').classList.add('hide'); return; }
+  if (e.repeat) return;
   const n = +e.key; if (n >= 1 && n <= TOOLS.length) setTool(TOOLS[n - 1].id);
   const k = e.key.toLowerCase();
-  if (k === 'escape') { if (cableFrom) { cableFrom = null; preview.visible = false; updateHint(); } else { setTool('select'); selected = null; updateInfo(); } }
-  if (k === 'r') { placeRot = (placeRot + 1) % 4; const o = selected && BYID.get(selected); if (o && tool === 'select') { o.r = (o.r + 1) % 4; o._g.rotation.y = o.r * Math.PI / 2; } }
+  if (k === 'escape') { if (cableFrom) { cableFrom = null; preview.visible = false; updateHint(); } else { selected = null; setTool('select'); updateInfo(); } }
+  if (k === 'r') { placeRot = (placeRot + 1) % 4; const o = selected && BYID.get(selected); if (o && tool === 'select' && !DEV[o.t].fixed && o._g) { o.r = ((o.r || 0) + 1) % 4; o._g.rotation.y = o.r * Math.PI / 2; } }
   if (k === 'h') toggleHeat();
-  if (k === 'u') $('shop').classList.contains('hide') ? openShop() : $('shop').classList.add('hide');
-  if (k === 'f' && S.up.fiber) { useFiber = !useFiber; renderTools(); updateHint(); }
+  if (k === 'g') toggleSpeed();
+  if (k === 'u') openShop();
+  if (k === 'f' && S.up.fiber) { useFiber = !useFiber; renderTools(); updateHint(); updateGhost(); }
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+const releaseKeys = () => { for (const k in keys) keys[k] = false; };
+addEventListener('blur', releaseKeys); document.addEventListener('visibilitychange', releaseKeys); // sonst „klebt“ WASD nach Alt-Tab
 function keyPan(dt) {
   const v = 260 * dt; let dx = 0, dy = 0;
   if (keys.w || keys.arrowup) dy += v; if (keys.s || keys.arrowdown) dy -= v;
@@ -861,12 +904,16 @@ function keyPan(dt) {
 }
 
 // ================= Menü & Loop =================
-function showMenu() { running = false; $('menu').classList.remove('hide'); $('btnContinue').style.display = loadSave() ? '' : 'none'; }
+function showMenu() { if (running) writeSave(); running = false; $('menu').classList.remove('hide'); $('btnContinue').style.display = loadSave() ? '' : 'none'; }
 function start(fresh) {
   if (fresh) { const had = loadSave(); if (had && had.earned > 500 && !confirm('Bestehendes Rechenzentrum überschreiben?')) return; S = defSave(); }
-  else S = loadSave() || defSave();
-  EVENT = null; $('event').style.display = 'none'; selected = null; cableFrom = null; useFiber = !!S.up.fiber && useFiber;
+  else S = (!DEMO && loadSave()) || defSave();
+  EVENT = null; $('event').style.display = 'none'; selected = null; cableFrom = null; hover = null; tool = 'select'; placeRot = 0; eventTimer = 120;
+  simAcc = saveAcc = popAcc = 0; preview.visible = ghost.visible = ring.visible = false; $('tip').style.display = 'none'; document.querySelectorAll('.pop,.big').forEach(el => el.remove()); useFiber = !!S.up.fiber && useFiber;
   rebuildAll(); simulate(0); updateVisuals(); renderTools(); updateHUD(); updateHint();
+  // Offline-Einnahmen: 50 % des aktuellen Gewinns, max. 2 h
+  const away = !fresh && S.t ? clamp((Date.now() - S.t) / 1000, 0, 7200) : 0, gain = Math.floor(Math.max(0, SIM.net) * away * 0.5);
+  if (gain > 0 && away > 60) { S.money += gain; S.earned += gain; setTimeout(() => bigText(`💤 Offline-Einnahmen<br><span style="font-size:.5em">${Math.round(away / 60)} min · +${fmt(gain)} €</span>`), 300); }
   Object.assign(cam, { tx: wx(hallW() / 2) - 0.5, tz: wz(hallH() / 2) - 0.5, dist: 6 + hallW() * 0.9 });
   $('menu').classList.add('hide'); running = true; writeSave();
 }
@@ -880,16 +927,18 @@ let last = performance.now(), simAcc = 0, saveAcc = 0, popAcc = 0, ledAcc = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (running) {
-    S.money += SIM.net * dt; if (SIM.net > 0) S.earned += SIM.net * dt;
-    simAcc += dt; saveAcc += dt; popAcc += dt;
-    if (simAcc >= 0.25) { simulate(simAcc); simAcc = 0; updateVisuals(); updateHUD(); updateHint(); }
+    const gdt = dt * SPEEDS[speedI]; // Spielzeit (Geld, Wärme, Events); Kamera/Animation bleiben Echtzeit
+    S.money = SIM.net < 0 ? Math.max(Math.min(S.money, 0), S.money + SIM.net * gdt) : S.money + SIM.net * gdt; // Stromkosten treiben nicht ins Minus
+    if (SIM.net > 0) S.earned += SIM.net * gdt;
+    simAcc += gdt; saveAcc += dt; popAcc += dt;
+    if (simAcc >= 0.25) { simulate(simAcc); simAcc = 0; updateVisuals(); updateHUD(); updateHint(); if (!$('shop').classList.contains('hide')) renderShop(); }
     if (saveAcc > 5) { saveAcc = 0; writeSave(); }
     if (popAcc > 2.5) {
       popAcc = 0;
       const act = S.objs.filter(o => o.t === 'rack' && SIM.st.get(o.id) && SIM.st.get(o.id).inc > 0);
-      if (act.length) { const o = act[Math.floor(Math.random() * act.length)]; popup(o, '+' + fmt(SIM.st.get(o.id).inc * 2.5) + ' €'); }
+      if (act.length) { const o = act[Math.floor(Math.random() * act.length)]; popup(o, '+' + fmt(SIM.st.get(o.id).inc * 2.5 * SPEEDS[speedI]) + ' €'); }
     }
-    tickEvents(dt);
+    tickEvents(gdt);
   }
   // LED-Flackern
   ledAcc += dt;
@@ -899,7 +948,8 @@ function frame(now) {
     if (o._fan && SIM.st.get(o.id) && SIM.st.get(o.id).pwr) o._fan.rotation.y += dt * 12;
     if (o._icon && o._icon.visible) o._icon.position.y = DEV[o.t].h + 0.6 + Math.sin(now / 250 + o.id) * 0.06;
   }
-  keyPan(dt); updateCam();
+  if (running && $('shop').classList.contains('hide')) keyPan(dt);
+  updateCam();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -922,6 +972,7 @@ function selfTest() {
   S.cables.push({ id: 21, a: 11, b: 1, k: 'net' }); S.objs[2].srv = [0, 0, 0, 0, 0, 0]; reindex();
   for (let i = 0; i < 200; i++) simulate(0.25);
   ok(S.objs[2].hot || S.objs[2].temp > 55, 'volles Rack ohne Kühlung überhitzt');
+  ok(srvValue(0) === 300 && srvValue(2) === 300 + 1280 + 5600, 'Serverwert = Kauf + Upgrades');
   S = keep; reindex();
   const el = $('selftest'); el.style.display = 'block'; el.textContent = out.join('\n'); console.log(out.join('\n'));
 }
