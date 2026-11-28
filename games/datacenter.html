@@ -75,7 +75,15 @@ canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touc
 .upg .tx { flex:1; font-size:13px; }
 .upg .tx b { font-size:15px; }
 .upg .tx small { opacity:.75; }
-@media (max-width:700px) { #info { top:auto; bottom:92px; right:6px; width:210px; max-height:40%; } .stat { font-size:11px; } .stat b { font-size:14px; } #hint { font-size:12px; } #hud { width:calc(100% - 20px); top:52px; } }
+#goals { position:fixed; left:10px; top:56px; z-index:19; width:230px; background:var(--panel); border:1px solid rgba(56,225,255,.35); border-radius:12px; padding:7px 10px; font-size:12px; }
+#goals .gh { font-weight:800; color:var(--accent); cursor:pointer; display:flex; justify-content:space-between; }
+#goals.min #goalList { display:none; }
+#goals .g { padding:4px 0; border-top:1px solid rgba(255,255,255,.08); }
+#goals .g small { color:#ffe066; }
+#goals .bar { height:5px; background:rgba(255,255,255,.12); border-radius:3px; overflow:hidden; margin-top:3px; }
+#goals .bar i { display:block; height:100%; background:var(--good); }
+@media (max-width:700px) { #goals { top:auto; bottom:112px; left:6px; width:165px; font-size:11px; } }
+@media (max-width:700px) { #info { top:auto; bottom:112px; right:6px; width:210px; max-height:40%; } .stat { font-size:11px; } .stat b { font-size:14px; } #hint { font-size:12px; } #hud { width:calc(100% - 20px); top:52px; } }
 </style>
 </head>
 <body>
@@ -84,6 +92,7 @@ canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touc
 <canvas id="c"></canvas>
 <div id="hud"><div id="top"></div><div id="hint"></div><div id="event"></div></div>
 <div id="info"><div id="infoStats"></div><div id="infoActs"></div></div>
+<div id="goals"><div class="gh" id="goalHead"></div><div id="goalList"></div></div>
 <div id="tools"></div>
 <div id="tip"></div>
 <div id="toast"></div>
@@ -96,7 +105,8 @@ canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touc
     <li><b>Verkabeln:</b> 🔴 Stromkabel Rack/Switch/Klima → ⚡ PDU → 🏭 Hauptverteiler. 🔵 Netzkabel Rack → 🔀 Switch → 🌐 Uplink-Router.</li>
     <li><b>Kühlung:</b> Volle Racks werden heiß. Ab 60 °C schalten sie ab – ❄️ Klimageräte in der Nähe aufstellen.</li>
     <li><b>Engpässe:</b> PDUs und Hausanschluss haben kW-Grenzen, Kupferkabel nur 10 Gbit/s, der Uplink ist begrenzt.</li>
-    <li><b>Upgrades:</b> Server (CPU/RAM/GPU), Switch-Ports, PDU-Leistung, Glasfaser, Hallen-Erweiterung, USV, DDoS-Schutz …</li>
+    <li><b>Upgrades:</b> Server (CPU/RAM/GPU/KI), Switch-Ports, PDU-Leistung, Glasfaser, Hallen-Erweiterung, Solar-Dach, USV, DDoS-Schutz …</li>
+    <li><b>🎯 Ziele:</b> Erfülle Aufträge (links oben) für Geld-Belohnungen.</li>
   </ul>
   <p style="font-size:12px;opacity:.75">Maus: Linksklick = bauen/auswählen · Ziehen = drehen · Rechts-/Mittelklick-Ziehen = verschieben · Mausrad = Zoom · WASD = Kamera · R = drehen · Tasten 1–9 = Werkzeuge · H = Wärmekarte · U = Upgrades · G = Tempo 1×/2×/4× · Esc = abbrechen. Touch: Tippen = bauen, Ziehen = drehen, zwei Finger = zoomen/verschieben.</p>
   <div class="btns"><button class="btn" id="btnContinue">▶ Weiterspielen</button><button class="btn" id="btnNew">✨ Neues Rechenzentrum</button></div>
@@ -122,7 +132,9 @@ const SRV = [
   { name: 'Basic 1U', short: 'Basic', cost: 300, kw: 0.4, heat: 1.0, inc: 5, bw: 1, col: 0x5d6675 },
   { name: 'Pro 2U (CPU+RAM)', short: 'Pro', cost: 1600, kw: 0.7, heat: 1.6, inc: 20, bw: 2, col: 0x2f72c4 },
   { name: 'GPU-Node', short: 'GPU', cost: 7000, kw: 1.6, heat: 3.4, inc: 75, bw: 5, col: 0x23b26d },
+  { name: 'KI-Beschleuniger 4U', short: 'KI', cost: 24000, kw: 2.4, heat: 6.0, inc: 240, bw: 10, col: 0x8a3ffc },
 ];
+const SRV_IC = ['⬜', '🟦', '🟩', '🟪'];
 const SLOTS = 6;
 const DEV = {
   rack:   { name: 'Server-Rack', icon: '🗄️', cost: 400, kw: 0.05, h: 2.0, desc: 'Hält 6 Server. Braucht Strom (PDU) und Netz (Switch).' },
@@ -138,6 +150,7 @@ const UPG = [
   { id: 'mainp', name: 'Hausanschluss', icon: '🏭', vals: [12, 30, 80, 200], cost: [2000, 9000, 40000], f: v => v + ' kW' },
   { id: 'uplink', name: 'Uplink-Bandbreite', icon: '🌐', vals: [20, 60, 160, 400], cost: [2500, 12000, 50000], f: v => v + ' Gbit/s' },
   { id: 'fiber', name: 'Glasfaser-Technik', icon: '🟧', vals: [0, 1], cost: [4000], f: v => v ? 'freigeschaltet' : 'gesperrt', d: 'Netzkabel mit 40 statt 10 Gbit/s, ohne Längenlimit (Taste F)' },
+  { id: 'solar', name: 'Solar-Dach', icon: '☀️', vals: [0, 4, 12, 30], cost: [3500, 15000, 60000], f: v => v ? v + ' kW gratis' : 'keins', d: 'Deckt einen Teil des Verbrauchs kostenlos' },
   { id: 'eco', name: 'Strom-Vertrag', icon: '🌱', vals: [1, 0.8, 0.6], cost: [5000, 20000], f: v => Math.round(v * 100) + ' % Strompreis' },
   { id: 'ups', name: 'USV + Notstrom-Diesel', icon: '🔋', vals: [0, 1], cost: [7000], f: v => v ? 'installiert' : 'keine', d: 'Überbrückt Stromausfälle (Diesel kostet doppelt)' },
   { id: 'fw', name: 'DDoS-Schutz', icon: '🛡️', vals: [0, 1], cost: [9000], f: v => v ? 'aktiv' : 'keiner', d: 'Uplink bleibt bei Angriffen voll nutzbar' },
@@ -152,22 +165,44 @@ const MILESTONES = [
   { inc: 1500, title: 'Cloud-Anbieter', reward: 40000 },
   { inc: 5000, title: 'Hyperscaler', reward: 100000 },
 ];
+// Ziele: p() liefert [aktuell, nötig]; erledigt wenn aktuell >= nötig
+const runSrv = () => S.objs.reduce((a, o) => a + (o.t === 'rack' && SIM.st.get(o.id) && SIM.st.get(o.id).run ? o.srv.length : 0), 0);
+const hasTier = t => +S.objs.some(o => o.t === 'rack' && o.srv.some(x => x >= t));
+const GOALS = [
+  { id: 'rack3', t: 'Stelle 3 Racks auf', r: 800, p: () => [S.objs.filter(o => o.t === 'rack').length, 3] },
+  { id: 'srv10', t: '10 Server in Betrieb', r: 1500, p: () => [runSrv(), 10] },
+  { id: 'pro', t: 'Baue einen Pro-Server ein', r: 1000, p: () => [hasTier(1), 1] },
+  { id: 'crac', t: 'Betreibe ein Klimagerät', r: 1000, p: () => [+S.objs.some(o => o.t === 'crac' && SIM.st.get(o.id) && SIM.st.get(o.id).pwr), 1] },
+  { id: 'bw20', t: '20 Gbit/s Uplink-Verkehr', r: 3000, p: () => [Math.floor(SIM.bw), 20] },
+  { id: 'gpu', t: 'Baue einen GPU-Node ein', r: 4000, p: () => [hasTier(2), 1] },
+  { id: 'fiber', t: 'Verlege ein Glasfaserkabel', r: 3000, p: () => [+S.cables.some(c => c.f), 1] },
+  { id: 'ev1', t: 'Überstehe ein Ereignis', r: 2500, p: () => [S.stats.ev, 1] },
+  { id: 'solar', t: 'Installiere ein Solar-Dach', r: 2000, p: () => [S.up.solar, 1] },
+  { id: 'cool8', t: '8 Racks laufen, keins über 45 °C', r: 8000, p: () => { const r = S.objs.filter(o => o.t === 'rack' && SIM.st.get(o.id) && SIM.st.get(o.id).run); return [r.some(o => o.temp > 45) ? 0 : r.length, 8]; } },
+  { id: 'kw50', t: '50 kW Gesamtlast', r: 10000, p: () => [Math.floor(SIM.kw), 50] },
+  { id: 'ai', t: 'Baue einen KI-Beschleuniger ein', r: 20000, p: () => [hasTier(3), 1] },
+  { id: 'hall', t: 'Volle Halle (16×12)', r: 25000, p: () => [S.up.hall, 2] },
+  { id: 'srv60', t: '60 Server in Betrieb', r: 50000, p: () => [runSrv(), 60] },
+  { id: 'rich', t: '1 Mio. € verdient', r: 100000, p: () => [Math.floor(S.earned), 1e6] },
+];
 const EVENTS = {
   ddos: { name: '🛡️ DDoS-Angriff! Uplink nur 25 %', dur: 25, prot: 'fw' },
   blackout: { name: '⚡ Stromausfall im Netz!', dur: 15, prot: 'ups' },
   heat: { name: '🌡️ Hitzewelle! Kühlung −40 %', dur: 45 },
+  boom: { name: '📈 Großkunde! Einnahmen +50 %', dur: 30, good: true },
 };
 const GW = 16, GH = 12; // volles Raster
 
 // ================= State =================
 const SAVE_KEY = 'datacenter_save';
-const defSave = () => ({ v: 1, money: 2500, earned: 0, nid: 3, ms: 0, up: { hall: 0, mainp: 0, uplink: 0, fiber: 0, eco: 0, ups: 0, fw: 0 },
+const defSave = () => ({ v: 1, money: 2500, earned: 0, nid: 3, ms: 0, up: { hall: 0, mainp: 0, uplink: 0, fiber: 0, solar: 0, eco: 0, ups: 0, fw: 0 }, goals: [], stats: { ev: 0 },
   objs: [{ id: 1, t: 'router', x: 0, z: 0, r: 0, lv: 0 }, { id: 2, t: 'main', x: 1, z: 0, r: 0, lv: 0 }], cables: [] });
 function loadSave() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (!s || s.v !== 1 || !Array.isArray(s.objs) || !s.objs.some(o => o.t === 'router') || !s.objs.some(o => o.t === 'main')) return null;
     s.up = Object.assign(defSave().up, s.up); // ältere Saves ohne neue Upgrade-Keys
+    s.goals = Array.isArray(s.goals) ? s.goals : []; s.stats = Object.assign({ ev: 0 }, s.stats);
     const ids = new Set(s.objs.map(o => o.id));
     s.cables = (s.cables || []).filter(c => ids.has(c.a) && ids.has(c.b)); // verwaiste Kabel verwerfen
     return s;
@@ -261,7 +296,7 @@ function simulate(dt) {
     const s = st.get(o.id);
     if (!s.run) continue;
     s.f = (s.eff / s.demand) * st.get(s.sw).f;
-    s.inc = o.srv.reduce((a, t) => a + SRV[t].inc, 0) * s.f;
+    s.inc = o.srv.reduce((a, t) => a + SRV[t].inc, 0) * s.f * (ev === 'boom' ? 1.5 : 1);
     gross += s.inc;
     if (s.f < 0.95) s.issue = 'Bandbreite knapp (' + Math.round(s.f * 100) + ' %)';
   }
@@ -288,7 +323,7 @@ function simulate(dt) {
   // --- Kosten ---
   let kw = 0;
   for (const o of S.objs) if ((o.t === 'rack' || o.t === 'sw' || o.t === 'crac') && st.get(o.id).pwr) kw += devKw(o);
-  const cost = kw * POWER_PRICE * val('eco') * (diesel ? 2 : 1);
+  const cost = Math.max(0, kw - val('solar')) * POWER_PRICE * val('eco') * (diesel ? 2 : 1);
   SIM = { gross, cost, net: gross - cost, kw: mainLoad, kwCap: mainCap, bw: Math.min(rIn, bwCap), bwCap, bwWant: rIn, st };
 }
 
@@ -414,6 +449,7 @@ function buildMesh(o) {
       const y = 0.2 + i * 0.29, hh = t === 0 ? 0.2 : 0.25;
       box(g, 0.68, hh, 0.05, M.srv[t], 0, y, 0.49, false);
       if (t === 2) box(g, 0.5, 0.04, 0.02, LED.amber, 0.05, y - 0.07, 0.52, false);
+      if (t === 3) box(g, 0.5, 0.04, 0.02, LED.act[1], 0.05, y - 0.07, 0.52, false);
       for (let k = 0; k < (t + 2); k++) o._leds.push(box(g, 0.035, 0.035, 0.02, LED.off, -0.29 + k * 0.05, y + 0.05, 0.522, false));
     });
   } else if (o.t === 'sw') {
@@ -572,6 +608,7 @@ function updateHUD() {
     bigText(`🏆 ${m.title}!<br><span style="font-size:.5em">Bonus +${fmt(m.reward)} €</span>`);
     if (AC) AC.powerup();
   }
+  checkGoals();
   const ms = MILESTONES[S.ms];
   $('top').innerHTML = `<div class="stat money">💰 <b class="${S.money < 0 ? 'neg' : ''}">${fmt(S.money)} €</b></div>`
     + `<div class="stat">📈 <b class="${SIM.net < 0 ? 'neg' : ''}">${SIM.net >= 0 ? '+' : ''}${fmt(SIM.net)} €/s</b> <small style="opacity:.7">(${fmt(SIM.gross)} − ${fmt(SIM.cost)} Strom)</small></div>`
@@ -580,6 +617,24 @@ function updateHUD() {
     + `<div class="stat">🏆 ${S.ms ? MILESTONES[S.ms - 1].title : 'Startup'}${ms ? ` → ${fmt(Math.max(0, SIM.net))}/${fmt(ms.inc)} €/s` : ''}</div>`;
   updateInfo();
 }
+function checkGoals() {
+  let n = 0;
+  for (const g of GOALS) {
+    if (S.goals.includes(g.id)) continue;
+    const [a, b] = g.p(); if (a < b) continue;
+    S.goals.push(g.id); S.money += g.r;
+    const txt = `🎯 ${g.t}<br><span style="font-size:.5em">Ziel erreicht · +${fmt(g.r)} €</span>`;
+    setTimeout(() => bigText(txt), n++ * 1200); // mehrere gleichzeitig (alter Spielstand) nacheinander zeigen
+    if (AC) AC.powerup();
+  }
+  const open = GOALS.filter(g => !S.goals.includes(g.id)).slice(0, 3);
+  const head = `<span>🎯 Ziele (${S.goals.length}/${GOALS.length})</span><span>${$('goals').classList.contains('min') ? '▸' : '▾'}</span>`;
+  const list = open.length ? open.map(g => { const [a, b] = g.p(); return `<div class="g">${g.t} <small>+${fmt(g.r)} €</small>${b > 1 ? `<div class="bar"><i style="width:${Math.min(100, a / b * 100)}%"></i></div>` : ''}</div>`; }).join('') : '<div class="g">Alle Ziele erreicht! 🏆</div>';
+  if ($('goalHead').innerHTML !== head) $('goalHead').innerHTML = head;
+  if ($('goalList').dataset.h !== list) { $('goalList').innerHTML = list; $('goalList').dataset.h = list; }
+}
+$('goalHead').onclick = () => { $('goals').classList.toggle('min'); checkGoals(); };
+if (innerWidth < 700) $('goals').classList.add('min');
 function nextHint() {
   const has = t => S.objs.some(o => o.t === t), racks = S.objs.filter(o => o.t === 'rack');
   const pwrLinked = o => cablesOf(o.id).some(c => c.k === 'pwr'), netLinked = o => cablesOf(o.id).some(c => c.k === 'net');
@@ -622,7 +677,7 @@ function updateInfo() {
     a += `<div style="margin-top:6px;font-weight:700">Server (${o.srv.length}/${SLOTS})</div>`;
     o.srv.forEach((t, i) => {
       const n = SRV[t + 1], c = n ? Math.round(n.cost * 0.8) : 0;
-      a += `<div class="srv"><span>${t === 2 ? '🟩' : t === 1 ? '🟦' : '⬜'} ${SRV[t].name}<br><small style="opacity:.7">${SRV[t].inc} €/s · ${SRV[t].kw} kW</small></span><span style="display:flex;gap:4px;align-items:center">${n ? `<button class="btn" data-a="srvup" data-i="${i}" ${S.money < c ? 'disabled' : ''}>⬆ ${n.short} ${fmt(c)} €</button>` : '<small>max</small>'}<button class="btn red" data-a="srvsell" data-i="${i}" title="Verkaufen (+${fmt(Math.floor(srvValue(t) * 0.5))} €)">✕</button></span></div>`;
+      a += `<div class="srv"><span>${SRV_IC[t]} ${SRV[t].name}<br><small style="opacity:.7">${SRV[t].inc} €/s · ${SRV[t].kw} kW</small></span><span style="display:flex;gap:4px;align-items:center">${n ? `<button class="btn" data-a="srvup" data-i="${i}" ${S.money < c ? 'disabled' : ''}>⬆ ${n.short} ${fmt(c)} €</button>` : '<small>max</small>'}<button class="btn red" data-a="srvsell" data-i="${i}" title="Verkaufen (+${fmt(Math.floor(srvValue(t) * 0.5))} €)">✕</button></span></div>`;
     });
     if (o.srv.length < SLOTS) a += `<button class="btn wide" data-a="srvadd" ${S.money < SRV[0].cost ? 'disabled' : ''}>+ Basic-Server (${SRV[0].cost} €)</button>`;
   } else if (o.t === 'sw') {
@@ -770,7 +825,7 @@ function tickEvents(dt) {
   if (EVENT) {
     EVENT.t -= dt;
     $('event').textContent = EVENTS[EVENT.type].name + (EVENTS[EVENT.type].prot && S.up[EVENTS[EVENT.type].prot] ? ' – abgewehrt ✔' : '') + ` (${Math.ceil(EVENT.t)} s)`;
-    if (EVENT.t <= 0) { EVENT = null; $('event').style.display = 'none'; changed(); }
+    if (EVENT.t <= 0) { EVENT = null; S.stats.ev++; $('event').style.display = 'none'; changed(); }
     return;
   }
   if (S.earned < 3000) return;
@@ -778,7 +833,8 @@ function tickEvents(dt) {
   if (eventTimer <= 0) {
     const keys = Object.keys(EVENTS), type = keys[Math.floor(Math.random() * keys.length)];
     EVENT = { type, t: EVENTS[type].dur }; eventTimer = 90 + Math.random() * 120;
-    $('event').style.display = 'block'; tone(440, 0.3, 'sawtooth', 0.08); setTimeout(() => tone(330, 0.4, 'sawtooth', 0.08), 300);
+    $('event').style.display = 'block'; $('event').style.background = EVENTS[type].good ? 'rgba(40,190,110,.92)' : '';
+    tone(440, 0.3, 'sawtooth', 0.08); setTimeout(() => tone(330, 0.4, 'sawtooth', 0.08), 300);
     changed();
   }
 }
@@ -973,6 +1029,11 @@ function selfTest() {
   for (let i = 0; i < 200; i++) simulate(0.25);
   ok(S.objs[2].hot || S.objs[2].temp > 55, 'volles Rack ohne Kühlung überhitzt');
   ok(srvValue(0) === 300 && srvValue(2) === 300 + 1280 + 5600, 'Serverwert = Kauf + Upgrades');
+  ok(new Set(GOALS.map(g => g.id)).size === GOALS.length && GOALS.every(g => g.p().length === 2), 'Ziele eindeutig und auswertbar');
+  S.objs[2].srv = [0, 0]; S.objs[2].hot = false; S.objs[2].temp = 22; S.up.solar = 1; simulate(0);
+  ok(SIM.cost === 0, 'Solar-Dach deckt 4 kW gratis');
+  S.up.solar = 0; EVENT = { type: 'boom', t: 1 }; simulate(0); EVENT = null;
+  ok(Math.abs(SIM.gross - 15) < 1e-6, 'Großkunde: Einnahmen +50 %');
   S = keep; reindex();
   const el = $('selftest'); el.style.display = 'block'; el.textContent = out.join('\n'); console.log(out.join('\n'));
 }
