@@ -417,6 +417,13 @@ function roadTexture() {
   t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
 }
 const roadMat = new THREE.MeshLambertMaterial({ map: roadTexture() });
+const junctionMat = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  g.fillStyle = '#46474a'; g.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 5000; k++) { const v = 55 + Math.random() * 40 | 0; g.fillStyle = `rgba(${v},${v},${v + 3},0.5)`; g.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return new THREE.MeshLambertMaterial({ map: t, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+})();
 const padMat = new THREE.MeshLambertMaterial({ color: lin('#a5a39b') });
 const terrMat = new THREE.MeshLambertMaterial({ vertexColors: true });
 const GC = {}; [['g1', '#6ea548'], ['g2', '#55913a'], ['g3', '#7fb04f'], ['dirt', '#8f7a55'], ['rock', '#8b8a84'], ['snow', '#f3f5f7'], ['grav', '#9a8f78'], ['f0', '#d9c56a'], ['f1', '#8d6b44'], ['f2', '#a3c95a'], ['f3', '#c9b25a']].forEach(([k, h]) => { const c = lin(h); GC[k] = [c.r, c.g, c.b]; });
@@ -457,20 +464,49 @@ function groundColor(x, z, h, ny, d, out, o) {
   const shade = 0.92 + n1 * 0.16;
   out[o] = r * shade; out[o + 1] = g * shade; out[o + 2] = bl * shade;
 }
-function stripMesh(e, half, yOff, plain, ox, oz) {
-  const n = e.n, pos = new Float32Array((n + 1) * 6), uv = new Float32Array((n + 1) * 4), idx = [], p = e.pts;
+function stripMesh(e, half, yOff, plain, ox, oz, s0 = 0, s1 = e.len) {
+  const ss = [s0]; for (let k = 1; k < e.n; k++) if (e.cum[k] > s0 + 0.5 && e.cum[k] < s1 - 0.5) ss.push(e.cum[k]); ss.push(s1);
+  const n = ss.length - 1, pos = new Float32Array((n + 1) * 6), uv = new Float32Array((n + 1) * 4), idx = [], A = {}, B = {}, M = {};
   for (let k = 0; k <= n; k++) {
-    const a = Math.max(0, k - 1), b = Math.min(n, k + 1);
-    let tx = p[b * 3] - p[a * 3], tz = p[b * 3 + 2] - p[a * 3 + 2]; const l = Math.hypot(tx, tz); tx /= l; tz /= l;
-    const rx = -tz, rz = tx, x = p[k * 3] - ox, z = p[k * 3 + 2] - oz, y = p[k * 3 + 1] + yOff;
+    const s = ss[k]; edgeSample(e, s, M); edgeSample(e, s - 1, A); edgeSample(e, s + 1, B);
+    let tx = B.x - A.x, tz = B.z - A.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+    const rx = -tz, rz = tx, x = M.x - ox, z = M.z - oz, y = M.h + yOff;
     pos.set([x - rx * half, y, z - rz * half, x + rx * half, y, z + rz * half], k * 6);
-    const v = e.cum[k] / 24;
-    uv.set(plain ? [0.3, 0.1, 0.3, 0.1] : [0, v, 1, v], k * 4);
+    const v = s / 24;
+    uv.set(plain ? [(M.x - rx * half) / 8, (M.z - rz * half) / 8, (M.x + rx * half) / 8, (M.z + rz * half) / 8] : [0, v, 1, v], k * 4);
     if (k < n) { const q = k * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
   if (g.attributes.normal.getY(0) < 0) { for (let q = 0; q < idx.length; q += 3) { const t = idx[q]; idx[q] = idx[q + 1]; idx[q + 1] = t; } g.setIndex(idx); g.computeVertexNormals(); }
-  const m = new THREE.Mesh(g, roadMat); m.receiveShadow = true; return m;
+  const m = new THREE.Mesh(g, plain ? junctionMat : roadMat); m.receiveShadow = true; return m;
+}
+// Kreuzung: Straßen enden je nach Winkel früher, damit sich die Streifen nicht überlappen (sonst Z-Fighting)
+const juncCache = new Map();
+function junction(i, j) {
+  const k = ck(i, j); let J = juncCache.get(k); if (J) return J;
+  const ends = neighbors(i, j).map(([ei, ej, d, fw]) => {
+    const e = edgeOf(ei, ej, d), p = e.pts, n = e.n;
+    const dx = fw ? p[3] - p[0] : p[n * 3 - 3] - p[n * 3], dz = fw ? p[5] - p[2] : p[n * 3 - 1] - p[n * 3 + 2];
+    return { ei, ej, d, fw, a: Math.atan2(dz, dx) };
+  });
+  ends.forEach(q => { let m = Math.PI; ends.forEach(o => { if (o !== q) m = Math.min(m, Math.abs(angWrap(o.a - q.a))); }); q.trim = ends.length > 1 ? clamp((HALF + 1) / Math.tan(m / 2) + 1.5, 6, 32) : 0; });
+  J = { ends }; juncCache.set(k, J); return J;
+}
+function trimOf(e, atB) { const nd = atB ? e.b : e.a, q = junction(nd[0], nd[1]).ends.find(q => q.ei === e.i && q.ej === e.j && q.d === e.d && q.fw === !atB); return q ? q.trim : 0; }
+function junctionMesh(i, j, ox, oz) {
+  const J = junction(i, j); if (J.ends.length < 2) return null;
+  const [nx, nz] = nodePos(i, j), h = terrainBase(nx, nz), pt = {}, ring = [];
+  J.ends.forEach(q => {
+    const e = edgeOf(q.ei, q.ej, q.d); edgeSample(e, q.fw ? q.trim : e.len - q.trim, pt);
+    const l = Math.hypot(pt.tx, pt.tz) || 1, rx = -pt.tz / l, rz = pt.tx / l;
+    ring.push([pt.x + rx * HALF, pt.h, pt.z + rz * HALF], [pt.x - rx * HALF, pt.h, pt.z - rz * HALF]);
+  });
+  ring.sort((a, b) => Math.atan2(a[2] - nz, a[0] - nx) - Math.atan2(b[2] - nz, b[0] - nx));
+  const pos = [nx - ox, h + 0.12, nz - oz], uv = [nx / 8, nz / 8], idx = [];
+  ring.forEach(([x, y, z], k) => { pos.push(x - ox, y + 0.12, z - oz); uv.push(x / 8, z / 8); idx.push(0, k + 1, (k + 1) % ring.length + 1); });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  if (g.attributes.normal.getY(0) < 0) { for (let q = 0; q < idx.length; q += 3) { const t = idx[q]; idx[q] = idx[q + 1]; idx[q + 1] = t; } g.setIndex(idx); g.computeVertexNormals(); }
+  const m = new THREE.Mesh(g, junctionMat); m.receiveShadow = true; return m;
 }
 function rng(i, j, s) { let k = 0; return () => h2(i * 7 + k, j * 13 + (k++), s); }
 const live = new Map(), collected = new Set();
@@ -478,13 +514,10 @@ function buildCell(i, j) {
   const c = getCell(i, j), grp = new THREE.Group(), ox = i * C, oz = j * C;
   grp.add(buildTerrain(i, j));
   const road = new THREE.Group(); road.position.set(ox, 0, oz); grp.add(road);
-  [c.E, c.N].forEach(e => { if (e) road.add(stripMesh(e, HALF, 0.12, false, ox, oz)); });
+  [c.E, c.N].forEach(e => { if (e) road.add(stripMesh(e, HALF, 0.12, false, ox, oz, trimOf(e, false), e.len - trimOf(e, true))); });
   const props = [], cols = [];
   const [nx, nz] = nodePos(i, j);
-  if (nodeHasEdge(i, j)) {
-    const disc = new THREE.CircleGeometry(7.2, 24); const uv = disc.attributes.uv; for (let q = 0; q < uv.count; q++) uv.setXY(q, 0.3, 0.1);
-    const m = new THREE.Mesh(disc, roadMat); m.rotation.x = -Math.PI / 2; m.position.set(nx - ox, terrainBase(nx, nz) + 0.15, nz - oz); m.receiveShadow = true; road.add(m);
-  }
+  const jm = junctionMesh(i, j, ox, oz); if (jm) road.add(jm);
   const dp = c.depot;
   if (dp) {
     road.add(stripMesh(c.drive, 4, 0.13, true, ox, oz));
@@ -609,7 +642,7 @@ function updateCells(px, pz, all) {
   const t0 = performance.now();
   for (const [i, j] of want) { live.set(ck(i, j), buildCell(i, j)); instDirty = true; if (!all && performance.now() - t0 > 6) break; }
   live.forEach((L, k) => { if (Math.abs(L.i - ci) > VIEW + 1 || Math.abs(L.j - cj) > VIEW + 1) { disposeCell(L); live.delete(k); instDirty = true; } });
-  if (cells.size > 700) cells.forEach((c, k) => { if (Math.abs(c.i - ci) > 9 || Math.abs(c.j - cj) > 9) cells.delete(k); });
+  if (cells.size > 700) { cells.forEach((c, k) => { if (Math.abs(c.i - ci) > 9 || Math.abs(c.j - cj) > 9) cells.delete(k); }); juncCache.clear(); }
   if (instDirty) { rebuildInstances(); instDirty = false; }
 }
 function nearCols(x, z, fn) {
@@ -677,7 +710,9 @@ function physics(dt, inp) {
   P.steer += clamp(tgt - P.steer, -s.rate * dt, s.rate * dt);
   // Längsdynamik
   const cap = 1 + 0.35 * lv('nitro');
-  P.nosOn = inp.nos && P.nos > 0.01 && !P.air && P.v > -1 && tipT < 0;
+  if (!inp.nos) P.nosLock = false;
+  if (P.nos <= 0.01) P.nosLock = true;
+  P.nosOn = inp.nos && !P.nosLock && (P.nosOn || P.nos > 0.12) && !P.air && P.v > -1 && tipT < 0;
   if (P.nosOn) P.nos = Math.max(0, P.nos - 0.28 * dt); else P.nos = Math.min(cap, P.nos + (0.05 + 0.025 * lv('nitro')) * dt);
   const vm = s.vmax * (P.onRoad ? 1 : s.off) * (1 + 0.05 * lv('motor')) * (P.nosOn ? 1.35 : 1);
   const acc = s.acc * (1 + 0.12 * lv('motor')) * (P.nosOn ? 2.3 : 1);
@@ -1170,7 +1205,7 @@ function updateCamera(dt, menu) {
   }
   if (shake > 0) { camera.position.x += (Math.random() - 0.5) * shake * 0.6; camera.position.y += (Math.random() - 0.5) * shake * 0.6; shake = Math.max(0, shake - dt * 2.5); }
   camera.lookAt(camLook);
-  const fov = 60 + clamp(Math.abs(P.v) / P.s.vmax, 0, 1.4) * 8 + (P.nosOn ? 8 : 0); if (Math.abs(camera.fov - fov) > 0.1) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  const fov = 60 + clamp(Math.abs(P.v) / P.s.vmax, 0, 1.4) * 8 + (P.nosOn ? 8 : 0); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = lerp(camera.fov, fov, 1 - Math.exp(-4 * dt)); camera.updateProjectionMatrix(); }
 }
 
 // ================= Sound =================
