@@ -140,7 +140,7 @@ const DEV = {
   rack:   { name: 'Server-Rack', icon: '🗄️', cost: 400, kw: 0.05, h: 2.0, desc: 'Hält 6 Server. Braucht Strom (PDU) und Netz (Switch).' },
   sw:     { name: 'Switch', icon: '🔀', cost: 500, kw: 0.2, h: 1.1, ports: [4, 8, 16], up: [800, 2500], desc: 'Verbindet Racks mit dem Uplink-Router. Jedes Kabel belegt einen Port.' },
   pdu:    { name: 'PDU', icon: '⚡', cost: 350, kw: 0, h: 1.5, cap: [4, 8, 16], up: [700, 2200], desc: 'Stromverteiler. Muss am Hauptverteiler hängen.' },
-  crac:   { name: 'Klimagerät', icon: '❄️', cost: 1200, kw: 1.2, h: 1.9, cool: [8, 14, 22], up: [1500, 4500], radius: 3.5, desc: 'Kühlt Racks im Umkreis von 3,5 Feldern.' },
+  crac:   { name: 'Klimagerät', icon: '❄️', cost: 1200, kw: 1.2, h: 1.9, cool: [8, 14, 22, 36], up: [1500, 4500, 12000], radius: 3.5, desc: 'Kühlt Racks im Umkreis von 3,5 Feldern.' },
   router: { name: 'Uplink-Router', icon: '🌐', h: 2.0, fixed: true, kw: 0, desc: 'Deine Verbindung zum Internet.' },
   main:   { name: 'Hauptverteiler', icon: '🏭', h: 2.1, fixed: true, kw: 0, desc: 'Hausanschluss für alle PDUs.' },
 };
@@ -302,19 +302,22 @@ function simulate(dt) {
   }
   // --- Wärme ---
   for (const o of racks) { const s = st.get(o.id); s.heat = s.pwr && !o.hot ? o.srv.reduce((a, t) => a + SRV[t].heat, 0) * (s.run ? 1 : 0.4) : 0; }
-  for (const c of S.objs) {
-    if (c.t !== 'crac') continue;
-    const cs = st.get(c.id); if (!cs.pwr) continue;
-    const cap = DEV.crac.cool[c.lv] * (ev === 'heat' ? 0.6 : 1);
-    const near = racks.filter(r => Math.hypot(r.x - c.x, r.z - c.z) <= DEV.crac.radius);
-    const need = r => Math.max(0, st.get(r.id).heat - st.get(r.id).cool); // schon gekühlte Wärme nicht doppelt bedienen
-    const H = near.reduce((a, r) => a + need(r), 0), k = H > 0 ? Math.min(1, cap / H) : 0;
-    cs.load = Math.min(H, cap); cs.cap = cap;
-    for (const r of near) st.get(r.id).cool += need(r) * k;
+  const cracs = S.objs.filter(c => c.t === 'crac' && st.get(c.id).pwr).map(c => {
+    const cs = st.get(c.id); cs.cap = DEV.crac.cool[c.lv] * (ev === 'heat' ? 0.6 : 1);
+    return { cs, left: cs.cap, near: racks.filter(r => Math.hypot(r.x - c.x, r.z - c.z) <= DEV.crac.radius) };
+  });
+  // Leistung in Häppchen verteilen statt gierig nacheinander: Racks, die mehrere Klimas erreichen, binden sonst Leistung, die ein Rack am Rand bräuchte
+  const need = r => Math.max(0, st.get(r.id).heat - st.get(r.id).cool), PASSES = 12;
+  for (let p = 0; p < PASSES; p++) for (const c of cracs) {
+    const H = c.near.reduce((a, r) => a + need(r), 0); if (H <= 1e-9 || c.left <= 1e-9) continue;
+    const give = Math.min(H, c.left / (PASSES - p)), k = give / H;
+    for (const r of c.near) st.get(r.id).cool += need(r) * k;
+    c.left -= give; c.cs.load += give;
   }
   for (const o of racks) {
     const s = st.get(o.id), cool = Math.min(s.cool, s.heat);
-    const target = 22 + s.heat * 1.5 + (s.heat - cool) * 7 + (ev === 'heat' ? 4 : 0);
+    // gekühlte Wärme erwärmt nur leicht (voll gekühltes KI-Rack ≈ 40 °C), ungekühlte stark
+    const target = 22 + s.heat * 0.5 + (s.heat - cool) * 7 + (ev === 'heat' ? 4 : 0);
     if (o.temp === undefined) o.temp = 22;
     o.temp += (target - o.temp) * Math.min(1, dt * 0.35);
     if (!o.hot && o.temp >= 60) { o.hot = true; alarm(o); }
@@ -1051,6 +1054,25 @@ function selfTest() {
   ok(Math.abs(SIM.gross - 15) < 1e-6, 'Großkunde: Einnahmen +50 %');
   EVENT = { type: 'blackout', t: 1 }; simulate(0); EVENT = null;
   ok(!SIM.kwOk && GOALS.find(g => g.id === 'kw50').p()[0] === 0, 'abgeschaltete Last zählt nicht fürs kW-Ziel');
+  // Kühlung: jede Rack-Hitze muss mit genug Klimas lösbar sein
+  const coolRig = (racks, srv, cracs, lv) => {
+    S = defSave(); S.up.mainp = 3; let id = 30;
+    const add = (t, x, z, extra) => { const o = Object.assign({ id: id++, t, x, z, r: 0, lv: 0 }, extra); S.objs.push(o); return o; };
+    const cab = (a, b, k) => S.cables.push({ id: id++, a, b, k, f: 1 });
+    const sw = add('sw', 0, 9, { lv: 2 }), cp = add('pdu', 1, 9, { lv: 2 });
+    cab(cp.id, 2, 'pwr'); cab(sw.id, cp.id, 'pwr'); cab(sw.id, 1, 'net');
+    const rs = racks.map(x => { const r = add('rack', x, 5, { srv: srv.slice(), temp: 22 }), p = add('pdu', x, 8, { lv: 2 }); cab(r.id, p.id, 'pwr'); cab(p.id, 2, 'pwr'); cab(r.id, sw.id, 'net'); return r; });
+    for (const x of cracs) cab(add('crac', x, 5, { lv }).id, cp.id, 'pwr');
+    reindex(); for (let i = 0; i < 300; i++) simulate(0.25);
+    return rs;
+  };
+  let rs = coolRig([3], [3, 3, 3, 3, 3, 3], [2, 4], 3);
+  ok(SIM.st.get(rs[0].id).run && !rs[0].hot && rs[0].temp < 45, 'volles KI-Rack mit 2 Klimas Stufe 4 unter 45 °C (' + rs[0].temp.toFixed(1) + ')');
+  EVENT = { type: 'heat', t: 99 }; for (let i = 0; i < 300; i++) simulate(0.25); EVENT = null;
+  ok(!rs[0].hot && rs[0].temp < 45, 'auch in der Hitzewelle (' + rs[0].temp.toFixed(1) + ' °C)');
+  // Klima x=3 erreicht Racks 1+5, Klima x=7 erreicht 5+9: lösbar (3×13,6 ≤ 2×22), gierig aber nicht
+  rs = coolRig([1, 5, 9], [3, 3, 1], [3, 7], 2);
+  ok(rs.every(r => SIM.st.get(r.id).run && !r.hot && r.temp < 45), 'überlappende Klimas teilen Leistung sinnvoll (' + rs.map(r => r.temp.toFixed(1)).join(' / ') + ' °C)');
   S = keep; reindex();
   const el = $('selftest'); el.style.display = 'block'; el.textContent = out.join('\n'); console.log(out.join('\n'));
 }
