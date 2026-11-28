@@ -61,6 +61,14 @@ canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; tou
 .shop h2 { font-size:19px; margin:0 0 8px; } .shoprow { display:flex; align-items:center; gap:10px; background:#163452; border-radius:10px; padding:8px 10px; margin-bottom:6px; font-size:13px; }
 .shoprow .ic { font-size:24px; } .shoprow .tx { flex:1; line-height:1.4; } .shoprow .lvl { opacity:.75; font-size:12px; }
 .btn:disabled { opacity:.4; cursor:default; }
+.sw { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.swb { width:30px; height:30px; border-radius:50%; border:2px solid #ffffff44; cursor:pointer; padding:0; }
+.swb.on { border:3px solid #ffd21f; transform:scale(1.12); }
+#garage { justify-content:flex-start; background:linear-gradient(90deg,#0a1a2acc 0%,#0a1a2a88 45%,transparent 70%); backdrop-filter:none; padding-top:56px; }
+#garage .box { max-width:560px; }
+#cards { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+#garage .st span { width:50px; } #garage .st i { width:58px; }
+@media (max-width:760px) { #garage { background:#0a1a2a99; } #garage .box { max-width:none; } }
 #err { position:fixed; inset:0; z-index:99; display:none; align-items:center; justify-content:center; background:#300; color:#fff; font-size:18px; padding:20px; text-align:center; }
 #touch { position:fixed; inset:auto 0 0 0; height:170px; z-index:15; display:none; pointer-events:none; }
 body.touch #touch { display:block; } body.touch #help { display:none; } body.touch #speedo { bottom:180px; }
@@ -99,7 +107,7 @@ body.touch #touch { display:block; } body.touch #help { display:none; } body.tou
   <p class="sub">Such dir dein Fahrzeug aus – vom Go-Kart bis zum 220-Tonnen-Minenkipper. Die Welt hört nie auf: Straßen, Dörfer, Wälder und Lager entstehen beim Fahren. Nimm Aufträge an Lagern an und liefere sie ab.</p>
   <div id="cards"></div>
   <button class="btn" id="goBtn">Losfahren ▶</button>
-  <div class="shop"><h2>🔧 Werkstatt <span id="shopMoney" style="font-size:15px;color:#5fe36a"></span></h2><div id="shopList"></div></div>
+  <div class="shop"><h2 id="customTitle">🎨 Anpassen</h2><div id="customList"></div></div>
 </div></div>
 
 <div class="ov" id="jobsOv"><div class="box" style="max-width:620px">
@@ -130,16 +138,34 @@ const angWrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI
 
 // ================= Spielstand =================
 const SAVE_KEY = 'fernfahrer_save';
-let save = { money: 0, km: 0, jobs: 0, veh: 'sattelzug', up: {}, best: 0 };
-try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && typeof d === 'object') save = { money: Math.max(0, Number(d.money) || 0), km: Math.max(0, Number(d.km) || 0), jobs: Math.max(0, Math.floor(Number(d.jobs)) || 0), veh: typeof d.veh === 'string' ? d.veh : 'sattelzug', up: (d.up && typeof d.up === 'object') ? d.up : {}, best: Math.max(0, Number(d.best) || 0) }; } catch (e) {}
-const lv = id => Math.max(0, Math.floor(Number(save.up[id]) || 0));
-const UPG = [
-  { id: 'motor', ic: '🔧', name: 'Motor-Tuning', max: 5, cost: [300, 800, 2000, 5000, 12000], desc: '+12 % Antrieb und +5 % Spitze pro Stufe – für alle Fahrzeuge.' },
-  { id: 'nitro', ic: '🔥', name: 'Nitro-Tank', max: 4, cost: [250, 700, 1800, 4500], desc: 'Mehr Nitro (Shift) und schnelleres Nachfüllen.' },
-  { id: 'sicher', ic: '🛡️', name: 'Ladungssicherung', max: 4, cost: [200, 600, 1500, 4000], desc: '−20 % Ladungsschaden pro Stufe bei Unfällen und harten Landungen.' },
-  { id: 'magnet', ic: '🧲', name: 'Münzmagnet', max: 3, cost: [400, 1200, 3500], desc: 'Sammelt Münzen aus größerer Entfernung ein.' },
-  { id: 'fanfare', ic: '🎺', name: 'Fanfare', max: 1, cost: [150], desc: 'H spielt eine Melodie statt der Hupe.' },
+let save = { money: 0, km: 0, jobs: 0, veh: 'sattelzug', tune: {}, paint: {}, best: 0 };
+const obj = v => (v && typeof v === 'object') ? v : {};
+try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && typeof d === 'object') save = { money: Math.max(0, Number(d.money) || 0), km: Math.max(0, Number(d.km) || 0), jobs: Math.max(0, Math.floor(Number(d.jobs)) || 0), veh: typeof d.veh === 'string' ? d.veh : 'sattelzug', tune: obj(d.tune || d.up), paint: obj(d.paint), best: Math.max(0, Number(d.best) || 0) }; } catch (e) {}
+// Tuning ist frei einstellbar (kein Kauf), gilt für alle Fahrzeuge
+const TUNE = [
+  { id: 'motor', ic: '🔧', name: 'Motor-Tuning', max: 5, desc: '+12 % Antrieb und +5 % Spitze pro Stufe.' },
+  { id: 'nitro', ic: '🔥', name: 'Nitro-Tank', max: 4, desc: 'Mehr Nitro (Shift) und schnelleres Nachfüllen.' },
+  { id: 'sicher', ic: '🛡️', name: 'Ladungssicherung', max: 4, desc: '−20 % Ladungsschaden pro Stufe.' },
+  { id: 'magnet', ic: '🧲', name: 'Münzmagnet', max: 3, desc: 'Sammelt Münzen aus größerer Entfernung ein.' },
+  { id: 'fanfare', ic: '🎺', name: 'Fanfare', max: 1, desc: 'H spielt eine Melodie statt der Hupe.' },
 ];
+const lv = id => { const t = TUNE.find(u => u.id === id); return clamp(Math.floor(Number(save.tune[id]) || 0), 0, t ? t.max : 0); };
+// Lackierung: Original-Farben aus den Blender-Modellen, die umgefärbt werden
+const BODY = { kart: ['#2f7fd6'], kleinwagen: ['#d6352b'], pickup: ['#2f5f8f'], sattelzug: ['#c62828'], kipper: ['#f2b705', '#d99f04'] };
+const RIM = { kart: '#d9dade', kipper: '#e0a804' };
+const PAINTS = ['#d6352b', '#f08a1c', '#f2b705', '#3c9a4a', '#1fa39a', '#2f7fd6', '#2f5f8f', '#7a2bd6', '#e0407a', '#eceef0', '#8a8f98', '#222326'];
+const RIMS = ['#b9bcc4', '#e0a804', '#222326', '#d6352b', '#2f7fd6', '#f4f4f4'];
+const shade = (h, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
+const okHex = h => typeof h === 'string' && /^#[0-9a-f]{6}$/.test(h);
+function paintOf(type) {
+  const p = obj(save.paint[type]), body = BODY[type][0], rim = RIM[type] || '#b9bcc4';
+  return { body: okHex(p.body) ? p.body : body, rim: okHex(p.rim) ? p.rim : rim };
+}
+function recolorFor(type) {
+  const p = paintOf(type), b = BODY[type], m = { [b[0]]: p.body, [RIM[type] || '#b9bcc4']: p.rim };
+  if (b[1]) m[b[1]] = shade(p.body, 0.88);
+  return m;
+}
 function addMoney(n) { save.money = Math.max(0, save.money + n); }
 function persist() { if (Q_AUTO) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} ArcadeCore.saveScore('fernfahrer', Math.floor(save.money)); }
 
@@ -612,11 +638,11 @@ function spawn(type, x, z, yaw) {
   if (P.g) scene.remove(P.g.root);
   if (P.trl) scene.remove(P.trl.g.root);
   P.type = type; P.s = VEH[type];
-  P.g = build(type, { own: ['#c81e1e'] }); scene.add(P.g.root);
+  P.g = build(type, { own: ['#c81e1e'], recolor: recolorFor(type) }); scene.add(P.g.root);
   P.x = x; P.z = z; P.yaw = yaw; P.v = 0; P.steer = 0; P.vy = 0; P.air = false; P.spin = 0;
   P.y = groundAt(x, z); P.pitch = P.roll = 0; P.trl = null; P.airT = 0; if (P.nos == null) P.nos = 1;
   if (P.s.trailer) {
-    const g = build(P.s.trailer, { own: ['#c81e1e'] }); scene.add(g.root);
+    const pc = paintOf(type), g = build(P.s.trailer, { own: ['#c81e1e'], recolor: { '#c62828': pc.body, '#b9bcc4': pc.rim } }); scene.add(g.root);
     const f = [-Math.sin(yaw), -Math.cos(yaw)], hx = x + f[0] * (P.s.rz - TRL.hitch), hz = z + f[1] * (P.s.rz - TRL.hitch);
     P.trl = { g, ax: hx - f[0] * TRL.L, az: hz - f[1] * TRL.L, yaw, pitch: 0, spin: 0 };
   }
@@ -1121,8 +1147,11 @@ function updateCamera(dt, menu) {
     orbit += dt * 0.25; const d = s.cam[0] * 0.95;
     camPos.set(t.x + Math.sin(orbit) * d, t.y + s.cam[1] * 0.9, t.z + Math.cos(orbit) * d);
     const gh = heightAt(camPos.x, camPos.z) + 1.2; if (camPos.y < gh) camPos.y = gh;
-    camera.position.copy(camPos); camLook.set(t.x, t.y + s.b.y1 * 0.45, t.z); camera.lookAt(camLook); return;
+    camera.position.copy(camPos); camLook.set(t.x, t.y + s.b.y1 * 0.45, t.z); camera.lookAt(camLook);
+    if (innerWidth > 760) camera.setViewOffset(innerWidth, innerHeight, -innerWidth * 0.22, 0, innerWidth, innerHeight);
+    return;
   }
+  if (camera.view && camera.view.enabled) camera.clearViewOffset();
   camYaw += angWrap(P.yaw - camYaw) * (1 - Math.exp(-3 * dt));
   if (dragX === null) orbit *= Math.exp(-1.5 * dt);
   const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
@@ -1180,20 +1209,36 @@ function renderCards() {
     const s = VEH[k], d = document.createElement('div'); d.className = 'card' + (k === selVeh ? ' sel' : '');
     const bar = (lb, f) => `<div class="st"><span>${lb}</span><i><em style="width:${Math.round(clamp(f, 0.05, 1) * 100)}%"></em></i></div>`;
     d.innerHTML = `<div class="ic">${s.ic}</div><b>${s.name}</b><div class="d">${s.desc}</div>` + bar('Tempo', s.vmax * 3.6 / mx.v) + bar('Antrieb', s.acc / mx.a) + bar('Größe', s.size) + bar('Gelände', s.off) + `<div class="st">${Math.round(s.vmax * 3.6)} km/h · ${s.len.toFixed(1)} m${s.trailer ? ' + 13,6 m' : ''}</div>`;
-    d.onclick = () => { selVeh = k; renderCards(); previewVeh(); };
+    d.onclick = () => { selVeh = k; renderCards(); previewVeh(); renderCustom(); };
     box.appendChild(d);
   }
 }
-function renderShop() {
-  $('shopMoney').textContent = '💶 ' + fmt(save.money) + ' €';
-  const box = $('shopList'); box.innerHTML = '';
-  UPG.forEach(u => {
-    const l = lv(u.id), max = l >= u.max, cost = max ? 0 : u.cost[l];
+function renderCustom() {
+  $('customTitle').textContent = '🎨 ' + VEH[selVeh].name + ' anpassen';
+  const box = $('customList'); box.innerHTML = '';
+  const p = paintOf(selVeh);
+  const swatches = (label, list, cur, key) => {
     const row = document.createElement('div'); row.className = 'shoprow';
-    row.innerHTML = `<div class="ic">${u.ic}</div><div class="tx"><b>${u.name}</b> <span class="lvl">Stufe ${l}/${u.max}</span><br>${u.desc}</div>`;
-    const b = document.createElement('button'); b.className = 'btn g s'; b.textContent = max ? 'Max' : fmt(cost) + ' €'; b.disabled = max || save.money < cost;
-    b.onclick = () => { if (save.money < cost || lv(u.id) >= u.max) return; save.money -= cost; save.up[u.id] = l + 1; persist(); ArcadeCore.powerup(); renderShop(); };
-    row.appendChild(b); box.appendChild(row);
+    row.innerHTML = `<div class="tx"><b>${label}</b><div class="sw"></div></div>`;
+    const sw = row.querySelector('.sw');
+    list.forEach(c => {
+      const b = document.createElement('button'); b.className = 'swb' + (c === cur ? ' on' : ''); b.style.background = c; b.title = c;
+      b.onclick = () => { save.paint[selVeh] = Object.assign(paintOf(selVeh), { [key]: c }); persist(); spawn(P.type, P.x, P.z, P.yaw); renderCustom(); };
+      sw.appendChild(b);
+    });
+    box.appendChild(row);
+  };
+  swatches('Lackierung', [BODY[selVeh][0], ...PAINTS.filter(c => c !== BODY[selVeh][0])], p.body, 'body');
+  swatches('Felgen', [RIM[selVeh] || '#b9bcc4', ...RIMS.filter(c => c !== (RIM[selVeh] || '#b9bcc4'))], p.rim, 'rim');
+  const h = document.createElement('h2'); h.textContent = '⚙️ Tuning (gilt für alle Fahrzeuge)'; h.style.marginTop = '12px'; box.appendChild(h);
+  TUNE.forEach(u => {
+    const l = lv(u.id), row = document.createElement('div'); row.className = 'shoprow';
+    row.innerHTML = `<div class="ic">${u.ic}</div><div class="tx"><b>${u.name}</b><br>${u.desc}</div>`;
+    const set = n => { save.tune[u.id] = clamp(n, 0, u.max); persist(); renderCustom(); };
+    const minus = document.createElement('button'); minus.className = 'btn s'; minus.textContent = '−'; minus.disabled = l <= 0; minus.onclick = () => set(l - 1);
+    const val = document.createElement('span'); val.className = 'lvl'; val.style.minWidth = '42px'; val.style.textAlign = 'center'; val.textContent = u.max === 1 ? (l ? 'an' : 'aus') : l + '/' + u.max;
+    const plus = document.createElement('button'); plus.className = 'btn s'; plus.textContent = '+'; plus.disabled = l >= u.max; plus.onclick = () => set(l + 1);
+    row.append(minus, val, plus); box.appendChild(row);
   });
 }
 function previewVeh() {
@@ -1202,7 +1247,7 @@ function previewVeh() {
   const s = VEH[selVeh];
   spawn(selVeh, cx - fx * s.rz, cz - fz * s.rz, P.yaw);
 }
-function openGarage() { if (job && !confirm('Fahrzeugwechsel bricht den laufenden Auftrag ab. Weiter?')) return; inMenu = true; renderCards(); renderShop(); $('garage').classList.add('on'); }
+function openGarage() { if (job && !confirm('Fahrzeugwechsel bricht den laufenden Auftrag ab. Weiter?')) return; inMenu = true; renderCards(); renderCustom(); $('garage').classList.add('on'); }
 function closeGarage() { inMenu = false; $('garage').classList.remove('on'); if (P.type !== selVeh) previewVeh(); if (job && P.type !== job.veh) { job = null; setLoad(false); } engineInit(); camera.position.copy(P.g.root.position).add(_v.set(0, P.s.cam[1], P.s.cam[0])); }
 $('goBtn').onclick = closeGarage;
 $('garageBtn').onclick = () => { if (!inMenu) openGarage(); };
@@ -1255,7 +1300,7 @@ function startDepot() {
 const home = startDepot();
 updateCells(home.tx, home.tz, true);
 spawn(selVeh, home.tx, home.tz, Math.atan2(home.dx, home.dz));
-renderCards(); renderShop();
+renderCards(); renderCustom();
 if (Q_AUTO && VEH[Q_AUTO]) { selVeh = Q_AUTO; previewVeh(); closeGarage(); }
 
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
