@@ -64,6 +64,9 @@ canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; tou
 .sw { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .swb { width:30px; height:30px; border-radius:50%; border:2px solid #ffffff44; cursor:pointer; padding:0; }
 .swb.on { border:3px solid #ffd21f; transform:scale(1.12); }
+.seg { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.segb { font:inherit; font-size:12px; font-weight:700; color:#fff; background:#0d2236; border:1px solid #ffffff33; border-radius:999px; padding:5px 10px; cursor:pointer; }
+.segb.on { background:#ffd21f; color:#111; border-color:#ffd21f; }
 #garage { justify-content:flex-start; background:linear-gradient(90deg,#0a1a2acc 0%,#0a1a2a88 45%,transparent 70%); backdrop-filter:none; padding-top:56px; }
 #garage .box { max-width:560px; }
 #cards { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
@@ -138,9 +141,9 @@ const angWrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI
 
 // ================= Spielstand =================
 const SAVE_KEY = 'fernfahrer_save';
-let save = { money: 0, km: 0, jobs: 0, veh: 'sattelzug', tune: {}, paint: {}, best: 0 };
+let save = { money: 0, km: 0, jobs: 0, veh: 'sattelzug', tune: {}, paint: {}, world: {}, best: 0 };
 const obj = v => (v && typeof v === 'object') ? v : {};
-try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && typeof d === 'object') save = { money: Math.max(0, Number(d.money) || 0), km: Math.max(0, Number(d.km) || 0), jobs: Math.max(0, Math.floor(Number(d.jobs)) || 0), veh: typeof d.veh === 'string' ? d.veh : 'sattelzug', tune: obj(d.tune || d.up), paint: obj(d.paint), best: Math.max(0, Number(d.best) || 0) }; } catch (e) {}
+try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && typeof d === 'object') save = { money: Math.max(0, Number(d.money) || 0), km: Math.max(0, Number(d.km) || 0), jobs: Math.max(0, Math.floor(Number(d.jobs)) || 0), veh: typeof d.veh === 'string' ? d.veh : 'sattelzug', tune: obj(d.tune || d.up), paint: obj(d.paint), world: obj(d.world), best: Math.max(0, Number(d.best) || 0) }; } catch (e) {}
 // Tuning ist frei einstellbar (kein Kauf), gilt für alle Fahrzeuge
 const TUNE = [
   { id: 'motor', ic: '🔧', name: 'Motor-Tuning', max: 5, desc: '+12 % Antrieb und +5 % Spitze pro Stufe.' },
@@ -184,11 +187,22 @@ function vnoise(x, z, s) {
 }
 function fbm(x, z, o, s) { let a = 0, amp = 0.5, f = 1, tot = 0; for (let k = 0; k < o; k++) { a += amp * vnoise(x * f, z * f, s + k); tot += amp; amp *= 0.5; f *= 2.03; } return a / tot; }
 const region = (x, z) => fbm(x / 900, z / 900, 3, 11);
+// Welt-Einstellungen: Kurvigkeit der Straßen und Höhe des Geländes
+const CURV = [['Gerade', 0], ['Sanft', 0.5], ['Normal', 1], ['Kurvig', 2], ['Serpentinen', 3]];
+const HILL = [['Flach', 0], ['Leicht hügelig', 0.45], ['Normal', 1], ['Hügelig', 1.4], ['Bergig', 1.8]];
+const W = { curv: 1, hills: 1 };
+function applyWorld() {
+  const ix = (v, L) => { const n = Math.floor(Number(v)); return n >= 0 && n < L.length ? n : 2; };
+  save.world = { c: ix(save.world.c, CURV), h: ix(save.world.h, HILL) };
+  W.curv = CURV[save.world.c][1]; W.hills = HILL[save.world.h][1];
+}
+applyWorld();
 function terrainBase(x, z) {
+  if (W.hills === 0) return 0;
   const m = region(x, z);
   const hills = (fbm(x / 260, z / 260, 4, 21) - 0.5) * 2;
   const mount = Math.max(0, m - 0.55) * 2.2;
-  return hills * 14 * (0.5 + m) + mount * mount * 150 + (vnoise(x / 40, z / 40, 31) - 0.5) * 2.5;
+  return (hills * 14 * (0.5 + m) + mount * mount * 150 + (vnoise(x / 40, z / 40, 31) - 0.5) * 2.5) * W.hills;
 }
 
 // ================= Straßennetz (Zellen) =================
@@ -210,16 +224,18 @@ function finishLine(e, pts) {
 }
 function makeEdge(i, j, d) {
   const [ax, az] = nodePos(i, j), [bx, bz] = d ? nodePos(i, j + 1) : nodePos(i + 1, j);
-  const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz), off = (h2(i, j, d ? 6 : 5) - 0.5) * 80;
-  const cx = (ax + bx) / 2 - dz / l * off, cz = (az + bz) / 2 + dx / l * off;
-  const pts = new Float64Array((NP + 1) * 3);
-  for (let k = 0; k <= NP; k++) {
-    const t = k / NP, a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
-    const x = a * ax + b * cx + c * bx, z = a * az + b * cz + c * bz;
+  const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz), px = -dz / l, pz = dx / l;
+  const o = (h2(i, j, d ? 6 : 5) - 0.5) * 55 * W.curv, sc = (h2(i, j, d ? 41 : 40) - 0.5) * 90 * Math.max(0, W.curv - 1);
+  const o1 = clamp(o + sc, -110, 110), o2 = clamp(o - sc, -110, 110);
+  const c1x = ax + dx / 3 + px * o1, c1z = az + dz / 3 + pz * o1, c2x = ax + dx * 2 / 3 + px * o2, c2z = az + dz * 2 / 3 + pz * o2;
+  const np = W.curv > 1 ? 40 : NP, pts = new Float64Array((np + 1) * 3);
+  for (let k = 0; k <= np; k++) {
+    const t = k / np, u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, e = t * t * t;
+    const x = a * ax + b * c1x + c * c2x + e * bx, z = a * az + b * c1z + c * c2z + e * bz;
     pts[k * 3] = x; pts[k * 3 + 2] = z; pts[k * 3 + 1] = terrainBase(x, z);
   }
-  pts[1] = terrainBase(ax, az); pts[NP * 3 + 1] = terrainBase(bx, bz);
-  for (let p = 0; p < 6; p++) { const h = pts.slice(); for (let k = 1; k < NP; k++) pts[k * 3 + 1] = 0.25 * h[k * 3 - 2] + 0.5 * h[k * 3 + 1] + 0.25 * h[k * 3 + 4]; }
+  pts[1] = terrainBase(ax, az); pts[np * 3 + 1] = terrainBase(bx, bz);
+  for (let p = 0; p < 6; p++) { const h = pts.slice(); for (let k = 1; k < np; k++) pts[k * 3 + 1] = 0.25 * h[k * 3 - 2] + 0.5 * h[k * 3 + 1] + 0.25 * h[k * 3 + 4]; }
   return finishLine({ i, j, d, a: [i, j], b: d ? [i, j + 1] : [i + 1, j] }, pts);
 }
 const SYL1 = ['Ober', 'Unter', 'Groß', 'Klein', 'Neu', 'Alt', 'Hoch', 'Nieder', '', '', ''];
@@ -1265,6 +1281,18 @@ function renderCustom() {
   };
   swatches('Lackierung', [BODY[selVeh][0], ...PAINTS.filter(c => c !== BODY[selVeh][0])], p.body, 'body');
   swatches('Felgen', [RIM[selVeh] || '#b9bcc4', ...RIMS.filter(c => c !== (RIM[selVeh] || '#b9bcc4'))], p.rim, 'rim');
+  const wh = document.createElement('h2'); wh.textContent = '🌍 Welt'; wh.style.marginTop = '12px'; box.appendChild(wh);
+  [['〰️', 'Kurven', CURV, 'c'], ['⛰️', 'Gelände', HILL, 'h']].forEach(([ic, label, list, key]) => {
+    const row = document.createElement('div'); row.className = 'shoprow';
+    row.innerHTML = `<div class="ic">${ic}</div><div class="tx"><b>${label}</b><div class="seg"></div></div>`;
+    const seg = row.querySelector('.seg');
+    list.forEach(([name], k) => {
+      const b = document.createElement('button'); b.className = 'segb' + (save.world[key] === k ? ' on' : ''); b.textContent = name;
+      b.onclick = () => { if (save.world[key] === k) return; save.world[key] = k; applyWorld(); persist(); regenerateWorld(); renderCustom(); };
+      seg.appendChild(b);
+    });
+    box.appendChild(row);
+  });
   const h = document.createElement('h2'); h.textContent = '⚙️ Tuning (gilt für alle Fahrzeuge)'; h.style.marginTop = '12px'; box.appendChild(h);
   TUNE.forEach(u => {
     const l = lv(u.id), row = document.createElement('div'); row.className = 'shoprow';
@@ -1292,11 +1320,18 @@ const syncMute = () => { $('mute').textContent = ArcadeCore.isMuted() ? '🔇' :
 $('mute').onclick = () => { ArcadeCore.toggleMute(); syncMute(); }; syncMute();
 
 // ================= Eingabe =================
-function resetToRoad() {
+function regenerateWorld() {
+  live.forEach(disposeCell); live.clear(); cells.clear(); juncCache.clear();
+  for (let k = traffic.length - 1; k >= 0; k--) removeTraffic(k);
+  updateCells(P.x, P.z, true);
+  if (job) { const d = depotAt(job.to.i, job.to.j); if (d) job.to = d; else { job = null; setLoad(false); } }
+  resetToRoad(true);
+}
+function resetToRoad(quiet) {
   roadQuery(P.x, P.z);
   const yaw = Math.atan2(-Q.tx, -Q.tz), fwd = Math.cos(angWrap(yaw - P.yaw)) > 0 ? yaw : yaw + Math.PI;
   spawn(P.type, Q.px + Math.cos(fwd) * 2.3, Q.pz - Math.sin(fwd) * 2.3, fwd);
-  banner('↩️ Zurück auf die Straße', 1.2);
+  if (!quiet) banner('↩️ Zurück auf die Straße', 1.2);
 }
 addEventListener('keydown', e => {
   if (e.code === 'Escape') { if ($('jobsOv').classList.contains('on')) closeJobs(); return; }
