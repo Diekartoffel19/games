@@ -82,7 +82,7 @@ canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touc
 #goals .g small { color:#ffe066; }
 #goals .bar { height:5px; background:rgba(255,255,255,.12); border-radius:3px; overflow:hidden; margin-top:3px; }
 #goals .bar i { display:block; height:100%; background:var(--good); }
-@media (max-width:700px) { #goals { top:auto; bottom:112px; left:6px; width:165px; font-size:11px; } }
+@media (max-width:700px) { #goals { top:auto; bottom:112px; left:6px; width:165px; font-size:11px; } body.sel #goals { display:none; } }
 @media (max-width:700px) { #info { top:auto; bottom:112px; right:6px; width:210px; max-height:40%; } .stat { font-size:11px; } .stat b { font-size:14px; } #hint { font-size:12px; } #hud { width:calc(100% - 20px); top:52px; } }
 </style>
 </head>
@@ -179,7 +179,7 @@ const GOALS = [
   { id: 'ev1', t: 'Überstehe ein Ereignis', r: 2500, p: () => [S.stats.ev, 1] },
   { id: 'solar', t: 'Installiere ein Solar-Dach', r: 2000, p: () => [S.up.solar, 1] },
   { id: 'cool8', t: '8 Racks laufen, keins über 45 °C', r: 8000, p: () => { const r = S.objs.filter(o => o.t === 'rack' && SIM.st.get(o.id) && SIM.st.get(o.id).run); return [r.some(o => o.temp > 45) ? 0 : r.length, 8]; } },
-  { id: 'kw50', t: '50 kW Gesamtlast', r: 10000, p: () => [Math.floor(SIM.kw), 50] },
+  { id: 'kw50', t: '50 kW Gesamtlast', r: 10000, p: () => [SIM.kwOk ? Math.floor(SIM.kw) : 0, 50] }, // Überlast/Stromausfall zählt nicht
   { id: 'ai', t: 'Baue einen KI-Beschleuniger ein', r: 20000, p: () => [hasTier(3), 1] },
   { id: 'hall', t: 'Volle Halle (16×12)', r: 25000, p: () => [S.up.hall, 2] },
   { id: 'srv60', t: '60 Server in Betrieb', r: 50000, p: () => [runSrv(), 60] },
@@ -324,7 +324,7 @@ function simulate(dt) {
   let kw = 0;
   for (const o of S.objs) if ((o.t === 'rack' || o.t === 'sw' || o.t === 'crac') && st.get(o.id).pwr) kw += devKw(o);
   const cost = Math.max(0, kw - val('solar')) * POWER_PRICE * val('eco') * (diesel ? 2 : 1);
-  SIM = { gross, cost, net: gross - cost, kw: mainLoad, kwCap: mainCap, bw: Math.min(rIn, bwCap), bwCap, bwWant: rIn, st };
+  SIM = { gross, cost, net: gross - cost, kw: mainLoad, kwCap: mainCap, kwOk: mainOk, bw: Math.min(rIn, bwCap), bwCap, bwWant: rIn, st };
 }
 
 // ================= Three.js Szene =================
@@ -662,6 +662,7 @@ function updateHint() { $('hint').textContent = nextHint(); }
 function statusLine(o) { const s = SIM.st.get(o.id); return s && s.issue ? s.issue : 'OK'; }
 function updateInfo() {
   const o = selected && BYID.get(selected);
+  document.body.classList.toggle('sel', !!o);
   if (!o) { $('info').style.display = 'none'; return; }
   $('info').style.display = 'block';
   const s = SIM.st.get(o.id) || {}, d = DEV[o.t];
@@ -805,10 +806,12 @@ function buyUpgrade(id) {
   renderShop(); renderTools(); changed();
 }
 function renderShop() {
-  $('shopList').innerHTML = UPG.map(u => {
+  const html = UPG.map(u => {
     const lv = S.up[u.id], c = u.cost[lv], nx = u.vals[lv + 1];
     return `<div class="upg"><span class="ic">${u.icon}</span><span class="tx"><b>${u.name}</b><br>${u.f(u.vals[lv])}${nx !== undefined ? ` → <span style="color:var(--good)">${u.f(nx)}</span>` : ' (max)'}${u.d ? `<br><small>${u.d}</small>` : ''}</span>${c !== undefined ? `<button class="btn" data-u="${u.id}" ${S.money < c ? 'disabled' : ''}>${fmt(c)} €</button>` : ''}</div>`;
   }).join('');
+  // nur bei Änderung neu bauen: sonst ersetzt der 0,25-s-Takt den Button zwischen mousedown und mouseup und der Klick geht verloren
+  if ($('shopList').dataset.h !== html) { $('shopList').innerHTML = html; $('shopList').dataset.h = html; }
 }
 $('shopList').addEventListener('click', e => { const b = e.target.closest('button[data-u]'); if (b) buyUpgrade(b.dataset.u); });
 function openShop() { renderShop(); $('shop').classList.remove('hide'); }
@@ -950,7 +953,15 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 const releaseKeys = () => { for (const k in keys) keys[k] = false; };
-addEventListener('blur', releaseKeys); document.addEventListener('visibilitychange', releaseKeys); // sonst „klebt“ WASD nach Alt-Tab
+addEventListener('blur', releaseKeys); // sonst „klebt“ WASD nach Alt-Tab
+// Hintergrund-Tab: rAF pausiert, also beim Verstecken speichern und beim Zurückkommen Offline-Einnahmen gutschreiben
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  releaseKeys();
+  if (!running) return;
+  if (document.hidden) { hiddenAt = Date.now(); writeSave(); }
+  else if (hiddenAt) { offlineIncome((Date.now() - hiddenAt) / 1000); hiddenAt = 0; }
+});
 function keyPan(dt) {
   const v = 260 * dt; let dx = 0, dy = 0;
   if (keys.w || keys.arrowup) dy += v; if (keys.s || keys.arrowdown) dy -= v;
@@ -967,11 +978,15 @@ function start(fresh) {
   EVENT = null; $('event').style.display = 'none'; selected = null; cableFrom = null; hover = null; tool = 'select'; placeRot = 0; eventTimer = 120;
   simAcc = saveAcc = popAcc = 0; preview.visible = ghost.visible = ring.visible = false; $('tip').style.display = 'none'; document.querySelectorAll('.pop,.big').forEach(el => el.remove()); useFiber = !!S.up.fiber && useFiber;
   rebuildAll(); simulate(0); updateVisuals(); renderTools(); updateHUD(); updateHint();
-  // Offline-Einnahmen: 50 % des aktuellen Gewinns, max. 2 h
-  const away = !fresh && S.t ? clamp((Date.now() - S.t) / 1000, 0, 7200) : 0, gain = Math.floor(Math.max(0, SIM.net) * away * 0.5);
-  if (gain > 0 && away > 60) { S.money += gain; S.earned += gain; setTimeout(() => bigText(`💤 Offline-Einnahmen<br><span style="font-size:.5em">${Math.round(away / 60)} min · +${fmt(gain)} €</span>`), 300); }
+  if (!fresh && S.t) offlineIncome((Date.now() - S.t) / 1000);
+  hiddenAt = 0;
   Object.assign(cam, { tx: wx(hallW() / 2) - 0.5, tz: wz(hallH() / 2) - 0.5, dist: 6 + hallW() * 0.9 });
   $('menu').classList.add('hide'); running = true; writeSave();
+}
+// Offline-Einnahmen: 50 % des aktuellen Gewinns, max. 2 h
+function offlineIncome(sec) {
+  const away = clamp(sec, 0, 7200), gain = Math.floor(Math.max(0, SIM.net) * away * 0.5);
+  if (gain > 0 && away > 60) { S.money += gain; S.earned += gain; setTimeout(() => bigText(`💤 Offline-Einnahmen<br><span style="font-size:.5em">${Math.round(away / 60)} min · +${fmt(gain)} €</span>`), 300); }
 }
 $('btnContinue').onclick = () => start(false);
 $('btnNew').onclick = () => start(true);
@@ -1034,6 +1049,8 @@ function selfTest() {
   ok(SIM.cost === 0, 'Solar-Dach deckt 4 kW gratis');
   S.up.solar = 0; EVENT = { type: 'boom', t: 1 }; simulate(0); EVENT = null;
   ok(Math.abs(SIM.gross - 15) < 1e-6, 'Großkunde: Einnahmen +50 %');
+  EVENT = { type: 'blackout', t: 1 }; simulate(0); EVENT = null;
+  ok(!SIM.kwOk && GOALS.find(g => g.id === 'kw50').p()[0] === 0, 'abgeschaltete Last zählt nicht fürs kW-Ziel');
   S = keep; reindex();
   const el = $('selftest'); el.style.display = 'block'; el.textContent = out.join('\n'); console.log(out.join('\n'));
 }
