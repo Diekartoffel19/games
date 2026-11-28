@@ -82,7 +82,7 @@ canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touc
 #goals .g small { color:#ffe066; }
 #goals .bar { height:5px; background:rgba(255,255,255,.12); border-radius:3px; overflow:hidden; margin-top:3px; }
 #goals .bar i { display:block; height:100%; background:var(--good); }
-@media (max-width:700px) { #goals { top:auto; bottom:112px; left:6px; width:165px; font-size:11px; } }
+@media (max-width:700px) { #goals { top:auto; bottom:112px; left:6px; width:165px; font-size:11px; } body.sel #goals { display:none; } }
 @media (max-width:700px) { #info { top:auto; bottom:112px; right:6px; width:210px; max-height:40%; } .stat { font-size:11px; } .stat b { font-size:14px; } #hint { font-size:12px; } #hud { width:calc(100% - 20px); top:52px; } }
 </style>
 </head>
@@ -140,7 +140,7 @@ const DEV = {
   rack:   { name: 'Server-Rack', icon: '🗄️', cost: 400, kw: 0.05, h: 2.0, desc: 'Hält 6 Server. Braucht Strom (PDU) und Netz (Switch).' },
   sw:     { name: 'Switch', icon: '🔀', cost: 500, kw: 0.2, h: 1.1, ports: [4, 8, 16], up: [800, 2500], desc: 'Verbindet Racks mit dem Uplink-Router. Jedes Kabel belegt einen Port.' },
   pdu:    { name: 'PDU', icon: '⚡', cost: 350, kw: 0, h: 1.5, cap: [4, 8, 16], up: [700, 2200], desc: 'Stromverteiler. Muss am Hauptverteiler hängen.' },
-  crac:   { name: 'Klimagerät', icon: '❄️', cost: 1200, kw: 1.2, h: 1.9, cool: [8, 14, 22], up: [1500, 4500], radius: 3.5, desc: 'Kühlt Racks im Umkreis von 3,5 Feldern.' },
+  crac:   { name: 'Klimagerät', icon: '❄️', cost: 1200, kw: 1.2, h: 1.9, cool: [8, 14, 22, 36], up: [1500, 4500, 12000], radius: 3.5, desc: 'Kühlt Racks im Umkreis von 3,5 Feldern.' },
   router: { name: 'Uplink-Router', icon: '🌐', h: 2.0, fixed: true, kw: 0, desc: 'Deine Verbindung zum Internet.' },
   main:   { name: 'Hauptverteiler', icon: '🏭', h: 2.1, fixed: true, kw: 0, desc: 'Hausanschluss für alle PDUs.' },
 };
@@ -179,7 +179,7 @@ const GOALS = [
   { id: 'ev1', t: 'Überstehe ein Ereignis', r: 2500, p: () => [S.stats.ev, 1] },
   { id: 'solar', t: 'Installiere ein Solar-Dach', r: 2000, p: () => [S.up.solar, 1] },
   { id: 'cool8', t: '8 Racks laufen, keins über 45 °C', r: 8000, p: () => { const r = S.objs.filter(o => o.t === 'rack' && SIM.st.get(o.id) && SIM.st.get(o.id).run); return [r.some(o => o.temp > 45) ? 0 : r.length, 8]; } },
-  { id: 'kw50', t: '50 kW Gesamtlast', r: 10000, p: () => [Math.floor(SIM.kw), 50] },
+  { id: 'kw50', t: '50 kW Gesamtlast', r: 10000, p: () => [SIM.kwOk ? Math.floor(SIM.kw) : 0, 50] }, // Überlast/Stromausfall zählt nicht
   { id: 'ai', t: 'Baue einen KI-Beschleuniger ein', r: 20000, p: () => [hasTier(3), 1] },
   { id: 'hall', t: 'Volle Halle (16×12)', r: 25000, p: () => [S.up.hall, 2] },
   { id: 'srv60', t: '60 Server in Betrieb', r: 50000, p: () => [runSrv(), 60] },
@@ -302,19 +302,22 @@ function simulate(dt) {
   }
   // --- Wärme ---
   for (const o of racks) { const s = st.get(o.id); s.heat = s.pwr && !o.hot ? o.srv.reduce((a, t) => a + SRV[t].heat, 0) * (s.run ? 1 : 0.4) : 0; }
-  for (const c of S.objs) {
-    if (c.t !== 'crac') continue;
-    const cs = st.get(c.id); if (!cs.pwr) continue;
-    const cap = DEV.crac.cool[c.lv] * (ev === 'heat' ? 0.6 : 1);
-    const near = racks.filter(r => Math.hypot(r.x - c.x, r.z - c.z) <= DEV.crac.radius);
-    const need = r => Math.max(0, st.get(r.id).heat - st.get(r.id).cool); // schon gekühlte Wärme nicht doppelt bedienen
-    const H = near.reduce((a, r) => a + need(r), 0), k = H > 0 ? Math.min(1, cap / H) : 0;
-    cs.load = Math.min(H, cap); cs.cap = cap;
-    for (const r of near) st.get(r.id).cool += need(r) * k;
+  const cracs = S.objs.filter(c => c.t === 'crac' && st.get(c.id).pwr).map(c => {
+    const cs = st.get(c.id); cs.cap = DEV.crac.cool[c.lv] * (ev === 'heat' ? 0.6 : 1);
+    return { cs, left: cs.cap, near: racks.filter(r => Math.hypot(r.x - c.x, r.z - c.z) <= DEV.crac.radius) };
+  });
+  // Leistung in Häppchen verteilen statt gierig nacheinander: Racks, die mehrere Klimas erreichen, binden sonst Leistung, die ein Rack am Rand bräuchte
+  const need = r => Math.max(0, st.get(r.id).heat - st.get(r.id).cool), PASSES = 12;
+  for (let p = 0; p < PASSES; p++) for (const c of cracs) {
+    const H = c.near.reduce((a, r) => a + need(r), 0); if (H <= 1e-9 || c.left <= 1e-9) continue;
+    const give = Math.min(H, c.left / (PASSES - p)), k = give / H;
+    for (const r of c.near) st.get(r.id).cool += need(r) * k;
+    c.left -= give; c.cs.load += give;
   }
   for (const o of racks) {
     const s = st.get(o.id), cool = Math.min(s.cool, s.heat);
-    const target = 22 + s.heat * 1.5 + (s.heat - cool) * 7 + (ev === 'heat' ? 4 : 0);
+    // gekühlte Wärme erwärmt nur leicht (voll gekühltes KI-Rack ≈ 40 °C), ungekühlte stark
+    const target = 22 + s.heat * 0.5 + (s.heat - cool) * 7 + (ev === 'heat' ? 4 : 0);
     if (o.temp === undefined) o.temp = 22;
     o.temp += (target - o.temp) * Math.min(1, dt * 0.35);
     if (!o.hot && o.temp >= 60) { o.hot = true; alarm(o); }
@@ -324,7 +327,7 @@ function simulate(dt) {
   let kw = 0;
   for (const o of S.objs) if ((o.t === 'rack' || o.t === 'sw' || o.t === 'crac') && st.get(o.id).pwr) kw += devKw(o);
   const cost = Math.max(0, kw - val('solar')) * POWER_PRICE * val('eco') * (diesel ? 2 : 1);
-  SIM = { gross, cost, net: gross - cost, kw: mainLoad, kwCap: mainCap, bw: Math.min(rIn, bwCap), bwCap, bwWant: rIn, st };
+  SIM = { gross, cost, net: gross - cost, kw: mainLoad, kwCap: mainCap, kwOk: mainOk, bw: Math.min(rIn, bwCap), bwCap, bwWant: rIn, st };
 }
 
 // ================= Three.js Szene =================
@@ -662,6 +665,7 @@ function updateHint() { $('hint').textContent = nextHint(); }
 function statusLine(o) { const s = SIM.st.get(o.id); return s && s.issue ? s.issue : 'OK'; }
 function updateInfo() {
   const o = selected && BYID.get(selected);
+  document.body.classList.toggle('sel', !!o);
   if (!o) { $('info').style.display = 'none'; return; }
   $('info').style.display = 'block';
   const s = SIM.st.get(o.id) || {}, d = DEV[o.t];
@@ -805,10 +809,12 @@ function buyUpgrade(id) {
   renderShop(); renderTools(); changed();
 }
 function renderShop() {
-  $('shopList').innerHTML = UPG.map(u => {
+  const html = UPG.map(u => {
     const lv = S.up[u.id], c = u.cost[lv], nx = u.vals[lv + 1];
     return `<div class="upg"><span class="ic">${u.icon}</span><span class="tx"><b>${u.name}</b><br>${u.f(u.vals[lv])}${nx !== undefined ? ` → <span style="color:var(--good)">${u.f(nx)}</span>` : ' (max)'}${u.d ? `<br><small>${u.d}</small>` : ''}</span>${c !== undefined ? `<button class="btn" data-u="${u.id}" ${S.money < c ? 'disabled' : ''}>${fmt(c)} €</button>` : ''}</div>`;
   }).join('');
+  // nur bei Änderung neu bauen: sonst ersetzt der 0,25-s-Takt den Button zwischen mousedown und mouseup und der Klick geht verloren
+  if ($('shopList').dataset.h !== html) { $('shopList').innerHTML = html; $('shopList').dataset.h = html; }
 }
 $('shopList').addEventListener('click', e => { const b = e.target.closest('button[data-u]'); if (b) buyUpgrade(b.dataset.u); });
 function openShop() { renderShop(); $('shop').classList.remove('hide'); }
@@ -950,7 +956,15 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 const releaseKeys = () => { for (const k in keys) keys[k] = false; };
-addEventListener('blur', releaseKeys); document.addEventListener('visibilitychange', releaseKeys); // sonst „klebt“ WASD nach Alt-Tab
+addEventListener('blur', releaseKeys); // sonst „klebt“ WASD nach Alt-Tab
+// Hintergrund-Tab: rAF pausiert, also beim Verstecken speichern und beim Zurückkommen Offline-Einnahmen gutschreiben
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  releaseKeys();
+  if (!running) return;
+  if (document.hidden) { hiddenAt = Date.now(); writeSave(); }
+  else if (hiddenAt) { offlineIncome((Date.now() - hiddenAt) / 1000); hiddenAt = 0; }
+});
 function keyPan(dt) {
   const v = 260 * dt; let dx = 0, dy = 0;
   if (keys.w || keys.arrowup) dy += v; if (keys.s || keys.arrowdown) dy -= v;
@@ -967,11 +981,15 @@ function start(fresh) {
   EVENT = null; $('event').style.display = 'none'; selected = null; cableFrom = null; hover = null; tool = 'select'; placeRot = 0; eventTimer = 120;
   simAcc = saveAcc = popAcc = 0; preview.visible = ghost.visible = ring.visible = false; $('tip').style.display = 'none'; document.querySelectorAll('.pop,.big').forEach(el => el.remove()); useFiber = !!S.up.fiber && useFiber;
   rebuildAll(); simulate(0); updateVisuals(); renderTools(); updateHUD(); updateHint();
-  // Offline-Einnahmen: 50 % des aktuellen Gewinns, max. 2 h
-  const away = !fresh && S.t ? clamp((Date.now() - S.t) / 1000, 0, 7200) : 0, gain = Math.floor(Math.max(0, SIM.net) * away * 0.5);
-  if (gain > 0 && away > 60) { S.money += gain; S.earned += gain; setTimeout(() => bigText(`💤 Offline-Einnahmen<br><span style="font-size:.5em">${Math.round(away / 60)} min · +${fmt(gain)} €</span>`), 300); }
+  if (!fresh && S.t) offlineIncome((Date.now() - S.t) / 1000);
+  hiddenAt = 0;
   Object.assign(cam, { tx: wx(hallW() / 2) - 0.5, tz: wz(hallH() / 2) - 0.5, dist: 6 + hallW() * 0.9 });
   $('menu').classList.add('hide'); running = true; writeSave();
+}
+// Offline-Einnahmen: 50 % des aktuellen Gewinns, max. 2 h
+function offlineIncome(sec) {
+  const away = clamp(sec, 0, 7200), gain = Math.floor(Math.max(0, SIM.net) * away * 0.5);
+  if (gain > 0 && away > 60) { S.money += gain; S.earned += gain; setTimeout(() => bigText(`💤 Offline-Einnahmen<br><span style="font-size:.5em">${Math.round(away / 60)} min · +${fmt(gain)} €</span>`), 300); }
 }
 $('btnContinue').onclick = () => start(false);
 $('btnNew').onclick = () => start(true);
@@ -1034,6 +1052,27 @@ function selfTest() {
   ok(SIM.cost === 0, 'Solar-Dach deckt 4 kW gratis');
   S.up.solar = 0; EVENT = { type: 'boom', t: 1 }; simulate(0); EVENT = null;
   ok(Math.abs(SIM.gross - 15) < 1e-6, 'Großkunde: Einnahmen +50 %');
+  EVENT = { type: 'blackout', t: 1 }; simulate(0); EVENT = null;
+  ok(!SIM.kwOk && GOALS.find(g => g.id === 'kw50').p()[0] === 0, 'abgeschaltete Last zählt nicht fürs kW-Ziel');
+  // Kühlung: jede Rack-Hitze muss mit genug Klimas lösbar sein
+  const coolRig = (racks, srv, cracs, lv) => {
+    S = defSave(); S.up.mainp = 3; let id = 30;
+    const add = (t, x, z, extra) => { const o = Object.assign({ id: id++, t, x, z, r: 0, lv: 0 }, extra); S.objs.push(o); return o; };
+    const cab = (a, b, k) => S.cables.push({ id: id++, a, b, k, f: 1 });
+    const sw = add('sw', 0, 9, { lv: 2 }), cp = add('pdu', 1, 9, { lv: 2 });
+    cab(cp.id, 2, 'pwr'); cab(sw.id, cp.id, 'pwr'); cab(sw.id, 1, 'net');
+    const rs = racks.map(x => { const r = add('rack', x, 5, { srv: srv.slice(), temp: 22 }), p = add('pdu', x, 8, { lv: 2 }); cab(r.id, p.id, 'pwr'); cab(p.id, 2, 'pwr'); cab(r.id, sw.id, 'net'); return r; });
+    for (const x of cracs) cab(add('crac', x, 5, { lv }).id, cp.id, 'pwr');
+    reindex(); for (let i = 0; i < 300; i++) simulate(0.25);
+    return rs;
+  };
+  let rs = coolRig([3], [3, 3, 3, 3, 3, 3], [2, 4], 3);
+  ok(SIM.st.get(rs[0].id).run && !rs[0].hot && rs[0].temp < 45, 'volles KI-Rack mit 2 Klimas Stufe 4 unter 45 °C (' + rs[0].temp.toFixed(1) + ')');
+  EVENT = { type: 'heat', t: 99 }; for (let i = 0; i < 300; i++) simulate(0.25); EVENT = null;
+  ok(!rs[0].hot && rs[0].temp < 45, 'auch in der Hitzewelle (' + rs[0].temp.toFixed(1) + ' °C)');
+  // Klima x=3 erreicht Racks 1+5, Klima x=7 erreicht 5+9: lösbar (3×13,6 ≤ 2×22), gierig aber nicht
+  rs = coolRig([1, 5, 9], [3, 3, 1], [3, 7], 2);
+  ok(rs.every(r => SIM.st.get(r.id).run && !r.hot && r.temp < 45), 'überlappende Klimas teilen Leistung sinnvoll (' + rs.map(r => r.temp.toFixed(1)).join(' / ') + ' °C)');
   S = keep; reindex();
   const el = $('selftest'); el.style.display = 'block'; el.textContent = out.join('\n'); console.log(out.join('\n'));
 }
